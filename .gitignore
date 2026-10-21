@@ -1,0 +1,167 @@
+#-------------------------
+# Operating Specific Junk Files
+#-------------------------
+
+# OS X
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# OS X Thumbnails
+._*
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows Installer files
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Windows shortcuts
+*.lnk
+
+# Linux
+*~
+
+# KDE directory preferences
+.directory
+
+# Linux trash folder which might appear on any partition or disk
+.Trash-*
+
+#-------------------------
+# Environment Files
+#-------------------------
+# These should never be under version control,
+# as it poses a security risk.
+.env
+.env.*
+!.env.example
+.vagrant
+Vagrantfile
+
+#-------------------------
+# Temporary Files
+#-------------------------
+/writable/cache/*
+!/writable/cache/index.html
+
+/writable/logs/*
+!/writable/logs/index.html
+
+# PHPUnit output (cache and reports).
+/writable/build/
+
+# Private backups, runtime data and generated local validation artifacts.
+/writable/backups/
+/writable/report-temp/
+/writable/widget-test-tools/
+/writable/*.log
+/writable/isolated-inventory-db/
+/writable/queue-isolated-*/
+/writable/__pycache__/
+/writable/audit-upgrade-*/
+# Screenshot/preview output from local design and contrast checks.
+/writable/*-preview/
+/writable/*-previews/
+# Uploaded member photos are personal data, not source.
+/writable/profile-photos/*
+!/writable/profile-photos/index.html
+
+/writable/session/*
+!/writable/session/index.html
+
+/writable/uploads/*
+!/writable/uploads/index.html
+
+# Approved USB firmware binaries remain private deployment artifacts.
+/writable/firmware/
+
+/writable/debugbar/*
+!/writable/debugbar/index.html
+
+php_errors.log
+
+#-------------------------
+# User Guide Temp Files
+#-------------------------
+/user_guide_src/build/*
+/user_guide_src/cilexer/build/*
+/user_guide_src/cilexer/dist/*
+/user_guide_src/cilexer/pycilexer.egg-info/*
+
+#-------------------------
+# Test Files
+#-------------------------
+/tests/coverage*
+
+# Don't save phpunit under version control.
+/phpunit
+
+#-------------------------
+# Composer
+#-------------------------
+vendor/
+# Integrity-pinned browser dependency and its licenses are shipped with the app.
+!/public/assets/vendor/
+/public/assets/vendor/*
+!/public/assets/vendor/esptool-js/
+!/public/assets/vendor/esptool-js/**
+
+#-------------------------
+# Local Tool State
+#-------------------------
+# Agent/tool session history and hook state (per-machine, per-session).
+.mimosa/
+
+#-------------------------
+# IDE / Development Files
+#-------------------------
+
+# Modules Testing
+_modules/*
+
+# phpenv local config
+.php-version
+
+# Jetbrains editors (PHPStorm, etc)
+.idea/
+*.iml
+
+# NetBeans
+/nbproject/
+/build/
+/nbbuild/
+/dist/
+/nbdist/
+/nbactions.xml
+/nb-configuration.xml
+/.nb-gradle/
+
+# Sublime Text
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+*.sublime-workspace
+*.sublime-project
+.phpintel
+/api/
+
+# Visual Studio Code
+.vscode/
+
+# Tool caches
+.phpunit.result.cache
+.php-cs-fixer.cache
+node_modules/
+*.log
+
+/results/
+/phpunit.xml

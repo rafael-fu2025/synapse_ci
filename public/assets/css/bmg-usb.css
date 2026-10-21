@@ -1,0 +1,235 @@
+[data-bmg-usb].bmg-usb-workspace {
+  min-width: 0;
+  color: var(--na-text);
+}
+
+[data-bmg-usb] .bmg-usb-workflow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  margin: 0 0 1.25rem;
+  list-style: none;
+  border: 1px solid var(--na-border);
+  border-radius: 0.75rem;
+  background: var(--na-surface);
+}
+
+[data-bmg-usb] .bmg-usb-workflow li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+[data-bmg-usb] .bmg-usb-step {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2rem;
+  height: 2rem;
+  border: 1px solid var(--na-border);
+  border-radius: 50%;
+  color: var(--na-text);
+  background: var(--na-surface-2);
+  font-weight: 700;
+}
+
+[data-bmg-usb] .bmg-usb-workflow strong,
+[data-bmg-usb] .bmg-usb-workflow li div > span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+[data-bmg-usb] .bmg-usb-workflow strong {
+  color: var(--na-heading);
+  font-size: 0.9rem;
+}
+
+[data-bmg-usb] .bmg-usb-workflow li div > span {
+  margin-top: 0.15rem;
+  color: var(--na-text-muted);
+  font-size: 0.8rem;
+}
+
+[data-bmg-usb] .bmg-usb-connection-status {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--na-border);
+  border-inline-start: 3px solid var(--na-primary);
+  border-radius: 0.5rem;
+  background: var(--na-surface);
+}
+
+[data-bmg-usb] .bmg-usb-status {
+  margin: 0.5rem 0;
+  color: var(--na-heading);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+[data-bmg-usb] .bmg-usb-safety {
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+
+[data-bmg-usb] .bmg-usb-safety h3 {
+  line-height: 1.5;
+}
+
+[data-bmg-usb] .bmg-panel,
+[data-bmg-usb] .bmg-panel-body,
+[data-bmg-usb] .bmg-panel-heading > div,
+[data-bmg-usb] .row > div {
+  min-width: 0;
+}
+
+[data-bmg-usb] .bmg-panel-heading {
+  flex-wrap: wrap;
+}
+
+[data-bmg-usb] .bmg-panel-body {
+  overflow-wrap: anywhere;
+}
+
+[data-bmg-usb] .bmg-usb-identity,
+[data-bmg-usb] .bmg-usb-gates,
+[data-bmg-usb] .bmg-usb-unavailable {
+  padding: 1rem;
+  border: 1px solid var(--na-border);
+  border-radius: 0.5rem;
+  background: var(--na-surface-2);
+}
+
+[data-bmg-usb] .bmg-usb-gates,
+[data-bmg-usb] .bmg-usb-unavailable {
+  margin-bottom: 1rem;
+}
+
+[data-bmg-usb] .bmg-usb-gates ul {
+  margin-bottom: 0;
+}
+
+[data-bmg-usb] .bmg-usb-gates li + li {
+  margin-top: 0.4rem;
+}
+
+[data-bmg-usb] .bmg-usb-unavailable {
+  border-inline-start: 3px solid var(--na-text-muted);
+}
+
+[data-bmg-usb] .bmg-usb-unavailable-heading {
+  margin-bottom: 0.5rem;
+  color: var(--na-heading);
+  font-weight: 700;
+}
+
+[data-bmg-usb] .btn {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+[data-bmg-usb] .form-select {
+  width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+}
+
+[data-bmg-usb] .bmg-usb-progress {
+  display: block;
+  width: 100%;
+  height: 0.65rem;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 1rem;
+  accent-color: var(--na-primary);
+  background: var(--na-surface-2);
+}
+
+[data-bmg-usb] .bmg-usb-progress::-webkit-progress-bar {
+  border-radius: 1rem;
+  background: var(--na-surface-2);
+}
+
+[data-bmg-usb] .bmg-usb-progress::-webkit-progress-value {
+  border-radius: 1rem;
+  background: var(--na-primary);
+}
+
+[data-bmg-usb] .bmg-usb-progress::-moz-progress-bar {
+  border-radius: 1rem;
+  background: var(--na-primary);
+}
+
+[data-bmg-usb] .bmg-usb-monitor-mode {
+  margin-inline-start: auto;
+}
+
+[data-bmg-usb] .bmg-usb-terminal {
+  overflow: hidden;
+  border: 1px solid var(--na-border);
+  border-radius: 0.625rem;
+  background: var(--na-bg);
+}
+
+[data-bmg-usb] .bmg-usb-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--na-border);
+  background: var(--na-surface-2);
+}
+
+[data-bmg-usb] .bmg-usb-log-title {
+  color: var(--na-heading);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+[data-bmg-usb] .bmg-usb-log-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+[data-bmg-usb] .bmg-usb-log-toolbar .btn {
+  font-size: 0.8rem;
+}
+
+[data-bmg-usb] .bmg-usb-log {
+  width: 100%;
+  min-width: 0;
+  height: 20rem;
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--na-text);
+  background: var(--na-bg);
+  font-size: 0.8125rem;
+  line-height: 1.65;
+}
+
+[data-bmg-usb] .bmg-usb-log:focus-visible {
+  outline: 3px solid var(--na-primary);
+  outline-offset: -3px;
+}
+
+@media (max-width: 575.98px) {
+  [data-bmg-usb] .bmg-usb-workflow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.875rem;
+  }
+
+  [data-bmg-usb] .bmg-usb-monitor-mode {
+    margin-inline-start: 0;
+  }
+
+  [data-bmg-usb] .bmg-usb-log-toolbar {
+    width: 100%;
+  }
+}

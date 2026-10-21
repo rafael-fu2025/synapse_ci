@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="isolated-inventory-bootstrap.php" colors="false" cacheResult="false" failOnRisky="true">
+  <testsuites><testsuite name="Isolated inventory">
+    <file>../tests/unit/InventoryServiceTest.php</file>
+    <file>../tests/unit/InventoryConcurrencyTest.php</file>
+    <file>../tests/feature/InventoryRoutesTest.php</file>
+    <file>../tests/feature/InventoryRouteContractTest.php</file>
+    <file>../tests/unit/InventoryMigrationVersionTest.php</file>
+    <file>../tests/unit/InventoryReadinessTest.php</file>
+    <file>../tests/unit/InventorySummaryTest.php</file>
+    <file>../tests/unit/InventoryValidationTest.php</file>
+  </testsuite></testsuites>
+  <php>
+    <const name="HOMEPATH" value="./"/>
+    <const name="CONFIGPATH" value="./app/Config/"/>
+    <const name="PUBLICPATH" value="./public/"/>
+    <server name="app.baseURL" value="http://example.com/"/>
+    <server name="CODEIGNITER_SCREAM_DEPRECATIONS" value="0"/>
+  </php>
+</phpunit>

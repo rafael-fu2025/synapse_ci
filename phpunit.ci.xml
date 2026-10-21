@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/codeigniter4/framework/system/Test/bootstrap.php"
+         colors="true" failOnRisky="true" failOnWarning="true" failOnSkipped="true" cacheResult="false">
+    <!-- Explicit DB-free baseline. This is not the entire historical App suite. -->
+    <testsuites>
+        <testsuite name="Security and correctness baseline">
+            <file>tests/unit/EncryptionServiceTest.php</file>
+            <file>tests/unit/HttpMisClientTest.php</file>
+            <file>tests/unit/MisProfileMapperTest.php</file>
+            <file>tests/unit/ProductionSessionConfigTest.php</file>
+            <file>tests/unit/SessionRotationSecurityTest.php</file>
+            <file>tests/unit/HealthTest.php</file>
+            <file>tests/unit/SchedulingClockTest.php</file>
+            <file>tests/unit/DashboardStatusContractTest.php</file>
+            <file>tests/unit/DashboardAuditAccessTest.php</file>
+            <file>tests/unit/QueueControllerSafetyTest.php</file>
+            <file>tests/unit/AuditHashTest.php</file>
+            <file>tests/unit/GuidanceControllerSafetyTest.php</file>
+            <file>tests/unit/GuidanceModelScopeTest.php</file>
+            <file>tests/unit/LoginSecurityTest.php</file>
+            <file>tests/unit/WebSecurityHeadersTest.php</file>
+            <file>tests/unit/LoginPipelineTest.php</file>
+        </testsuite>
+    </testsuites>
+    <php>
+        <server name="app.baseURL" value="http://example.com/"/>
+        <server name="CODEIGNITER_SCREAM_DEPRECATIONS" value="0"/>
+        <const name="HOMEPATH" value="./"/>
+        <const name="CONFIGPATH" value="./app/Config/"/>
+        <const name="PUBLICPATH" value="./public/"/>
+    </php>
+</phpunit>

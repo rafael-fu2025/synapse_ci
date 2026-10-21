@@ -1,0 +1,124 @@
+#--------------------------------------------------------------------
+# Example Environment Configuration file
+#
+# This file can be used as a starting point for your own
+# custom .env files, and contains most of the possible settings
+# available in a default install.
+#
+# By default, all of the settings are commented out. If you want
+# to override the setting, you must un-comment it by removing the '#'
+# at the beginning of the line.
+#--------------------------------------------------------------------
+
+#--------------------------------------------------------------------
+# ENVIRONMENT
+#--------------------------------------------------------------------
+
+# CI_ENVIRONMENT = production
+
+#--------------------------------------------------------------------
+# APP
+#--------------------------------------------------------------------
+
+# app.baseURL = ''
+# If you have trouble with `.`, you could also use `_`.
+# app_baseURL = ''
+# app.forceGlobalSecureRequests = false
+# app.CSPEnabled = true
+# The strict script/style policy is report-only; low-risk CSP is enforced separately.
+# contentsecuritypolicy.reportOnly = true
+# Login attempts share atomic database budgets across portals/workers.
+# Defaults: 60/IP/minute, 5/normalized-identifier+IP per 5 minutes.
+# Values must remain positive; zero/malformed configuration fails closed.
+# loginsecurity.ipAttempts = 60
+# loginsecurity.ipWindowSeconds = 60
+# loginsecurity.identityAttempts = 5
+# loginsecurity.identityWindowSeconds = 300
+# Configure App.proxyIPs only for the exact reverse proxies you control.
+# Never trust arbitrary X-Forwarded-For headers. See docs/WEB_SECURITY.md.
+
+#--------------------------------------------------------------------
+# DATABASE
+#--------------------------------------------------------------------
+
+# database.default.hostname = localhost
+# database.default.database = ci4
+# database.default.username = root
+# database.default.password = root
+# database.default.DBDriver = MySQLi
+# database.default.DBPrefix =
+# database.default.port = 3306
+
+# If you use MySQLi as tests, first update the values of Config\Database::$tests.
+# database.tests.hostname = localhost
+# database.tests.database = ci4_test
+# database.tests.username = root
+# database.tests.password = root
+# database.tests.DBDriver = MySQLi
+# database.tests.DBPrefix =
+# database.tests.charset = utf8mb4
+# database.tests.DBCollat = utf8mb4_general_ci
+# database.tests.port = 3306
+
+#--------------------------------------------------------------------
+# ENCRYPTION
+#--------------------------------------------------------------------
+
+# encryption.key =
+
+# Counseling notes: required private key configuration (no fallback).
+# Each key must be exactly 64 hexadecimal characters (32 bytes).
+# COUNSELLING_KEY_VERSION must be a positive integer: 1 uses COUNSELLING_KEY;
+# n > 1 uses explicitly configured COUNSELLING_KEY_Vn, never the version-1 key.
+# Missing/malformed keys or versions must fail closed; see README deployment contract.
+# Before upgrading existing fallback-encrypted notes, securely preserve the old
+# actual encryption key as COUNSELLING_KEY. Do not blindly generate a replacement.
+# Generate a key only for a fresh installation with no existing encrypted notes:
+# php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+# Never commit keys. Retain every key required to decrypt historical notes.
+# COUNSELLING_KEY = ''
+# COUNSELLING_KEY_VERSION = 1
+# COUNSELLING_KEY_V2 = ''
+
+# Identified survey answers use a dedicated AES-256-GCM key (no fallback).
+# Set SURVEY_KEY to 64 random hexadecimal characters through private configuration.
+# Generate locally: php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+# Never commit keys. Retain old keys when rotating to SURVEY_KEY_VERSION = 2,
+# SURVEY_KEY_V2 = <new 64-character hex key>; historical responses need old keys.
+# SURVEY_KEY = ''
+# SURVEY_KEY_VERSION = 1
+
+#--------------------------------------------------------------------
+# SESSION
+#--------------------------------------------------------------------
+
+# session.driver = 'CodeIgniter\Session\Handlers\FileHandler'
+# session.savePath = null
+
+#--------------------------------------------------------------------
+# LOGGER
+#--------------------------------------------------------------------
+
+# logger.threshold = 4
+
+#--------------------------------------------------------------------
+# MIS AUTHENTICATION (server-side only; no secrets in public assets)
+#--------------------------------------------------------------------
+# FUMIS_ENABLED = false
+# FUMIS_BASE_URL = 'https://mis.foundationu.com/sandbox'
+# FUMIS_API_KEY = ''
+# FUMIS_TIMEOUT_SECONDS = 10
+# Explicit development/testing fixtures only. Never enable for real users.
+# FUMIS_FAKE_ENABLED = false
+
+#--------------------------------------------------------------------
+# BMG ROTATION — leave disabled until firmware and physical safety acceptance
+#--------------------------------------------------------------------
+# Server gating is not an emergency stop and cannot stop offline cached schedules.
+# An explicit facilities.hardware.manage DB grant is also required; no default grant.
+# BMG_HARDWARE_ENABLED = false
+# USB firmware installation is separately gated; identification/monitoring need no flash gate.
+# Requires explicit hardware permission, maintenance, disabled schedule, bound device,
+# physical motor isolation, and an administrator-approved private firmware catalog.
+# Keep BMG_HARDWARE_ENABLED=false during USB installation.
+# BMG_USB_FLASH_ENABLED = false

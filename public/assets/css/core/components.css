@@ -1,0 +1,1735 @@
+﻿/* components.css
+ * Shared cards, tables, badges, dropdowns, widgets, and reusable component styles.
+ * Extracted from assets/css/style.css without changing selector order.
+ */
+
+/* ================================================================
+   DEMO DASHBOARD COMPONENTS (Card, Dashboard Grid, Widget Stat)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Dashboard Grid */
+.dashboard-grid {
+  display: grid;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.dashboard-grid>.card {
+  margin-bottom: 0;
+  height: 100%;
+}
+
+.dashboard-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.dashboard-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.dashboard-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 991px) {
+
+  .dashboard-grid-3,
+  .dashboard-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 575px) {
+
+  .dashboard-grid-2,
+  .dashboard-grid-3,
+  .dashboard-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Card */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
+  margin-bottom: var(--spacing-lg);
+}
+
+.card:last-child {
+  margin-bottom: 0;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.card-header:first-child {
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  margin: 0;
+}
+
+.card-subtitle {
+  font-size: 0.8125rem;
+  color: var(--muted-color);
+  margin-top: 2px;
+}
+
+.card-body {
+  padding: var(--spacing-lg);
+}
+
+.card-footer {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--background-color);
+  border-top: 1px solid var(--border-color);
+  border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+}
+
+
+/* Widget Stat */
+.widget-stat {
+  padding: var(--spacing-lg);
+}
+
+.widget-stat-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.widget-stat-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  font-size: 1.5rem;
+}
+
+.widget-stat-icon.primary {
+  background: color-mix(in srgb, var(--accent-color), transparent 90%);
+  color: var(--icon-accent-color);
+}
+
+.widget-stat-icon.success {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.widget-stat-icon.warning {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
+.widget-stat-icon.danger {
+  background: var(--danger-color-light);
+  color: var(--danger-color);
+}
+
+.widget-stat-icon.info {
+  background: var(--info-color-light);
+  color: var(--info-color);
+}
+
+.widget-stat-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--heading-color);
+  line-height: 1.2;
+}
+
+.widget-stat-label {
+  font-size: 0.8125rem;
+  color: var(--muted-color);
+  margin-top: 2px;
+}
+
+.widget-stat-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: var(--spacing-sm);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.widget-stat-change.positive {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.widget-stat-change.negative {
+  background: var(--danger-color-light);
+  color: var(--danger-color);
+}
+
+
+
+
+/* Page Header + Breadcrumb (from demo) */
+.page-header,
+.pagetitle {
+  margin-bottom: var(--spacing-xl);
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+
+.page-header-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.page-title,
+.pagetitle h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  margin: 0 0 var(--spacing-sm);
+}
+
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  font-size: 0.8125rem;
+}
+
+.breadcrumb-item {
+  color: var(--muted-color);
+}
+
+.breadcrumb-item a {
+  color: var(--muted-color);
+  transition: color var(--transition-fast);
+}
+
+.breadcrumb-item a:hover {
+  color: var(--accent-color);
+}
+
+.breadcrumb-item.active {
+  color: var(--default-color);
+}
+
+.breadcrumb-item+.breadcrumb-item::before {
+  content: "/";
+  padding-right: var(--spacing-xs);
+  color: var(--light-color);
+}
+
+
+
+/* ================================================================
+   DEMO DASHBOARD PIECE 2 (Two Column Layout, Card Actions, Charts, Tables, Badges)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Two Column Layout */
+.two-column-layout {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: var(--spacing-xl);
+}
+
+.two-column-layout>div>.card:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1199px) {
+  .two-column-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Card Actions */
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Chart Containers */
+.chart-container {
+  position: relative;
+  width: 100%;
+  min-height: 300px;
+}
+.echart-container {
+  position: relative;
+  width: 100%;
+  min-height: 320px;
+}
+.echart-container {
+  position: relative;
+  width: 100%;
+  min-height: 320px;
+}
+
+.chart-container-sm {
+  min-height: 200px;
+}
+
+.chart-container-lg {
+  min-height: 400px;
+}
+
+/* Table */
+.table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--default-color);
+  --bs-table-border-color: var(--border-color);
+  --bs-table-striped-bg: var(--table-stripe-bg);
+  --bs-table-hover-bg: var(--table-hover-bg);
+}
+
+.table>thead {
+  background-color: var(--table-header-bg);
+}
+
+/* Badge Dot */
+.badge-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: var(--radius-full);
+}
+
+/* Soft Badges (for inline status pills in tables etc) */
+.badge-soft-primary {
+  background-color: color-mix(in srgb, var(--accent-color), transparent 90%);
+  color: var(--accent-color);
+}
+
+.badge-soft-success {
+  background-color: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.badge-soft-warning {
+  background-color: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
+.badge-soft-danger {
+  background-color: var(--danger-color-light);
+  color: var(--danger-color);
+}
+
+.badge-soft-info {
+  background-color: var(--info-color-light);
+  color: var(--info-color);
+}
+
+.badge-soft-secondary {
+  background-color: var(--border-color-light);
+  color: var(--muted-color);
+}
+
+
+/* ================================================================
+   DEMO DASHBOARD PIECE 3 (Transaction List, Region List)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Transaction List */
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.transaction-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.transaction-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.transaction-icon.success {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.transaction-icon.danger {
+  background: var(--danger-color-light);
+  color: var(--danger-color);
+}
+
+.transaction-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.transaction-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.transaction-meta {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.transaction-amount {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.transaction-amount.positive {
+  color: var(--success-color);
+}
+
+.transaction-amount.negative {
+  color: var(--danger-color);
+}
+
+/* Region List */
+.region-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.region-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.region-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 140px;
+}
+
+.region-flag {
+  font-size: 1.25rem;
+}
+
+.region-name {
+  font-size: 0.875rem;
+  color: var(--default-color);
+}
+
+.region-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.region-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  min-width: 70px;
+  text-align: right;
+}
+
+.region-progress {
+  flex: 1;
+  height: 6px;
+}
+
+
+/* ================================================================
+   DEMO TABLE CELL STYLES (proper padding, header styling)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+.table> :not(caption)>*>* {
+  padding: var(--spacing-md) var(--spacing-md);
+  background-color: transparent;
+  border-bottom-width: 1px;
+  box-shadow: none;
+}
+
+.table>thead {
+  vertical-align: bottom;
+}
+
+.table>thead>tr>th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-color);
+  background-color: var(--table-header-bg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.table>tbody>tr>td {
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.table>tbody>tr:last-child>td {
+  border-bottom: none;
+}
+
+/* Zebra striping for data rows */
+.table>tbody>tr:nth-of-type(odd)>* {
+  background-color: var(--table-stripe-bg);
+}
+
+/* Outline the hovered row without shifting the table layout */
+.table>tbody>tr:hover {
+  outline: 1px solid var(--accent-color);
+  outline-offset: -1px;
+}
+
+
+
+/* ================================================================
+   DEMO ANALYTICS DASHBOARD COMPONENTS
+   (Traffic Sources, Device Breakdown, Browser Stats, Real-time)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Traffic Sources List */
+.traffic-source-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+}
+
+.traffic-source-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+}
+
+.traffic-source-info {
+  flex: 1;
+}
+
+.traffic-source-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.traffic-source-value {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.traffic-source-percent {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Device Breakdown List */
+.device-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.device-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--background-color);
+  color: var(--muted-color);
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.device-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.device-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  margin-bottom: var(--spacing-xs);
+}
+
+.device-progress {
+  height: 6px;
+}
+
+.device-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 70px;
+}
+
+.device-percent {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+
+.device-count {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+/* Browser Stats List */
+.browser-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) 0;
+}
+
+.browser-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.browser-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.browser-info i {
+  font-size: 1.25rem;
+}
+
+.browser-name {
+  font-size: 0.875rem;
+  color: var(--default-color);
+}
+
+.browser-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.browser-percent {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading-color);
+  min-width: 50px;
+  text-align: right;
+}
+
+/* Real-time Visitors */
+.realtime-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--success-color);
+  border-radius: var(--radius-full);
+  margin-right: var(--spacing-sm);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success-color), transparent 30%);
+  }
+  70% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--success-color), transparent 100%);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--success-color), transparent 100%);
+  }
+}
+
+.realtime-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-lg);
+  text-align: center;
+}
+
+.realtime-stat {
+  padding: var(--spacing-md);
+  background: var(--background-color);
+  border-radius: var(--radius-md);
+}
+
+.realtime-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--heading-color);
+  line-height: 1.2;
+}
+
+.realtime-label {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+  margin-top: var(--spacing-xs);
+}
+
+@media (max-width: 767px) {
+  .realtime-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+
+/* ================================================================
+   DEMO CRM DASHBOARD COMPONENTS
+   (Sales Pipeline, Deal List, Contact List, Task List, Chart Legend)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Sales Pipeline Stages */
+.pipeline-stages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.pipeline-stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.pipeline-stage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pipeline-stage-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--default-color);
+}
+
+.pipeline-stage-count {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+  background: var(--background-color);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.pipeline-stage-bar {
+  height: 8px;
+  background: var(--background-color);
+  border-radius: var(--radius-full);
+  position: relative;
+  overflow: hidden;
+}
+
+.pipeline-stage-bar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: var(--stage-width, 100%);
+  background: var(--stage-color, var(--accent-color));
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+}
+
+.pipeline-stage-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+
+/* Deal List */
+.deal-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.deal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.deal-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.deal-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.deal-company {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.deal-contact {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.deal-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.deal-amount {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+
+/* Contact List */
+.contact-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.contact-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.contact-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.contact-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.contact-company {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.contact-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 80px;
+}
+
+.contact-deals {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.contact-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+
+.contact-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.contact-actions .btn {
+  padding: 4px 8px;
+}
+
+/* Task List */
+.task-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.task-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.task-checkbox {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.task-checkbox input {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  margin: 0;
+  display: block;
+  transition: all var(--transition-fast);
+}
+
+.task-checkbox input:checked {
+  background: var(--success-color);
+  border-color: var(--success-color);
+}
+
+.task-checkbox input:checked::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--contrast-color);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.task-checkbox label {
+  display: none;
+}
+
+.task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-title {
+  font-size: 0.875rem;
+  color: var(--default-color);
+}
+
+.task-item:has(input:checked) .task-title {
+  text-decoration: line-through;
+  color: var(--muted-color);
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-top: 2px;
+}
+
+.task-due {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-due i {
+  font-size: 0.6875rem;
+}
+
+/* Chart Legend */
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  justify-content: center;
+  padding-top: var(--spacing-md);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.8125rem;
+  color: var(--muted-color);
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+}
+
+.legend-label {
+  font-weight: 500;
+}
+
+.legend-value {
+  font-weight: 600;
+  color: var(--heading-color);
+  margin-left: 4px;
+}
+
+
+/* ================================================================
+   DEMO MARKETING DASHBOARD COMPONENTS
+   (Social Media Stats, Content List, Conversion Funnel)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Social Media Stats List */
+.social-stats-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.social-stats-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.social-stats-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.social-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.social-icon.facebook {
+  background: rgba(24, 119, 242, 0.1);
+  color: #1877f2;
+}
+
+.social-icon.twitter {
+  background: color-mix(in srgb, var(--default-color), transparent 90%);
+  color: var(--default-color);
+}
+
+[data-theme=dark] .social-icon.twitter {
+  background: color-mix(in srgb, var(--contrast-color), transparent 90%);
+  color: var(--contrast-color);
+}
+
+.social-icon.instagram {
+  background: linear-gradient(45deg, rgba(253, 29, 29, 0.1), rgba(131, 58, 180, 0.1));
+  color: #e1306c;
+}
+
+.social-icon.linkedin {
+  background: rgba(10, 102, 194, 0.1);
+  color: #0a66c2;
+}
+
+.social-icon.youtube {
+  background: rgba(255, 0, 0, 0.1);
+  color: #ff0000;
+}
+
+.social-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.social-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.social-followers {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.social-engagement {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 70px;
+}
+
+.engagement-value {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--success-color);
+}
+
+.engagement-label {
+  font-size: 0.6875rem;
+  color: var(--muted-color);
+  text-transform: uppercase;
+}
+
+/* Content List */
+.content-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.content-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.content-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.content-rank {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-color);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted-color);
+  flex-shrink: 0;
+}
+
+.content-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.content-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.content-meta {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.content-stats {
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.content-views,
+.content-shares {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.content-views i,
+.content-shares i {
+  font-size: 0.6875rem;
+}
+
+/* Conversion Funnel */
+.funnel-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) 0;
+}
+
+.funnel-stage {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.funnel-bar {
+  height: 32px;
+  width: var(--funnel-width, 100%);
+  border-radius: var(--radius-sm);
+  transition: width var(--transition-base);
+}
+
+.funnel-bar.primary {
+  background: var(--accent-color);
+}
+
+.funnel-bar.info {
+  background: var(--info-color);
+}
+
+.funnel-bar.warning {
+  background: var(--warning-color);
+}
+
+.funnel-bar.success {
+  background: var(--success-color);
+}
+
+.funnel-bar.danger {
+  background: var(--danger-color);
+}
+
+.funnel-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 180px;
+  flex-shrink: 0;
+}
+
+.funnel-name {
+  font-size: 0.875rem;
+  color: var(--default-color);
+  min-width: 80px;
+}
+
+.funnel-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+
+.funnel-rate {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+@media (max-width: 767px) {
+  .funnel-info {
+    min-width: 120px;
+  }
+}
+
+
+/* ================================================================
+   DEMO PROJECTS DASHBOARD COMPONENTS
+   (Project List, Avatar Group, Workload, Milestone, Activity)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Project List */
+.project-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md) var(--spacing-lg);
+  gap: var(--spacing-lg);
+}
+
+.project-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.project-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 220px;
+}
+
+.project-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.project-details {
+  min-width: 0;
+}
+
+.project-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.project-client {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.project-team {
+  min-width: 120px;
+}
+
+/* Avatar Group (overlapping avatars) */
+.avatar-group {
+  display: flex;
+  align-items: center;
+}
+
+.avatar-group .avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--surface-color);
+  margin-left: -8px;
+  object-fit: cover;
+}
+
+.avatar-group .avatar:first-child {
+  margin-left: 0;
+}
+
+.avatar-more {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-color);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--surface-color);
+  margin-left: -8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted-color);
+}
+
+.project-progress-info {
+  min-width: 150px;
+}
+
+.project-progress-label {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.project-progress-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+
+.project-deadline {
+  display: flex;
+  flex-direction: column;
+  min-width: 100px;
+}
+
+.deadline-label {
+  font-size: 0.6875rem;
+  color: var(--muted-color);
+  text-transform: uppercase;
+}
+
+.deadline-date {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--default-color);
+}
+
+.project-status {
+  min-width: 80px;
+}
+
+.project-actions {
+  min-width: 40px;
+}
+
+@media (max-width: 1199px) {
+  .project-item {
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+  }
+  .project-info {
+    min-width: 100%;
+  }
+  .project-team,
+  .project-progress-info,
+  .project-deadline,
+  .project-status {
+    min-width: auto;
+  }
+}
+
+/* Workload List */
+.workload-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.workload-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.workload-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.workload-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.workload-info {
+  min-width: 120px;
+}
+
+.workload-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.workload-role {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.workload-stats {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.workload-tasks {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+.workload-bar-container {
+  height: 6px;
+  background: var(--background-color);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.workload-bar {
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+.workload-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  width: 100%;
+}
+
+.workload-bar-fill.overloaded {
+  background: var(--danger-color);
+}
+
+.workload-bar-fill.warning {
+  background: var(--warning-color);
+}
+
+.workload-bar-fill.normal {
+  background: var(--success-color);
+}
+
+.workload-bar-fill.low {
+  background: var(--info-color);
+}
+
+/* Milestone List */
+.milestone-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.milestone-item {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.milestone-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.milestone-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  background: var(--background-color);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.milestone-day {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--heading-color);
+  line-height: 1;
+}
+
+.milestone-month {
+  font-size: 0.6875rem;
+  color: var(--muted-color);
+  text-transform: uppercase;
+}
+
+.milestone-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.milestone-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+.milestone-project {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+}
+
+/* Activity Widget */
+.widget-activity .activity-item {
+  display: flex;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) 0;
+  position: relative;
+}
+
+.widget-activity .activity-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 48px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-color);
+}
+
+.activity-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  font-size: 0.875rem;
+}
+
+.activity-icon.primary {
+  background: color-mix(in srgb, var(--accent-color), transparent 90%);
+  color: var(--icon-accent-color);
+}
+
+.activity-icon.success {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.activity-icon.warning {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
+.activity-icon.danger {
+  background: var(--danger-color-light);
+  color: var(--danger-color);
+}
+
+.activity-icon.info {
+  background: var(--info-color-light);
+  color: var(--info-color);
+}
+
+.activity-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-title {
+  font-size: 0.875rem;
+  color: var(--heading-color);
+  margin-bottom: 2px;
+}
+
+.activity-title a {
+  font-weight: 500;
+  color: var(--accent-color);
+}
+
+.activity-text {
+  font-size: 0.8125rem;
+  color: var(--muted-color);
+}
+
+.activity-time {
+  font-size: 0.75rem;
+  color: var(--light-color);
+  margin-top: var(--spacing-xs);
+}
+
+
+/* ================================================================
+   DEMO FINANCE DASHBOARD COMPONENTS
+   (Progress Group, Invoice List)
+   Extracted from NiceAdmin v3 demo main.css
+   ================================================================ */
+
+/* Progress Group (Budget Overview) */
+.progress-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.progress-group-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.progress-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-group-label {
+  font-size: 0.875rem;
+  color: var(--default-color);
+}
+
+.progress-group-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--heading-color);
+}
+
+/* Invoice List */
+.invoice-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.invoice-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) 0;
+  gap: var(--spacing-md);
+}
+
+.invoice-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color-light);
+}
+
+.invoice-list-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.invoice-list-number {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+
+.invoice-client {
+  font-size: 0.8125rem;
+  color: var(--default-color);
+  margin-top: 2px;
+}
+
+.invoice-date {
+  font-size: 0.75rem;
+  color: var(--muted-color);
+  margin-top: 2px;
+}
+
+.invoice-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.invoice-amount {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--heading-color);
+}
+

@@ -1,0 +1,100 @@
+/* Workstation task board: NiceAdmin Kanban structure, Synapse theme tokens. */
+.teams-workspace { min-width: 0; }
+.teams-intro { border-top: 3px solid var(--fu-brand); }
+.teams-eyebrow { color: var(--fu-maroon-accent); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.teams-members { display: inline-flex; align-items: center; padding: .5rem .8rem; background: var(--na-primary-soft); color: var(--fu-maroon-accent); border-radius: 4px; font-size: .8rem; font-weight: 600; }
+.teams-board { display: grid; grid-template-columns: repeat(4, minmax(250px, 1fr)); gap: 1rem; overflow-x: auto; align-items: start; padding-bottom: .75rem; }
+.teams-column { border: 1px solid var(--border-color); border-radius: 4px; background: color-mix(in srgb, var(--surface-color) 80%, var(--background-color)); min-width: 0; }
+.teams-column-header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
+.teams-column-header h2 { display: inline-flex; align-items: center; gap: .5rem; font-size: .86rem; }
+.teams-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-color); }
+.teams-status-dot.is-in_progress { background: var(--fu-maroon-accent); }
+.teams-status-dot.is-blocked { background: var(--warning-color); }
+.teams-status-dot.is-done { background: var(--success-color); }
+.teams-count { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 4px; background: var(--surface-color); color: var(--muted-color); border: 1px solid var(--border-color); font-size: .76rem; }
+.teams-column-body { padding: .75rem; display: grid; gap: .75rem; }
+.teams-task { min-width: 0; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem; box-shadow: var(--na-shadow-sm); }
+.teams-task-title { font-size: .9rem; line-height: 1.45; margin-bottom: .55rem; overflow-wrap: anywhere; }
+.teams-task-title a { color: var(--heading-color); }
+.teams-task-title a:hover { color: var(--fu-maroon-accent); }
+.teams-task-excerpt { font-size: .8rem; color: var(--muted-color); margin-bottom: .8rem; overflow-wrap: anywhere; }
+.teams-task-meta { display: grid; gap: .4rem; font-size: .74rem; color: var(--muted-color); overflow-wrap: anywhere; }
+.teams-priority { display: inline-block; padding: .2rem .5rem; border-radius: 4px; background: var(--na-primary-soft); color: var(--fu-maroon-accent); font-size: .7rem; font-weight: 700; }
+.teams-priority.is-low { background: color-mix(in srgb, var(--muted-color), transparent 90%); color: var(--muted-color); }
+.teams-priority.is-high { background: color-mix(in srgb, var(--danger-color), transparent 90%); color: var(--danger-color); }
+.teams-column-empty { font-size: .8rem; color: var(--muted-color); text-align: center; margin: 1rem 0; }
+.teams-member-list { display: grid; gap: .5rem; margin: 0; }
+.teams-member-list li { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; padding: .6rem 0; border-bottom: 1px solid var(--border-color); }
+.teams-preserve { white-space: pre-wrap; overflow-wrap: anywhere; }
+.teams-status-select { width: auto; min-width: 160px; }
+.teams-comment { padding: .85rem; margin-bottom: .7rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface-color); }
+.teams-activity { padding-left: 1.2rem; font-size: .82rem; }
+.teams-activity li { padding: .5rem 0; }
+@media (max-width: 575.98px) {
+  .teams-board { grid-template-columns: minmax(0, 1fr); overflow-x: visible; }
+}
+
+/* NiceAdmin-inspired department channel and chronological message pane. */
+.team-chat-layout { display: grid; grid-template-columns: 245px minmax(0, 1fr); gap: 1rem; align-items: start; }
+.team-chat-main { min-width: 0; overflow: hidden; }
+.team-chat-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
+.team-chat-channel { display: flex; align-items: center; gap: .45rem; padding: .8rem .5rem; border-radius: 4px; color: var(--fu-maroon-accent); background: var(--na-primary-soft); font-size: .85rem; font-weight: 700; overflow-wrap: anywhere; }
+.team-chat-channel i { color: var(--icon-accent-color); }
+.team-chat-tools { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .5rem; padding: .6rem; }
+.team-chat-log { position: relative; height: clamp(300px, 52vh, 650px); overflow-y: auto; overflow-x: hidden; padding: 1rem; background: color-mix(in srgb, var(--surface-color), var(--muted-color) 3%); overflow-anchor: none; }
+.team-chat-message { display: flex; margin-bottom: .9rem; min-width: 0; }
+.team-chat-message.is-own { justify-content: flex-end; }
+.team-chat-bubble { max-width: min(85%, 650px); min-width: 120px; padding: .8rem 1rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 4px; font-size: .88rem; overflow-wrap: anywhere; }
+.team-chat-message.is-own .team-chat-bubble { background: var(--na-primary-soft); border-color: color-mix(in srgb, var(--fu-maroon-accent), transparent 75%); }
+.team-chat-message-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .7rem; margin-bottom: .5rem; font-size: .75rem; }
+.team-chat-message-header time { color: var(--muted-color); font-size: .7rem; }
+.team-chat-task { display: block; margin-top: .6rem; padding-top: .5rem; border-top: 1px solid var(--border-color); font-size: .78rem; }
+.team-chat-day { margin: .6rem 0 1rem; text-align: center; color: var(--muted-color); font-size: .75rem; font-weight: 600; }
+.team-chat-unread-divider { text-align: center; margin: .75rem 0; padding: .35rem; color: var(--fu-maroon-accent); border-block: 1px solid var(--border-color); font-size: .75rem; font-weight: 700; }
+.team-chat-composer { padding: 1rem; border-top: 1px solid var(--border-color); }
+.team-chat-composer textarea { resize: vertical; max-height: 250px; }
+.team-chat-task-input { max-width: 220px; min-width: 120px; }
+.team-chat-update-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; padding: .5rem 1rem; }
+@media (max-width: 1199.98px) { .team-chat-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 575.98px) {
+  .team-chat-log { padding: .6rem; }
+  .team-chat-bubble { max-width: 94%; padding: .65rem; }
+}
+
+/* NiceAdmin calendar layout: filter rail and calendar card. */
+.team-calendar-layout { display: grid; grid-template-columns: 245px minmax(0, 1fr); gap: 1rem; align-items: start; }
+.team-calendar-main { min-width: 0; overflow: hidden; }
+.team-calendar-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .85rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
+.team-calendar-scroll { overflow-x: auto; }
+.team-calendar-grid { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 700px; }
+.team-calendar-grid th { font-size: .75rem; text-transform: uppercase; padding: .75rem .5rem; color: var(--muted-color); background: var(--table-header-bg); text-align: center; }
+.team-calendar-grid td { vertical-align: top; height: 135px; padding: .5rem; border: 1px solid var(--border-color); background: var(--surface-color); }
+.team-calendar-grid.is-week td { height: 350px; }
+.team-calendar-grid td.is-other-month { background: color-mix(in srgb, var(--surface-color), var(--muted-color) 5%); }
+.team-calendar-grid td.is-today { box-shadow: inset 0 3px var(--fu-maroon-accent); }
+.team-calendar-day-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; font-size: .8rem; }
+.team-calendar-day-heading time { font-weight: 700; color: var(--heading-color); }
+.team-calendar-day-heading time[aria-current] { color: var(--fu-maroon-accent); }
+.team-calendar-add { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 4px; color: var(--muted-color); }
+.team-calendar-add:hover { background: var(--na-primary-soft); color: var(--icon-hover-color); }
+.team-calendar-day-items { margin: 0; display: grid; gap: .4rem; }
+.team-calendar-item { display: block; border-inline-start: 3px solid var(--fu-maroon-accent); border-radius: 4px; padding: .4rem; background: var(--na-primary-soft); color: var(--heading-color); font-size: .75rem; line-height: 1.35; overflow-wrap: anywhere; }
+.team-calendar-item:hover { color: var(--fu-maroon-accent); outline: 1px solid var(--fu-maroon-accent); }
+.team-calendar-item.is-task { border-inline-start-color: var(--muted-color); background: color-mix(in srgb, var(--surface-color), var(--muted-color) 9%); }
+.team-calendar-item-meta { display: block; margin-bottom: .2rem; font-size: .67rem; font-weight: 700; }
+.team-calendar-item.is-complete > span:last-child { text-decoration: line-through; }
+.team-calendar-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .45rem; background: var(--fu-maroon-accent); }
+.team-calendar-key.is-task { background: var(--muted-color); }
+.team-calendar-agenda-day { padding: 1rem; border-bottom: 1px solid var(--border-color); }
+.team-calendar-agenda-day ul { display: grid; gap: .5rem; }
+.team-calendar-agenda .team-calendar-item { font-size: .85rem; padding: .7rem; }
+.team-calendar-participants { max-height: 220px; overflow-y: auto; padding: .25rem; }
+[data-theme="dark"] .team-calendar-grid th { background: #303030; }
+@media (max-width: 1199.98px) {
+  .team-calendar-layout { grid-template-columns: minmax(0, 1fr); }
+  .team-calendar-layout > aside { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; }
+}
+@media (max-width: 575.98px) {
+  .team-calendar-layout > aside { grid-template-columns: minmax(0, 1fr); }
+  .team-calendar-toolbar { padding: .75rem; }
+}

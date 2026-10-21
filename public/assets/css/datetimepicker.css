@@ -1,0 +1,396 @@
+/**
+ * BalayDateTimePicker styles — customized Date + Time picker modal.
+ * Internal popup layout:
+ * | date picker (wider) | scrollable hour | : | scrollable minute | am/pm |
+ */
+
+.dtp-wrap, .dtp-popup {
+  --accent-color: var(--fu-maroon-accent, #800000);
+  --dtp-primary: var(--fu-maroon, #800000);
+}
+
+/* Trigger shell */
+.dtp-wrap {
+  position: relative;
+  display: block;
+}
+
+.dtp-wrap .dtp-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted-color);
+  font-size: 1rem;
+  transition: color 0.2s ease;
+}
+
+.dtp-wrap .form-control {
+  padding-right: 2.4rem;
+  cursor: pointer;
+}
+
+.dtp-wrap .form-control:focus ~ .dtp-icon,
+.dtp-wrap.dtp-open .dtp-icon {
+  color: var(--accent-color);
+}
+
+/* Popup Modal: side-by-side | date picker(wider) | time section | */
+.dtp-popup {
+  position: fixed;
+  z-index: 1090;
+  width: 486px;
+  max-width: calc(100vw - 16px);
+  padding: 14px;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 0.25rem);
+  box-shadow: none;
+  animation: dtpIn 0.18s ease;
+  user-select: none;
+}
+
+.dtp-popup.dtp-time-only {
+  width: 260px;
+}
+
+.dtp-time-only .dtp-time-pane {
+  width: 100%;
+}
+
+.dtp-time-only .dtp-foot {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@keyframes dtpIn {
+  from { opacity: 0; transform: translateY(5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dtp-popup { animation: none; }
+}
+
+/* Main body: split horizontally */
+.dtp-body {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+/* Left Pane: Date Picker (wider) */
+.dtp-date-pane {
+  flex: 1 1 250px;
+  min-width: 240px;
+}
+
+.dtp-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.dtp-nav {
+  width: 30px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--surface-color, #fff);
+  color: var(--default-color, #2d3a4e);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dtp-nav:hover {
+  background: color-mix(in srgb, var(--accent-color), transparent 90%);
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color), transparent 70%);
+}
+
+.dtp-select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.34rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--surface-color, #fff);
+  color: var(--heading-color, #1a1a1a);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dtp-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--fu-maroon-accent, #800000), transparent 50%);
+  outline-offset: 1px;
+}
+
+/* Grid */
+.dtp-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.dtp-grid th {
+  padding: 4px 0;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-color);
+  text-align: center;
+}
+
+.dtp-grid td.dtp-cell {
+  padding: 0;
+  height: 32px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.dtp-grid td.dtp-cell:focus {
+  outline: none;
+}
+
+.dtp-grid td.dtp-cell:focus .dtp-day {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.dtp-day {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm, 0.25rem);
+  font-size: 0.82rem;
+  color: var(--default-color, #2d3a4e);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+td.dtp-cell:not(.is-disabled):not(.is-selected):hover .dtp-day {
+  background: color-mix(in srgb, var(--accent-color), transparent 88%);
+  color: var(--accent-color);
+}
+
+td.dtp-cell.is-outmonth .dtp-day {
+  color: var(--muted-color, #667085);
+  opacity: 0.55;
+}
+
+td.dtp-cell.is-today .dtp-day {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  font-weight: 700;
+}
+
+td.dtp-cell.is-selected .dtp-day {
+  background: var(--dtp-primary);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+td.dtp-cell.is-today.is-selected .dtp-day {
+  border-color: #fff;
+}
+
+td.dtp-cell.is-disabled {
+  cursor: not-allowed;
+}
+
+td.dtp-cell.is-disabled .dtp-day {
+  color: var(--muted-color, #667085);
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+/* Vertical divider */
+.dtp-divider {
+  width: 1px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Right Pane: Time section with scrollable columns */
+.dtp-time-pane {
+  width: 190px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dtp-time-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.dtp-time-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-color);
+  display: flex;
+  align-items: center;
+}
+
+.dtp-time-readout {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--heading-color, #1a1a1a);
+  background: color-mix(in srgb, var(--accent-color), transparent 94%);
+  border: 1px solid color-mix(in srgb, var(--accent-color), transparent 80%);
+  border-radius: var(--radius-sm, 0.25rem);
+  padding: 1px 6px;
+}
+
+/* Scrollable wheels container */
+.dtp-wheels-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.dtp-wheels-headers {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.dtp-wheel-title {
+  flex: 1;
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-color);
+}
+
+.dtp-wheels-box {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  height: 184px;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 0.25rem);
+  padding: 4px 2px;
+}
+
+.dtp-wheel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  padding: 0 1px;
+}
+
+.dtp-wheel::-webkit-scrollbar {
+  width: 3px;
+}
+
+.dtp-wheel::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-color), transparent 40%);
+  border-radius: 3px;
+}
+
+.dtp-wheel-item {
+  width: 100%;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--default-color, #2d3a4e);
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 0.25rem);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.dtp-wheel-item:hover {
+  background: color-mix(in srgb, var(--accent-color), transparent 90%);
+  color: var(--accent-color);
+}
+
+.dtp-wheel-item.is-selected {
+  background: var(--dtp-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Footer */
+.dtp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.dtp-selection-preview {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--heading-color, #1a1a1a);
+}
+
+.dtp-foot-btn {
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 0.25rem);
+  color: var(--accent-color);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dtp-foot-btn:hover {
+  background: color-mix(in srgb, var(--accent-color), transparent 90%);
+}
+
+.dtp-foot-btn.dtp-btn-apply {
+  background: var(--dtp-primary);
+  color: #fff;
+  padding: 4px 12px;
+}
+
+.dtp-foot-btn.dtp-btn-apply:hover {
+  background: color-mix(in srgb, var(--dtp-primary), black 15%);
+}
+
+/* Screen-reader-only help line */
+.dtp-help {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

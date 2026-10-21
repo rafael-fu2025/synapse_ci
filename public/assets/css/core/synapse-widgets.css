@@ -1,0 +1,567 @@
+/* =========================================================
+   SYNAPSE widget layer — custom select dropdown (BalaySelect)
+   Rebranded from the BalayWorks teal build to SYNAPSE maroon.
+   Loaded after core/tokens.css + core/synapse-theme.css so the
+   NiceAdmin tokens (--surface-color, --border-color, --muted-color,
+   --accent-color) resolve automatically in light and dark mode.
+   ========================================================= */
+
+/* Bootstrap dropdown link colours -> SYNAPSE maroon */
+.dropdown-menu {
+  --bs-dropdown-link-hover-color: var(--fu-maroon, #800000);
+  --bs-dropdown-link-hover-bg: rgba(128, 0, 0, 0.08);
+  --bs-dropdown-link-active-color: #fff;
+  --bs-dropdown-link-active-bg: var(--fu-maroon, #800000);
+  border-radius: var(--radius-md, 0.25rem);
+  box-shadow: none !important;
+}
+
+/* Override shadow utilities on shared confirmation and form dialogs. */
+:is(.modal-content, dialog) {
+  border-radius: var(--radius-lg, 0.25rem);
+  box-shadow: none !important;
+}
+
+.bd-select {
+  position: relative;
+}
+
+.bd-select .bd-select-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+  background-image: none; /* the ::after caret replaces the form-select arrow */
+}
+
+.bd-select .bd-select-toggle::after {
+  margin-left: 0.5em;
+}
+
+.bd-select-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 0.25rem;
+}
+
+.bd-select-label.bd-placeholder {
+  color: var(--muted-color);
+  font-weight: 400;
+}
+
+.bd-select-menu {
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: var(--radius-md, 0.25rem);
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+}
+
+.bd-select-menu .dropdown-header {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fu-maroon-light, #800000);
+}
+
+.bd-select-menu .bd-item-placeholder {
+  color: var(--muted-color);
+  font-style: italic;
+}
+
+/* The hidden native select: out of sight, still form-bound */
+.bd-select-source {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  pointer-events: none;
+}
+
+/* Red state mirrors from the hidden select to the visible button */
+.bd-select .bd-select-toggle.is-invalid {
+  border-color: var(--bs-danger);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath d='m5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+}
+
+/* Compact variant inside the date picker header */
+.dp-head .bd-select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The month control needs more room than the year control */
+.dp-head .bd-select:nth-of-type(1) {
+  flex: 1.5 1 0;
+}
+
+.dp-popup .bd-select-toggle {
+  padding: 0.34rem 1.7rem 0.34rem 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--heading-color, #1a1a1a);
+  border-radius: var(--radius-sm, 0.25rem);
+}
+
+.dp-popup .bd-select-menu {
+  font-size: 0.84rem;
+}
+
+.dp-popup .bd-select-menu .dropdown-item {
+  padding: 0.32rem 1rem;
+}
+
+/* --- Dark mode ---------------------------------------------------------
+   The picker and menus are appended to <body> and read the same
+   :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) tokens as the rest of the system. Only the
+   literal teal accents from the original build need remapping. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-header,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select .bd-select-toggle:hover {
+  color: var(--default-color);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item.active,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item:active {
+  background: var(--fu-brand);
+  color: #ffffff;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .dropdown-menu {
+  --bs-dropdown-link-hover-color: var(--default-color);
+  --bs-dropdown-link-hover-bg: #383838;
+  --bs-dropdown-link-active-color: #ffffff;
+  --bs-dropdown-link-active-bg: var(--fu-brand);
+}
+
+/* Keep the trigger legible when the theme flips */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select .bd-select-toggle {
+  background-color: var(--input-bg);
+  color: var(--default-color, #f0f0f0);
+  border-color: var(--input-border);
+}
+
+.dp-wrap .form-control:focus ~ .dp-icon,
+.dp-wrap.dp-open .dp-icon,
+.dtp-wrap .form-control:focus ~ .dtp-icon,
+.dtp-wrap.dtp-open .dtp-icon {
+  color: var(--icon-accent-color);
+}
+
+/* Picker toolbar actions follow the same solid-fill policy as form actions.
+   Calendar days and time options remain selection controls, not action buttons. */
+:is(.dp-foot-btn, .dtp-foot-btn):not(.dtp-btn-apply),
+:is(.dp-nav, .dtp-nav) {
+  background: var(--action-secondary);
+  border: 1px solid var(--action-secondary);
+  color: #ffffff;
+}
+
+:is(.dp-foot-btn, .dtp-foot-btn):not(.dtp-btn-apply):is(:hover, :focus-visible),
+:is(.dp-nav, .dtp-nav):is(:hover, :focus-visible) {
+  background: var(--action-secondary-hover);
+  border-color: var(--action-secondary-hover);
+  color: #ffffff;
+}
+
+.dtp-foot-btn.dtp-btn-apply {
+  background: var(--fu-brand);
+  color: #ffffff;
+}
+
+.dtp-foot-btn.dtp-btn-apply:is(:hover, :focus-visible) {
+  background: var(--fu-brand-hover);
+  color: #ffffff;
+}
+
+:is(.dp-foot-btn, .dtp-foot-btn, .dp-nav, .dtp-nav):focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+/* =========================================================
+ * Portal Profile Card (ATM Card Format - ISO/IEC 7810 ID-1)
+ * Fixed ATM proportion (aspect ratio 1.586) and dimensions
+ * (360px width). Never resizes or stretches when viewport scales.
+ * ========================================================= */
+.portal-profile-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  width: 360px;
+  min-width: 360px;
+  max-width: 100%;
+  aspect-ratio: 1.586;
+  min-height: 228px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, var(--fu-maroon, #800000) 0%, #5a0000 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 16px 36px -10px rgba(128, 0, 0, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+@media (max-width: 380px) {
+  .portal-profile-card {
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: auto;
+  }
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card {
+  background: linear-gradient(135deg, #242424 0%, #161616 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f0f0f0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 36px -10px rgba(0, 0, 0, 0.5);
+}
+
+.portal-profile-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08), 0 20px 42px -10px rgba(128, 0, 0, 0.45);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), 0 20px 42px -10px rgba(0, 0, 0, 0.65);
+}
+
+.portal-profile-card .card-art-logo {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  height: 72%;
+  width: auto;
+  transform: translateY(-50%);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.85;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card .card-art-logo {
+  opacity: 0.15;
+}
+
+.portal-profile-card .card-art-noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.portal-profile-card .card-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  padding: 1.15rem 1.25rem;
+}
+
+.portal-profile-card .card-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 0.5rem;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card .card-caption {
+  color: #a3a3a3;
+}
+
+.portal-profile-card .card-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #ffffff;
+  margin-bottom: 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card .card-name {
+  color: #ffffff;
+}
+
+.portal-profile-card .card-id {
+  font-size: 0.72rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: rgba(255, 255, 255, 0.75);
+  margin-bottom: 0.85rem;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card .card-id {
+  color: #888888;
+}
+
+.portal-profile-card .card-details {
+  margin-top: auto;
+  margin-bottom: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 0.65rem;
+  row-gap: 0.25rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.portal-profile-card .card-details dt {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card .card-details dt {
+  color: #888888;
+}
+
+.portal-profile-card .card-details dd {
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card .card-details dd {
+  color: #f0f0f0;
+}
+
+.portal-profile-card .card-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-profile-card .card-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e0e0e0;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* =========================================================
+ * Survey Responses & Analytics Visualizations
+ * NiceAdmin v3 KPI Rail & Question Breakdowns
+ * ========================================================= */
+.nd-kpi-card {
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  min-height: 124px;
+  justify-content: space-between;
+}
+
+.nd-kpi-card .nd-kpi-value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.nd-kpi-card .nd-kpi-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.07em;
+}
+
+.nd-kpi-card .nd-kpi-trend {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: #1c1c1c;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-revenue {
+  background: color-mix(in srgb, #198754, #1c1c1c 88%);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-leads {
+  background: color-mix(in srgb, #0dcaf0, #1c1c1c 88%);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-cycle {
+  background: color-mix(in srgb, #ffc107, #1c1c1c 88%);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-retention {
+  background: color-mix(in srgb, var(--accent-color), #1c1c1c 88%);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-value {
+  color: #ffffff;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-label {
+  color: #a3a3a3;
+}
+
+.survey-kpi-card {
+  border-radius: 12px;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color);
+  padding: 1.25rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .survey-kpi-card {
+  background: #1c1c1c;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.survey-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+}
+
+.survey-kpi-val {
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--heading-color, #1a1a1a);
+}
+
+.survey-kpi-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-color);
+  margin-top: 0.35rem;
+}
+
+.survey-q-card {
+  border-radius: 12px;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .survey-q-card {
+  background: #1c1c1c;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.survey-q-header {
+  padding: 0.85rem 1.25rem;
+  background: color-mix(in srgb, var(--surface-color, #fff) 95%, var(--accent-color) 5%);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .survey-q-header {
+  background: #242424;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.survey-q-body {
+  padding: 1.25rem;
+}
+
+.survey-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.survey-bar-label {
+  width: 140px;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--default-color, #2d3a4e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.survey-bar-track {
+  flex: 1;
+  height: 22px;
+  background: color-mix(in srgb, var(--border-color) 40%, transparent 60%);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .survey-bar-track {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.survey-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--fu-maroon-light, #800000) 0%, color-mix(in srgb, var(--fu-maroon-light, #800000), white 25%) 100%);
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  min-width: 28px;
+}
+
+.survey-bar-fill.bar-rating-5 { background: linear-gradient(90deg, #198754 0%, #20c997 100%); }
+.survey-bar-fill.bar-rating-4 { background: linear-gradient(90deg, #0d6efd 0%, #0dcaf0 100%); }
+.survey-bar-fill.bar-rating-3 { background: linear-gradient(90deg, #ffc107 0%, #ffca2c 100%); color: #000; }
+.survey-bar-fill.bar-rating-2 { background: linear-gradient(90deg, #fd7e14 0%, #ff922b 100%); }
+.survey-bar-fill.bar-rating-1 { background: linear-gradient(90deg, #dc3545 0%, #ea868f 100%); }
+
+.survey-bar-meta {
+  width: 80px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--heading-color, #1a1a1a);
+}
+
+.survey-quote-card {
+  border-left: 3px solid var(--fu-maroon-light, #800000);
+  background: color-mix(in srgb, var(--surface-color, #fff) 96%, var(--accent-color) 4%);
+  border-radius: 0 8px 8px 0;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .survey-quote-card {
+  background: #242424;
+  border-color: var(--default-color);
+  color: #e0e0e0;
+}

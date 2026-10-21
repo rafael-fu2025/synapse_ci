@@ -1,0 +1,819 @@
+{
+    "source": "synapse_zcode",
+    "target": "humus_db",
+    "source_tables": [
+        {
+            "TABLE_NAME": "audit_events",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "audit_outbox",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "auth_groups",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "auth_groups_permissions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "auth_groups_users",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "auth_identities",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "auth_logins",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "auth_refresh_tokens",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "auth_token_logins",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_appointments",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_encounters",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_equipment",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_equipment_status_log",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_equipment_units",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_inventory_items",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_inventory_movements",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_medicines",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_medicine_batches",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_medicine_forecasts",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_medicine_transactions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_queue_entries",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_reorder_requests",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_treatments",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_triage_predictions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "clinic_vitals",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "counselling_appointments",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "counselling_availability",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "counselling_key_versions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "counselling_notes",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "counselling_queue_entries",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "counselling_scheduling_analytics",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "counselling_sessions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_alerts",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_batches",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_batch_updates",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_composition",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_devices",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_device_assignments",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_device_commands",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_device_runs",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_inputs",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_losses",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_outputs",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_process_logs",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_schedule_history",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_units",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_unit_categories",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_bmg_unit_schedules",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_sop_documents",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "facilities_waste_categories",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "generated_reports",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "guidance_announcements",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "guidance_followups",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "guidance_services",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "migrations",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "notifications",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "notification_outbox",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "patient_allergies",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "patient_contacts",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "permissions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "referral_referrals",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "report_configurations",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "report_summaries",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "surveys",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_answers",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_answer_options",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_links",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_link_opens",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_link_screenshots",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_questions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_responses",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "survey_versions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "tenants",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "users",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "user_permissions",
+            "TABLE_TYPE": "BASE TABLE",
+            "ENGINE": "InnoDB"
+        },
+        {
+            "TABLE_NAME": "v_clinic_visit_report",
+            "TABLE_TYPE": "VIEW",
+            "ENGINE": null
+        },
+        {
+            "TABLE_NAME": "v_counselling_workload_summary",
+            "TABLE_TYPE": "VIEW",
+            "ENGINE": null
+        }
+    ],
+    "directory_columns": [
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "id",
+            "COLUMN_TYPE": "bigint(20) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": "PRI"
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "tenant_id",
+            "COLUMN_TYPE": "int(10) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "user_id",
+            "COLUMN_TYPE": "bigint(20) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": "MUL"
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "day_of_week",
+            "COLUMN_TYPE": "tinyint(3) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "shift_start",
+            "COLUMN_TYPE": "time",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "shift_end",
+            "COLUMN_TYPE": "time",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "schedule_type",
+            "COLUMN_TYPE": "enum('regular','on_call','leave')",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "effective_from",
+            "COLUMN_TYPE": "date",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "effective_to",
+            "COLUMN_TYPE": "date",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "is_active",
+            "COLUMN_TYPE": "tinyint(1)",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "created_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": "MUL"
+        },
+        {
+            "TABLE_NAME": "clinic_staff_schedules",
+            "COLUMN_NAME": "updated_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "tenants",
+            "COLUMN_NAME": "id",
+            "COLUMN_TYPE": "int(10) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": "PRI"
+        },
+        {
+            "TABLE_NAME": "tenants",
+            "COLUMN_NAME": "name",
+            "COLUMN_TYPE": "varchar(128)",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "tenants",
+            "COLUMN_NAME": "slug",
+            "COLUMN_TYPE": "varchar(64)",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": "UNI"
+        },
+        {
+            "TABLE_NAME": "tenants",
+            "COLUMN_NAME": "is_active",
+            "COLUMN_TYPE": "tinyint(1)",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "tenants",
+            "COLUMN_NAME": "created_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "tenants",
+            "COLUMN_NAME": "updated_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "id",
+            "COLUMN_TYPE": "bigint(20) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": "PRI"
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "tenant_id",
+            "COLUMN_TYPE": "int(10) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "kind",
+            "COLUMN_TYPE": "enum('student','employee','contractor','alumni')",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "first_name",
+            "COLUMN_TYPE": "varchar(100)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "last_name",
+            "COLUMN_TYPE": "varchar(100)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "middle_name",
+            "COLUMN_TYPE": "varchar(100)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "qr_code",
+            "COLUMN_TYPE": "varchar(255)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": "UNI"
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "date_of_birth",
+            "COLUMN_TYPE": "date",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "gender",
+            "COLUMN_TYPE": "enum('male','female','other')",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "address",
+            "COLUMN_TYPE": "text",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "archived_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "student_number",
+            "COLUMN_TYPE": "varchar(50)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": "UNI"
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "course",
+            "COLUMN_TYPE": "varchar(100)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "year_level",
+            "COLUMN_TYPE": "tinyint(3) unsigned",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "section",
+            "COLUMN_TYPE": "varchar(20)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "blood_type",
+            "COLUMN_TYPE": "varchar(5)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "consecutive_no_shows",
+            "COLUMN_TYPE": "int(10) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "employee_number",
+            "COLUMN_TYPE": "varchar(50)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": "UNI"
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "department",
+            "COLUMN_TYPE": "varchar(100)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "position",
+            "COLUMN_TYPE": "varchar(100)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "date_hired",
+            "COLUMN_TYPE": "date",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "employment_status",
+            "COLUMN_TYPE": "enum('active','inactive','on_leave')",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "hr_synced_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "emergency_contact_name",
+            "COLUMN_TYPE": "varchar(150)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "emergency_contact_phone",
+            "COLUMN_TYPE": "varchar(20)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "is_teaching",
+            "COLUMN_TYPE": "tinyint(1)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "username",
+            "COLUMN_TYPE": "varchar(64)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": "UNI"
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "status",
+            "COLUMN_TYPE": "varchar(32)",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "status_message",
+            "COLUMN_TYPE": "varchar(255)",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "active",
+            "COLUMN_TYPE": "tinyint(1)",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "last_active",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "token_epoch",
+            "COLUMN_TYPE": "bigint(20) unsigned",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "created_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "updated_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "NO",
+            "COLUMN_KEY": ""
+        },
+        {
+            "TABLE_NAME": "users",
+            "COLUMN_NAME": "deleted_at",
+            "COLUMN_TYPE": "datetime",
+            "IS_NULLABLE": "YES",
+            "COLUMN_KEY": "MUL"
+        }
+    ],
+    "source_tenants": [
+        {
+            "id": "1",
+            "name": "Foundation University",
+            "slug": "foundation-university",
+            "is_active": "1"
+        }
+    ],
+    "target_tenant": {
+        "id": "1",
+        "name": "Foundation University",
+        "slug": "fu_main",
+        "is_active": "1"
+    },
+    "source_directory_counts": [
+        {
+            "tenant_id": "1",
+            "kind": null,
+            "rows_total": "15",
+            "deleted_rows": "0",
+            "archived_rows": "0",
+            "missing_official_id": "0"
+        },
+        {
+            "tenant_id": "1",
+            "kind": "student",
+            "rows_total": "2005",
+            "deleted_rows": "0",
+            "archived_rows": "1",
+            "missing_official_id": "0"
+        },
+        {
+            "tenant_id": "1",
+            "kind": "employee",
+            "rows_total": "602",
+            "deleted_rows": "0",
+            "archived_rows": "0",
+            "missing_official_id": "0"
+        }
+    ],
+    "existing_target_people": [
+        {
+            "kind": "student",
+            "count": "3"
+        },
+        {
+            "kind": "employee",
+            "count": "3"
+        }
+    ]
+}

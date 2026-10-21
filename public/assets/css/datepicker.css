@@ -1,0 +1,224 @@
+/**
+ * BalayDatepicker styles — dependency-free, themed via NiceAdmin tokens
+ * (--border-color, --muted-color, --accent-color, --surface-color) so the
+ * popup follows SYNAPSE's light/dark tokens.
+ */
+
+/* Widget-local accents avoid changing the rest of NiceAdmin's palette. */
+.dp-wrap, .dp-popup {
+  --accent-color: var(--fu-maroon-accent, #800000);
+}
+
+/* Trigger shell */
+.dp-wrap {
+  position: relative;
+}
+
+.dp-wrap .dp-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--muted-color);
+  transition: color 0.2s ease;
+}
+
+.dp-wrap .form-control {
+  padding-right: 2.4rem;
+  cursor: pointer;
+}
+
+.dp-wrap .form-control:focus ~ .dp-icon,
+.dp-wrap.dp-open .dp-icon {
+  color: var(--accent-color);
+}
+
+/* Popup */
+.dp-popup {
+  position: fixed;
+  z-index: 1090;
+  width: 306px;
+  max-width: calc(100vw - 16px);
+  padding: 10px;
+  background: var(--surface-color, #fff);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 0.25rem);
+  box-shadow: none;
+  animation: dpIn 0.18s ease;
+}
+
+@keyframes dpIn {
+  from { opacity: 0; transform: translateY(5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-popup { animation: none; }
+}
+
+/* Header */
+.dp-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.dp-nav {
+  width: 30px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--surface-color, #fff);
+  color: var(--default-color, #2d3a4e);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dp-nav:hover {
+  background: color-mix(in srgb, var(--accent-color), transparent 90%);
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color), transparent 70%);
+}
+
+.dp-select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.34rem 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--surface-color, #fff);
+  color: var(--heading-color, #1a1a1a);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dp-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--fu-maroon-accent, #800000), transparent 50%);
+  outline-offset: 1px;
+}
+
+/* Grid */
+.dp-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.dp-grid th {
+  padding: 5px 0;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-color);
+}
+
+.dp-grid td.dp-cell {
+  padding: 0;
+  height: 36px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.dp-grid td.dp-cell:focus {
+  outline: none;
+}
+
+/* Preserve a visible keyboard focus ring without decorative elevation. */
+.dp-grid td.dp-cell:focus .dp-day {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.dp-day {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm, 0.25rem);
+  font-size: 0.84rem;
+  color: var(--default-color, #2d3a4e);
+  border: 1.5px solid transparent;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+td.dp-cell:not(.is-disabled):not(.is-selected):hover .dp-day {
+  background: color-mix(in srgb, var(--accent-color), transparent 88%);
+  color: var(--accent-color);
+}
+
+td.dp-cell.is-outmonth .dp-day {
+  color: var(--muted-color, #667085);
+  opacity: 0.65;
+}
+
+td.dp-cell.is-today .dp-day {
+  border-color: var(--accent-color);
+  color: var(--accent-color);
+  font-weight: 700;
+}
+
+td.dp-cell.is-selected .dp-day {
+  background: var(--fu-maroon, #800000);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+td.dp-cell.is-today.is-selected .dp-day {
+  border-color: #fff;
+}
+
+td.dp-cell.is-disabled {
+  cursor: not-allowed;
+}
+
+td.dp-cell.is-disabled .dp-day {
+  color: var(--muted-color, #667085);
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+/* Footer */
+.dp-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color-light, #eef0f4);
+}
+
+.dp-foot-btn {
+  border: none;
+  background: none;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm, 0.25rem);
+  color: var(--accent-color);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dp-foot-btn:hover {
+  background: color-mix(in srgb, var(--accent-color), transparent 90%);
+}
+
+/* Screen-reader-only help line (self-contained, no Bootstrap dependency) */
+.dp-help {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

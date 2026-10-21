@@ -1,0 +1,258 @@
+﻿/* tokens.css
+ * Design tokens, theme variables, and Bootstrap variable overrides.
+ * Extracted from assets/css/style.css without changing selector order.
+ */
+
+/*!
+ * NiceAdmin v3 - 2026
+ * Author: BootstrapMade
+ * Updated: 2026 with modern design system, dark mode, new icon libraries
+ * License: https://bootstrapmade.com/license/
+ */
+
+/*--------------------------------------------------------------
+# Design Tokens
+--------------------------------------------------------------*/
+:root {
+  /* Fonts */
+  --default-font: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --heading-font: "Poppins", sans-serif;
+  --nav-font: "Nunito Sans", sans-serif;
+  --mono-font: "JetBrains Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+
+  /* Brand: action fills stay maroon in both themes. */
+  --fu-maroon: #800000;
+  --fu-maroon-hover: #6b0000;
+  --fu-maroon-active: #5a0000;
+  --fu-maroon-light: #800000;
+  --fu-maroon-accent: #800000;
+  --fu-brand: #800000;
+  --fu-brand-hover: #6b0000;
+  --fu-brand-active: #5a0000;
+  --action-secondary: #595959;
+  --action-secondary-hover: #484848;
+  --action-secondary-active: #383838;
+  --action-success: #146c43;
+  --action-success-hover: #105635;
+  --action-success-active: #0c4229;
+  --action-danger: #b02a37;
+  --action-danger-hover: #96232f;
+  --action-danger-active: #7c1d27;
+  --action-warning: #ffc107;
+  --action-warning-hover: #e5ad06;
+  --action-warning-active: #cc9a06;
+  --action-info: #087990;
+  --action-info-hover: #066478;
+  --action-info-active: #055264;
+  --control-border: #767676;
+  --focus-color: #800000;
+  --focus-ring: rgb(128 0 0 / 0.25);
+  --primary-text-color: #800000;
+  --icon-accent-color: #800000;
+  --icon-hover-color: #6b0000;
+  --table-link-primary: #800000;
+  --table-link-secondary: #595959;
+  --table-link-success: #146c43;
+  --table-link-danger: #b02a37;
+  --table-link-warning: #806000;
+  --table-link-info: #076e83;
+  --table-link-light: #595959;
+  --table-link-dark: #303030;
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.16);
+  --na-primary: #800000;
+  --na-primary-rgb: 128, 0, 0;
+  --na-primary-soft: #f8eeee;
+  --link-color: #800000;
+  --link-hover-color: #6b0000;
+  --bs-primary: #800000;
+  --bs-primary-rgb: 128, 0, 0;
+  --bs-primary-bg-subtle: #f8eeee;
+  --bs-primary-border-subtle: #f0d5d5;
+  --bs-primary-text-emphasis: #5a0000;
+  --bs-link-color: #800000;
+  --bs-link-color-rgb: 128, 0, 0;
+  --bs-link-hover-color: #6b0000;
+  --bs-link-hover-color-rgb: 107, 0, 0;
+  --na-success: #2eca6a;
+  --na-success-rgb: 46, 202, 106;
+  --na-info: #3b8af2;
+  --na-warning: #ff771d;
+  --na-danger: #ff4d4d;
+  --na-purple: #6f42c1;
+  --na-pink: #d63384;
+
+  /* Surfaces (light) */
+  --na-bg: #f6f7fb;
+  --na-surface: #ffffff;
+  --na-surface-2: #fafbfc;
+  --na-border: #e5e7ef;
+  --na-text: #1f2937;
+  --na-text-muted: #6c757d;
+  --na-heading: #111827;
+
+  /* Sidebar */
+  --na-sidebar-bg: #ffffff;
+  --na-sidebar-color: #5a6b85;
+  --na-sidebar-hover: #f3f4f7;
+  --na-sidebar-active: var(--na-primary);
+  --na-sidebar-active-color: #ffffff;
+  --na-sidebar-heading: #8392a5;
+  --na-sidebar-border: #eef0f4;
+
+  /* Header */
+  --na-header-bg: #ffffff;
+  --na-header-border: #eef0f4;
+
+  /* Misc */
+  --na-shadow-sm: 0 1px 2px rgba(16,24,40,.04);
+  --na-shadow: 0 2px 8px rgba(16,24,40,.06);
+  --na-shadow-lg: 0 8px 24px rgba(16,24,40,.08);
+  --na-radius: .75rem;
+  --na-radius-sm: .5rem;
+  --na-radius-lg: 1rem;
+
+  /* Layout */
+  --na-header-height: 64px;
+  --na-sidebar-width: 260px;
+  --na-sidebar-collapsed: 76px;
+
+  /* Transitions */
+  --na-transition: all .25s ease;
+}
+
+:root {
+  /* Core palette */
+  --background-color: #f5f7ff;
+  --default-color: #2d3a4e;
+  --heading-color: #111827;
+  --accent-color: #800000;
+  --surface-color: #ffffff;
+  --contrast-color: #ffffff;
+  /* Extended text colors */
+  --muted-color: #667085;
+  --light-color: #98a2b3;
+  /* Borders */
+  --border-color: #dbe3ff;
+  --border-color-light: #ebefff;
+  --border-color-dark: #c7d3ff;
+  /* Status colors */
+  --success-color: #21a66c;
+  --success-color-light: #dcf8ea;
+  --warning-color: #ec9f05;
+  --warning-color-light: #fff3d8;
+  --danger-color: #e74c63;
+  --danger-color-light: #ffe3e8;
+  --info-color: #2f80ed;
+  --info-color-light: #e4efff;
+  /* Cards */
+  --card-bg: #ffffff;
+  --card-shadow: var(--shadow-md);
+  --card-border: var(--border-color);
+  /* Forms */
+  --input-bg: #ffffff;
+  --input-border: var(--control-border);
+  --input-focus-border: var(--accent-color);
+  --input-focus-ring: rgb(128 0 0 / 0.2);
+}
+
+/* Bootstrap Radius Overrides */
+:root {
+  --bs-border-radius: 0.25rem;
+  --bs-border-radius-sm: 0.25rem;
+  --bs-border-radius-lg: 0.25rem;
+  --bs-border-radius-xl: 0.25rem;
+  --bs-border-radius-xxl: 0.25rem;
+  --bs-card-border-radius: 0.25rem;
+  --bs-dropdown-border-radius: 0.25rem;
+  --bs-btn-border-radius: 0.25rem;
+  --bs-btn-border-radius-sm: 0.25rem;
+  --bs-btn-border-radius-lg: 0.25rem;
+  --bs-modal-border-radius: 0.25rem;
+  --bs-popover-border-radius: 0.25rem;
+  --bs-tooltip-border-radius: 0.25rem;
+}
+
+/* One dark palette for the current HTML theme and the legacy body hook.
+   Apply on body too: a locally declared legacy token beats inheritance. */
+html[data-theme="dark"],
+html[data-theme="dark"] body,
+html:not([data-theme="light"]) body.dark-mode {
+  color-scheme: dark;
+  --background-color: #121212;
+  --default-color: #f0f0f0;
+  --heading-color: #ffffff;
+  --accent-color: #800000;
+  --surface-color: #1c1c1c;
+  --contrast-color: #ffffff;
+  --muted-color: #a3a3a3;
+  --light-color: #b0b0b0;
+  --border-color: #484848;
+  --border-color-light: #383838;
+  --border-color-dark: #767676;
+  --control-border: #929292;
+  --focus-color: #ffffff;
+  --focus-ring: rgb(255 255 255 / 0.35);
+  --primary-text-color: #f0f0f0;
+  --icon-accent-color: #ffffff;
+  --icon-hover-color: #ffffff;
+  --table-link-primary: #f0f0f0;
+  --table-link-secondary: #c2c2c2;
+  --table-link-success: #75d6a4;
+  --table-link-danger: #ff9aa2;
+  --table-link-warning: #ffda6a;
+  --table-link-info: #73d7ec;
+  --table-link-light: #f0f0f0;
+  --table-link-dark: #d0d0d0;
+  --link-color: #f0f0f0;
+  --link-hover-color: #ffffff;
+  --bs-link-color: #f0f0f0;
+  --bs-link-color-rgb: 240, 240, 240;
+  --bs-link-hover-color: #ffffff;
+  --bs-link-hover-color-rgb: 255, 255, 255;
+  --bs-primary-bg-subtle: #321c1c;
+  --bs-primary-border-subtle: #855252;
+  --bs-primary-text-emphasis: #f0f0f0;
+  --na-primary-soft: #321c1c;
+  --header-bg: #181818;
+  --header-border: var(--border-color);
+  --header-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --sidebar-bg: #141414;
+  --sidebar-border: var(--border-color);
+  --sidebar-color: #e0e0e0;
+  --sidebar-muted-color: #a3a3a3;
+  --sidebar-hover-bg: #282828;
+  --sidebar-active-bg: #383838;
+  --sidebar-active-color: #ffffff;
+  --card-bg: var(--surface-color);
+  --card-border: var(--border-color);
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --table-header-bg: #242424;
+  --table-hover-bg: #262626;
+  --table-stripe-bg: #222222;
+  --input-bg: #222222;
+  --input-border: var(--control-border);
+  --input-focus-border: var(--focus-color);
+  --input-focus-ring: var(--focus-ring);
+  --na-bg: var(--background-color);
+  --na-surface: var(--surface-color);
+  --na-surface-2: #222222;
+  --na-border: var(--border-color);
+  --na-text: var(--default-color);
+  --na-text-muted: var(--muted-color);
+  --na-heading: var(--heading-color);
+  --na-sidebar-bg: var(--sidebar-bg);
+  --na-sidebar-color: var(--sidebar-color);
+  --na-sidebar-hover: var(--sidebar-hover-bg);
+  --na-sidebar-heading: var(--sidebar-muted-color);
+  --na-sidebar-border: var(--sidebar-border);
+  --na-header-bg: var(--header-bg);
+  --na-header-border: var(--header-border);
+  --bs-body-color: var(--default-color);
+  --bs-body-bg: var(--background-color);
+  --bs-secondary-color: var(--muted-color);
+  --bs-secondary-bg: #222222;
+  --bs-tertiary-bg: #282828;
+  --bs-border-color: var(--border-color);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+

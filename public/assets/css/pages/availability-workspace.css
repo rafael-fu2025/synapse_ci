@@ -1,0 +1,33 @@
+/* Availability management only; booking and appointment-review modals are unaffected. */
+#main:has([data-availability-workspace]) .pagetitle { flex-wrap: wrap; gap: 1rem; align-items: flex-start !important; }
+.availability-workspace { min-width: 0; }
+.availability-workspace [data-availability-apply][hidden],
+.availability-workspace [data-availability-filter-error][hidden] { display: none !important; }
+.availability-workspace .btn-outline-secondary:not(:disabled), .av-back-link { color: var(--default-color); border-color: var(--muted-color); }
+.availability-workspace .av-section-nav { display: flex; flex-wrap: wrap; gap: .6rem; margin: 0 0 1.5rem; }
+.availability-workspace .av-section-link { padding: .7rem 1rem; color: var(--default-color); background: var(--surface-color); border: 1px solid var(--border-color-light); border-radius: var(--radius-sm, .375rem); font-weight: 600; font-size: .875rem; }
+.availability-workspace .av-section-link.is-active { background: var(--accent-color); border-color: var(--accent-color); color: #fff; }
+
+.availability-workspace .av-section-link:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 3px; }
+.availability-workspace .av-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+.availability-workspace .av-section-heading > div { flex: 1 1 20rem; min-width: 0; }
+.availability-workspace .av-form-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; }
+.availability-workspace .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.4rem; }
+.availability-workspace .btn-sm { min-height: 2rem; }
+.availability-workspace .table { margin-bottom: 0; }
+.availability-workspace .table td { overflow-wrap: anywhere; }
+.availability-workspace table[data-department-staff] { min-width: 43rem; }
+.availability-workspace table[data-configured-windows] { min-width: 38rem; }
+.availability-workspace .av-exception-list { display: grid; gap: 0; }
+.availability-workspace .av-exception-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 0; border-top: 1px solid var(--border-color-light); }
+.availability-workspace .av-exception-row > div { min-width: 0; }
+.availability-workspace .av-exception-row > .btn { flex: 0 0 auto; }
+.availability-workspace [data-availability-feedback] { white-space: pre-wrap; overflow-wrap: anywhere; }
+.availability-workspace .modal-body { padding: 1.5rem; }
+@media (max-width: 575.98px) {
+  .availability-workspace .av-section-link { flex: 1 1 auto; text-align: center; padding: .65rem .75rem; }
+  .availability-workspace .av-exception-row { flex-direction: column; align-items: stretch; }
+  .availability-workspace .av-form-footer > .btn { flex: 1 1 auto; }
+  .availability-workspace .av-section-heading > .btn { width: 100%; }
+  .availability-workspace .modal-body { padding: 1rem; }
+}

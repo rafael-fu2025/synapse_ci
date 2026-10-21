@@ -1,0 +1,55 @@
+/* Student/employee-facing feeds only; management tables retain their existing design. */
+.portal-engagement { --pe-accent: var(--accent-color, #800000); --pe-muted: var(--muted-color, #667085); color: var(--default-color); }
+.portal-engagement .pe-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+.portal-engagement .pe-header-icon { display: grid; place-items: center; flex: 0 0 3.25rem; height: 3.25rem; border: 1px solid var(--border-color-light, #e3e6eb); border-radius: var(--radius-md, .5rem); background: var(--surface-color, #fff); color: var(--icon-accent-color); font-size: 1.4rem; }
+.portal-engagement .pe-eyebrow { color: var(--pe-muted); font-size: .7rem; font-weight: 700; letter-spacing: .12em; margin: 0 0 .35rem; }
+.portal-engagement .pe-header h2 { font-size: 1.45rem; font-weight: 700; margin: 0 0 .5rem; color: var(--heading-color, var(--default-color)); }
+.portal-engagement .pe-toolbar { margin-bottom: 1.25rem; }
+.portal-engagement .pe-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1.25rem; }
+.portal-engagement .pe-tab { display: inline-flex; align-items: center; gap: .5rem; padding: .6rem .85rem; border: 1px solid var(--border-color-light, #e3e6eb); border-radius: var(--radius-sm, .375rem); background: var(--surface-color, #fff); color: var(--default-color); font-size: .875rem; font-weight: 600; }
+.portal-engagement .pe-tab.is-active { background: var(--pe-accent); border-color: var(--pe-accent); color: #fff; }
+.portal-engagement .pe-tab:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 3px; }
+.portal-engagement .pe-tab-count { min-width: 1.5rem; padding: .1rem .35rem; border-radius: .25rem; background: color-mix(in srgb, currentColor 10%, transparent); text-align: center; font-size: .75rem; }
+.portal-engagement .pe-feed { display: grid; gap: 1rem; }
+.portal-engagement .pe-survey-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.portal-engagement .pe-content-card { margin: 0; min-width: 0; border: 1px solid var(--border-color-light, #e3e6eb); transition: none; }
+.portal-engagement .pe-content-card:hover { transform: none; }
+.portal-engagement .pe-unread { border-inline-start: 3px solid var(--pe-accent); }
+.portal-engagement .pe-card-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .65rem; margin-bottom: 1rem; }
+.portal-engagement .pe-department { display: inline-flex; align-items: center; gap: .45rem; color: var(--pe-muted); font-size: .8rem; font-weight: 600; }
+.portal-engagement .pe-department > i { color: var(--icon-accent-color); }
+.portal-engagement .pe-state { padding: .25rem .6rem; border: 1px solid var(--border-color-light, #e3e6eb); border-radius: .25rem; color: var(--pe-muted); font-size: .75rem; font-weight: 600; }
+.portal-engagement .pe-state-pending { color: var(--default-color); border-color: color-mix(in srgb, var(--pe-accent) 30%, transparent); }
+.portal-engagement .pe-state-success { color: var(--default-color); border-color: color-mix(in srgb, var(--bs-success, #198754) 35%, transparent); }
+.portal-engagement .pe-card-title { margin: 0 0 .75rem; font-size: 1.15rem; line-height: 1.5; font-weight: 700; overflow-wrap: anywhere; color: var(--heading-color, var(--default-color)); }
+.portal-engagement .pe-excerpt { margin: 0 0 1.25rem; line-height: 1.7; color: var(--pe-muted); overflow-wrap: anywhere; }
+.portal-engagement .pe-card-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color-light, #e3e6eb); }
+.portal-engagement .pe-meta { display: flex; flex-direction: column; gap: .35rem; font-size: .8rem; color: var(--pe-muted); }
+.portal-engagement .pe-meta i { margin-right: .4rem; }
+.portal-engagement .pe-privacy { display: flex; align-items: flex-start; gap: .75rem; padding: 1rem 1.25rem; margin-bottom: 1.25rem; border: 1px solid var(--border-color-light, #e3e6eb); border-radius: var(--radius-md, .5rem); background: var(--surface-color, #fff); font-size: .875rem; line-height: 1.6; }
+.portal-engagement .pe-privacy > i { color: var(--icon-accent-color); margin-top: .15rem; }
+.portal-engagement .pe-filter-note { color: var(--pe-muted); font-size: .8rem; margin: -.5rem 0 1.25rem; }
+.portal-engagement .pe-survey-card > .card-body { display: flex; flex-direction: column; }
+.portal-engagement .pe-survey-deadline { display: flex; gap: .65rem; padding: .85rem 0 1.25rem; margin-top: auto; }
+.portal-engagement .pe-survey-deadline > i { color: var(--pe-muted); margin-top: .15rem; }
+.portal-engagement .pe-survey-deadline > div { display: flex; flex-direction: column; gap: .25rem; font-size: .875rem; }
+.portal-engagement .pe-date-label { color: var(--pe-muted); font-size: .75rem; }
+.portal-engagement .pe-survey-action { padding-top: 1rem; border-top: 1px solid var(--border-color-light, #e3e6eb); }
+.portal-engagement .pe-completion { display: flex; align-items: flex-start; gap: .5rem; margin: .5rem 0; font-size: .875rem; line-height: 1.6; }
+.portal-engagement .pe-completion i { color: var(--bs-success, #198754); }
+.portal-engagement .pe-action-note { margin: .65rem 0 0; font-size: .8rem; color: var(--pe-muted); }
+.portal-engagement .pe-empty { text-align: center; padding: 2.5rem 1.25rem; margin: 0; }
+.portal-engagement .pe-empty > i { display: block; font-size: 2rem; color: var(--pe-muted); margin-bottom: .75rem; }
+.portal-engagement .pe-empty h3 { font-size: 1.15rem; font-weight: 600; }
+.portal-engagement .pe-empty p { color: var(--pe-muted); max-width: 34rem; margin: .5rem auto 1.25rem; line-height: 1.7; }
+.portal-engagement .pe-empty > a { align-self: center; }
+.portal-engagement .pe-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin: 1.5rem 0; }
+.portal-engagement .pe-reading { max-width: 56rem; margin-inline: auto; }
+.portal-engagement .pe-reading-body { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.85; margin: 1.75rem 0; }
+
+@media (max-width: 767.98px) {
+  .portal-engagement .pe-survey-grid { grid-template-columns: minmax(0, 1fr); }
+  .portal-engagement .pe-header-icon { display: none; }
+  .portal-engagement .pe-card-footer > a { width: 100%; }
+  .portal-engagement .pe-tab { padding: .5rem .65rem; font-size: .8rem; }
+}

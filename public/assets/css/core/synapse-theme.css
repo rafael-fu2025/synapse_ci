@@ -1,0 +1,970 @@
+/*!
+ * SYNAPSE Achromatic Neutral Dark Mode Engine
+ * Matches the original zynapse design tokens:
+ * - Achromatic neutral scale (chroma 0 neutrals)
+ * - Remaps all hardcoded Bootstrap text-dark/bg-light classes to crisp high-contrast values
+ * - Shared action and control contrast in light and dark themes
+ */
+
+/* -------------------------------------------------------------
+ 0. Shared action colors
+ Shared by buttons, custom dropdowns and the date picker so the
+ widgets stay on-brand in both themes.
+ ------------------------------------------------------------- */
+/* Palette values live in tokens.css; variants only choose a semantic role. */
+
+.btn-primary,
+.btn-outline-primary,
+.btn-link {
+  --action-color: #ffffff;
+  --action-bg: var(--fu-brand);
+  --action-hover-bg: var(--fu-brand-hover);
+  --action-active-bg: var(--fu-brand-active);
+}
+
+.btn-secondary, .btn-outline-secondary {
+  --action-bg: var(--action-secondary);
+  --action-hover-bg: var(--action-secondary-hover);
+  --action-active-bg: var(--action-secondary-active);
+}
+
+.btn-success, .btn-outline-success {
+  --action-bg: var(--action-success);
+  --action-hover-bg: var(--action-success-hover);
+  --action-active-bg: var(--action-success-active);
+}
+
+.btn-danger, .btn-outline-danger {
+  --action-bg: var(--action-danger);
+  --action-hover-bg: var(--action-danger-hover);
+  --action-active-bg: var(--action-danger-active);
+}
+
+.btn-info, .btn-outline-info {
+  --action-bg: var(--action-info);
+  --action-hover-bg: var(--action-info-hover);
+  --action-active-bg: var(--action-info-active);
+}
+
+.btn-warning, .btn-outline-warning {
+  --action-color: #1a1a1a;
+  --action-bg: var(--action-warning);
+  --action-hover-bg: var(--action-warning-hover);
+  --action-active-bg: var(--action-warning-active);
+}
+
+.btn-light, .btn-outline-light {
+  --action-color: #1a1a1a;
+  --action-bg: #f0f0f0;
+  --action-hover-bg: #dedede;
+  --action-active-bg: #cccccc;
+}
+
+.btn-dark, .btn-outline-dark {
+  --action-bg: #303030;
+  --action-hover-bg: #242424;
+  --action-active-bg: #181818;
+}
+
+/* Filled brand controls must not inherit muted/dark utility colors. */
+html :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-link.active, .bg-primary) {
+  color: #ffffff !important;
+}
+
+
+/* Bootstrap components that ship literal NiceAdmin blue values. */
+.pagination {
+  --bs-pagination-active-bg: var(--fu-brand);
+  --bs-pagination-active-border-color: var(--fu-brand);
+  --bs-pagination-active-color: #ffffff;
+  --bs-pagination-focus-box-shadow: 0 0 0 0.2rem var(--focus-ring);
+}
+
+.nav-pills {
+  --bs-nav-pills-link-active-bg: var(--fu-brand);
+  --bs-nav-pills-link-active-color: #ffffff;
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 0.2rem var(--focus-ring);
+}
+
+/* Native inputs keep their semantics; .btn-check remains visually hidden.
+   Do not use !important here: Bootstrap validation states must still apply. */
+input:is([type="checkbox"], [type="radio"]):not(.btn-check) {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--input-bg);
+  border: 1px solid var(--control-border);
+}
+
+/* Bootstrap already supplies sizing, layout and SVGs for form-check-input. */
+input:is([type="checkbox"], [type="radio"]):not(.form-check-input):not(.btn-check) {
+  width: 1em;
+  height: 1em;
+  min-width: 1em;
+  padding: 0;
+  vertical-align: -0.125em;
+  background-image: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+input[type="checkbox"]:not(.form-check-input):not(.btn-check) {
+  border-radius: 0.25em;
+}
+
+input[type="radio"]:not(.form-check-input):not(.btn-check) {
+  border-radius: 50%;
+}
+
+input:is([type="checkbox"], [type="radio"]):not(.btn-check):checked,
+input[type="checkbox"]:not(.btn-check):indeterminate {
+  background-color: var(--fu-brand);
+  border-color: var(--control-border);
+}
+
+input[type="checkbox"]:not(.form-check-input):not(.btn-check):checked {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m5 10 3 3 7-7'/%3e%3c/svg%3e");
+}
+
+input[type="radio"]:not(.form-check-input):not(.btn-check):checked {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%23fff'/%3e%3c/svg%3e");
+}
+
+input[type="checkbox"]:not(.form-check-input):not(.btn-check):indeterminate {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-width='3' d='M5 10h10'/%3e%3c/svg%3e");
+}
+
+input:is([type="checkbox"], [type="radio"]):not(.btn-check):focus {
+  border-color: var(--focus-color);
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 0.25rem var(--focus-ring);
+}
+
+/* Selected icons remain visible; native :disabled also covers fieldsets. */
+input:is([type="checkbox"], [type="radio"]):not(.btn-check):disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+input:is([type="checkbox"], [type="radio"]):not(.btn-check):disabled ~ .form-check-label {
+  color: var(--muted-color);
+  opacity: 1;
+}
+
+/* -------------------------------------------------------------
+   Unified button and dialog-action system
+ ------------------------------------------------------------- */
+.btn {
+  --bs-btn-color: var(--action-color, #ffffff);
+  --bs-btn-bg: var(--action-bg, var(--action-secondary));
+  --bs-btn-border-color: var(--bs-btn-bg);
+  --bs-btn-hover-color: var(--bs-btn-color);
+  --bs-btn-hover-bg: var(--action-hover-bg, var(--action-secondary-hover));
+  --bs-btn-hover-border-color: var(--bs-btn-hover-bg);
+  --bs-btn-active-color: var(--bs-btn-color);
+  --bs-btn-active-bg: var(--action-active-bg, var(--action-secondary-active));
+  --bs-btn-active-border-color: var(--bs-btn-active-bg);
+  --bs-btn-disabled-color: var(--bs-btn-color);
+  --bs-btn-disabled-bg: var(--bs-btn-bg);
+  --bs-btn-disabled-border-color: var(--bs-btn-border-color);
+  --bs-btn-disabled-opacity: 0.65;
+  --bs-btn-focus-box-shadow: 0 0 0 0.25rem var(--focus-ring);
+  --bs-btn-font-size: 0.9375rem;
+  --bs-btn-font-weight: 600;
+  --bs-btn-line-height: 1.25;
+  --bs-btn-padding-x: 0.95rem;
+  --bs-btn-padding-y: 0.45rem;
+  --bs-btn-border-radius: 4px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  color: var(--bs-btn-color) !important;
+  background-color: var(--bs-btn-bg) !important;
+  border-color: var(--bs-btn-border-color) !important;
+}
+
+.btn:hover,
+.btn:focus-visible {
+  color: var(--bs-btn-hover-color) !important;
+  background-color: var(--bs-btn-hover-bg) !important;
+  border-color: var(--bs-btn-hover-border-color) !important;
+}
+
+.btn:active,
+.btn.active,
+.btn.show,
+.btn-check:checked + .btn {
+  color: var(--bs-btn-active-color) !important;
+  background-color: var(--bs-btn-active-bg) !important;
+  border-color: var(--bs-btn-active-border-color) !important;
+}
+
+.btn:disabled,
+.btn.disabled,
+.btn[aria-disabled="true"],
+fieldset:disabled .btn {
+  color: var(--bs-btn-disabled-color) !important;
+  background-color: var(--bs-btn-disabled-bg) !important;
+  border-color: var(--bs-btn-disabled-border-color) !important;
+  pointer-events: none;
+  opacity: var(--bs-btn-disabled-opacity);
+}
+
+.btn.text-start {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.btn.btn-sm {
+  --bs-btn-font-size: 0.875rem;
+  --bs-btn-padding-x: 0.7rem;
+  --bs-btn-padding-y: 0.35rem;
+  min-height: 32px;
+}
+
+.btn.btn-lg {
+  --bs-btn-font-size: 1.0625rem;
+  --bs-btn-padding-x: 1.15rem;
+  --bs-btn-padding-y: 0.65rem;
+  min-height: 46px;
+}
+
+.btn.btn-link {
+  text-decoration: none;
+}
+
+.btn:focus-visible,
+.btn-check:focus-visible + .btn {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+.btn i {
+  line-height: 1;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.form-actions > form {
+  margin: 0;
+}
+
+.modal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.1rem;
+  background: var(--surface-color);
+  border-top: 1px solid var(--border-color);
+}
+
+.modal-footer > form {
+  margin: 0;
+}
+
+/* -------------------------------------------------------------
+ * 2. Shell & Body
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) body {
+  background-color: #121212 !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #main.main {
+  background-color: #121212 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .main-content {
+  background-color: #121212 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .footer {
+  background-color: #161616 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #a3a3a3 !important;
+}
+
+/* -------------------------------------------------------------
+ * 3. CRITICAL: Remap Hardcoded Bootstrap Utility Classes
+ * Prevents black text on dark background
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .text-dark:not(.btn):not(.badge) {
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .text-muted:not(.btn):not(.badge) {
+  color: #a3a3a3 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .text-secondary:not(.btn):not(.badge) {
+  color: #b0b0b0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .text-body:not(.btn):not(.badge) {
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-light:not(.btn):not(.badge) {
+  background-color: #222222 !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-white:not(.btn):not(.badge) {
+  background-color: #1c1c1c !important;
+  color: #f0f0f0 !important;
+}
+
+/* -------------------------------------------------------------
+ * 4. Cards, Containers & Panels
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .card,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .metric-card,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .profile-board,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .page-profile .card {
+  background-color: #1c1c1c !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .metric-card .metric-value {
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .metric-card .metric-label {
+  color: #a3a3a3 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .metric-card .metric-subtext {
+  color: #888888 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .card-header {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .card-header h5,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .card-header h6,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .card-title {
+  color: #ffffff !important;
+}
+
+/* Kanban column and nested ticket cards */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .card.bg-light {
+  background-color: #181818 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .card.bg-light .card {
+  background-color: #222222 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Subtle primary/info/warning alert surfaces */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .border-primary-subtle,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-primary-subtle:not(.badge) {
+  background-color: var(--bs-primary-bg-subtle) !important;
+  border-color: var(--bs-primary-border-subtle) !important;
+  color: var(--bs-primary-text-emphasis) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-primary-subtle .text-dark,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-primary-subtle strong {
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-info-subtle:not(.badge) {
+  background-color: rgba(59, 138, 242, 0.15) !important;
+  color: #9eccff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-warning-subtle:not(.badge) {
+  background-color: rgba(255, 119, 29, 0.15) !important;
+  color: #ffc085 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-success-subtle:not(.badge) {
+  background-color: rgba(46, 202, 106, 0.15) !important;
+  color: #8bebb0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-danger-subtle:not(.badge) {
+  background-color: rgba(255, 77, 77, 0.15) !important;
+  color: #ff9999 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .text-primary:not(.btn):not(.badge) {
+  color: var(--primary-text-color) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(i, svg).text-primary:not(.btn):not(.badge) {
+  color: var(--icon-accent-color) !important;
+}
+
+/* Brand fills take precedence over descendant text-color utilities. */
+html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-link.active, .bg-primary)[class] :is(i, svg, span, small, strong, .text-primary, .text-muted, .text-dark) {
+  color: #ffffff !important;
+}
+
+/* -------------------------------------------------------------
+ * 5. Badges
+ * ------------------------------------------------------------- */
+/* Legacy soft names and Bootstrap subtle tags now share solid status fills.
+   Keep these badge-scoped: alert and panel surfaces are not status tags. */
+.badge-soft-primary,
+.badge:is(.bg-primary, .text-bg-primary, .bg-primary-subtle) {
+  background-color: var(--fu-brand) !important;
+  color: #ffffff !important;
+}
+
+.badge-soft-secondary,
+.badge:is(.bg-secondary, .text-bg-secondary, .bg-secondary-subtle) {
+  background-color: var(--action-secondary) !important;
+  color: #ffffff !important;
+}
+
+.badge-soft-success,
+.badge:is(.bg-success, .text-bg-success, .bg-success-subtle) {
+  background-color: var(--action-success) !important;
+  color: #ffffff !important;
+}
+
+.badge-soft-danger,
+.badge:is(.bg-danger, .text-bg-danger, .bg-danger-subtle) {
+  background-color: var(--action-danger) !important;
+  color: #ffffff !important;
+}
+
+.badge-soft-warning,
+.badge:is(.bg-warning, .text-bg-warning, .bg-warning-subtle) {
+  background-color: var(--action-warning) !important;
+  color: #1a1a1a !important;
+}
+
+.badge-soft-info,
+.badge:is(.bg-info, .text-bg-info, .bg-info-subtle) {
+  background-color: var(--action-info) !important;
+  color: #ffffff !important;
+}
+
+.badge-soft-light,
+.badge:is(.bg-light, .text-bg-light, .bg-light-subtle) {
+  background-color: #f0f0f0 !important;
+  color: #1a1a1a !important;
+}
+
+.badge-soft-dark,
+.badge:is(.bg-dark, .text-bg-dark, .bg-dark-subtle) {
+  background-color: #303030 !important;
+  color: #ffffff !important;
+}
+
+/* -------------------------------------------------------------
+ * 6. Tables & Data Grids
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .table {
+  --bs-table-bg: var(--surface-color) !important;
+  --bs-table-color: #f0f0f0 !important;
+  --bs-table-striped-bg: var(--table-stripe-bg);
+  --bs-table-striped-color: #f0f0f0;
+  --bs-table-hover-bg: var(--table-hover-bg);
+  --bs-table-hover-color: #ffffff;
+  --bs-table-active-bg: #383838;
+  --bs-table-active-color: #ffffff;
+  color: #f0f0f0 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .table > :not(caption) > * > * {
+  background-color: transparent;
+  color: #f0f0f0;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .table>tbody>tr:nth-of-type(odd)>* {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .table-light,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) thead.table-light,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) thead.table-light th {
+  background-color: #242424 !important;
+  color: #d0d0d0 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .table-hover > tbody > tr:hover > * {
+  background-color: #262626 !important;
+  color: #ffffff !important;
+}
+
+/* Semantic table links use text colors, never action fills. */
+.table a.text-primary:not(.btn) {
+  --table-link-color: var(--table-link-primary);
+}
+
+.table a.text-secondary:not(.btn) {
+  --table-link-color: var(--table-link-secondary);
+}
+
+.table a.text-success:not(.btn) {
+  --table-link-color: var(--table-link-success);
+}
+
+.table a.text-danger:not(.btn) {
+  --table-link-color: var(--table-link-danger);
+}
+
+.table a.text-warning:not(.btn) {
+  --table-link-color: var(--table-link-warning);
+}
+
+.table a.text-info:not(.btn) {
+  --table-link-color: var(--table-link-info);
+}
+
+.table a.text-light:not(.btn) {
+  --table-link-color: var(--table-link-light);
+}
+
+.table a.text-dark:not(.btn) {
+  --table-link-color: var(--table-link-dark);
+}
+
+.table :is(td, th) a:not(.btn):not(.badge),
+.table :is(td, th) a:not(.btn):not(.badge):is(:hover, :focus, :active) {
+  color: var(--table-link-color, var(--link-color)) !important;
+}
+
+.table :is(td, th) a:not(.btn):not(.badge):focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------
+ * 7. Form Controls & Inputs
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .form-control,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .form-select {
+  background-color: #222222 !important;
+  border-color: var(--input-border) !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .form-control:focus,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .form-select:focus {
+  border-color: var(--focus-color) !important;
+  box-shadow: 0 0 0 0.2rem var(--focus-ring) !important;
+  background-color: var(--input-bg) !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .form-control::placeholder {
+  color: #888888 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .form-label {
+  color: #e5e5e5 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .form-text {
+  color: #9e9e9e !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .input-group-text {
+  background-color: #2a2a2a !important;
+  color: #d0d0d0 !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* -------------------------------------------------------------
+ * 8. Modals & Dialogs
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .modal-content {
+  background-color: #1c1c1c !important;
+  color: #f0f0f0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .modal-header,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .modal-footer {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .modal-footer.bg-light {
+  background-color: #222222 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* -------------------------------------------------------------
+ * 9. List Groups & Action Links
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .list-group-item {
+  background-color: transparent !important;
+  color: #f0f0f0 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .list-group-item-action:hover {
+  background-color: #262626 !important;
+  color: #ffffff !important;
+}
+
+/* -------------------------------------------------------------
+ * 10. Tabs & Breadcrumbs
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .pagetitle h1 {
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nav-tabs-bordered .nav-link {
+  color: #a3a3a3 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nav-tabs-bordered .nav-link:hover {
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nav-tabs-bordered .nav-link.active {
+  color: #ffffff !important;
+  border-bottom: 2px solid var(--focus-color) !important;
+  background-color: transparent !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .breadcrumb-item,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .breadcrumb-item a {
+  color: #a3a3a3 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .breadcrumb-item.active {
+  color: #f0f0f0 !important;
+}
+
+.breadcrumb {
+  --bs-breadcrumb-divider: "/";
+  --bs-breadcrumb-divider-color: var(--muted-color);
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+  content: var(--bs-breadcrumb-divider, "/");
+  color: var(--muted-color);
+}
+
+/* -------------------------------------------------------------
+ * 11. Dropdown Menus & NiceAdmin User Menu
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .dropdown-menu {
+  background-color: #1c1c1c !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #f0f0f0 !important;
+  box-shadow: none !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-header {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-name {
+  color: #ffffff !important;
+}
+
+.user-brief {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.user-brief .user-email {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--default-color, #1f2937);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.user-brief .user-role {
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-top: 2px;
+  color: var(--fu-maroon);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-brief .user-email {
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-brief .user-role {
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-email {
+  color: #a3a3a3 !important;
+}
+
+.user-menu-role-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(128, 0, 0, 0.08);
+  color: var(--fu-maroon);
+  border: 1px solid rgba(128, 0, 0, 0.22);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-role-badge {
+  background: rgba(212, 117, 117, 0.16) !important;
+  color: #ffffff !important;
+  border-color: rgba(212, 117, 117, 0.35) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-item {
+  color: #e0e0e0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+/* -------------------------------------------------------------
+ * 12. Tooltips (Consistent refined styling across both modes)
+ * ------------------------------------------------------------- */
+.tooltip {
+  --bs-tooltip-bg: #1e1e1e !important;
+  --bs-tooltip-color: #ffffff !important;
+  --bs-tooltip-opacity: 1 !important;
+}
+
+.tooltip-inner {
+  background-color: #1e1e1e !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+  font-size: 0.74rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+}
+
+.bs-tooltip-bottom .tooltip-arrow::before,
+.bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+  border-bottom-color: #1e1e1e !important;
+}
+
+.bs-tooltip-top .tooltip-arrow::before,
+.bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+  border-top-color: #1e1e1e !important;
+}
+
+.bs-tooltip-start .tooltip-arrow::before,
+.bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+  border-left-color: #1e1e1e !important;
+}
+
+.bs-tooltip-end .tooltip-arrow::before,
+.bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+  border-right-color: #1e1e1e !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tooltip {
+  --bs-tooltip-bg: #2a2a2a !important;
+  --bs-tooltip-color: #ffffff !important;
+  --bs-tooltip-opacity: 1 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tooltip-inner {
+  background-color: #2a2a2a !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+  font-size: 0.74rem !important;
+  font-weight: 600 !important;
+  padding: 6px 12px !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-bottom .tooltip-arrow::before,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-auto[data-popper-placement^="bottom"] .tooltip-arrow::before {
+  border-bottom-color: #2a2a2a !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-top .tooltip-arrow::before,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-auto[data-popper-placement^="top"] .tooltip-arrow::before {
+  border-top-color: #2a2a2a !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-start .tooltip-arrow::before,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-auto[data-popper-placement^="left"] .tooltip-arrow::before {
+  border-left-color: #2a2a2a !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-end .tooltip-arrow::before,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bs-tooltip-auto[data-popper-placement^="right"] .tooltip-arrow::before {
+  border-right-color: #2a2a2a !important;
+}
+
+/* -------------------------------------------------------------
+ * 13. Browser Autofill / Prefill Color Overrides
+ * Neutralizes Chrome/Edge's harsh yellow/blue autofill background
+ * ------------------------------------------------------------- */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset !important;
+  -webkit-text-fill-color: var(--default-color) !important;
+  caret-color: var(--default-color) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+:is(input, textarea, select):autofill {
+  background-color: var(--input-bg) !important;
+  color: var(--default-color) !important;
+}
+
+:is(input, textarea, select):-webkit-autofill:focus {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------
+ * 14. Synapse Logo Light / Night Mode Switching
+ * ------------------------------------------------------------- */
+html:not([data-theme="dark"]) .synapse-logo-dark {
+  display: none !important;
+}
+
+html:not([data-theme="dark"]) .synapse-logo-light {
+  display: block !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .synapse-logo-light {
+  display: none !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .synapse-logo-dark {
+  display: block !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .header-logo img,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-logo img {
+  filter: none !important;
+}
+
+/* -------------------------------------------------------------
+ * 15. Login / Auth Screen in Dark Mode
+ * ------------------------------------------------------------- */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-main-wrapper,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-photo-aside,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-pane {
+  background-color: #121212 !important;
+  color: #f0f0f0 !important;
+}
+
+.auth-photo-container {
+  box-shadow: none !important;
+  border: 0 !important;
+  outline: 0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-theme-toggle {
+  background-color: #1c1c1c !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-theme-toggle:hover {
+  background-color: #282828 !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .social-dock {
+  background: #1c1c1c !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .social-item {
+  color: #a3a3a3 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .social-item:hover {
+  background: #282828 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .social-seal {
+  background: #2a2a2a !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .password-toggle-btn {
+  color: #a3a3a3 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .password-toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+
+/* Extend NiceAdmin v3's existing notification component; no legacy dropdown copy. */
+.notification-dropdown .notification-mark-all {
+  font-size: .75rem;
+  white-space: nowrap;
+}
+.notification-dropdown .notification-mark-all:disabled {
+  cursor: default;
+}
+.notification-dropdown .notification-content { min-width: 0; }
+.notification-dropdown .notification-title,
+.notification-dropdown .notification-text,
+.notification-dropdown .notification-time { display: block; overflow-wrap: anywhere; }
+.notification-dropdown .notification-feedback {
+  padding: .75rem;
+  font-size: .8rem;
+  color: var(--default-color);
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-color-light);
+}
+.notification-dropdown .notification-item:focus-visible,
+.notification-dropdown .notification-mark-all:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: -2px;
+}
+.notification-dropdown[aria-busy="true"] .notification-list { opacity: .7; }
+#my-appointments { scroll-margin-top: calc(var(--header-height, 64px) + 1rem); }

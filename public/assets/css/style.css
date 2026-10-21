@@ -1,0 +1,20 @@
+﻿/*! NiceAdmin v3 modular stylesheet entry point */
+/*
+ * The imported modules preserve the audited rule order while making ownership
+ * explicit. Keep this stable URL for the existing static HTML routes.
+ */
+@import url("core/tokens.css");
+@import url("core/base.css");
+@import url("core/layout.css");
+@import url("core/components.css");
+@import url("pages/dashboard.css");
+@import url("pages/portal-engagement.css");
+@import url("pages/guidance-case.css");
+@import url("pages/availability-workspace.css");
+@import url("core/synapse-theme.css");
+@import url("datepicker.css");
+@import url("datetimepicker.css");
+@import url("core/synapse-widgets.css");
+@import url("navigation.css");
+@import url("loading.css");
+@import url("teams.css");

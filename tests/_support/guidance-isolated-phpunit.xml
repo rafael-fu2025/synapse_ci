@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="queue-isolated-bootstrap.php" colors="false" cacheResult="false" failOnRisky="true" failOnWarning="true">
+    <testsuites>
+        <testsuite name="Isolated guidance"><file>../unit/GuidanceIsolationTest.php</file></testsuite>
+    </testsuites>
+</phpunit>

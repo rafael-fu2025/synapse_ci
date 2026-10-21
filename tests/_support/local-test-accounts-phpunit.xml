@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="local-test-accounts-bootstrap.php" colors="false" cacheResult="false" failOnRisky="true" failOnWarning="true">
+    <testsuites>
+        <testsuite name="Isolated local test accounts">
+            <file>../unit/LocalTestAccountsTest.php</file>
+                        <file>../unit/CreateTestAccountsCommandTest.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>
