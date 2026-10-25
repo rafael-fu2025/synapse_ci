@@ -19,7 +19,28 @@ $person = $chart['person'] ?? [];
 $student = $chart['student_profile'] ?? null;
 $employee = $chart['employee_profile'] ?? null;
 $health = $chart['health_profile'] ?? [];
-$appointments = $chart['appointments'] ?? [];
+$appointments = $appointments ?? ($chart['appointments'] ?? []);
+$filters = $filters ?? ['service' => 'all', 'status' => 'all', 'sort' => 'upcoming'];
+$hasFilters = $filters['service'] !== 'all' || $filters['status'] !== 'all';
+$serviceLabel = static fn (string $unit): string => $unit === 'clinic' ? 'University Clinic' : 'Guidance & Counseling';
+$typeLabel = static fn (string $type): string => ucwords(str_replace('_', ' ', $type));
+$statusLabel = static fn (string $status): string => match ($status) {
+    'requested' => 'Awaiting confirmation',
+    'scheduled' => 'Scheduled',
+    'confirmed' => 'Confirmed',
+    'checked_in' => 'In Queue',
+    'completed' => 'Completed',
+    'cancelled' => 'Cancelled',
+    'no_show' => 'No show',
+    default => ucwords(str_replace('_', ' ', $status)),
+};
+$statusBadge = static fn (string $status): string => match ($status) {
+    'requested' => 'bg-warning text-dark',
+    'scheduled', 'confirmed' => 'bg-primary',
+    'checked_in' => 'bg-info text-dark',
+    'completed' => 'bg-success',
+    default => 'bg-secondary',
+};
 
 $email = !empty($person['email']) ? $person['email'] : ($user['email'] ?? null);
 if (empty($email) && !empty($person['first_name']) && !empty($person['last_name'])) {
@@ -75,26 +96,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
   </div></div></div>
 </div>
 
-<!-- Active Daily Queue Status (If patient checked in today) -->
-<?php if (!empty($activeTicket)): ?>
-  <div class="card border-0 shadow-sm bg-primary text-white p-4 mb-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-      <div>
-        <span class="badge bg-white text-primary text-uppercase mb-2">Live Waiting Room Ticket</span>
-        <h3 class="fw-bold mb-1 display-6 text-white"><?= esc($activeTicket['ticket_code']) ?></h3>
-        <p class="mb-0 opacity-75">
-          <?= ($activeTicket['unit'] === 'clinic') ? 'University Clinic' : 'Guidance & Counseling Center' ?> ·
-          Status: <strong><?= esc(ucwords(str_replace('_', ' ', $activeTicket['status']))) ?></strong>
-        </p>
-      </div>
-      <div class="text-end">
-        <span class="badge bg-light text-dark px-3 py-2 fw-semibold">
-          Priority: <?= esc(ucfirst($activeTicket['priority'])) ?>
-        </span>
-      </div>
-    </div>
-  </div>
-<?php endif; ?>
+<?= view('portal/_queue_tickets', ['activeTickets' => $activeTickets ?? (!empty($activeTicket) ? [$activeTicket] : [])]) ?>
 
 <div class="row g-4 align-items-start">
   <!-- Left Column: Student / Employee ATM Profile Card (Fixed ATM dimensions, never stretches) -->
@@ -146,13 +148,6 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
             <dd>
               <?= esc(ucwords(str_replace('_', ' ', $employee['employment_status'] ?? 'Active'))) ?>
             </dd>
-
-            <dt>Type</dt>
-            <dd>
-              <span class="card-badge">
-                <?= !empty($employee['is_teaching']) ? 'Teaching' : 'Non-teaching' ?>
-              </span>
-            </dd>
           <?php else: ?>
             <dt>Course</dt>
             <dd title="<?= esc($student['program'] ?? 'N/A') ?>">
@@ -193,101 +188,149 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
 
   <!-- Right Column: My Appointments -->
   <div class="col-12 col-xl">
-    <div id="my-appointments" class="card border-0 shadow-sm">
-      <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
-        <h6 class="fw-bold mb-0 text-dark">
+    <section id="my-appointments" class="card border-0 shadow-sm"
+             data-live-filters
+             data-filter-url="<?= esc(site_url('/portal')) ?>"
+             data-filter-key="portal-appointments"
+             data-live-events="portal.appointments.changed portal.queue.changed"
+             aria-labelledby="my-appointments-title">
+      <div class="card-header bg-transparent py-3">
+        <h6 class="fw-bold mb-0 text-dark" id="my-appointments-title">
           <i class="bi bi-calendar-check text-primary me-1"></i> My Appointments
         </h6>
-        <span class="badge bg-light text-dark border"><?= count($appointments) ?> Total</span>
+        <p class="small text-muted mb-0">Filter by service or status, or change the date order.</p>
       </div>
-
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover align-middle mb-0 small">
-            <thead class="table-light text-uppercase">
-              <tr>
-                <th class="ps-3">Service</th>
-                <th>Date & Time</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th class="text-end pe-3">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php if (empty($appointments)): ?>
+      <div class="px-3 pb-3">
+        <form method="get" action="<?= esc(site_url('/portal')) ?>" class="row g-2 align-items-end" role="search" aria-label="Filter my appointments" data-filter-form>
+          <div class="col-12 col-sm-4">
+            <label for="portal-appointment-service" class="form-label small mb-1">Service</label>
+            <select id="portal-appointment-service" name="service" class="form-select form-select-sm">
+              <?php foreach (['all' => 'All services', 'clinic' => 'University Clinic', 'guidance' => 'Guidance & Counseling'] as $value => $label): ?>
+                <option value="<?= esc($value) ?>" <?= $filters['service'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-12 col-sm-4">
+            <label for="portal-appointment-status" class="form-label small mb-1">Status</label>
+            <select id="portal-appointment-status" name="status" class="form-select form-select-sm">
+              <?php foreach ([
+                  'all' => 'All statuses',
+                  'active' => 'Active',
+                  'requested' => 'Awaiting confirmation',
+                  'confirmed' => 'Confirmed',
+                  'checked_in' => 'In queue',
+                  'completed' => 'Completed',
+                  'cancelled' => 'Cancelled',
+                  'no_show' => 'No-show',
+              ] as $value => $label): ?>
+                <option value="<?= esc($value) ?>" <?= $filters['status'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-12 col-sm-4">
+            <label for="portal-appointment-sort" class="form-label small mb-1">Sort by date</label>
+            <select id="portal-appointment-sort" name="sort" class="form-select form-select-sm">
+              <?php foreach (['upcoming' => 'Upcoming first', 'date_desc' => 'Newest first', 'date_asc' => 'Oldest first'] as $value => $label): ?>
+                <option value="<?= esc($value) ?>" <?= $filters['sort'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-12 d-flex gap-2">
+            <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm" data-filter-reset>Reset</a>
+          </div>
+        </form>
+      </div>
+      <p data-filter-status hidden></p>
+      <div class="alert alert-danger" data-filter-error role="alert" hidden>
+        <span data-filter-error-text></span>
+        <button class="btn btn-secondary btn-sm ms-2" type="button" data-filter-retry>Retry</button>
+      </div>
+      <div data-filter-region="results">
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 small">
+              <thead class="table-light text-uppercase">
                 <tr>
-                  <td colspan="5" class="text-center py-5 text-muted">
-                    <i class="bi bi-calendar2-x fs-1 d-block mb-2 opacity-50"></i>
-                    You have no appointments or requests. Use the buttons above to request a visit.
-                  </td>
+                  <th class="ps-3">Service</th>
+                  <th>Date &amp; Time</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th class="text-end pe-3">Actions</th>
                 </tr>
-              <?php else: ?>
-                <?php foreach ($appointments as $a): ?>
+              </thead>
+              <tbody>
+                <?php if (empty($appointments)): ?>
                   <tr>
-                    <td class="ps-3 fw-bold">
-                      <?= ($a['unit'] === 'clinic') ? 'University Clinic' : 'Guidance & Counseling' ?>
-                    </td>
-                    <td>
-                      <div><?= esc(date('M j, Y', strtotime($a['starts_at']))) ?></div>
-                      <small class="text-muted">
-                        <?= esc(date('h:i A', strtotime($a['starts_at']))) ?>
-                        <?php if (in_array($a['status'], ['confirmed', 'scheduled'], true) && !empty($a['ends_at'])): ?>
-                          – <?= esc(date('h:i A', strtotime($a['ends_at']))) ?>
-                        <?php endif; ?>
-                      </small>
-                      <?php if ($a['status'] === 'requested'): ?>
-                        <small class="d-block text-muted">Preferred time—not yet confirmed</small>
-                      <?php elseif (in_array($a['status'], ['confirmed', 'scheduled'], true)): ?>
-                        <?php if (!empty($a['provider_name'])): ?>
-                          <small class="d-block text-muted">Assigned staff: <?= esc($a['provider_name']) ?></small>
-                        <?php endif; ?>
-                        <small class="d-block text-muted">Confirmed time—please arrive before your appointment</small>
-                      <?php endif; ?>
-                    </td>
-                    <td>
-                      <span class="badge bg-light text-dark border">
-                        <?= esc(ucwords(str_replace('_', ' ', $a['type']))) ?>
-                      </span>
-                    </td>
-                    <td>
-                      <?php if ($a['status'] === 'requested'): ?>
-                        <span class="badge bg-warning text-dark">Awaiting confirmation</span>
-                      <?php elseif ($a['status'] === 'confirmed'): ?>
-                        <span class="badge bg-primary">Confirmed</span>
-                      <?php elseif ($a['status'] === 'scheduled'): ?>
-                        <span class="badge bg-primary">Scheduled</span>
-                      <?php elseif ($a['status'] === 'checked_in'): ?>
-                        <span class="badge bg-info">In Queue</span>
-                      <?php elseif ($a['status'] === 'completed'): ?>
-                        <span class="badge bg-success">Completed</span>
-                      <?php elseif ($a['status'] === 'cancelled'): ?>
-                        <span class="badge bg-secondary">Cancelled</span>
-                      <?php elseif ($a['status'] === 'no_show'): ?>
-                        <span class="badge bg-secondary">No show</span>
-                      <?php endif; ?>
-                    </td>
-                    <td class="text-end pe-3">
-                      <?php if (in_array($a['status'], ['requested', 'scheduled', 'confirmed'], true)): ?>
-                        <form action="<?= site_url('/portal/appointments/' . $a['unit'] . '/cancel/' . $a['id']) ?>" method="POST" class="d-inline"
-                                                      data-confirm="Cancel this appointment or pending request? Any reserved slot will be released."
-                                                      data-confirm-title="Cancel appointment"
-                                                      data-confirm-label="Cancel appointment"
-                                                      data-confirm-tone="danger">
-                          <?= csrf_field() ?>
-                          <button type="submit" class="btn btn-outline-danger btn-sm py-0">Cancel</button>
-                        </form>
+                    <td colspan="5" class="text-center py-5 text-muted">
+                      <i class="bi <?= $hasFilters ? 'bi-funnel' : 'bi-calendar2-x' ?> fs-1 d-block mb-2 opacity-50"></i>
+                      <?php if ($hasFilters): ?>
+                        <p class="mb-2">No appointments match these filters.</p>
+                        <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-primary btn-sm" data-filter-reset>Clear filters</a>
                       <?php else: ?>
-                        <span class="text-muted">—</span>
+                        You have no appointments or requests. Use the buttons above to request a visit.
                       <?php endif; ?>
                     </td>
                   </tr>
-                <?php endforeach; ?>
-              <?php endif; ?>
-            </tbody>
-          </table>
+                <?php else: ?>
+                  <?php foreach ($appointments as $a): ?>
+                    <tr>
+                      <td class="ps-3 fw-bold"><?= esc($serviceLabel((string) $a['unit'])) ?></td>
+                      <td>
+                        <div><?= esc(date('M j, Y', strtotime($a['starts_at']))) ?></div>
+                        <small class="text-muted">
+                          <?= esc(date('h:i A', strtotime($a['starts_at']))) ?>
+                          <?php if (in_array($a['status'], ['confirmed', 'scheduled', 'checked_in', 'completed'], true) && !empty($a['ends_at'])): ?>
+                            – <?= esc(date('h:i A', strtotime($a['ends_at']))) ?>
+                          <?php endif; ?>
+                        </small>
+                        <?php if ($a['status'] === 'requested'): ?>
+                          <small class="d-block text-muted">Preferred time—not yet confirmed</small>
+                        <?php elseif (in_array($a['status'], ['confirmed', 'scheduled'], true)): ?>
+                          <?php if (!empty($a['provider_name'])): ?>
+                            <small class="d-block text-muted">Assigned staff: <?= esc($a['provider_name']) ?></small>
+                          <?php endif; ?>
+                          <small class="d-block text-muted">Confirmed time—please arrive before your appointment</small>
+                        <?php elseif ($a['status'] === 'checked_in'): ?>
+                          <small class="d-block text-muted">Checked in—please wait for your turn</small>
+                        <?php endif; ?>
+                      </td>
+                      <td>
+                        <span class="badge bg-light text-dark border"><?= esc($typeLabel((string) $a['type'])) ?></span>
+                      </td>
+                      <td>
+                        <span class="badge <?= esc($statusBadge((string) $a['status'])) ?>"><?= esc($statusLabel((string) $a['status'])) ?></span>
+                      </td>
+                      <td class="text-end pe-3">
+                        <div class="d-inline-flex justify-content-end gap-1 text-nowrap">
+                          <a href="<?= esc(site_url('/portal/appointments/' . (int) $a['id'])) ?>"
+                             class="btn btn-outline-primary btn-sm py-0"
+                             data-app-modal-open
+                             aria-label="<?= esc('View details for ' . $serviceLabel((string) $a['unit']) . ' appointment on ' . date('M j, Y', strtotime($a['starts_at']))) ?>">Details</a>
+                          <?php if (in_array($a['status'], ['requested', 'scheduled', 'confirmed'], true)): ?>
+                            <form action="<?= site_url('/portal/appointments/' . $a['unit'] . '/cancel/' . $a['id']) ?>" method="POST" class="d-inline" data-background-submit
+                                  data-confirm="Cancel this appointment or pending request? Any reserved slot will be released."
+                                  data-confirm-title="Cancel appointment"
+                                  data-confirm-label="Cancel appointment"
+                                  data-confirm-tone="danger">
+                              <?= csrf_field() ?>
+                              <button type="submit" class="btn btn-outline-danger btn-sm py-0">Cancel</button>
+                            </form>
+                          <?php endif; ?>
+                        </div>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script src="<?= base_url('assets/js/queue-live.js') ?>"></script>
 <?= $this->endSection() ?>

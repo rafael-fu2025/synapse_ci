@@ -20,6 +20,15 @@
  *
  * Options (data attributes on the trigger input):
  *   data-target      selector of the hidden ISO input    (optional)
+ *   data-range-end   hidden end-date selector; enables range mode (requires data-target)
+ *   data-max-days    maximum inclusive days in range mode (optional)
+ *
+ * Range example:
+ *   <input data-datepicker data-target="#from" data-range-end="#to" data-max-days="31">
+ *   <input type="hidden" id="from" name="from"><input type="hidden" id="to" name="to">
+ * Select a start and end in one calendar, or type DD/MM/YYYY – DD/MM/YYYY.
+ * Incomplete/invalid ranges clear both mirrors and block required form submission.
+ *
  *   data-min         "today" or YYYY-MM-DD               (optional)
  *   data-max         "today" or YYYY-MM-DD               (optional)
  *   data-week-start  0 (Sunday) or 1 (Monday, default)   (optional)
@@ -83,6 +92,11 @@
     constructor(input) {
       this.input = input;
       this.target = input.dataset.target ? document.querySelector(input.dataset.target) : null;
+      this.range = input.hasAttribute('data-range-end');
+      this.endTarget = this.range ? document.querySelector(input.dataset.rangeEnd) : null;
+      this.maxDays = Math.max(1, Number(input.dataset.maxDays) || Infinity);
+      this.initialEndISO = this.endTarget ? this.endTarget.value : '';
+      this.rangeEnd = parseISO(this.initialEndISO);
       this.locale = input.dataset.locale || document.documentElement.lang || navigator.language || 'en';
       this.weekStart = input.dataset.weekStart === undefined ? 1 : Number(input.dataset.weekStart);
       this.order = (input.dataset.order || 'dmy').toLowerCase() === 'mdy' ? 'mdy' : 'dmy';
@@ -103,23 +117,26 @@
       this.weekdayFmt = new Intl.DateTimeFormat(this.locale, { weekday: 'short', timeZone: 'UTC' });
       this.weekdayLongFmt = new Intl.DateTimeFormat(this.locale, { weekday: 'long', timeZone: 'UTC' });
       if (!this.input.placeholder) {
-        this.input.placeholder = this.order === 'mdy' ? 'MM/DD/YYYY' : 'DD/MM/YYYY';
+        const format = this.order === 'mdy' ? 'MM/DD/YYYY' : 'DD/MM/YYYY';
+        this.input.placeholder = this.range ? format + ' – ' + format : format;
       }
 
       this.buildShell();
       this.buildPopup();
       this.bind();
       this.syncFromTarget();
-      this.lastNotifiedISO = this.target ? this.target.value : '';
+      this.lastNotifiedISO = this.range ? this.rangeValue() : (this.target ? this.target.value : '');
       this.observer = new MutationObserver(() => {
         this.min = resolveBound(input.dataset.min || input.getAttribute('min'));
         this.max = resolveBound(input.dataset.max || input.getAttribute('max'));
         if (this.target) this.target.disabled = input.disabled;
+        if (this.endTarget) this.endTarget.disabled = input.disabled;
         this.validateText();
         if (input.disabled || input.readOnly) this.closePopup(false);
       });
       this.observer.observe(input, { attributes: true, attributeFilter: ['data-min', 'data-max', 'min', 'max', 'required', 'disabled', 'readonly'] });
       if (this.target) this.target.disabled = input.disabled;
+      if (this.endTarget) this.endTarget.disabled = input.disabled;
       instances.set(input, this);
     }
 
@@ -138,7 +155,7 @@
       this.input.setAttribute('aria-expanded', 'false');
       this.input.setAttribute('autocomplete', 'off');
       this.input.setAttribute('inputmode', 'numeric');
-      this.input.setAttribute('maxlength', '10');
+      this.input.setAttribute('maxlength', this.range ? '23' : '10');
     }
 
     buildPopup() {
@@ -148,7 +165,8 @@
       this.input.setAttribute('aria-controls', this.id);
       popup.setAttribute('role', 'dialog');
       popup.setAttribute('aria-modal', 'false');
-      popup.setAttribute('aria-label', 'Choose date');
+      popup.setAttribute('aria-label', this.range ? 'Choose date range' : 'Choose date');
+      if (this.range) popup.classList.add('dp-range');
       popup.hidden = true;
       popup.innerHTML =
         '<div class="dp-head">' +
@@ -210,7 +228,7 @@
         const start = this.input.selectionStart ?? this.input.value.length;
         const end = this.input.selectionEnd ?? start;
         const next = this.input.value.slice(0, start) + text + this.input.value.slice(end);
-        return /^[0-9/-]*$/.test(next) && next.length <= 10;
+        return (this.range ? /^[0-9/–\s-]*$/ : /^[0-9/-]*$/).test(next) && next.length <= (this.range ? 23 : 10);
       };
       on(this.input, 'beforeinput', (e) => {
         if (e.inputType.startsWith('insert') && e.data !== null && !acceptsInsertion(e.data)) e.preventDefault();
@@ -222,7 +240,7 @@
         if (this.notifying) return;
         // Some autofill/IME edits cannot be canceled. Clear the whole invalid
         // entry rather than turning a decimal or mixed string into a valid date.
-        if (/[^0-9/-]/.test(this.input.value) || this.input.value.length > 10) this.input.value = '';
+        if ((this.range ? /[^0-9/–\s-]/ : /[^0-9/-]/).test(this.input.value) || this.input.value.length > (this.range ? 23 : 10)) this.input.value = '';
         // Synchronize ISO/model immediately, but keep valid editing text untouched.
         this.validateText();
         if (this.isOpen) this.renderGrid();
@@ -234,6 +252,7 @@
         // Native change precedes blur; this fallback is idempotent.
         if (!this.notifying) this.commitText();
       });
+      if (this.range) this.popup.querySelector('[role="grid"]').setAttribute('aria-multiselectable', 'true');
       on(this.popup, 'keydown', (e) => {
         if (e.key !== 'Escape') return;
         e.preventDefault();
@@ -272,6 +291,7 @@
       on(this.popup.querySelector('[data-dp-clear]'), 'click', () => {
         if (this.input.disabled || this.input.readOnly) return;
         this.selected = null;
+        this.rangeEnd = null;
         this.commit();
         this.closePopup(true);
       });
@@ -284,19 +304,23 @@
         on(this.target, 'change', () => { if (!this.notifying) this.syncFromTarget(); });
         on(this.target, 'dp:sync', () => this.syncFromTarget());
       }
+      if (this.endTarget) {
+        on(this.endTarget, 'change', () => { if (!this.notifying) this.syncFromTarget(); });
+        on(this.endTarget, 'dp:sync', () => this.syncFromTarget());
+      }
       if (this.input.form) {
         on(this.input.form, 'reset', (e) => setTimeout(() => {
           if (e.defaultPrevented || !this.input.isConnected) return;
           // Setting .value on a hidden input also changes its reset default.
           // Retain the original ISO explicitly rather than trusting native reset.
           if (this.target) this.target.value = this.initialISO;
+          if (this.endTarget) this.endTarget.value = this.initialEndISO;
           this.syncFromTarget();
-          if (this.target) {
-            this.notifying = true;
-            try { this.target.dispatchEvent(new Event('input', { bubbles: true })); }
-            finally { this.notifying = false; }
-          }
-          this.lastNotifiedISO = this.target ? this.target.value : '';
+          this.notifying = true;
+          try {
+            [this.target, this.endTarget].filter(Boolean).forEach(target => target.dispatchEvent(new Event('input', { bubbles: true })));
+          } finally { this.notifying = false; }
+          this.lastNotifiedISO = this.range ? this.rangeValue() : (this.target ? this.target.value : '');
           this.closePopup(false);
         }, 0));
       }
@@ -305,6 +329,7 @@
     /* ---------- value handling ---------- */
 
     syncFromTarget() {
+      if (this.range) this.rangeEnd = parseISO(this.endTarget?.value);
       this.selected = parseISO(this.target ? this.target.value : this.input.value);
       this.refreshDisplay();
       this.validateText();
@@ -316,10 +341,21 @@
       const m = pad(this.selected.getMonth() + 1);
       const y = String(this.selected.getFullYear()).padStart(4, '0');
       this.input.value = this.order === 'mdy' ? m + '/' + d + '/' + y : d + '/' + m + '/' + y;
+      if (this.range) {
+        const end = this.rangeEnd;
+        const formatted = end ? (this.order === 'mdy'
+          ? pad(end.getMonth() + 1) + '/' + pad(end.getDate())
+          : pad(end.getDate()) + '/' + pad(end.getMonth() + 1)) + '/' + String(end.getFullYear()).padStart(4, '0') : '';
+        this.input.value += ' – ' + formatted;
+      }
     }
 
     readText() {
       const text = this.input.value.trim();
+      return this.parseDateText(text);
+    }
+
+    parseDateText(text) {
       if (ISO_RE.test(text)) return parseISO(text);
       if (/^\d{8}$/.test(text)) return this.parseTyped(text);
       const parts = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
@@ -327,6 +363,17 @@
     }
 
     updateTarget() {
+      if (this.range) {
+        const complete = this.selected && this.rangeEnd && !this.input.validationMessage;
+        const values = [[this.target, complete ? toISO(this.selected) : ''], [this.endTarget, complete ? toISO(this.rangeEnd) : '']];
+        const changed = values.filter(([target, value]) => target && target.value !== value);
+        // Write both endpoints before notifying any listener (e.g. Alpine or HTMX).
+        changed.forEach(([target, value]) => { target.value = value; });
+        this.notifying = true;
+        try { changed.forEach(([target]) => target.dispatchEvent(new Event('input', { bubbles: true }))); }
+        finally { this.notifying = false; }
+        return;
+      }
       if (!this.target) return;
       const iso = this.selected ? toISO(this.selected) : '';
       if (this.target.value === iso) return;
@@ -338,6 +385,7 @@
     }
 
     validateText() {
+      if (this.range) return this.validateRangeText();
       const text = this.input.value.trim();
       const date = this.readText();
       let error = '';
@@ -352,13 +400,43 @@
       return !error;
     }
 
+    rangeDays(start, end) {
+      // Calendar-day arithmetic must not change across DST boundaries.
+      const day = date => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+      return Math.round((day(end) - day(start)) / 86400000) + 1;
+    }
+
+    rangeValue() {
+      return (this.target?.value || '') + '|' + (this.endTarget?.value || '');
+    }
+
+    validateRangeText() {
+      const text = this.input.value.trim();
+      const parts = text.split(/\s*[–]\s*|\s+-\s+/);
+      const start = this.parseDateText(parts[0] || '');
+      const end = parts.length === 2 ? this.parseDateText(parts[1]) : null;
+      let error = '';
+      if (!text && this.input.required) error = 'Choose a date range.';
+      else if (text && (!start || !end || parts.length !== 2)) error = 'Enter a start and end date in ' + (this.order === 'mdy' ? 'MM/DD/YYYY – MM/DD/YYYY' : 'DD/MM/YYYY – DD/MM/YYYY') + ' format.';
+      else if (start && end && (end < start || !this.inRange(start) || !this.inRange(end))) error = 'Choose an ordered date range within the allowed dates.';
+      else if (start && end && this.rangeDays(start, end) > this.maxDays) error = 'Choose a range of at most ' + this.maxDays + ' days, including both dates.';
+      this.selected = start;
+      this.rangeEnd = end;
+      this.input.setCustomValidity(error);
+      this.input.classList.toggle('is-invalid', Boolean(error));
+      this.input.setAttribute('aria-invalid', String(Boolean(error)));
+      this.updateTarget();
+      return !error;
+    }
+
     notifyChange(visible) {
-      const iso = this.selected ? toISO(this.selected) : '';
+      const iso = this.range ? this.rangeValue() : (this.selected ? toISO(this.selected) : '');
       if (iso === this.lastNotifiedISO) return;
       this.lastNotifiedISO = iso;
       this.notifying = true;
       try {
         if (this.target) this.target.dispatchEvent(new Event('change', { bubbles: true }));
+        if (this.endTarget) this.endTarget.dispatchEvent(new Event('change', { bubbles: true }));
         if (visible) {
           this.input.dispatchEvent(new Event('input', { bubbles: true }));
           this.input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -381,6 +459,28 @@
 
     select(date) {
       if (this.input.matches(':disabled') || this.input.readOnly || !date || !this.inRange(date)) return;
+      if (this.range) {
+        if (!this.selected || this.rangeEnd) {
+          this.selected = date;
+          this.rangeEnd = null;
+        } else {
+          const start = date < this.selected ? date : this.selected;
+          const end = date < this.selected ? this.selected : date;
+          if (this.rangeDays(start, end) > this.maxDays) {
+            this.help.textContent = 'Choose a range of at most ' + this.maxDays + ' days, including both dates.';
+            return;
+          }
+          this.selected = start;
+          this.rangeEnd = end;
+        }
+        this.commit();
+        this.focusDate = new Date(date);
+        const cell = this.renderGrid();
+        this.help.textContent = this.rangeEnd ? 'Date range selected.' : 'Start date selected. Choose the end date.';
+        if (this.rangeEnd) this.closePopup(true);
+        else cell?.focus();
+        return;
+      }
       this.selected = date;
       this.commit();
       this.closePopup(true);
@@ -446,7 +546,8 @@
           td.dataset.date = toISO(date);
           td.setAttribute('role', 'gridcell');
           td.setAttribute('aria-label', new Intl.DateTimeFormat(this.locale, { dateStyle: 'full' }).format(date));
-          td.setAttribute('aria-selected', String(sameDay(date, this.selected)));
+          const inSelectedRange = this.range && this.selected && this.rangeEnd && date >= this.selected && date <= this.rangeEnd;
+          td.setAttribute('aria-selected', String(Boolean(inSelectedRange) || sameDay(date, this.selected)));
           td.className = 'dp-cell';
           const span = document.createElement('span');
           span.className = 'dp-day';
@@ -457,7 +558,10 @@
             td.classList.add('is-today');
             td.setAttribute('aria-current', 'date');
           }
-          if (sameDay(date, this.selected)) {
+          if (inSelectedRange) td.classList.add('is-in-range');
+          if (sameDay(date, this.selected)) td.classList.add('is-range-start');
+          if (this.range && sameDay(date, this.rangeEnd)) td.classList.add('is-range-end');
+          if (sameDay(date, this.selected) || (this.range && sameDay(date, this.rangeEnd))) {
             td.classList.add('is-selected');
             td.setAttribute('aria-selected', 'true');
           }
@@ -510,7 +614,7 @@
       this.popup.hidden = false;
       this.input.setAttribute('aria-expanded', 'true');
       this.position();
-      this.help.textContent = 'Arrow keys move by day, Home and End jump the week, Page Up and Page Down change month, Shift with them changes year, Enter selects, Escape closes.';
+      this.help.textContent = (this.range ? 'Choose a start date, then an end date. ' : '') + 'Arrow keys move by day, Home and End jump the week, Page Up and Page Down change month, Shift with them changes year, Enter selects, Escape closes.';
       const cell = this.gridBody.querySelector('td[tabindex="0"]');
       if (cell) cell.focus();
     }

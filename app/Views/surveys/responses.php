@@ -47,11 +47,16 @@ $overallRating = $analytics['overall_avg_rating'] ?? null;
 <?php if ($canExportResponses ?? false): ?>
 <div class="card border-0 shadow-sm mb-4"><div class="card-body p-4">
   <h2 class="h6">Export identified survey responses</h2>
-  <p class="small">This is not anonymous analytics: the CSV contains respondent names and plaintext answers. Store it securely and share only with authorized recipients. Downloads are audited; the server does not retain the CSV. Maximum 500 responses and 31 inclusive Manila calendar days; larger exports are rejected, not truncated.</p>
+  <p class="small">This is not anonymous analytics: the CSV contains respondent names and plaintext answers. Store it securely and share only with authorized recipients. Downloads are audited; the server does not retain the CSV. Maximum 500 responses and 31 calendar days, inclusive; larger exports are rejected, not truncated.</p>
   <form method="post" action="<?= esc(site_url('guidance/surveys/' . $survey['id'] . '/responses/export')) ?>" class="row g-3" data-report-download>
     <?= csrf_field() ?>
-    <div class="col-sm-4"><label class="form-label" for="response-export-from">From (Manila)</label><input id="response-export-from" class="form-control" type="date" name="from" required></div>
-    <div class="col-sm-4"><label class="form-label" for="response-export-to">To (Manila, inclusive)</label><input id="response-export-to" class="form-control" type="date" name="to" required></div>
+    <div class="col-sm-8">
+      <label class="form-label" for="response-export-range">Date range</label>
+      <input id="response-export-range" class="form-control" type="text" data-datepicker data-target="#response-export-from" data-range-end="#response-export-to" data-max-days="31" autocomplete="off" placeholder="DD/MM/YYYY – DD/MM/YYYY" aria-describedby="response-export-date-help" required>
+      <input id="response-export-from" type="hidden" name="from" value="">
+      <input id="response-export-to" type="hidden" name="to" value="">
+    </div>
+    <div class="col-12"><p id="response-export-date-help" class="form-text mb-0">Dates use Philippine time (Asia/Manila). Both selected dates are included.</p></div>
     <div class="col-12"><label><input type="checkbox" name="confirm_identified" value="1" required> I understand this download contains identified survey answers.</label></div>
     <div class="col-12"><button type="submit" class="btn btn-outline-primary btn-sm">Download identified response CSV</button></div>
   </form>

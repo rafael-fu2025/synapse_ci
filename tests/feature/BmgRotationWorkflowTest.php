@@ -33,6 +33,9 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
 
     protected function setUp(): void
     {
+        if (!defined('BMG_ISOLATED_TESTS') || BMG_ISOLATED_TESTS !== true) {
+            throw new \RuntimeException('Use tests/_support/bmg-isolated-phpunit.xml; configured databases are forbidden.');
+        }
         parent::setUp();
         if (!extension_loaded('sqlite3')) { $this->markTestSkipped('SQLite3 is required for isolated rotation fixtures.'); }
         $this->hardwareEnv = $_ENV['BMG_HARDWARE_ENABLED'] ?? null;
@@ -247,6 +250,156 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
         $this->assertSame([], $this->rotation->pendingCommands($this->token)['commands']);
         $this->gate(true);
         $this->assertSame([], $this->rotation->pendingCommands($this->token)['commands']);
+    }
+
+    public function testTerminalAcknowledgementsRecordOnlyAcceptedDeviceClaims(): void
+    {
+        $this->gate(true);
+        foreach (['completed', 'failed', 'rejected'] as $status) {
+            $command = $this->command($this->unitId, ['command' => 'run_now']);
+            $ack = ['command_id' => $command['command_id'], 'status' => $status, 'message' => 'private device diagnostic'];
+            $this->assertSame('acknowledged', $this->rotation->acknowledgeCommand($this->token, $ack)['status']);
+            $this->rotation->acknowledgeCommand($this->token, $ack);
+            $this->reject(fn () => $this->rotation->acknowledgeCommand($this->token, array_replace($ack, ['message' => 'changed'])), 409);
+            $this->assertWorkflowEvent('bmg_command_' . $status, $command['command_id'], 'terminal', null);
+        }
+        $this->assertSame(3, $this->rotationDb->table('workflow_events')->countAllResults());
+        $this->assertStringNotContainsString('private device diagnostic', json_encode($this->rotationDb->table('workflow_events')->get()->getResultArray()));
+    }
+
+    public function testOnlyNewFailedAndInterruptedRunsRecordEvents(): void
+    {
+        foreach (['turned_normal', 'stopped', 'failed', 'interrupted'] as $state) {
+            $payload = array_replace($this->runPayload(), ['run_uid' => 'run-' . $state, 'motor_state' => $state]);
+            $this->assertSame('created', $this->rotation->ingestRun($this->token, $payload)['status']);
+            $run = $this->rotationDb->table('bmg_rotation_runs')->where('run_uid', $payload['run_uid'])->get()->getRowArray();
+            $this->assertSame('acknowledged', $this->rotation->ingestRun($this->token, $payload)['status']);
+            $this->reject(fn () => $this->rotation->ingestRun($this->token, array_replace($payload, ['duration_seconds' => 59])), 409);
+            if (in_array($state, ['failed', 'interrupted'], true)) {
+                $this->assertWorkflowEvent('bmg_run_' . $state, (int) $run['id'], 'reported', null);
+            }
+        }
+        $this->assertSame(2, $this->rotationDb->table('workflow_events')->countAllResults());
+    }
+
+    public function testCancellationAndExpiryRecordActualTransitionsOnce(): void
+    {
+        $this->gate(true);
+        $run = $this->command($this->unitId, ['command' => 'run_now']);
+        $stop = $this->command($this->unitId, ['command' => 'stop']);
+        $this->assertWorkflowEvent('bmg_command_cancelled', $run['command_id'], 'terminal', 1);
+        $this->rotationDb->table('bmg_rotation_commands')->where('id', $stop['command_id'])->update(['expires_at' => '2000-01-01 00:00:00']);
+        $this->rotation->pendingCommands($this->token);
+        $this->rotation->pendingCommands($this->token);
+        $this->assertWorkflowEvent('bmg_command_expired', $stop['command_id'], 'terminal', null);
+        $pending = $this->command($this->unitId, ['command' => 'run_now']);
+        $this->gate(false);
+        $this->rotation->pendingCommands($this->token);
+        $this->rotation->pendingCommands($this->token);
+        $this->assertWorkflowEvent('bmg_command_cancelled', $pending['command_id'], 'terminal', null);
+        $this->assertSame(3, $this->rotationDb->table('workflow_events')->countAllResults());
+        $this->assertSame(1, (int) $this->rotationDb->table('bmg_rotation_commands')->where('id', $run['command_id'])->get()->getRowArray()['created_by_user_id']);
+    }
+
+    public function testBulkCancellationPreservesRequestersAndTenantScope(): void
+    {
+        $this->gate(true);
+        $this->rotationDb->table('users')->insert(['id' => 2, 'tenant_id' => 1, 'role' => 'facilities_op', 'username' => 'requester', 'status' => 'active']);
+        $first = $this->command($this->unitId, ['command' => 'run_now']);
+        $row = $this->rotationDb->table('bmg_rotation_commands')->where('id', $first['command_id'])->get()->getRowArray();
+        unset($row['id']);
+        $row['created_by_user_id'] = 2;
+        $this->rotationDb->table('bmg_rotation_commands')->insert($row);
+        $second = (int) $this->rotationDb->insertID();
+        $row['tenant_id'] = 2;
+        $this->rotationDb->table('bmg_rotation_commands')->insert($row);
+        $foreign = (int) $this->rotationDb->insertID();
+        $this->saveSchedule($this->unitId, []);
+        $this->assertWorkflowEvent('bmg_command_cancelled', $first['command_id'], 'terminal', 1);
+        $this->assertWorkflowEvent('bmg_command_cancelled', $second, 'terminal', 1);
+        $this->saveSchedule($this->unitId, []);
+        $this->assertSame(2, $this->rotationDb->table('workflow_events')->countAllResults());
+        $this->assertSame(2, (int) $this->rotationDb->table('bmg_rotation_commands')->where('id', $second)->get()->getRowArray()['created_by_user_id']);
+        $this->assertSame('pending', $this->rotationDb->table('bmg_rotation_commands')->where('id', $foreign)->get()->getRowArray()['status']);
+    }
+
+    public function testDeviceEventsUseCredentialTenantNotSessionTenant(): void
+    {
+        session()->set('tenant_id', 2);
+        $payload = array_replace($this->runPayload(), ['motor_state' => 'failed']);
+        $this->rotation->ingestRun($this->token, $payload);
+        $run = $this->rotationDb->table('bmg_rotation_runs')->get()->getRowArray();
+        $this->assertWorkflowEvent('bmg_run_failed', (int) $run['id'], 'reported', null);
+    }
+
+    public function testOutboxStorageFailureRollsBackRunAndBulkCancellation(): void
+    {
+        $this->gate(true);
+        $command = $this->command($this->unitId, ['command' => 'run_now']);
+        $version = $this->version($this->unitId);
+        $this->rotationDb->query("CREATE TRIGGER fail_bmg_event BEFORE INSERT ON workflow_events BEGIN SELECT RAISE(ABORT, 'synthetic outbox failure'); END");
+        try {
+            $this->rotation->ingestRun($this->token, array_replace($this->runPayload(), ['motor_state' => 'failed']));
+            $this->fail('Outbox storage failure must roll back the run.');
+        } catch (\RuntimeException $error) {
+            $this->assertNotEmpty($error->getMessage());
+        }
+        $this->assertSame(0, $this->rotationDb->table('bmg_rotation_runs')->countAllResults());
+        // Failed transactions require an explicit status reset before another attempt.
+        $this->rotationDb->resetTransStatus();
+        try {
+            $this->saveSchedule($this->unitId, []);
+            $this->fail('Outbox storage failure must roll back cancellation and publication.');
+        } catch (\RuntimeException $error) {
+            $this->assertNotEmpty($error->getMessage());
+        }
+        $this->assertSame($version, $this->version($this->unitId));
+        $this->assertSame('pending', $this->rotationDb->table('bmg_rotation_commands')->where('id', $command['command_id'])->get()->getRowArray()['status']);
+        $this->assertSame(0, $this->rotationDb->table('workflow_events')->countAllResults());
+    }
+
+    public function testRejectedLateAckRollsBackHousekeepingUntilPolling(): void
+    {
+        $this->gate(true);
+        $command = $this->command($this->unitId, ['command' => 'run_now']);
+        $this->rotationDb->table('bmg_rotation_commands')->where('id', $command['command_id'])->update(['expires_at' => '2000-01-01 00:00:00']);
+        $this->reject(fn () => $this->rotation->acknowledgeCommand($this->token, ['command_id' => $command['command_id'], 'status' => 'completed']), 409);
+        $this->assertSame('pending', $this->rotationDb->table('bmg_rotation_commands')->where('id', $command['command_id'])->get()->getRowArray()['status']);
+        $this->assertSame(0, $this->rotationDb->table('workflow_events')->countAllResults());
+        $this->rotation->pendingCommands($this->token);
+        $this->assertWorkflowEvent('bmg_command_expired', $command['command_id'], 'terminal', null);
+    }
+
+    public function testOutboxStorageFailureRollsBackAcceptedAck(): void
+    {
+        $this->gate(true);
+        $command = $this->command($this->unitId, ['command' => 'run_now']);
+        $this->rotationDb->query("CREATE TRIGGER fail_bmg_event BEFORE INSERT ON workflow_events BEGIN SELECT RAISE(ABORT, 'synthetic outbox failure'); END");
+        try {
+            $this->rotation->acknowledgeCommand($this->token, ['command_id' => $command['command_id'], 'status' => 'completed']);
+            $this->fail('Outbox storage failure must not acknowledge the command.');
+        } catch (\RuntimeException $error) {
+            $this->assertNotEmpty($error->getMessage());
+        }
+        $row = $this->rotationDb->table('bmg_rotation_commands')->where('id', $command['command_id'])->get()->getRowArray();
+        $this->assertSame('pending', $row['status']);
+        $this->assertNull($row['ack_status']);
+        $this->assertSame(0, $this->rotationDb->table('workflow_events')->countAllResults());
+    }
+
+    private function assertWorkflowEvent(string $kind, int $subject, string $occurrence, ?int $actor): void
+    {
+        $rows = $this->rotationDb->table('workflow_events')->where('event_kind', $kind)->where('subject_id', $subject)->get()->getResultArray();
+        $this->assertCount(1, $rows);
+        $event = $rows[0];
+        $this->assertSame(1, (int) $event['tenant_id']);
+        $this->assertSame('facilities', $event['unit']);
+        $this->assertSame($occurrence, $event['occurrence_key']);
+        $this->assertSame($actor, $event['actor_user_id'] === null ? null : (int) $event['actor_user_id']);
+        $this->assertSame(0, (int) $event['attempts']);
+        $this->assertNull($event['processed_at']);
+        $this->assertNull($event['last_error']);
+        $this->assertMatchesRegularExpression('/\A[0-9a-f]{64}\z/', $event['event_key']);
     }
 
     public function testApiRejectsMalformedJsonAndDoesNotExposeDatabaseExceptions(): void
@@ -699,6 +852,28 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
             'CREATE UNIQUE INDEX rotation_fixture_token ON bmg_devices(device_token_hash)',
             'CREATE UNIQUE INDEX rotation_fixture_mac ON bmg_devices(tenant_id, chip_mac)',
             'CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, event_type TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, actor_user_id INTEGER, actor_role TEXT, actor_ip TEXT, action TEXT NOT NULL, payload_json TEXT, prev_hash TEXT NOT NULL, curr_hash TEXT NOT NULL, hash_version INTEGER NOT NULL DEFAULT 1, occurred_at TEXT NOT NULL)',
+            'CREATE UNIQUE INDEX workflow_fixture_user_tenant ON users(tenant_id, id)',
+            "CREATE TABLE workflow_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL,
+                unit VARCHAR(16) NOT NULL CHECK (unit IN ('clinic','guidance','facilities')),
+                event_key CHAR(64) NOT NULL COLLATE BINARY,
+                event_kind VARCHAR(64) NOT NULL,
+                subject_kind VARCHAR(32) NOT NULL,
+                subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+                actor_user_id INTEGER DEFAULT NULL,
+                occurrence_key VARCHAR(96) NOT NULL CHECK (length(occurrence_key)>0 AND occurrence_key NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+                occurred_at DATETIME NOT NULL,
+                created_at DATETIME NOT NULL,
+                available_at DATETIME NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                processed_at DATETIME DEFAULT NULL,
+                last_error VARCHAR(64) DEFAULT NULL CHECK (last_error IS NULL OR (length(last_error)>0 AND substr(last_error,1,1) GLOB '[A-Z]' AND last_error NOT GLOB '*[^A-Z0-9_]*')),
+                UNIQUE(tenant_id,id), UNIQUE(tenant_id,event_key),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+                FOREIGN KEY (tenant_id,actor_user_id) REFERENCES users(tenant_id,id) ON DELETE RESTRICT ON UPDATE RESTRICT
+            )",
+            'CREATE INDEX workflow_event_pending ON workflow_events(processed_at,available_at,id)',
             'CREATE TABLE bmg_device_runs (id INTEGER PRIMARY KEY, run_uid TEXT)',
             'CREATE TABLE bmg_process_logs (id INTEGER PRIMARY KEY)',
             'INSERT INTO tenants (id, is_active) VALUES (1, 1), (2, 1)',

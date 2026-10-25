@@ -38,6 +38,7 @@ final class TeamTaskService
     private const STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
     private const PRIORITIES = ['low', 'normal', 'high'];
     private BaseConnection $db;
+    private TeamsNotifications $notifications;
 
     public function __construct()
     {
@@ -131,6 +132,7 @@ final class TeamTaskService
             ]));
             $task = $this->record($unit, (int) $this->db->insertID(), $actor);
             $this->activity($task, $actor, 'created');
+            $this->notifications->enqueue($task, $actor, TeamsNotifications::taskPlan(null, $task));
             return $task;
         });
     }
@@ -160,7 +162,9 @@ final class TeamTaskService
                 'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'task_id' => $id,
                 'actor_user_id' => $actor['id'], 'body' => $body, 'created_at' => gmdate('Y-m-d H:i:s'),
             ]));
+            $commentId = (int) $this->db->insertID();
             $this->activity($task, $actor, 'commented');
+            $this->notifications->enqueue($task, $actor, TeamsNotifications::taskPlan($task, $task, true), $commentId);
             return [];
         });
     }
@@ -193,11 +197,19 @@ final class TeamTaskService
             $data = $move ? ['status' => $this->choice($input['status'] ?? null, self::STATUSES, 'status')]
                 : $this->editable($input, true);
             $this->assignee($unit, $move ? $task['assignee_user_id'] : $data['assignee_user_id'], $actor);
+            $unchanged = true;
+            foreach ($data as $field => $value) {
+                if (($field === 'checklist' ? json_decode($value, true, 512, JSON_THROW_ON_ERROR) : $value) !== $task[$field]) {
+                    $unchanged = false;
+                }
+            }
+            if ($unchanged) { return $task; }
             $this->must($this->scope('team_tasks', $unit, $actor)->where('id', $id)->where('version', $version)
                 ->update($data + ['version' => $version + 1, 'updated_at' => gmdate('Y-m-d H:i:s')]));
             if ($this->db->affectedRows() !== 1) { throw new RuntimeException('Task changed. Reload before saving.', 409); }
             $updated = $this->record($unit, $id, $actor);
             $this->activity($updated, $actor, $move ? 'moved' : 'updated', $task['status'], $updated['status']);
+            $this->notifications->enqueue($updated, $actor, TeamsNotifications::taskPlan($task, $updated));
             return $updated;
         });
     }
@@ -397,12 +409,14 @@ final class TeamTaskService
     private function transaction(callable $operation): array
     {
         if ($this->db->transDepth !== 0) { throw new RuntimeException('An independent team task transaction is required.', 409); }
+        $this->notifications = new TeamsNotifications($this->db);
         $this->db->resetTransStatus();
         $this->must($this->db->transBegin());
         try {
             $result = $operation();
             if (!$this->db->transStatus()) { throw new RuntimeException('Team task transaction failed.', 503); }
             $this->must($this->db->transCommit());
+            $this->notifications->publishCommitted();
             return $result;
         } catch (Throwable $e) {
             try { $this->db->transRollback(); }

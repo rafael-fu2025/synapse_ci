@@ -14,12 +14,17 @@ final class QueueService
     private QueueEntryModel $queueModel;
     private AppointmentModel $appointmentModel;
     private BaseConnection $db;
+    private array $invalidations = [];
+    private ?\Closure $invalidate;
+    private ?\Closure $captureInvalidation = null;
 
     public function __construct(
         ?QueueEntryModel $queueModel = null,
         ?AppointmentModel $appointmentModel = null,
-        ?BaseConnection $db = null
+        ?BaseConnection $db = null,
+        ?callable $invalidate = null
     ) {
+        $this->invalidate = $invalidate === null ? null : \Closure::fromCallable($invalidate);
         $this->db = $db ?? \Config\Database::connect();
         $this->queueModel = $queueModel ?? new QueueEntryModel($this->db);
         $this->appointmentModel = $appointmentModel ?? new AppointmentModel($this->db);
@@ -67,7 +72,9 @@ final class QueueService
             if ($id < 1) {
                 throw new \RuntimeException('Unable to issue queue ticket.');
             }
-            return $this->queueModel->scoped()->find($id);
+            $entry = $this->queueModel->scoped()->find($id);
+            $this->recordInvalidation($entry);
+            return $entry;
         });
     }
 
@@ -137,6 +144,7 @@ final class QueueService
             }
             $existing = $this->queueModel->scoped()->where('unit', $unit)
                 ->where('appointment_id', $appointmentId)->first();
+            $changed = false;
             if ($appt['status'] === 'checked_in' && $existing !== null) {
                 $entry = $existing;
             } else {
@@ -157,16 +165,20 @@ final class QueueService
                     throw new \RuntimeException('Unable to check in appointment.');
                 }
                 $entry = $this->queueModel->scoped()->find($queueId);
+                $changed = true;
             }
             if (!$db->transStatus() || !$db->transCommit()) {
                 throw new \RuntimeException('Unable to check in appointment.');
             }
-            return $entry;
         } catch (\Throwable $e) {
             $db->transRollback();
             $db->resetTransStatus();
             throw $e;
         }
+        if ($changed) {
+            $this->publishInvalidation((int) $entry['tenant_id'], $entry['unit'], $entry['queue_date'], (int) $entry['person_id']);
+        }
+        return $entry;
     }
 
     /**
@@ -466,7 +478,60 @@ final class QueueService
             ->where('status', $entry['status'])->update($changes) || $this->db->affectedRows() !== 1) {
             throw new \RuntimeException('Unable to update queue ticket. Reload the board.', 409);
         }
+        $this->recordInvalidation($entry);
         return array_replace($entry, $changes);
+    }
+
+    /**
+     * Capture successful joined mutations for an owning transaction. Hints are not
+     * delivery work: the caller must discard them on rollback and publish after commit.
+     *
+     * @param array<string, array{int, string, string, int}> $hints
+     */
+    public function captureInvalidations(callable $operation, array &$hints): mixed
+    {
+        $hints = [];
+        $previous = $this->captureInvalidation;
+        $this->captureInvalidation = static function (int $tenant, string $unit, string $date, int $person = 0) use (&$hints): void {
+            $hint = [$tenant, $unit, $date, $person];
+            $hints[implode(':', $hint)] = $hint;
+        };
+        try {
+            return $operation();
+        } catch (\Throwable $e) {
+            $hints = [];
+            throw $e;
+        } finally {
+            $this->captureInvalidation = $previous;
+        }
+    }
+
+    /** Only an owner that has successfully committed may deliver captured hints. */
+    public function publishCommittedInvalidations(array $hints): void
+    {
+        foreach ($hints as $hint) {
+            $this->publishInvalidation(...$hint);
+        }
+    }
+
+    private function recordInvalidation(array $entry): void
+    {
+        $hint = [(int) $entry['tenant_id'], $entry['unit'], $entry['queue_date'], (int) ($entry['person_id'] ?? 0)];
+        $this->invalidations[implode(':', $hint)] = $hint;
+    }
+
+    private function publishInvalidation(int $tenant, string $unit, string $date, int $person = 0): void
+    {
+        try {
+            if ($this->invalidate !== null) {
+                ($this->invalidate)($tenant, $unit, $date, $person);
+            } else {
+                (new QueueInvalidation())->publish($tenant, $unit, $date);
+                                (new PersonalQueueInvalidation())->publish($tenant, $person);
+            }
+        } catch (\Throwable) {
+            // This runs after commit: even construction/configuration failures are best-effort.
+        }
     }
 
     private function assertUnit(string $unit): void
@@ -485,6 +550,7 @@ final class QueueService
 
     private function transaction(callable $operation): ?array
     {
+        $this->invalidations = [];
         $ownsTransaction = $this->db->transDepth === 0;
         if ($ownsTransaction) {
             $this->db->resetTransStatus();
@@ -500,8 +566,8 @@ final class QueueService
             if (!$this->db->transStatus() || ($ownsTransaction && !$this->db->transCommit())) {
                 throw new \RuntimeException('Unable to commit queue transaction.');
             }
-            return $result;
         } catch (\Throwable $e) {
+            $this->invalidations = [];
             // Encounter completion owns its transaction; let that caller roll back all changes.
             if ($ownsTransaction) {
                 try {
@@ -512,6 +578,17 @@ final class QueueService
             }
             throw $e;
         }
+        $hints = $this->invalidations;
+        $this->invalidations = [];
+        if ($ownsTransaction) {
+            $this->publishCommittedInvalidations($hints);
+        } elseif ($this->captureInvalidation !== null) {
+            foreach ($hints as $hint) {
+                ($this->captureInvalidation)(...$hint);
+            }
+        }
+        // Uncaptured caller-owned transactions must never publish before their owner commits.
+        return $result;
     }
 
     /**

@@ -14,7 +14,8 @@ const root = path.resolve(__dirname, '../..');
 const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
 let browser, server, origin;
 const cache = new Map();
-const posts = [];
+const posts = [], allPosts = [];
+const isTeamsPath = pathname => /^\/(?:clinic|guidance|facilities)\/teams(?:\/|$)/.test(pathname);
 let rejectSave = false;
 
 function render(requestPath) {
@@ -44,7 +45,15 @@ before(async () => {
     if (req.method === 'POST') {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
-      posts.push({ path: url.pathname, body: Buffer.concat(chunks).toString('utf8'), headers: req.headers });
+      const post = { path: url.pathname, body: Buffer.concat(chunks).toString('utf8'), headers: req.headers };
+      allPosts.push(post);
+      // Layout startup requests (notably /realtime/ticket) are not Teams mutations.
+      if (!isTeamsPath(url.pathname)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Not provided by this calendar fixture.' }));
+        return;
+      }
+      posts.push(post);
       res.writeHead(rejectSave ? 422 : 200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: !rejectSave, message: rejectSave ? 'Fixture validation error' : 'Saved',
         redirect: origin + '/' + url.pathname.split('/')[1] + '/teams/calendar?date=2026-10-01',
@@ -75,12 +84,14 @@ after(async () => {
   finally {
     if (server?.listening) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }
+  assert.deepEqual(allPosts.filter(post => !isTeamsPath(post.path) && post.path !== '/realtime/ticket').map(post => post.path), [],
+    'No unexpected writes outside Teams; only realtime ticket acquisition is background traffic');
 });
 
 async function pageFor(t, url, { width = 1280, dark = false } = {}) {
   rejectSave = false;
   const context = await browser.newContext({ viewport: { width, height: 900 } });
-  await context.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '' }));
+  await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   await context.addInitScript(dark => localStorage.setItem('na-dark-mode', dark ? '1' : '0'), dark);
   const page = await context.newPage();
   page.setDefaultTimeout(6000);
@@ -181,7 +192,7 @@ for (const dark of [false, true]) {
     assert.equal(await page.locator('[data-filter-form] [name="view"]').inputValue(), 'week');
     assert.equal(await page.evaluate(nodes => nodes[0] === document.querySelector('[data-filter-form]') && nodes[1] === document.querySelector('#calendarDateDisplay'), original), true);
     await original.dispose();
-    assert.equal(posts.length, postCount, 'Calendar filtering never sends a write');
+    assert.equal(posts.length, postCount, 'Calendar filtering never sends a write; observed POST paths: ' + JSON.stringify(posts.slice(postCount).map(post => post.path)));
   });
 }
 
@@ -203,7 +214,7 @@ test('fragment create initializes both pickers; selected participants submit and
   await page.locator('#teamEventLocation').fill('Room 2');
   await page.locator('#eventMember2').check();
   rejectSave = true;
-  const response = page.waitForResponse(r => r.request().method() === 'POST');
+  const response = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/clinic/teams/calendar/events/store');
   await page.getByRole('button', { name: 'Create event', exact: true }).click();
   assert.equal((await response).status(), 422);
   await page.locator('[data-modal-error]:not(.d-none)').waitFor();
@@ -252,7 +263,7 @@ test('repeated edit fragments initialize stored values once and submit version a
       await page.locator('#eventMember2').uncheck();
       await page.locator('#eventMember1').check();
       rejectSave = true;
-      const response = page.waitForResponse(r => r.request().method() === 'POST');
+      const response = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/guidance/teams/calendar/events/41/update');
       await page.getByRole('button', { name: 'Save changes', exact: true }).click();
       await response;
       await page.locator('[data-modal-error]:not(.d-none)').waitFor();
@@ -304,11 +315,11 @@ test('accepting shared cancellation confirmation posts exactly one versioned CSR
   const count = posts.length;
   await page.locator('#appFormModal button[type="submit"]').click();
   await page.locator('#synapseConfirmModal.show').waitFor();
-  assert.equal(posts.length, count);
+  assert.equal(posts.length, count, 'No mutation before confirmation; observed POST paths: ' + JSON.stringify(posts.slice(count).map(post => post.path)));
   await page.locator('[data-confirm-accept]').click();
   await page.waitForURL(origin + '/clinic/teams/calendar?date=2026-10-01');
   await page.waitForFunction(() => !document.querySelector('#appFormModal'));
-  assert.equal(posts.length, count + 1);
+  assert.equal(posts.length, count + 1, 'Exactly one cancellation; observed POST paths: ' + JSON.stringify(posts.slice(count).map(post => post.path)));
   assert.equal(posts.at(-1).path, '/clinic/teams/calendar/events/41/cancel');
   assert.deepEqual(field(posts.at(-1), 'version'), ['3']);
   assert.ok(field(posts.at(-1), 'csrf_test_name')[0]);

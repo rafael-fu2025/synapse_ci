@@ -12,6 +12,10 @@ use Config\Database;
 /** DB-backed authority; deliberately uncached, including between filters. */
 final class AuthenticatedUser
 {
+    public const EXPIRED_MESSAGE = 'Your session has expired. Please sign in again to continue.';
+    public const REAUTHENTICATION_MESSAGE = 'Please sign in again to continue.';
+    public const AUTHENTICATION_MESSAGE = 'Please sign in to continue.';
+
     /** Return a refreshed, credential-free session identity, or clear invalid authentication. */
     public function current(): ?array
     {
@@ -21,7 +25,11 @@ final class AuthenticatedUser
         if (!is_array($source) || ($source['logged_in'] ?? null) !== true
             || self::positiveId($source['id'] ?? null) === null
             || $tenantId === null || self::positiveId($source['tenant_id'] ?? null) !== $tenantId) {
-            self::clear();
+            if ($source !== null || session()->get('_auth') !== null || session()->get('tenant_id') !== null) {
+                self::invalidate('reauthentication_required');
+            } else {
+                self::clear();
+            }
             return null;
         }
 
@@ -33,16 +41,22 @@ final class AuthenticatedUser
             || !is_int($auth['version'] ?? null) || $auth['version'] < 1
             || !is_string($auth['session_id'] ?? null) || $auth['session_id'] !== session_id()
             || $auth['started_at'] > $auth['last_seen_at'] || $auth['last_seen_at'] > $now
-            || $config->authIdleTimeout <= 0 || $config->authAbsoluteTimeout <= 0
-            || $now - $auth['last_seen_at'] >= $config->authIdleTimeout
+            || $config->authIdleTimeout <= 0 || $config->authAbsoluteTimeout <= 0) {
+            self::invalidate('reauthentication_required');
+            return null;
+        }
+
+        if ($now - $auth['last_seen_at'] >= $config->authIdleTimeout
             || $now - $auth['started_at'] >= $config->authAbsoluteTimeout) {
-            self::clear();
+            self::invalidate('session_expired');
+            // Legacy readers may still inspect this; _auth_notice owns durability.
+            session()->setFlashdata('_auth_expired', true);
             return null;
         }
 
         $user = $this->forIdentity((int) $source['id'], $tenantId);
         if ($user === null || $auth['version'] !== $user['auth_version']) {
-            self::clear();
+            self::invalidate('reauthentication_required');
             return null;
         }
 
@@ -115,19 +129,77 @@ final class AuthenticatedUser
 
     public static function denied(RequestInterface $request, bool $authenticated, string $message, string $target): ResponseInterface
     {
-        $json = strcasecmp($request->getHeaderLine('X-Requested-With'), 'XMLHttpRequest') === 0
-            || str_contains(strtolower($request->getHeaderLine('Accept')), 'json')
-            || strtolower($request->getHeaderLine('HX-Request')) === 'true'
-            || $request->getHeaderLine('X-Up-Version') !== ''
-            || (method_exists($request, 'getGet') && $request->getGet('fragment') === '1');
+        $reason = $authenticated ? null : self::noticeReason();
+        if (!$authenticated) {
+            $reason ??= 'authentication_required';
+            session()->set('_auth_notice', $reason);
+            if ($reason !== 'authentication_required') {
+                $message = self::noticeMessage($reason);
+            }
+        }
+        $json = self::isBackgroundRequest($request);
         if ($json || strtoupper($request->getMethod()) !== 'GET') {
             // Never redirect rejected mutations, even when a browser submitted them.
             $status = $authenticated || !$json ? 403 : 401;
-            return service('response')->setStatusCode($status)->setHeader('Cache-Control', 'no-store')
+            $response = service('response')->setStatusCode($status)->setHeader('Cache-Control', 'no-store')
                 ->setJSON(['message' => $message]);
+            $response->removeHeader('X-Synapse-Auth');
+            $response->removeHeader('X-Synapse-Login');
+            $response->removeHeader('Location');
+            if ($status === 401) {
+                $response->setHeader('X-Synapse-Auth', $reason)
+                    ->setHeader('X-Synapse-Login', site_url('auth/login'));
+            }
+            return $response;
         }
-        session()->setFlashdata('error', $message);
+        if (!$authenticated && $reason === 'session_expired') {
+            session()->keepFlashdata('_auth_expired');
+        } elseif ($authenticated || $reason === 'authentication_required') {
+            session()->setFlashdata('error', $message);
+        }
         return redirect()->to($target)->setHeader('Cache-Control', 'no-store');
+    }
+
+    private static function invalidate(string $reason): void
+    {
+        self::clear();
+        session()->remove('_auth_expired');
+        session()->set('_auth_notice', $reason);
+    }
+
+    /** Read without consuming; legacy timeout flash is accepted during migration. */
+    public static function noticeReason(): ?string
+    {
+        $reason = session()->get('_auth_notice');
+        if (in_array($reason, ['session_expired', 'reauthentication_required', 'authentication_required'], true)) {
+            return $reason;
+        }
+        if (session()->getFlashdata('_auth_expired') === true) {
+            session()->set('_auth_notice', 'session_expired');
+            return 'session_expired';
+        }
+        return null;
+    }
+
+    public static function noticeMessage(string $reason): string
+    {
+        return match ($reason) {
+            'session_expired' => self::EXPIRED_MESSAGE,
+            'reauthentication_required' => self::REAUTHENTICATION_MESSAGE,
+            default => self::AUTHENTICATION_MESSAGE,
+        };
+    }
+
+    public static function isBackgroundRequest(RequestInterface $request): bool
+    {
+        $destination = strtolower($request->getHeaderLine('Sec-Fetch-Dest'));
+        return strcasecmp($request->getHeaderLine('X-Requested-With'), 'XMLHttpRequest') === 0
+            || str_contains(strtolower($request->getHeaderLine('Accept')), 'json')
+            || strtolower($request->getHeaderLine('HX-Request')) === 'true'
+            || $request->getHeaderLine('X-Up-Version') !== ''
+            || $request->getHeaderLine('X-Synapse-Navigation') === '1'
+            || ($destination !== '' && $destination !== 'document')
+            || (method_exists($request, 'getGet') && $request->getGet('fragment') === '1');
     }
 
     private static function positiveId(mixed $value): ?int

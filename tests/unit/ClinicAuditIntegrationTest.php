@@ -241,6 +241,41 @@ final class ClinicAuditIntegrationTest extends FreshDatabaseTestCase
         $this->assertSame('in_consultation', $this->row('queue_entries', $ticket)['status']);
     }
 
+    public function testAggregateCompletionRollsBackPendingClinicalFieldsWhenQueueCompletionFails(): void
+    {
+        $appointment = $this->appointment();
+        $ticket = $this->ticket($appointment);
+        $started = $this->encounters->startEncounter($this->patientId, $this->actorId, $ticket);
+        $id = (int) $started['encounter']['id'];
+        $this->encounters->saveDraft($id, ['chief_complaint' => 'Original', 'pulse_bpm' => '72',
+            'diagnosis' => 'Original diagnosis', 'disposition_notes' => 'Original outcome'], $this->actorId);
+        $before = $this->encounters->getEncounterDetails($id);
+        $this->db->query("CREATE TRIGGER clinic_audit_fail_queue BEFORE UPDATE ON queue_entries FOR EACH ROW
+            BEGIN IF NEW.id={$ticket} AND NEW.status='done' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Clinic audit injected completion failure'; END IF; END");
+        try {
+            try {
+                $this->encounters->completeEncounter($id, 'discharged', pendingDraft: [
+                    'chief_complaint' => 'Changed', 'pulse_bpm' => '90', 'diagnosis' => 'Changed diagnosis',
+                    'disposition_notes' => 'Changed outcome',
+                ], recordedByUserId: $this->actorId);
+                $this->fail('Expected injected completion failure.');
+            } catch (\CodeIgniter\Database\Exceptions\DatabaseException | \RuntimeException $e) {
+                $this->assertNotEmpty($e->getMessage());
+            }
+            $this->assertSame($before, $this->encounters->getEncounterDetails($id));
+            $this->assertSame('in_consultation', $this->row('queue_entries', $ticket)['status']);
+            $this->assertSame('checked_in', $this->row('appointments', $appointment)['status']);
+            $this->assertSame(0, $this->db->transDepth);
+        } finally { $this->db->query('DROP TRIGGER clinic_audit_fail_queue'); }
+        $result = $this->encounters->completeEncounter($id, 'discharged', pendingDraft: [
+            'chief_complaint' => 'Changed', 'diagnosis' => 'Changed diagnosis',
+        ], recordedByUserId: $this->actorId);
+        $this->assertSame('completed', $result['encounter']['status']);
+        $this->assertSame('Changed diagnosis', $result['treatment']['diagnosis']);
+        $this->assertSame('done', $this->row('queue_entries', $ticket)['status']);
+        $this->assertSame('completed', $this->row('appointments', $appointment)['status']);
+    }
+
     public function testQueueServiceJoinsCallerTransactionWithoutCommittingIt(): void
     {
         $ticket = $this->ticket();

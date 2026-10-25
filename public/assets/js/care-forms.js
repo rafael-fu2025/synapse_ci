@@ -14,6 +14,7 @@
         const finishLoading = window.SynapseLoading?.begin(this.$root?.querySelector('.input-group')?.parentElement, { label: 'Searching directory…' });
         try {
           const response = await fetch(url, { signal: controller.signal });
+          if (controller.signal.aborted || window.SynapseCsrf?.fromResponse(response)) return;
           const payload = response.ok ? await response.json() : null;
           if (!controller.signal.aborted) this.results = payload?.results || [];
         } catch (error) { if (error.name !== 'AbortError' && !controller.signal.aborted) this.results = []; }
@@ -58,6 +59,7 @@
       url.searchParams.set('date', this.date);
       try {
         const response = await fetch(url, { signal: controller.signal });
+        if (controller.signal.aborted || window.SynapseCsrf?.fromResponse(response)) return;
         const result = await response.json();
         if (!controller.signal.aborted) {
           if (!response.ok) this.slotError = result.message || 'Unable to check availability. Please try again.';

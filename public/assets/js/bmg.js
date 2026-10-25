@@ -5,6 +5,7 @@
   window.SynapseBmg = true;
   let timeId = 0;
   let pendingWrite = null;
+  const committed = new WeakSet();
   const confirmationHandoffs = new WeakSet();
 
   function facilitiesUrl(value) {
@@ -51,6 +52,9 @@
   async function save(form, submitter) {
     const url = facilitiesUrl(form.action);
     if (!url) { errorBox(form, 'The form action must stay within this site’s facilities area.'); return; }
+    const mutations = window.SynapseMutations;
+    if (committed.has(form)) return;
+
     const data = new FormData(form);
     if (submitter?.name) data.append(submitter.name, submitter.value);
     const modal = form.closest('[data-bmg-modal]');
@@ -60,7 +64,7 @@
     const oldError = form.querySelector('[data-bmg-submit-error]');
     if (oldError) oldError.hidden = true;
     pendingWrite = form;
-    const finishLoading = window.SynapseLoading?.begin(form, { label: 'Saving…', button: submitter });
+    let finishLoading = window.SynapseLoading?.begin(form, { label: 'Saving…', button: submitter });
     form.setAttribute('aria-busy', 'true');
     controls.forEach(control => { control.disabled = true; });
     // Confirmed modal forms were hidden before asking for shared consent. Restore
@@ -70,7 +74,7 @@
     try {
       const response = await fetch(url.href, {
         method: 'POST', body: data, credentials: 'same-origin', redirect: 'error',
-        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers() }
+        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}) }
       });
       window.SynapseCsrf?.fromResponse(response);
       const payload = await response.json();
@@ -79,22 +83,36 @@
         errorBox(form, typeof payload.message === 'string' && payload.message ? payload.message : `The form could not be saved (HTTP ${response.status}).`);
         return;
       }
+      saved = true;
+      committed.add(form);
       const redirect = facilitiesUrl(payload.redirect);
       if (!redirect) {
         errorBox(form, 'The save succeeded, but the server returned an invalid facilities redirect. Do not resubmit; reload the facilities page to review the result.');
         return;
       }
-      saved = true;
-      location.assign(redirect.href);
+      finishLoading?.();
+      finishLoading = null;
+      controls.forEach((control, i) => { control.disabled = form.contains(control) ? true : disabled[i]; });
+      pendingWrite = null;
+      form.removeAttribute('aria-busy');
+      if (modal && (modal.classList.contains('show') || modal.getAttribute('aria-modal') === 'true')) {
+        const hidden = new Promise(resolve => modal.addEventListener('hidden.bs.modal', resolve, { once: true }));
+        const instance = bootstrap.Modal.getInstance(modal);
+        const hide = () => instance.hide();
+        modal.addEventListener('shown.bs.modal', hide, { once: true });
+        hide();
+        await hidden;
+        modal.removeEventListener('shown.bs.modal', hide);
+      }
+      if (mutations) await mutations.refresh(redirect.href, payload.message, { form });
+      else location.assign(redirect.href);
     } catch (_) {
       errorBox(form, 'The save response could not be received. Your fields are retained. The write may have completed; check the facilities record before retrying.');
     } finally {
-      if (!saved) {
-        finishLoading?.();
-        pendingWrite = null;
-        form.removeAttribute('aria-busy');
-        controls.forEach((control, i) => { control.disabled = disabled[i]; });
-      }
+      finishLoading?.();
+      pendingWrite = null;
+      form.removeAttribute('aria-busy');
+      controls.forEach((control, i) => { control.disabled = saved && form.contains(control) ? true : disabled[i]; });
     }
   }
 
@@ -123,6 +141,12 @@
   }
   function init() {
     document.querySelectorAll('[data-bmg-schedule]').forEach(refresh);
+    const requested = document.querySelector('[data-bmg-open-create]');
+    const modal = document.getElementById('unitModal');
+    if (requested && modal && window.bootstrap?.Modal) {
+      requested.removeAttribute('data-bmg-open-create');
+      bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
   }
   document.addEventListener('click', event => {
     const add = event.target.closest('[data-bmg-add-time]');
@@ -178,6 +202,12 @@
   });
   document.addEventListener('hide.bs.modal', event => {
     if (event.target.matches('[data-bmg-modal]') && pendingWrite?.closest('[data-bmg-modal]') === event.target) event.preventDefault();
+  });
+  document.addEventListener('hidden.bs.modal', event => {
+    const form = event.target.querySelector?.('form[data-bmg-create]');
+    if (!form || pendingWrite === form) return;
+    form.reset();
+    form.querySelectorAll('[data-bmg-submit-error]').forEach(box => { box.hidden = true; });
   });
   document.addEventListener('shown.bs.modal', event => {
     if (!event.target.matches('[data-bmg-modal]')) return;

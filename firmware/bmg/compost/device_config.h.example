@@ -1,0 +1,18 @@
+#pragma once
+// Generated PRIVATE device_config.h must define these four const char arrays.
+// This example contains placeholders only; never copy the legacy credentials.
+static const char WIFI_SSID[] = "REPLACE_WITH_WIFI_NAME";
+static const char WIFI_PASS[] = "REPLACE_WITH_WIFI_PASSWORD";
+// Origin + optional Humus deployment subdirectory; no trailing slash or API path.
+static const char API_BASE_URL[] = "https://humus.example.invalid";
+static const char DEVICE_TOKEN[] = "REPLACE_WITH_NEW_DEVICE_TOKEN";
+
+// TLS requires a reviewed root CA in this private header. No insecure fallback.
+// #define BMG_ROOT_CA_PEM R"PEM(-----BEGIN CERTIFICATE-----
+// ...reviewed CA certificate...
+// -----END CERTIFICATE-----
+// )PEM"
+
+// Define ONLY for an http:// URL after explicit trusted-local-network consent.
+// Never enable automatically, and never use for production/public networks.
+// #define BMG_ALLOW_HTTP true

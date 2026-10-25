@@ -59,7 +59,8 @@ final class MisSyncService
         return compact('actor', 'catalogs', 'lastSync');
     }
 
-    public function sync(): array
+    /** @param null|callable(array{percent:int,message:string}):void $progress */
+    public function sync(?callable $progress = null): array
     {
         $actor = $this->actor();
         $db = $this->db ??= Database::connect();
@@ -70,11 +71,13 @@ final class MisSyncService
         try {
             $client = $this->client ??= Services::misClient();
             // HttpMisClient returns [] for upstream failures; never interpret that as an empty authoritative catalog.
-            $catalogs = [
-                'departments' => $this->validate($client->fetchDepartments(), 'departments'),
-                'programs' => $this->validate($client->fetchPrograms(), 'programs'),
-                'year_levels' => $this->validate($client->fetchYearLevels(), 'year_levels'),
-            ];
+            $this->progress($progress, 5, 'Fetching all departments.');
+            $catalogs = ['departments' => $this->validate($client->fetchDepartments(), 'departments')];
+            $this->progress($progress, 25, 'Departments validated. Fetching programs.');
+            $catalogs['programs'] = $this->validate($client->fetchPrograms(), 'programs');
+            $this->progress($progress, 45, 'Fetching year levels.');
+            $catalogs['year_levels'] = $this->validate($client->fetchYearLevels(), 'year_levels');
+            $this->progress($progress, 65, 'Validating catalog relationships.');
             $departments = array_column($catalogs['departments'], 'code');
             foreach ($catalogs['programs'] as $program) {
                 if ($program['department_code'] !== null && !in_array($program['department_code'], $departments, true)) {
@@ -87,6 +90,7 @@ final class MisSyncService
         }
 
         $audit = new AuditService(null, $db);
+        $this->progress($progress, 85, 'Saving reference catalogs and auditing synchronization.');
         $db->resetTransStatus();
         if (!$db->transBegin()) {
             throw new RuntimeException('MIS reference synchronization is unavailable.', 503);
@@ -126,7 +130,6 @@ final class MisSyncService
             if (!$db->transStatus() || !$db->transCommit()) {
                 throw new RuntimeException('Reference commit failed.');
             }
-            return compact('counts', 'syncedAt');
         } catch (Throwable $error) {
             $db->transRollback();
             $db->resetTransStatus();
@@ -134,6 +137,17 @@ final class MisSyncService
                 throw new RuntimeException('Your access changed. Reload before trying again.', 403);
             }
             throw new RuntimeException('MIS reference synchronization could not be committed. No references were changed.', 503);
+        }
+        $this->progress($progress, 100, 'MIS reference catalogs synchronized.');
+        return compact('counts', 'syncedAt');
+    }
+
+    private function progress(?callable $observer, int $percent, string $message): void
+    {
+        try {
+            if ($observer !== null) { $observer(['percent' => $percent, 'message' => $message]); }
+        } catch (Throwable) {
+            // Best-effort observers must never affect synchronization or expose their errors.
         }
     }
 

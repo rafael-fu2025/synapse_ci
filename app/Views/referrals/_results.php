@@ -25,10 +25,10 @@ $labels = ['submitted' => 'Submitted', 'acknowledged' => 'Acknowledged', 'under_
       <td><?= esc($ref['issuer_name'] ?? 'Former staff') ?></td>
       <td class="pe-3"><div class="d-flex flex-wrap gap-2">
         <?php if ($receiving && $ref['status'] === 'submitted' && $can('referrals.acknowledge')): ?>
-          <form action="<?= esc($base . '/acknowledge') ?>" method="POST"><?= csrf_field() ?><button class="btn btn-outline-primary btn-sm" type="submit">Acknowledge</button></form>
+          <form action="<?= esc($base . '/acknowledge') ?>" method="POST" data-background-submit><?= csrf_field() ?><button class="btn btn-outline-primary btn-sm" type="submit">Acknowledge</button></form>
         <?php endif; ?>
         <?php if ($receiving && $ref['status'] === 'acknowledged' && $can('referrals.review')): ?>
-          <form action="<?= esc($base . '/review') ?>" method="POST"><?= csrf_field() ?><button class="btn btn-outline-primary btn-sm" type="submit">Start review</button></form>
+          <form action="<?= esc($base . '/review') ?>" method="POST" data-background-submit><?= csrf_field() ?><button class="btn btn-outline-primary btn-sm" type="submit">Start review</button></form>
         <?php endif; ?>
         <?php if ($canHandoff && !$linked && in_array($ref['status'], ['acknowledged','under_review'], true)): ?>
           <a href="<?= esc($base . '/handoff') ?>" class="btn btn-success btn-sm" data-app-modal-open><?= $unit === 'clinic' ? 'Start / Link Visit' : 'Open / Link Case' ?></a>
@@ -37,7 +37,7 @@ $labels = ['submitted' => 'Submitted', 'acknowledged' => 'Acknowledged', 'under_
           <a class="btn btn-outline-success btn-sm" href="<?= esc(site_url($unit === 'clinic' ? '/clinic/encounters/' . (int) $ref['target_encounter_id'] : '/guidance/cases/' . (int) $ref['target_case_id'])) ?>">Open linked <?= $unit === 'clinic' ? 'visit' : 'case' ?></a>
         <?php endif; ?>
         <?php if ($receiving && in_array($ref['status'], ['acknowledged','under_review','converted_to_case'], true) && $can('referrals.close')): ?>
-          <form action="<?= esc($base . '/close') ?>" method="POST" data-confirm="Close this referral handoff? This does not close its linked clinic visit or guidance case." data-confirm-title="Close referral" data-confirm-label="Close referral" data-confirm-tone="warning"><?= csrf_field() ?><button class="btn btn-outline-secondary btn-sm" type="submit">Close referral</button></form>
+          <form action="<?= esc($base . '/close') ?>" method="POST" data-background-submit data-confirm="Close this referral handoff? This does not close its linked clinic visit or guidance case." data-confirm-title="Close referral" data-confirm-label="Close referral" data-confirm-tone="warning"><?= csrf_field() ?><button class="btn btn-outline-secondary btn-sm" type="submit">Close referral</button></form>
         <?php endif; ?>
         <?php if (!$receiving): ?><span class="text-muted">Receiving team manages this handoff</span><?php elseif ($ref['status'] === 'closed' && !$linked): ?><span class="text-muted">Closed</span><?php elseif ($ref['status'] === 'converted_to_case' && !$linked): ?><span class="text-muted">Legacy case conversion—review linkage</span><?php endif; ?>
       </div></td>

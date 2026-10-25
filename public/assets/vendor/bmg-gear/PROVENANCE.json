@@ -1,0 +1,26 @@
+{
+  "sourceProject": "zynapse (local checkout, reused at user request; not modified)",
+  "sourceFiles": {
+    "frontend/src/components/facilities/gear/gearRenderer.ts": "3be10bed1ea5c6158086d18bc925b10d2fe14da2b731ddd9d3719b614abd2a9f",
+    "frontend/src/lib/gearModel.ts": "2e7688526230ba52c1661a6fe5f08e49f87939238a8c9a77d3216b9b1a437b7e",
+    "frontend/src/components/facilities/GearGauge.tsx": "d5fae6f34e5d634c32d9eaaa8678550baeb625e75fb521f53bfa949bdcf80b1c",
+    "frontend/src/components/facilities/DrumCard.tsx": "8384c6777ec53dc2401228300523d2d9d2c9faa6535a7d55b8472e7af0340674"
+  },
+  "sourceLicense": "No project LICENSE found in repository root or frontend; confirm redistribution permission before external distribution.",
+  "three": {
+    "version": "0.186.1",
+    "license": "MIT",
+    "licenseFile": "THREE-LICENSE.txt",
+    "source": "https://github.com/mrdoob/three.js"
+  },
+  "esbuild": {
+    "version": "0.21.5",
+    "buildTimeOnly": true
+  },
+  "adaptation": "Exact tooth outline and buildGear functions reused; static-only lifecycle adapted from shared renderer; batch semantics and progress bezel excluded.",
+  "bundle": {
+    "file": "public/assets/js/bmg-gear-renderer.js",
+    "bytes": 575138,
+    "sha256": "1c5763eee0f0f1ce6ba82b6976a99b097a58047ed1d29afd968ba37f19b11373"
+  }
+}

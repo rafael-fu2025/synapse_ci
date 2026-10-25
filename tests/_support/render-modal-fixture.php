@@ -7,6 +7,8 @@ if (PHP_SAPI !== 'cli') {
 }
 $fixture = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
 require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootstrap.php';
+// Realtime ticket renewal is unrelated to form saves and requires its own backend.
+config(\Config\Realtime::class)->enabled = false;
 $app = config('App');
 $app->baseURL = $fixture['origin'] . ($fixture['basePath'] ?? '/');
 $app->indexPage = $fixture['indexPage'] ?? '';
@@ -124,7 +126,10 @@ switch ($kind) {
         break;
     case 'guidance-case-list':
         $view = 'guidance/cases/index';
-        $data = ['title' => 'Counseling Cases', 'cases' => [], 'status' => '', 'category' => '', 'formModalPage' => false];
+        $pager = \Config\Services::pager();
+        $pager->store('default', 1, 25, 0);
+        $data = ['title' => 'Counseling Cases', 'cases' => [], 'pager' => $pager,
+            'status' => '', 'category' => '', 'formModalPage' => false];
         break;
     case 'clinic-list':
     case 'guidance-list':

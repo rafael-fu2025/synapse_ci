@@ -152,8 +152,15 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
         $this->setTransport('htmx');
         $response = $this->invoke('mutate', $operation);
         self::assertSame(2, $calls);
-        self::assertSame(['success' => true, 'message' => 'Saved.', 'redirect' => site_url('/guidance/cases/9')],
-            json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR));
+        $payload = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame([
+            'success' => true,
+            'message' => 'Saved.',
+            'redirect' => site_url('/guidance/cases/9'),
+            'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
+        ], $payload);
+        self::assertNotEmpty($payload['csrf']['name']);
+        self::assertNotEmpty($payload['csrf']['hash']);
     }
 
     public function testNoteErrorsPreserveExpectedStatusAndHideUnexpectedDetails(): void

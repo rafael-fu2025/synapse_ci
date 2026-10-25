@@ -30,6 +30,8 @@ final class TeamsHttpTest extends CIUnitTestCase
             'DBDebug' => true, 'foreignKeys' => true, 'busyTimeout' => 1000,
         ];
         $this->db = Database::connect();
+        require_once ROOTPATH . 'tests/_support/TeamsNotificationFixture.php';
+        \Tests\Support\TeamsNotificationFixture::install($this->db);
         $this->assertSame(':memory:', $this->db->database);
         $this->db->query('CREATE TABLE isolated_tenants (id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT)');
         $this->db->query('CREATE TABLE isolated_people (id INTEGER PRIMARY KEY, tenant_id INTEGER, first_name TEXT, last_name TEXT, mis_id TEXT, email TEXT, deleted_at TEXT)');

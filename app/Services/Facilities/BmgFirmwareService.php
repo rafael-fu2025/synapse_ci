@@ -25,7 +25,7 @@ final class BmgFirmwareService
     private string $root;
 
     /** Root injection is for isolated tests; production always uses the private writable catalog. */
-    public function __construct(private ?BaseConnection $db = null, ?BmgFirmware $config = null, ?string $root = null)
+    public function __construct(private ?BaseConnection $db = null, ?BmgFirmware $config = null, ?string $root = null, private ?BmgBuildService $builds = null)
     {
         $this->config = $config ?? config(BmgFirmware::class);
         $this->root = rtrim($root ?? WRITEPATH . 'firmware/bmg', '/\\');
@@ -35,8 +35,14 @@ final class BmgFirmwareService
     {
         $actor = $this->actor();
         $detail = (new BmgRotationService($this->database()))->unit($id);
-        return ['detail' => $detail, 'releases' => $this->catalog(),
-            'flashEnabled' => $this->workspaceFlashEnabled($actor, $detail),
+        $releases = $this->catalog();
+        foreach ($this->builds()->privateReleases($id, $actor) as $entry) {
+            $manifest = $this->validated($entry)['manifest'];
+            $releases[] = array_intersect_key($manifest, array_flip(['id', 'name', 'chip_family', 'flash_size']));
+        }
+        $flashBlockers = $this->workspaceFlashBlockers($actor, $detail);
+        return ['detail' => $detail, 'releases' => $releases,
+            'flashEnabled' => $flashBlockers === [], 'flashBlockers' => $flashBlockers,
             'title' => 'BMG USB Workspace', 'pageTitle' => 'BMG USB Workspace'];
     }
 
@@ -55,14 +61,14 @@ final class BmgFirmwareService
     public function manifest(int $id, string $releaseId): array
     {
         $this->accessUnit($id);
-        return $this->withUrls($id, $this->validated($this->release($releaseId))['manifest']);
+        return $this->withUrls($id, $this->validated($this->release($id, $releaseId))['manifest']);
     }
 
     /** Returns bounded, already hashed bytes, not a path to be reopened by the controller. */
     public function part(int $id, string $releaseId, int $index): array
     {
         $this->accessUnit($id);
-        $release = $this->validated($this->release($releaseId));
+        $release = $this->validated($this->release($id, $releaseId));
         if ($index < 0 || !isset($release['manifest']['parts'][$index])) {
             throw new RuntimeException('Firmware part not found.', 404);
         }
@@ -86,7 +92,7 @@ final class BmgFirmwareService
             || (int) $expected > 2147483646) {
             throw new InvalidArgumentException('Invalid expected_version.');
         }
-        $manifest = $this->withUrls($id, $this->validated($this->release($data['release_id']))['manifest']);
+        $manifest = $this->withUrls($id, $this->validated($this->release($id, $data['release_id']))['manifest']);
         $db = $this->database();
         if (!$db->transBegin()) { throw new RuntimeException('USB authorization unavailable.', 503); }
         try {
@@ -115,6 +121,8 @@ final class BmgFirmwareService
             if ($this->hasPendingCommands($tenant, $id)) {
                 throw new RuntimeException('Unexpired pending commands must be resolved first.', 409);
             }
+            // Private binding/expiry must still be current under the rotation tenant mutex.
+            if (str_starts_with($data['release_id'], 'build-')) { $this->release($id, $data['release_id']); }
             // Hash the immutable release metadata, not deployment-specific URLs or any credentials.
             $approved = $manifest;
             foreach ($approved['parts'] as &$part) { unset($part['url']); }
@@ -161,16 +169,37 @@ final class BmgFirmwareService
     }
 
     /** UI readiness only: detection, confirmation, version, and fresh authority are rechecked on POST. */
-    private function workspaceFlashEnabled(array $actor, array $detail): bool
+    private function workspaceFlashBlockers(array $actor, array $detail): array
     {
-        if (!$this->flashEnabled() || !in_array('facilities.hardware.manage', $actor['permissions'], true)
-            || $detail['unit']['status'] !== 'maintenance' || $detail['schedule']['enabled']
-            || !is_string($detail['device']['chip_mac'] ?? null)
-            || !preg_match('/\A(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\z/Di', $detail['device']['chip_mac'])) { return false; }
+        $blockers = [];
+        if (!in_array(env('BMG_USB_FLASH_ENABLED', false), [true, 'true'], true)) {
+            $blockers[] = 'Server USB flashing is disabled. Ask an administrator to review BMG_USB_FLASH_ENABLED.';
+        }
+        if (!in_array(env('BMG_HARDWARE_ENABLED', false), [false, 'false'], true)) {
+            $blockers[] = 'The motor hardware gate is enabled or invalid. USB flashing requires BMG_HARDWARE_ENABLED to be false.';
+        }
+        if (!in_array('facilities.hardware.manage', $actor['permissions'], true)) {
+            $blockers[] = 'Your account requires the explicit facilities.hardware.manage permission before flashing.';
+        }
+        if ($detail['unit']['status'] !== 'maintenance') {
+            $blockers[] = 'Place this unit in maintenance before flashing.';
+        }
+        if ($detail['schedule']['enabled']) {
+            $blockers[] = 'Disable and publish the rotation schedule before flashing.';
+        }
         $tenant = (int) $actor['tenant_id'];
         $id = (int) $detail['unit']['id'];
-        return $this->database()->table('bmg_rotation_schedules')->where('tenant_id', $tenant)->where('unit_id', $id)
-            ->countAllResults() === 1 && !$this->hasPendingCommands($tenant, $id);
+        if ($this->database()->table('bmg_rotation_schedules')->where('tenant_id', $tenant)->where('unit_id', $id)->countAllResults() !== 1) {
+            $blockers[] = 'Publish exactly one rotation schedule version for this unit before flashing.';
+        }
+        if (!is_string($detail['device']['chip_mac'] ?? null)
+            || !preg_match('/\A(?:[0-9a-f]{2}:){5}[0-9a-f]{2}\z/Di', $detail['device']['chip_mac'])) {
+            $blockers[] = 'Bind one active device with a valid chip MAC to this unit before flashing.';
+        }
+        if ($this->hasPendingCommands($tenant, $id)) {
+            $blockers[] = 'Resolve unexpired pending commands before flashing.';
+        }
+        return $blockers;
     }
 
     private function hasPendingCommands(int $tenant, int $id): bool
@@ -212,8 +241,14 @@ final class BmgFirmwareService
         return $this->config->releases;
     }
 
-    private function release(string $id): array
+    private function builds(): BmgBuildService
     {
+        return $this->builds ??= new BmgBuildService($this->database(), null, $this->root);
+    }
+
+    private function release(int $unit, string $id): array
+    {
+        if (str_starts_with($id, 'build-')) { return $this->builds()->privateRelease($unit, $id, $this->actor()); }
         if (!$this->slug($id)) { throw new RuntimeException('Firmware release not found.', 404); }
         foreach ($this->entries() as $entry) { if ($entry['id'] === $id) { return $entry; } }
         throw new RuntimeException('Firmware release not found.', 404);

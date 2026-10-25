@@ -40,7 +40,7 @@
     const events = new AbortController();
     const options = { signal: events.signal };
     const dirty = new Set();
-    let sequence = 0, edits = 0, timer = null, pending = null, composing = false, asking = false, syncing = false, retry = null;
+    let sequence = 0, edits = 0, timer = null, pending = null, composing = false, asking = false, syncing = false, retry = null, live = null;
 
     function queryUrl(source = form) {
       const url = new URL(endpoint);
@@ -112,11 +112,15 @@
         });
       } finally { syncing = false; observed = filterUrl().href; }
     }
-    async function load(url = filterUrl(), manual = false, mode = 'replace', link = false, restoreText = false) {
+    // `silent` is a background refresh: it never interrupts or discards user work and reports no errors except lost access.
+    async function load(url = filterUrl(), manual = false, mode = 'replace', link = false, restoreText = false, silent = false) {
+      if (root.querySelector('[data-team-board][aria-busy="true"], [data-task-dragging]')) return;
+      if (silent && (pending || timer !== null || composing || asking || syncing || editorOpen() || hasDrafts()
+          || root.querySelector('form[aria-busy="true"]'))) return;
       invalidate();
       const token = sequence;
       if (!validUrl(url) || !form.reportValidity()) return;
-      retry = { url, mode, link, restoreText };
+      if (!silent) retry = { url, mode, link, restoreText };
       if (editorOpen()) { paused('Finish or close the editor before filtering. Your values have been kept.'); return; }
       if (root.querySelector('form[aria-busy="true"]')) { paused('Wait for the current save before filtering.'); return; }
       if (hasDrafts()) {
@@ -134,15 +138,19 @@
       const controller = new AbortController(); pending = controller;
       let timedOut = false;
       const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
-      errorBox.hidden = true;
-      root.setAttribute('aria-busy', 'true');
-      status.textContent = 'Updating results…';
+      let denied = false;
+      if (!silent) {
+        errorBox.hidden = true;
+        root.setAttribute('aria-busy', 'true');
+        status.textContent = 'Updating results…';
+      }
       try {
         const response = await fetch(url.href, { method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
           headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers() } });
         if (token !== sequence || controller.signal.aborted || !root.isConnected) return;
         window.SynapseCsrf?.fromResponse(response);
-        if (!response.ok) throw new Error([401, 403, 419].includes(response.status) ? 'Your session or access changed. Retry or reload this page.' : 'Unable to update results. Please retry.');
+        denied = [401, 403, 419].includes(response.status);
+        if (!response.ok) throw new Error(denied ? 'Your session or access changed. Retry or reload this page.' : 'Unable to update results. Please retry.');
         if (response.redirected || (response.url && new URL(response.url).href !== url.href)
             || !response.headers.get('Content-Type')?.toLowerCase().includes('text/html')) throw new Error('Unexpected response. Retry or reload this page.');
         const html = await response.text();
@@ -159,7 +167,7 @@
             || Array.from(incomingRegions.values()).some(region => !safeContent(region))) {
           throw new Error('The page or your access changed. Reload this page before continuing.');
         }
-        if (version !== edits || editorOpen()) { paused('New edits were kept. Filters were not applied.'); return; }
+        if (version !== edits || editorOpen() || root.querySelector('[data-team-board][aria-busy="true"], [data-task-dragging]')) { if (!silent) paused('New edits were kept. Filters were not applied.'); return; }
         const contextLinks = Array.from(document.querySelectorAll('a[data-filter-context-link]'))
           .filter(anchor => anchor.dataset.filterContextLink === key).map(anchor => {
             const fresh = Array.from(page.querySelectorAll('a[data-filter-context-link]')).filter(item => item.dataset.filterContextLink === key);
@@ -195,8 +203,11 @@
         window.SynapseCsrf?.fromResponse(response);
         for (const region of currentRegions.values()) { window.SynapsePageLifecycle?.init(region); window.htmx?.process(region); }
         status.textContent = incoming.querySelector('[data-filter-status]')?.textContent.trim() || 'Results updated.';
+        document.dispatchEvent(new CustomEvent('synapse:filter-updated', { detail: { root } }));
+        return true;
       } catch (error) {
         if (token !== sequence || (!timedOut && controller.signal.aborted)) return;
+        if (silent && !denied) return; // Keep the last good results; the next refresh retries.
         errorText.textContent = timedOut ? 'Filtering timed out. Your previous results are still displayed.' : error instanceof TypeError ? 'Connection or sign-in changed. Retry or reload this page.' : error.message;
         errorBox.hidden = false;
         status.textContent = 'Filters were not applied. Previous results and edits are still displayed.';
@@ -254,7 +265,42 @@
       const url = new URL(location.href);
       if (validUrl(url)) void load(url, false, 'replace', true, true);
     }, options);
-    instances.set(root, { invalidate, destroy() { invalidate(); events.abort(); instances.delete(root); } });
+    // Opt-in live refresh: data-live-events="event.name other.event" refetches this region on those realtime hints.
+    // Hints are best-effort, so a visible-tab poll reconciles missed ones (slower while the socket is connected).
+    const liveEvents = new Set((root.dataset.liveEvents || '').split(/\s+/).filter(name => /^[a-z][a-z0-9_.]{0,63}$/.test(name)));
+    if (liveEvents.size) {
+      let ready = window.SynapseRealtime?.status === 'ready';
+      const active = () => root.isConnected && !document.hidden;
+      const arm = () => {
+        clearTimeout(live); live = null;
+        if (active()) live = setTimeout(refresh, (ready ? 120000 : 30000) * (0.9 + Math.random() * 0.2));
+      };
+      function refresh() {
+        clearTimeout(live); live = null;
+        if (!active()) return;
+        const url = new URL(location.href); url.hash = '';
+        void load(validUrl(url) ? url : filterUrl(), false, 'replace', false, false, true).finally(arm);
+      }
+      document.addEventListener('synapse:realtime-event', event => {
+        if (!liveEvents.has(event.detail?.event)) return;
+        clearTimeout(live); live = setTimeout(refresh, 250);
+      }, options);
+      document.addEventListener('synapse:realtime-status', event => {
+        const next = event.detail?.status === 'ready';
+        if (next === ready) return;
+        ready = next;
+        if (ready) refresh(); else arm();
+      }, options);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(live); live = null; } else refresh(); }, options);
+      arm();
+    }
+    instances.set(root, { invalidate,
+      async refresh() {
+        if (pending || timer !== null || composing || asking || syncing || editorOpen() || hasDrafts()) return false;
+        const url = new URL(location.href); url.hash = '';
+        return await load(validUrl(url) ? url : filterUrl()) === true;
+      },
+      destroy() { invalidate(); clearTimeout(live); events.abort(); instances.delete(root); } });
   }
   function scan(root = document) {
     for (const [element, instance] of instances) if (!element.isConnected) instance.destroy();
@@ -269,5 +315,15 @@
   window.addEventListener('pagehide', () => instances.forEach(instance => instance.destroy()));
   window.addEventListener('pageshow', () => scan());
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan()); else scan();
-  window.SynapseLiveFilters = { init: scan };
+  window.SynapseLiveFilters = { init: scan,
+    // null means no opted-in region owns this destination; false means its GET failed (do not navigate).
+    async refresh(value) {
+      const url = new URL(value, location.href);
+      const current = new URL(location.href);
+      if (url.origin !== current.origin || url.pathname !== current.pathname) return null;
+      const owners = [...instances].filter(([root]) => root.isConnected && root.hasAttribute('data-mutation-refresh'));
+      if (owners.length !== 1) return null;
+      return owners[0][1].refresh();
+    }
+  };
 })();

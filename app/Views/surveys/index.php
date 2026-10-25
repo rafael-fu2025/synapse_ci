@@ -11,10 +11,10 @@
     <tr><td><?= esc($survey['title']) ?></td><td><?= esc(ucfirst($survey['audience'])) ?><?= view('announcements/_targeting_summary', ['targetRecord' => $survey], ['saveData' => false]) ?></td><td><span class="badge bg-secondary"><?= esc(ucfirst($survey['status'])) ?></span></td><td><div class="d-flex gap-2 flex-wrap">
       <?php if ($survey['status'] === 'draft'): ?>
         <a href="<?= esc($base . '/edit') ?>" class="btn btn-outline-primary btn-sm" data-app-modal-open>Edit draft</a>
-        <form method="post" action="<?= esc($base . '/publish') ?>" data-confirm="Publish this identified survey? Questions, audience and dates will become immutable." data-confirm-title="Publish survey" data-confirm-label="Publish" data-confirm-tone="warning"><?= csrf_field() ?><button class="btn btn-primary btn-sm" type="submit">Publish</button></form>
+        <form method="post" action="<?= esc($base . '/publish') ?>" data-background-submit data-confirm="Publish this identified survey? Questions, audience and dates will become immutable." data-confirm-title="Publish survey" data-confirm-label="Publish" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= esc($survey['version']) ?>"><button class="btn btn-primary btn-sm" type="submit">Publish</button></form>
       <?php else: ?>
         <a href="<?= esc($base . '/responses') ?>" class="btn btn-outline-primary btn-sm">Responses</a>
-        <?php if ($survey['status'] === 'published'): ?><form method="post" action="<?= esc($base . '/close') ?>" data-confirm="Close this survey? No further submissions will be accepted. Existing responses will remain available." data-confirm-title="Close survey" data-confirm-label="Close survey" data-confirm-tone="warning"><?= csrf_field() ?><button class="btn btn-outline-danger btn-sm" type="submit">Close</button></form><?php endif; ?>
+        <?php if ($survey['status'] === 'published'): ?><form method="post" action="<?= esc($base . '/close') ?>" data-background-submit data-confirm="Close this survey? No further submissions will be accepted. Existing responses will remain available." data-confirm-title="Close survey" data-confirm-label="Close survey" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= esc($survey['version']) ?>"><button class="btn btn-outline-danger btn-sm" type="submit">Close</button></form><?php endif; ?>
       <?php endif; ?>
     </div></td></tr>
   <?php endforeach; ?>

@@ -112,6 +112,28 @@
 # FUMIS_FAKE_ENABLED = false
 
 #--------------------------------------------------------------------
+# REALTIME — optional Workerman process; existing polling remains enabled
+#--------------------------------------------------------------------
+# Generate TWO independent secrets; run this command once for each key:
+# php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+# Keep keys private and shared only by the app and realtime process.
+# realtime.enabled = false
+# realtime.signingKey = ''
+# realtime.publishKey = ''
+# Exact browser origins, comma-separated, with no trailing slash (no wildcards).
+# realtime.allowedOrigins = 'http://localhost:8080'
+# realtime.listen = 'websocket://127.0.0.1:8081'
+# Never expose or reverse-proxy the HTTP publisher outside loopback.
+# realtime.publishListen = 'http://127.0.0.1:8082'
+# Use wss://your-host/realtime behind a TLS reverse proxy in production.
+# realtime.publicUrl = 'ws://127.0.0.1:8081'
+# realtime.ticketTtl = 60
+# realtime.maxConnections = 512
+# realtime.maxPublishConnections = 32
+# Start separately: php spark realtime:serve start
+# Deployment, security limits, and future BMG RPM integration: docs/REALTIME.md
+
+#--------------------------------------------------------------------
 # BMG ROTATION — leave disabled until firmware and physical safety acceptance
 #--------------------------------------------------------------------
 # Server gating is not an emergency stop and cannot stop offline cached schedules.
@@ -122,3 +144,12 @@
 # physical motor isolation, and an administrator-approved private firmware catalog.
 # Keep BMG_HARDWARE_ENABLED=false during USB installation.
 # BMG_USB_FLASH_ENABLED = false
+# Optional trusted-template compiler (separate from USB-flash and motor gates).
+# Use a private, absolute Arduino CLI executable path. Install ESP32 core 3.3.3
+# and ArduinoJson 7.4.2 on the server first. See docs/BMG_USB.md.
+# bmgbuild.enabled = false
+# bmgbuild.cli = ''
+# Generate an independent secret locally; never commit it:
+# php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
+# bmgbuild.signingKey = ''
+# bmgbuild.timeoutSeconds = 180

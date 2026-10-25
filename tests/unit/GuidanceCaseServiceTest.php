@@ -10,6 +10,8 @@ use App\Models\CounsellingSessionModel;
 use App\Models\GuidanceFollowupModel;
 use App\Models\PersonModel;
 use App\Models\UserModel;
+use App\Services\AuthenticatedUser;
+use App\Services\CurrentTenant;
 use App\Services\Guidance\GuidanceCaseService;
 use Tests\Support\FreshDatabaseTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
@@ -37,6 +39,8 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+        AuthenticatedUser::clear();
+        CurrentTenant::set(1);
 
         $this->caseModel = new CounsellingCaseModel();
         $this->sessionModel = new CounsellingSessionModel();
@@ -54,9 +58,17 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
         );
 
         $unique = uniqid();
+        $counsellorPersonId = (int) $this->personModel->insert([
+            'tenant_id'  => 1,
+            'kind'       => 'employee',
+            'mis_id'     => 'GC_EMP_' . $unique,
+            'first_name' => 'Synthetic',
+            'last_name'  => 'Counsellor',
+        ]);
         $userModel = new UserModel();
         $this->counsellorUserId = (int) $userModel->insert([
             'tenant_id' => 1,
+            'person_id' => $counsellorPersonId,
             'username'  => 'counsellor_' . $unique,
             'role'      => 'counsellor',
             'status'    => 'active',
@@ -69,6 +81,49 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
             'first_name' => 'Carla',
             'last_name'  => 'Mendoza',
         ]);
+    }
+
+    protected function tearDown(): void
+    {
+        AuthenticatedUser::clear();
+        parent::tearDown();
+    }
+
+    private function signInCounsellor(): void
+    {
+        // Fresh migrations do not seed counsellor grants; install only these contracts' grants.
+        $permissions = [
+            'guidance.cases.read' => 'View assigned counseling cases',
+            'guidance.cases.write' => 'Write encrypted session notes and plans',
+        ];
+        foreach ($permissions as $code => $name) {
+            $permission = $this->db->table('permissions')->where('code', $code)->get()->getRowArray();
+            if ($permission === null) {
+                $this->assertTrue($this->db->table('permissions')->insert([
+                    'code' => $code, 'name' => $name, 'module' => 'guidance',
+                ]));
+                $permission = ['id' => $this->db->insertID()];
+            }
+            $grant = ['role' => 'counsellor', 'permission_id' => $permission['id']];
+            if ($this->db->table('role_permissions')->where($grant)->countAllResults() === 0) {
+                $this->assertTrue($this->db->table('role_permissions')->insert($grant));
+            }
+        }
+
+        $authority = new AuthenticatedUser();
+        $identity = $authority->forIdentity($this->counsellorUserId, 1);
+        $this->assertNotNull($identity);
+        $this->assertSame('counsellor', $identity['role']);
+        $this->assertNotNull($identity['person_id']);
+        $this->assertContains('guidance.cases.read', $identity['permissions']);
+        $this->assertContains('guidance.cases.write', $identity['permissions']);
+        $now = time();
+        session()->set(['user' => $identity, 'tenant_id' => $identity['tenant_id'], '_auth' => [
+            'started_at' => $now, 'last_seen_at' => $now,
+            'version' => $identity['auth_version'], 'session_id' => session_id(),
+        ]]);
+        $this->assertSame($identity, $authority->current());
+        $this->assertSame($identity, session()->get('user'));
     }
 
     public function testCreateCaseGeneratesSequentialNumber(): void
@@ -99,6 +154,7 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
 
     public function testEncryptedNotesDraftAndFinalizeLifecycle(): void
     {
+        $this->signInCounsellor();
         $pkg = $this->caseService->createCase($this->studentPersonId, $this->counsellorUserId, 'Test Notes Case', 'personal');
         $caseId = (int) $pkg['case']['id'];
         $session = $this->caseService->openSession($caseId, $this->counsellorUserId, 'regular');
@@ -139,8 +195,29 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
         $followup = $this->caseService->addFollowup($caseId, null, date('Y-m-d', strtotime('+7 days')), 'Review midterm syllabus');
         $this->assertSame('pending', $followup['status']);
 
+        $this->signInCounsellor();
         $completed = $this->caseService->completeFollowup((int) $followup['id']);
         $this->assertSame('completed', $completed['status']);
         $this->assertNotNull($completed['completed_at']);
+    }
+
+    public function testFollowupCompletionWithoutActorIsDeniedWithoutChangingState(): void
+    {
+        $pkg = $this->caseService->createCase($this->studentPersonId, $this->counsellorUserId, 'Unauthenticated Follow-up', 'academic');
+        $followup = $this->caseService->addFollowup((int) $pkg['case']['id'], null,
+            date('Y-m-d', strtotime('+7 days')), 'Must remain pending');
+        AuthenticatedUser::clear();
+
+        try {
+            $this->caseService->completeFollowup((int) $followup['id']);
+            $this->fail('Follow-up completion must require an authenticated actor.');
+        } catch (\RuntimeException $error) {
+            $this->assertSame(401, $error->getCode());
+            $this->assertSame('Please sign in to continue.', $error->getMessage());
+        }
+        CurrentTenant::set(1);
+        $unchanged = $this->followupModel->scoped()->find((int) $followup['id']);
+        $this->assertSame('pending', $unchanged['status']);
+        $this->assertNull($unchanged['completed_at']);
     }
 }

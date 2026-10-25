@@ -31,6 +31,8 @@ final class TeamCalendarServiceIntegrationTest extends CIUnitTestCase
             'DBDebug' => true, 'foreignKeys' => true, 'busyTimeout' => 1000,
         ];
         $this->db = Database::connect();
+        require_once ROOTPATH . 'tests/_support/TeamsNotificationFixture.php';
+        \Tests\Support\TeamsNotificationFixture::install($this->db);
         $this->db->query('CREATE TABLE isolated_tenants (id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT)');
         $this->db->query('CREATE TABLE isolated_people (id INTEGER PRIMARY KEY, tenant_id INTEGER, first_name TEXT,
             last_name TEXT, mis_id TEXT, email TEXT, deleted_at TEXT)');
@@ -88,6 +90,80 @@ final class TeamCalendarServiceIntegrationTest extends CIUnitTestCase
     private function create(array $changes = [], string $unit = 'clinic'): array
     {
         return $this->calendar->create($unit, $this->input($changes));
+    }
+
+    private function alerts(): array
+    {
+        return array_map(static fn (array $row): array => [(int) $row['recipient_user_id'], $row['type']],
+            $this->db->table('notifications')->orderBy('id')->get()->getResultArray());
+    }
+
+    public function testNotificationMatrixAcrossAllUnits(): void
+    {
+        foreach (['clinic' => [1, 2, 3], 'guidance' => [5, 6, 9], 'facilities' => [7, 8, 9]] as $unit => [$owner, $first, $second]) {
+            $this->signIn($owner);
+            $event = $this->create(['participant_ids' => [$owner, $first]], $unit);
+            $this->assertSame([[$first, 'team_event_added']], $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+            $updated = $this->calendar->update($unit, $event['id'], $this->input([
+                'version' => $event['version'], 'participant_ids' => [$owner, $second], 'title' => 'Changed',
+            ]));
+            $expected = [[$first, 'team_event_removed'], [$second, 'team_event_added']];
+            usort($expected, static fn ($a, $b) => $a[0] <=> $b[0]);
+            $this->assertSame($expected, $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+            $this->calendar->cancel($unit, $event['id'], ['version' => $updated['version']]);
+            $this->assertSame([[$second, 'team_event_cancelled']], $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+        }
+    }
+
+    public function testEventMaterialChangesAndUnchangedEdits(): void
+    {
+        $event = $this->create(['participant_ids' => [1, 2]]);
+        $this->db->table('notifications')->where('id >', 0)->delete();
+        $same = $this->calendar->update('clinic', $event['id'], $this->input(['version' => 1, 'participant_ids' => [2, 1]]));
+        $this->assertSame(1, $same['version']);
+        $this->assertSame([], $this->alerts());
+        $changes = [];
+        foreach (['title' => 'New title', 'location' => 'New room', 'starts_at' => '2026-10-01T00:10',
+            'ends_at' => '2026-10-01T01:10'] as $field => $value) {
+            $changes[$field] = $value;
+            $event = $this->calendar->update('clinic', $event['id'], $this->input($changes + [
+                'version' => $event['version'], 'participant_ids' => [1, 2],
+            ]));
+            $this->assertSame([[2, 'team_event_updated']], $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+        }
+        $changes['description'] = 'Description only';
+        $this->calendar->update('clinic', $event['id'], $this->input($changes + [
+            'version' => $event['version'], 'participant_ids' => [1, 2],
+        ]));
+        $this->assertSame([], $this->alerts());
+    }
+
+    public function testManagerChangesNotifyOrganizerWithoutDuplicateParticipantAlerts(): void
+    {
+        $event = $this->create(['participant_ids' => [1, 2]]);
+        $this->db->table('notifications')->where('id >', 0)->delete();
+        $this->signIn(4);
+        $event = $this->calendar->update('clinic', $event['id'], $this->input([
+            'version' => 1, 'participant_ids' => [1, 2, 3],
+        ]));
+        $this->assertSame([[1, 'team_event_updated'], [3, 'team_event_added']], $this->alerts());
+        $this->db->table('notifications')->where('id >', 0)->delete();
+        $this->db->table('users')->where('id', 2)->update(['status' => 'suspended']);
+        $this->calendar->cancel('clinic', $event['id'], ['version' => $event['version']]);
+        $this->assertSame([[1, 'team_event_cancelled'], [3, 'team_event_cancelled']], $this->alerts());
+    }
+
+    public function testNotificationFailureRollsBackEventAndParticipants(): void
+    {
+        $this->db->query("CREATE TRIGGER fail_alert BEFORE INSERT ON isolated_notifications BEGIN SELECT RAISE(ABORT, 'fixture failure'); END");
+        $this->fails(503, fn () => $this->create(['participant_ids' => [2]]));
+        $this->assertSame(0, $this->db->table('team_events')->countAllResults());
+        $this->assertSame(0, $this->db->table('team_event_participants')->countAllResults());
+        $this->assertSame([], $this->alerts());
     }
 
     public function testExactContractContextDefaultsAndServerOwnedFields(): void

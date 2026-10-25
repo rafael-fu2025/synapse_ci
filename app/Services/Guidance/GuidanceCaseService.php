@@ -77,7 +77,8 @@ final class GuidanceCaseService
                 'opened_at' => date('Y-m-d H:i:s'), 'summary_notes' => $summaryNotes ? trim($summaryNotes) : null,
             ]);
             $this->must($id !== false);
-            return $this->getCaseDetails((int) $id);
+            // Return only the case just created, without requiring a separate read grant.
+            return $this->caseDetails($this->caseRow((int) $id));
         });
     }
 
@@ -234,10 +235,12 @@ final class GuidanceCaseService
         });
     }
 
-    /** Tenant validation precedes ciphertext retrieval/decryption, including when no note exists. */
+    /** Refresh read authority before ciphertext retrieval, including when no note exists. */
     public function getDecryptedSessionNote(int $sessionId): ?array
     {
-        $this->getSession($sessionId);
+        \App\Services\EngagementAccess::actor('guidance.cases.read', 'guidance');
+        $session = $this->getSession($sessionId);
+        $this->authorizedCase((int) $session['case_id'], 'guidance.cases.read');
         $note = $this->noteModel->getDraftNote($sessionId) ?? $this->noteModel->getLatestFinalNote($sessionId);
         if ($note === null) {
             return null;
@@ -303,7 +306,7 @@ final class GuidanceCaseService
                 $this->must($this->caseModel->scoped()->update($caseId, $changes));
                 $this->audit('case', $caseId, 'closed', $actor);
             }
-            return $this->getCaseDetails($caseId);
+            return $this->caseDetails($this->caseRow($caseId));
         });
     }
 
@@ -317,7 +320,7 @@ final class GuidanceCaseService
             $this->assertNoActiveSessions($caseId);
             $this->must($this->caseModel->scoped()->update($caseId, ['status' => 'monitoring']));
             $this->audit('case', $caseId, 'monitoring', $actor);
-            return $this->getCaseDetails($caseId);
+            return $this->caseDetails($this->caseRow($caseId));
         });
     }
 
@@ -432,7 +435,14 @@ final class GuidanceCaseService
 
     public function getCaseDetails(int $caseId): array
     {
-        $case = $this->caseRow($caseId);
+        [$case] = $this->authorizedCase($caseId, 'guidance.cases.read');
+        return $this->caseDetails($case);
+    }
+
+    /** Assemble a package only after read authorization or the originating case write. */
+    private function caseDetails(array $case): array
+    {
+        $caseId = (int) $case['id'];
         $patient = $this->person((int) $case['person_id']);
         return [
             'case' => $case, 'patient' => $patient,
@@ -566,16 +576,19 @@ final class GuidanceCaseService
         } elseif (!$this->db->transStatus()) {
             throw new RuntimeException('Guidance changes require a healthy caller transaction.', 503);
         }
+        $queueHints = [];
         try {
             $table = $this->table('tenants');
             if ($this->db->query("SELECT id FROM {$table} WHERE id = ? FOR UPDATE", [CurrentTenant::id()])->getRowArray() === null) {
                 throw new RuntimeException('Guidance tenant is unavailable.', 503);
             }
-            $result = $operation();
+            // Nested intake/session calls contribute to the outer capture, not a new queue.
+            $result = $ownsTransaction
+                ? $this->queueService->captureInvalidations($operation, $queueHints)
+                : $operation();
             if (!$this->db->transStatus() || ($ownsTransaction && !$this->db->transCommit())) {
                 throw new RuntimeException('Unable to commit guidance changes.', 503);
             }
-            return $result;
         } catch (Throwable $e) {
             $retryable = in_array((int) $e->getCode(), [1205, 1213], true)
                 || in_array((int) ($this->db->error()['code'] ?? 0), [1205, 1213], true);
@@ -591,5 +604,9 @@ final class GuidanceCaseService
             }
             throw $e;
         }
+        if ($ownsTransaction) {
+            $this->queueService->publishCommittedInvalidations($queueHints);
+        }
+        return $result;
     }
 }

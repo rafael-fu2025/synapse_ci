@@ -37,6 +37,11 @@ final class TeamChatController extends BaseController
         return $this->respond(fn () => $this->payload((new TeamChatService())->history($unit, $this->request->getGet())));
     }
 
+    public function tasks(string $unit)
+    {
+        return $this->respond(fn () => $this->payload((new TeamChatService())->tasks($unit, $this->request->getGet())));
+    }
+
     public function send(string $unit)
     {
         return $this->respond(function () use ($unit) {

@@ -1,0 +1,86 @@
+/* Shared mobile table cards; desktop retains the native table layout. */
+@media (max-width: 767.98px) {
+  .table.table-mobile-cards {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  /* Keep column headings available to assistive technology. */
+  .table-mobile-cards > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .table-mobile-cards > tbody,
+  .table-mobile-cards > tfoot {
+    display: block;
+    width: 100%;
+  }
+
+  .table-mobile-cards > tbody > tr,
+  .table-mobile-cards > tfoot > tr {
+    display: block;
+    margin: .5rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--card-bg);
+    overflow: hidden;
+  }
+
+  .table.table-mobile-cards > :not(caption) > tr > :is(td, th) {
+    display: block;
+    width: auto !important;
+    min-width: 0 !important;
+    padding: .4rem .65rem !important;
+    text-align: start !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    border-bottom: 1px solid var(--border-color-light);
+  }
+
+  .table.table-mobile-cards > :not(caption) > tr > :last-child {
+    border-bottom: 0;
+  }
+
+  .table.table-mobile-cards > tbody > tr > [data-label]:not([data-label=""]) {
+    display: flow-root;
+    padding-left: 6.65rem !important;
+  }
+
+  .table-mobile-cards > tbody > tr > [data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    float: left;
+    width: 5.5rem;
+    margin-left: -6rem;
+    color: var(--muted-color);
+    font-size: .75rem;
+    font-weight: 600;
+  }
+
+  /* Select-all controls must remain visible and usable on mobile. */
+  .table-mobile-cards.table-mobile-controls > thead {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    margin: .5rem;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .table-mobile-controls > thead > tr {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .table-mobile-controls > thead > tr > th:not(:has(input, button, select)) {
+    display: none;
+  }
+}

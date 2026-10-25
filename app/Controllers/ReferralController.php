@@ -96,7 +96,7 @@ final class ReferralController extends BaseController
                 $personId = $encounter['person_id'];
             }
             if ($personId !== null) {
-                $patient = (new PersonModel())->scoped()->select('id,first_name,last_name,mis_id,kind')->find(ReferralService::positiveId($personId));
+                $patient = (new PersonModel())->allowCallbacks(false)->scoped()->select('id,first_name,last_name,mis_id,kind')->find(ReferralService::positiveId($personId));
                 if (!$patient) { throw new RuntimeException('Person not found.', 404); }
             }
             return view('referrals/create', [
@@ -216,6 +216,12 @@ final class ReferralController extends BaseController
     {
         $expected = $e instanceof RuntimeException || $e instanceof \InvalidArgumentException;
         $status = $expected && in_array($e->getCode(), [401, 403, 404, 422, 409], true) ? $e->getCode() : 503;
+        if ($status === 503) {
+            // SQL messages, traces and request data can contain private clinical content.
+            log_message('error', 'Referral operation failed: {type} (code {code}) at {file}:{line}', [
+                'type' => get_class($e), 'code' => $e->getCode(), 'file' => $e->getFile(), 'line' => $e->getLine(),
+            ]);
+        }
         $message = $status === 503 ? 'Referral operation could not be completed. Please retry or contact support.' : $e->getMessage();
         $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store, private');
         if ($this->request->isAJAX() || str_contains(strtolower($this->request->getHeaderLine('Accept')), 'json')) {
@@ -226,7 +232,9 @@ final class ReferralController extends BaseController
 
     private function success(string $message, string $redirect)
     {
-        session()->setFlashdata('success', $message);
+        if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+            session()->setFlashdata('success', $message);
+        }
         if ($this->request->isAJAX() || str_contains(strtolower($this->request->getHeaderLine('Accept')), 'json')) {
             return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => site_url($redirect),
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);

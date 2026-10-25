@@ -176,23 +176,48 @@ final class AdminCarouselController extends BaseController
      */
     public function reorder()
     {
-        $raw = (string) $this->request->getPost('order');
+        $raw = $this->request->getPost('order');
+        if (!is_string($raw)) {
+            return $this->respondToReorder('No ordering supplied.', false);
+        }
         $ids = array_values(array_filter(
             array_map('intval', array_map('trim', explode(',', $raw))),
             static fn (int $v): bool => $v > 0
         ));
 
         if (empty($ids)) {
-            return redirect()->to('/admin/carousel')->with('error', 'No ordering supplied.');
+            return $this->respondToReorder('No ordering supplied.', false);
         }
 
-        // Only reorder slides the current tenant can see.
-        $owned = array_column($this->slideModel->getAllSlides(), 'id');
-        $ids = array_values(array_intersect($ids, array_map('intval', $owned)));
+        try {
+            // Only reorder slides the current tenant can see.
+            $owned = array_column($this->slideModel->getAllSlides(), 'id');
+            $ids = array_values(array_intersect($ids, array_map('intval', $owned)));
+            if (empty($ids)) {
+                return $this->respondToReorder('No ordering supplied.', false);
+            }
 
-        $this->carousel->reorderSlides($ids);
+            $this->carousel->reorderSlides($ids);
+        } catch (Throwable $e) {
+            log_message('error', 'Unable to reorder carousel slides: {exception}', ['exception' => $e]);
+            return $this->respondToReorder('Unable to update slide order. Please try again.', false, 500);
+        }
 
-        return redirect()->to('/admin/carousel')->with('success', 'Slide order updated.');
+        return $this->respondToReorder('Slide order updated.');
+    }
+
+    private function respondToReorder(string $message, bool $success = true, int $errorStatus = 422)
+    {
+        if ($this->request->isAJAX()) {
+            // Reordering stays on the current page; do not queue a later flash notice.
+            return $this->response->setStatusCode($success ? 200 : $errorStatus)->setJSON([
+                'success' => $success,
+                'message' => $message,
+                'csrf'    => ['name' => csrf_token(), 'hash' => csrf_hash()],
+            ]);
+        }
+
+        return redirect()->to('/admin/carousel')->with($success ? 'success' : 'error', $message);
     }
 
     /**
@@ -247,9 +272,8 @@ final class AdminCarouselController extends BaseController
     private function respond(string $message, bool $success = true)
     {
         if ($this->request->isAJAX()) {
-            // The browser navigates separately once the XHR resolves, so carry
-            // the confirmation as flash data for that following request.
-            if ($success) {
+            // Legacy uploads navigate after saving; toast-owned requests refresh in place.
+            if ($success && $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
 
@@ -263,7 +287,8 @@ final class AdminCarouselController extends BaseController
                 ]);
         }
 
-        return redirect()->to('/admin/carousel')
-            ->with($success ? 'success' : 'error', $message);
+        $redirect = redirect()->to('/admin/carousel');
+        return $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast'
+            ? $redirect : $redirect->with($success ? 'success' : 'error', $message);
     }
 }

@@ -127,7 +127,10 @@ final class SchedulingClockTest extends TestCase
         $portal = file_get_contents($root . 'Controllers/PortalController.php');
         $view = file_get_contents($root . 'Views/appointments/index.php');
         self::assertStringContainsString("\$ticket['queue_date'] !== SchedulingClock::today()", $filter);
-        self::assertStringContainsString("->where('queue_date', SchedulingClock::today())", $portal);
+        self::assertStringContainsString('(new PortalQueueService())->snapshot()', $portal);
+        $portalQueue = file_get_contents($root . 'Services/PortalQueueService.php');
+        self::assertStringContainsString('$date = SchedulingClock::today();', $portalQueue);
+        self::assertStringContainsString("->where('queue_date', \$date)", $portalQueue);
         self::assertStringContainsString('$today = \\App\\Services\\Scheduling\\SchedulingClock::today();', $view);
         self::assertStringContainsString("\$appt['local_date'] === \$today", $view);
         foreach ([$filter, $portal, $view] as $source) self::assertStringNotContainsString("date('Y-m-d')", $source);

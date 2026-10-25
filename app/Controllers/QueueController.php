@@ -130,15 +130,25 @@ final class QueueController extends BaseController
         $priority = (string) ($this->request->getPost('priority') ?? 'routine');
 
         if ($personId <= 0) {
+            if ($this->wantsBackgroundFeedback()) {
+                return $this->queueJson(false, 'Please select a valid patient from the registry.', 422);
+            }
             return redirect()->back()->with('error', 'Please select a valid patient from the registry.');
         }
 
         try {
             (new \App\Services\Scheduling\AppointmentService())->assertSchedulingPermission($unit, (array) session()->get('user'), true);
             $entry = $this->queueService->enqueueWalkIn($unit, $personId, $priority, $this->queueDate());
-            return redirect()->to('/' . $unit . '/queue')->with('success', "Ticket {$entry['ticket_code']} issued successfully.");
-        } catch (\Exception $e) {
+            $message = "Ticket {$entry['ticket_code']} issued successfully.";
+            if ($this->wantsBackgroundFeedback()) {
+                return $this->queueJson(true, $message);
+            }
+            return redirect()->to('/' . $unit . '/queue')->with('success', $message);
+        } catch (\Throwable $e) {
             if (!in_array((int) $e->getCode(), [403, 404, 409, 422], true)) {
+                if ($this->wantsBackgroundFeedback()) {
+                    return $this->queueJson(false, 'Queue request failed.', 500);
+                }
                 throw $e;
             }
             return $this->queueError($unit, $e);
@@ -150,11 +160,14 @@ final class QueueController extends BaseController
         return $this->mutate($unit, fn () => $this->queueService->markNoShow($unit, $id, (array) session()->get('user')));
     }
 
-    private function queueError(string $unit, \Exception $e)
+    private function queueError(string $unit, \Throwable $e)
     {
         $status = in_array((int) $e->getCode(), [403, 404, 409, 422], true) ? (int) $e->getCode() : 422;
         if ($this->request->hasHeader('HX-Request')) {
             return $this->response->setStatusCode($status)->setJSON(['error' => $e->getMessage()]);
+        }
+        if ($this->wantsBackgroundFeedback()) {
+            return $this->queueJson(false, $e->getMessage(), $status);
         }
         return $this->response->setStatusCode($status)->setBody(view('queue/error', [
             'title' => 'Queue unavailable', 'pageTitle' => 'Queue unavailable', 'unit' => $unit, 'message' => $e->getMessage(),
@@ -198,12 +211,15 @@ final class QueueController extends BaseController
         try {
             $operation();
             return $this->renderBoardOrRedirect($unit);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $status = (int) $e->getCode();
             if (!in_array($status, [403, 404, 409, 422], true)) {
+                if ($this->wantsBackgroundFeedback()) {
+                    return $this->queueJson(false, 'Queue request failed.', 500);
+                }
                 throw $e;
             }
-            if ($this->request->hasHeader('HX-Request')) {
+            if ($this->request->hasHeader('HX-Request') || $this->wantsBackgroundFeedback()) {
                 return $this->queueError($unit, $e);
             }
             return redirect()->to('/' . $unit . '/queue')->with('error', $e->getMessage());
@@ -225,6 +241,25 @@ final class QueueController extends BaseController
             ]);
         }
 
+        if ($this->wantsBackgroundFeedback()) {
+            return $this->queueJson(true, 'Queue updated successfully.');
+        }
         return redirect()->to('/' . $unit . '/queue');
+    }
+
+    private function wantsBackgroundFeedback(): bool
+    {
+        return !$this->request->hasHeader('HX-Request')
+            && $this->request->isAJAX()
+            && $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast';
+    }
+
+    private function queueJson(bool $success, string $message, int $status = 200)
+    {
+        return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store')->setJSON([
+            'success' => $success,
+            'message' => $message,
+            'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
+        ]);
     }
 }

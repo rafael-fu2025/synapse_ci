@@ -98,11 +98,32 @@ final class DashboardAuditAccessTest extends CIUnitTestCase
     {
         $html = $this->renderDashboard(true);
         foreach (['Cryptographic Audit Ledger', 'Recent Cryptographic Audit Trail', 'Verify Audit Chain',
-            'Open ledger chain', 'Audit Chain Ledger', '123,456', 'audit-event-sentinel',
+            'Open ledger chain', '123,456', 'audit-event-sentinel',
             'actor-sentinel', 'resource-sentinel'] as $visible) {
             $this->assertStringContainsString($visible, $html);
         }
-        $this->assertSame(3, substr_count($html, site_url('/admin/audit')));
+        $this->assertSame(2, substr_count($html, site_url('/admin/audit')));
+                $this->assertStringNotContainsString('Audit Chain Ledger', $html);
+    }
+
+    public function testAdminActionsAreNotDuplicatedInWorkstationConsoles(): void
+    {
+        $html = $this->renderDashboard(true, ['name' => 'Administrator', 'role' => 'superadmin']);
+        $this->assertSame(1, substr_count($html, site_url('/admin/carousel')));
+        $this->assertSame(1, substr_count($html, site_url('/reports/export')));
+        $this->assertSame(1, substr_count($html, site_url('/admin/mis-sync')));
+        foreach (['Workstation Consoles', 'University Clinic Console', 'Guidance Center Console', 'Facilities & BMG Drum Console'] as $label) {
+            $this->assertStringContainsString($label, $html);
+        }
+        $hub = substr($html, strpos($html, '>Workstation Consoles<'));
+        $this->assertStringNotContainsString('/admin/audit', $hub);
+        $this->assertStringNotContainsString('/admin/carousel', $hub);
+        $this->assertStringNotContainsString('Administration Hub', $html);
+    }
+
+    public function testReportsOnlyDoesNotRenderAnEmptyConsoleCard(): void
+    {
+        $this->assertStringNotContainsString('Workstation Consoles', $this->renderDashboard(false));
     }
 
     public function testBothEntryPointsRejectMissingIdentityWithoutDatabase(): void
@@ -146,10 +167,10 @@ final class DashboardAuditAccessTest extends CIUnitTestCase
         $this->assertStringContainsString("['label' => 'Reports', 'url' => site_url('/dashboard')]", $source);
     }
 
-    private function renderDashboard(?bool $audit): string
+    private function renderDashboard(?bool $audit, ?array $user = null): string
     {
         $data = [
-            'user' => ['name' => 'Report Viewer', 'role' => 'report_viewer'],
+            'user' => $user ?? ['name' => 'Report Viewer', 'role' => 'report_viewer'],
             'totalPopulation' => 30, 'studentsCount' => 20, 'employeesCount' => 10,
             'totalOperationsVolume' => 7, 'totalClinicEncounters' => 4, 'totalGuidanceSessions' => 3,
             'activeAccounts' => 8, 'chartDays' => [], 'clinicSeries' => [], 'guidanceSeries' => [],

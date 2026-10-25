@@ -128,7 +128,9 @@ final class AnnouncementController extends BaseController
 
     private function success(string $message, string $redirect)
     {
-        session()->setFlashdata('success', $message);
+        if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+            session()->setFlashdata('success', $message);
+        }
         if ($this->json()) {
             return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => site_url($redirect),
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);

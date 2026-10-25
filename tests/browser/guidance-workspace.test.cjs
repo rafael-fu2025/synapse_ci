@@ -29,6 +29,9 @@ before(async () => {
   server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (req.method !== 'GET') return res.writeHead(405).end();
+    if (url.pathname === '/guidance/cases/10/photo') {
+      return res.writeHead(200, { 'Content-Type': 'image/svg+xml' }).end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><text>SC</text></svg>');
+    }
     if (url.pathname === '/guidance/cases/10') {
       try { return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(render(url)); }
       catch (error) { return res.writeHead(500).end(error.message); }
@@ -81,6 +84,17 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
   test(`${theme} ${mobile ? 'mobile' : 'desktop'}: organized controls, native validation and confirmation`, { timeout: 30000 }, async t => {
     const page = await open(t, theme, mobile);
     await noOverflow(page);
+    const avatar = page.locator('.gc-person-icon img');
+    assert.equal(await avatar.getAttribute('alt'), '');
+    assert.ok((await avatar.getAttribute('src')).endsWith('/guidance/cases/10/photo'));
+    await avatar.evaluate(img => img.decode());
+    assert.equal(await avatar.evaluate(img => img.naturalWidth > 0), true);
+    await page.route('**/guidance/cases/10/photo?missing=1', route => route.fulfill({ status: 404 }));
+    await avatar.evaluate(img => { img.src += '?missing=1'; });
+    await page.waitForFunction(() => document.querySelector('.gc-person-icon img')?.src.startsWith('data:image/svg+xml;base64,'));
+    const fallback = await avatar.getAttribute('src');
+    assert.match(Buffer.from(fallback.split(',')[1], 'base64').toString('utf8'), /SC/);
+    assert.equal(await page.locator('.gc-person-icon').getAttribute('aria-hidden'), 'true');
     assert.equal(await page.locator('.pagetitle select, .pagetitle input').count(), 0);
     const start = page.getByRole('button', { name: 'Start New Session', exact: true });
     assert.equal(await start.evaluate(el => getComputedStyle(el).whiteSpace), 'nowrap');

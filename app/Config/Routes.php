@@ -8,6 +8,7 @@ use CodeIgniter\Router\RouteCollection;
 $routes->get('auth/login', 'AuthController::login');
 $routes->post('auth/login', 'AuthController::attemptLogin', ['filter' => ['web_csrf', 'login_throttle']]);
 $routes->post('auth/logout', 'AuthController::logout', ['filter' => 'web_csrf']);
+$routes->get('auth/logout/confirm', 'AuthController::confirmLogout');
 $routes->get('auth/logout', static function () {
     return service('response')->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Use the Sign Out confirmation to end your session.');
 });
@@ -33,8 +34,13 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('run', 'MisSyncController::sync');
     });
 
+    // Short-lived, server-authorized WebSocket grants; no client-selected channels.
+    $routes->post('realtime/ticket', 'RealtimeController::ticket');
+
     // Personal, person-owned notifications (never a department-wide inbox).
     $routes->get('notifications', 'NotificationController::index');
+    $routes->get('notifications/inbox', 'NotificationController::inbox');
+    $routes->get('notifications/history', 'NotificationController::history');
     $routes->post('notifications/read-all', 'NotificationController::readAll');
     $routes->post('notifications/(:num)/read', 'NotificationController::read/$1');
     $routes->get('notifications/read-all', 'NotificationController::readAll');
@@ -44,8 +50,13 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->get('account/photo', 'ProfileSettingsController::photo');
 
     // Student & Employee Personal Health Portal
+    $routes->get('portal/queue', 'PortalQueueController::index');
+    foreach (['clinic', 'guidance'] as $unit) {
+        $routes->get($unit . '/dashboard/queue-counts', 'QueueDashboardController::' . $unit, ['filter' => 'portal_access:' . $unit]);
+    }
     $routes->get('portal', 'PortalController::index');
     $routes->get('portal/appointments', 'PortalController::index');
+    $routes->get('portal/appointments/(:num)', 'PortalController::appointmentDetail/$1');
     $routes->get('portal/records', 'PortalController::index');
     $routes->get('portal/settings', 'ProfileSettingsController::index');
     $routes->get('portal/settings/photo', 'ProfileSettingsController::photo');
@@ -58,6 +69,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
             $routes->get('', 'TeamsController::index/' . $unit);
             $routes->get('chat', 'TeamChatController::index/' . $unit);
             $routes->get('chat/history', 'TeamChatController::history/' . $unit);
+                        $routes->get('chat/tasks', 'TeamChatController::tasks/' . $unit);
             $routes->post('chat/send', 'TeamChatController::send/' . $unit);
             $routes->post('chat/read', 'TeamChatController::read/' . $unit);
             $routes->get('calendar', 'TeamCalendarController::index/' . $unit);
@@ -124,11 +136,16 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('facilities', 'FacilitiesController::index');
         $routes->get('facilities/unit/(:num)', 'FacilitiesController::unitView/$1');
         $routes->get('facilities/unit/(:num)/usb', 'BmgUsbController::index/$1');
+        $routes->get('facilities/unit/(:num)/usb/setup-status', 'BmgUsbController::setupStatus/$1');
+        $routes->get('facilities/unit/(:num)/usb/sketch', 'BmgUsbController::sketch/$1');
+        $routes->post('facilities/unit/(:num)/usb/build', 'BmgUsbController::build/$1');
         $routes->get('facilities/unit/(:num)/usb/releases/([a-z0-9]+(?:-[a-z0-9]+)*)/manifest', 'BmgUsbController::manifest/$1/$2');
         $routes->get('facilities/unit/(:num)/usb/releases/([a-z0-9]+(?:-[a-z0-9]+)*)/parts/(:num)', 'BmgUsbController::part/$1/$2/$3');
         $routes->post('facilities/unit/(:num)/usb/authorize-flash', 'BmgUsbController::authorizeFlash/$1');
         $routes->post('facilities/units/store', 'FacilitiesController::storeUnit');
         $routes->post('facilities/unit/(:num)/update', 'FacilitiesController::updateUnit/$1');
+        $routes->post('facilities/unit/(:num)/archive', 'FacilitiesController::archiveUnit/$1');
+        $routes->post('facilities/unit/(:num)/restore', 'FacilitiesController::restoreUnit/$1');
         $routes->post('facilities/unit/(:num)/schedule', 'FacilitiesController::saveSchedule/$1');
         $routes->post('facilities/unit/(:num)/device', 'FacilitiesController::registerDevice/$1');
         $routes->post('facilities/device/(:num)/revoke', 'FacilitiesController::revokeDevice/$1');
@@ -177,6 +194,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('guidance/cases/create', 'GuidanceController::newCase');
         $routes->post('guidance/cases/store', 'GuidanceController::storeCase');
         $routes->get('guidance/cases/(:num)', 'GuidanceController::caseView/$1');
+        $routes->get('guidance/cases/(:num)/photo', 'GuidanceController::casePhoto/$1');
         $routes->post('guidance/cases/(:num)/session', 'GuidanceController::startSession/$1');
         $routes->post('guidance/cases/(:num)/followups', 'GuidanceController::addFollowup/$1');
         $routes->post('guidance/cases/(:num)/close', 'GuidanceController::closeCase/$1');
@@ -235,6 +253,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('clinic/encounters/(:num)', 'ClinicController::encounter/$1');
         $routes->post('clinic/encounters/(:num)/vitals', 'ClinicController::saveVitals/$1');
         $routes->post('clinic/encounters/(:num)/assessment', 'ClinicController::saveAssessment/$1');
+        $routes->post('clinic/encounters/(:num)/draft', 'ClinicController::saveDraft/$1', ['filter' => 'inventory_csrf']);
         $routes->post('clinic/encounters/(:num)/dispense', 'ClinicController::dispense/$1', ['filter' => 'inventory_csrf']);
         $routes->post('clinic/encounters/(:num)/complete', 'ClinicController::complete/$1', ['filter' => 'inventory_csrf']);
         $routes->post('clinic/encounters/start-for-ticket/(:num)', 'ClinicController::startForTicket/$1', ['filter' => 'inventory_csrf']);

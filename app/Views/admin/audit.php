@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<form action="<?= site_url('/admin/audit/verify') ?>" method="POST" class="d-inline">
+<form action="<?= site_url('/admin/audit/verify') ?>" method="POST" class="d-inline" data-background-submit>
   <?= csrf_field() ?>
   <button type="submit" class="btn btn-primary btn-sm">
     <i class="bi bi-shield-check me-1"></i> Verify Cryptographic Chain
@@ -10,11 +10,78 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<?php
+$filters = $filters ?? [];
+$filterErrors = $filterErrors ?? [];
+$pagination = $pagination ?? [
+    'newer_url' => null,
+    'older_url' => null,
+    'first_url' => site_url('/admin/audit'),
+];
+$hasFilters = false;
+foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', 'from', 'to'] as $key) {
+    if (($filters[$key] ?? '') !== '') {
+        $hasFilters = true;
+        break;
+    }
+}
+?>
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <?php if (! empty($filterErrors)): ?>
+      <div class="alert alert-danger" role="alert">
+        <p class="fw-bold mb-1">Please correct the audit filters:</p>
+        <ul class="mb-0">
+          <?php foreach ($filterErrors as $error): ?>
+            <li><?= esc($error) ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
+    <form action="<?= esc(site_url('/admin/audit'), 'attr') ?>" method="GET" class="row g-3">
+      <?php foreach ([
+          'event_type' => 'Event type',
+          'action' => 'Action',
+          'entity_type' => 'Entity type',
+          'entity_id' => 'Entity ID',
+          'actor_user_id' => 'Actor user ID',
+      ] as $key => $label): ?>
+        <div class="col-sm-6 col-lg-4">
+          <label for="audit-<?= esc($key, 'attr') ?>" class="form-label"><?= esc($label) ?> (exact match)</label>
+          <input type="text" class="form-control" id="audit-<?= esc($key, 'attr') ?>" name="<?= esc($key, 'attr') ?>" value="<?= esc($filters[$key] ?? '', 'attr') ?>">
+        </div>
+      <?php endforeach; ?>
+      <div class="col-sm-6 col-lg-4">
+        <label for="audit-per-page" class="form-label">Page size</label>
+        <select class="form-select" id="audit-per-page" name="per_page">
+          <?php foreach (['25', '50', '100'] as $size): ?>
+            <option value="<?= esc($size, 'attr') ?>"<?= ($filters['per_page'] ?? '50') === $size ? ' selected' : '' ?>><?= esc($size) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <label for="audit-from" class="form-label">From</label>
+        <input type="date" class="form-control" id="audit-from" name="from" value="<?= esc($filters['from'] ?? '', 'attr') ?>" aria-describedby="audit-date-note">
+      </div>
+      <div class="col-sm-6 col-lg-4">
+        <label for="audit-to" class="form-label">To</label>
+        <input type="date" class="form-control" id="audit-to" name="to" value="<?= esc($filters['to'] ?? '', 'attr') ?>" aria-describedby="audit-date-note">
+      </div>
+      <div class="col-12">
+        <p class="text-muted small mb-2" id="audit-date-note">Dates use the server ledger timezone.</p>
+        <button type="submit" class="btn btn-primary">Apply filters</button>
+        <a href="<?= esc(site_url('/admin/audit'), 'attr') ?>" class="btn btn-outline-secondary ms-2">Clear filters</a>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="card border-0 shadow-sm">
   <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center py-3 gap-2">
     <div>
-      <h5 class="fw-bold mb-0 text-dark">Immutable Cryptographic Audit Ledger</h5>
-      <span class="text-muted small">Append-only SHA-256 hash-chained log for clinical, governance, and facilities mutations</span>
+      <h5 class="fw-bold mb-0 text-dark">Tamper-evident Cryptographic Audit Ledger</h5>
+      <p class="text-muted small mb-1">Append-only SHA-256 hash-chained log for clinical, governance, and facilities mutations.</p>
+      <p class="text-muted small mb-0">Verification checks the whole tenant chain, not the current filtered page. No external checkpoint is used.</p>
     </div>
   </div>
 
@@ -36,7 +103,13 @@
             <tr>
               <td colspan="6" class="text-center py-5 text-muted font-sans-serif">
                 <i class="bi bi-shield-slash fs-1 d-block mb-2 opacity-50"></i>
-                No audit events recorded yet.
+                <?php if (! empty($filterErrors)): ?>
+                                  Audit events were not loaded because the filters or pagination are invalid.
+                                <?php elseif ($hasFilters || ! empty($hasCursor) || ! empty($pagination['newer_url']) || ! empty($pagination['older_url'])): ?>
+                  No audit events match the current filters or page.
+                <?php else: ?>
+                  No audit events recorded yet.
+                <?php endif; ?>
               </td>
             </tr>
           <?php else: ?>
@@ -89,6 +162,22 @@
         </tbody>
       </table>
     </div>
+  </div>
+  <div class="card-footer bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+    <span class="text-muted small"><?= esc((string) count($events)) ?> events shown</span>
+    <nav aria-label="Audit ledger pagination" class="d-flex flex-wrap gap-2">
+      <a href="<?= esc($pagination['first_url'], 'attr') ?>" class="btn btn-outline-secondary btn-sm">Latest matching events</a>
+      <?php if (! empty($pagination['newer_url'])): ?>
+        <a href="<?= esc($pagination['newer_url'], 'attr') ?>" class="btn btn-outline-primary btn-sm">Newer</a>
+      <?php else: ?>
+        <span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true">Newer</span>
+      <?php endif; ?>
+      <?php if (! empty($pagination['older_url'])): ?>
+        <a href="<?= esc($pagination['older_url'], 'attr') ?>" class="btn btn-outline-primary btn-sm">Older</a>
+      <?php else: ?>
+        <span class="btn btn-outline-secondary btn-sm disabled" aria-disabled="true">Older</span>
+      <?php endif; ?>
+    </nav>
   </div>
 </div>
 <?= $this->endSection() ?>

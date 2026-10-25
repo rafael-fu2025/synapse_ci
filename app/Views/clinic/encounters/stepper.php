@@ -75,7 +75,14 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
   <?= view('clinic/encounters/_closed', compact('enc', 'vitals', 'treatment', 'dispensations'), ['saveData' => false]) ?>
 <?php else: ?>
 <!-- 2. The 4-Step Consultation Stepper -->
-<div class="card border-0 shadow-sm" x-data="encounterStepper()">
+<div class="card border-0 shadow-sm" x-data="encounterStepper()" data-encounter-stepper data-navigation-dirty="false"
+     data-draft-url="<?= site_url('/clinic/encounters/' . $enc['id'] . '/draft') ?>">
+  <div class="px-4 pt-3">
+    <p class="small text-muted mb-1">Clinical entries save when you change steps. Medicine dispensing always requires its own confirmation.</p>
+    <div class="small mb-2" role="status" aria-live="polite" data-encounter-save-status>Saved</div>
+    <button type="button" class="btn btn-outline-primary btn-sm mb-2" data-save-draft hidden>Retry saving draft</button>
+    <a href="<?= site_url('/clinic/encounters/' . $enc['id']) ?>" target="_blank" rel="noopener" class="small mb-2" data-review-completion hidden>Check saved encounter in a new tab</a>
+  </div>
   <!-- Nav tabs -->
   <div class="card-header bg-transparent border-bottom p-0">
     <ul class="nav nav-tabs nav-tabs-bordered d-flex text-center" role="tablist">
@@ -106,7 +113,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 
     <!-- STEP 1: TRIAGE & VITALS -->
     <div class="tab-pane fade show active" id="step-triage">
-      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/vitals') ?>" method="POST">
+      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/vitals') ?>" method="POST" data-clinical-form data-next-step="#step-assessment">
         <?= csrf_field() ?>
 
         <div class="row g-3 mb-4">
@@ -198,7 +205,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 
         <div class="d-flex justify-content-end">
           <button type="submit" class="btn btn-primary">
-            <i class="bi bi-save me-1"></i> Save Vitals & Next Step
+            <i class="bi bi-save me-1"></i> Save & Continue
           </button>
         </div>
       </form>
@@ -206,7 +213,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 
     <!-- STEP 2: ASSESSMENT & DIAGNOSIS -->
     <div class="tab-pane fade" id="step-assessment">
-      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/assessment') ?>" method="POST">
+      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/assessment') ?>" method="POST" data-clinical-form data-next-step="#step-dispense">
         <?= csrf_field() ?>
 
         <div class="mb-3">
@@ -262,7 +269,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 
         <div class="d-flex justify-content-end">
           <button type="submit" class="btn btn-primary">
-            <i class="bi bi-save me-1"></i> Save Assessment & Continue
+            <i class="bi bi-save me-1"></i> Save & Continue
           </button>
         </div>
       </form>
@@ -366,17 +373,21 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           <?php endif; ?>
         </div>
       </div>
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <button type="button" class="btn btn-outline-secondary" data-discard-medicine>Discard unfinished medicine entry</button>
+        <button type="button" class="btn btn-primary" data-continue-outcome>Continue to Outcome</button>
+      </div>
     </div>
 
     <!-- STEP 4: OUTCOME & DISPOSITION -->
     <div class="tab-pane fade" id="step-outcome">
-      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/complete') ?>" method="POST">
+      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/complete') ?>" method="POST" data-clinical-form data-complete-encounter>
         <?= csrf_field() ?>
 
         <div class="row g-3 mb-4">
           <div class="col-md-6">
             <label for="disposition" class="form-label fw-semibold">Final Disposition / Outcome</label>
-            <select name="disposition" id="disposition" class="form-select form-select-lg" required>
+            <select name="disposition" id="disposition" class="form-select" required>
               <option value="discharged" <?= ($enc['disposition'] === 'discharged') ? 'selected' : '' ?>>Discharged (Back to Class / Work)</option>
               <option value="sent_home" <?= ($enc['disposition'] === 'sent_home') ? 'selected' : '' ?>>Sent Home (Rest Advised)</option>
               <option value="referred_to_guidance" <?= ($enc['disposition'] === 'referred_to_guidance') ? 'selected' : '' ?>>Refer to Guidance & Counseling</option>
@@ -412,14 +423,14 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           <div class="d-flex align-items-center">
             <i class="bi bi-shield-check text-success fs-3 me-3"></i>
             <div class="small">
-              <strong>Closing Clinical Encounter:</strong> Completing this visit seals the encounter record and marks the patient's queue ticket as done.
+              <strong>Closing Clinical Encounter:</strong> Saves your clinical entries and outcome, then seals the visit and completes the queue ticket. Medicine is only dispensed using “Dispense &amp; Deduct Inventory”.
             </div>
           </div>
         </div>
 
         <div class="d-flex justify-content-end">
-          <button type="submit" class="btn btn-success btn-lg">
-            <i class="bi bi-check-circle-fill me-1"></i> Complete & Close Encounter
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-check-circle-fill me-1"></i> Save & Complete Encounter
           </button>
         </div>
       </form>
@@ -431,9 +442,14 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= base_url('assets/js/encounter-stepper.js') ?>"></script>
 <script>
   function encounterStepper() {
     return {
+      init() {
+        this.$nextTick(() => { this.stopDraftSaving = window.SynapseEncounterStepper.init(this.$el); });
+      },
+      destroy() { this.stopDraftSaving?.(); },
       bpSys: <?= !empty($vitals['bp_systolic']) ? (int) $vitals['bp_systolic'] : 'null' ?>,
       bpDia: <?= !empty($vitals['bp_diastolic']) ? (int) $vitals['bp_diastolic'] : 'null' ?>,
       tempC: <?= !empty($vitals['temp_c']) ? (float) $vitals['temp_c'] : 'null' ?>,

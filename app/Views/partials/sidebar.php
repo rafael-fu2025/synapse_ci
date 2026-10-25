@@ -4,6 +4,8 @@ use App\Services\PortalContext;
 // Authentication filters refresh this identity before protected views render.
 $currentUser = session()->get('user') ?? null;
 $role = $currentUser['role'] ?? 'guest';
+$isSelfServiceRole = in_array($role, ['student', 'employee'], true);
+$showPersonalHeading = !$isSelfServiceRole;
 $uri = trim(service('uri')->getRoutePath(), '/');
 $canContent = static fn (string $permission): bool => $role === 'superadmin'
     || in_array($permission, $currentUser['permissions'] ?? [], true);
@@ -35,9 +37,18 @@ $canExportNavigation = $canMain && in_array($role, ['superadmin', 'audit_reader'
 $canAccessNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', 'guidance_admin'], true) && $canContent('rbac.manage');
 $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', 'guidance_admin'], true) && $canContent('mis.sync');
 ?>
-<aside class="sidebar">
+<aside class="sidebar" id="app-sidebar" aria-label="Main navigation">
   <div class="sidebar-shell">
-    <button class="sidebar-close" type="button" aria-label="Close sidebar"><i class="bi bi-x-lg"></i></button>
+    <div class="sidebar-brand-row">
+      <a href="<?= site_url('/') ?>" class="sidebar-brand" aria-label="SYNAPSE home">
+        <img src="<?= base_url('assets/img/brand/synapse-white.png') ?>" class="sidebar-brand-logo" alt="" width="38" height="38">
+        <span class="sidebar-brand-copy">
+          <strong>SYNAPSE</strong>
+          <span>Foundation University</span>
+        </span>
+      </a>
+      <button class="sidebar-close" type="button" aria-label="Close sidebar"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
     <nav class="sidebar-nav">
       <ul class="nav-menu">
         <?php if (PortalContext::showsWorkstation('clinic', $role)): ?>
@@ -80,8 +91,10 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
         <?php endif; ?>
 
         <!-- Personal self-service remains available to staff acting as employees. -->
-        <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Personal Health</li>
-        <li class="nav-item"><a class="nav-link <?= $isActive('portal') && !$isActive('portal/announcements') && !$isActive('portal/surveys') && !$isActive('portal/settings') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal')) ?>"><span class="nav-icon"><i class="ph-light ph-user-circle"></i></span><span class="nav-text">My Health Portal</span></a></li>
+        <?php if ($showPersonalHeading): ?>
+          <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Personal Health</li>
+        <?php endif; ?>
+        <li class="nav-item<?= $isSelfServiceRole ? ' personal-portal-entry' : '' ?>"><a class="nav-link <?= $isActive('portal') && !$isActive('portal/announcements') && !$isActive('portal/surveys') && !$isActive('portal/settings') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal')) ?>"><span class="nav-icon"><i class="ph-light ph-user-circle"></i></span><span class="nav-text">My Health Portal</span></a></li>
         <li class="nav-item"><a class="nav-link <?= $isActive('portal/announcements') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/announcements')) ?>"><span class="nav-icon"><i class="bi bi-megaphone"></i></span><span class="nav-text">Announcements</span></a></li>
         <?php if (!empty($currentUser['person_id'])): ?>
           <li class="nav-item"><a class="nav-link <?= $isActive('portal/surveys') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/surveys')) ?>"><span class="nav-icon"><i class="bi bi-clipboard-check"></i></span><span class="nav-text">My Surveys</span></a></li>
@@ -121,4 +134,5 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
     </nav>
   </div>
 </aside>
+<button class="sidebar-overlay" type="button" tabindex="-1" aria-label="Close navigation"></button>
 <script src="<?= base_url('assets/js/sidebar-state.js') ?>"></script>

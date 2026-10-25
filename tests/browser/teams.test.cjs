@@ -12,7 +12,8 @@ const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
 let browser, server, origin;
-const cache = new Map(), posts = [];
+const cache = new Map(), posts = [], allPosts = [];
+const isTeamsPath = pathname => /^\/(?:clinic|guidance|facilities)\/teams(?:\/|$)/.test(pathname);
 let rejectSave = false;
 
 function render(requestPath) {
@@ -41,7 +42,15 @@ before(async () => {
     if (req.method === 'POST') {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
-      posts.push({ path: url.pathname, body: Buffer.concat(chunks).toString('utf8') });
+      const post = { path: url.pathname, body: Buffer.concat(chunks).toString('utf8') };
+      allPosts.push(post);
+      // Layout startup requests (notably /realtime/ticket) are not Teams mutations.
+      if (!isTeamsPath(url.pathname)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Not provided by this Teams fixture.' }));
+        return;
+      }
+      posts.push(post);
       res.writeHead(rejectSave ? 422 : 200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: !rejectSave, message: rejectSave ? 'Fixture validation error' : 'Saved',
         redirect: origin + '/' + url.pathname.split('/')[1] + '/teams',
@@ -72,13 +81,15 @@ after(async () => {
   finally {
     if (server?.listening) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   }
+  assert.deepEqual(allPosts.filter(post => !isTeamsPath(post.path) && post.path !== '/realtime/ticket').map(post => post.path), [],
+    'No unexpected writes outside Teams; only realtime ticket acquisition is background traffic');
 });
 
 async function pageFor(t, url, viewport = { width: 1280, height: 900 }, dark = false) {
   rejectSave = false;
   const context = await browser.newContext({ viewport });
   await context.addInitScript(dark => localStorage.setItem('na-dark-mode', dark ? '1' : '0'), dark);
-  await context.route('https://fonts.googleapis.com/**', route => route.fulfill({ contentType: 'text/css', body: '' }));
+  await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(6000);
   page.setDefaultNavigationTimeout(20000);
@@ -156,7 +167,7 @@ for (const dark of [false, true]) {
     await page.locator('[data-filter-region="results"] table tbody tr').waitFor();
     assert.equal(await page.locator('#teamSearch').inputValue(), '');
     assert.equal(reads.length, 5, 'Exactly one XHR for each filter action, no Apply click');
-    assert.equal(posts.length, postCount);
+    assert.equal(posts.length, postCount, 'Task filtering must not mutate data; observed POST paths: ' + JSON.stringify(posts.slice(postCount).map(post => post.path)));
   });
 }
 
@@ -167,6 +178,73 @@ async function modalReady(page) {
       bootstrap.Modal.getInstance(modal)?._focustrap?._isActive;
   });
 }
+
+test('task edit refreshes only board regions and preserves filters, shell and scroll', async t => {
+  const page = await pageFor(t, '/guidance/teams?view=board&q=Fixture&mine=1');
+  await page.waitForFunction(() => window.SynapseLiveFilters && window.SynapseTeamBoard && window.SynapseMutations);
+  const identities = await page.evaluateHandle(() => [document.getElementById('main'), document.querySelector('.teams-workspace'), document.querySelector('[data-filter-form]'), document.querySelector('#teamSearch'), document.querySelector('.teams-intro')]);
+  await page.getByRole('link', { name: 'Edit / move', exact: true }).click();
+  await modalReady(page);
+  await page.getByLabel('Title *', { exact: true }).fill('Updated task');
+  const before = posts.length;
+  const refresh = page.waitForResponse(r => r.request().method() === 'GET' && new URL(r.url()).pathname === '/guidance/teams' && r.request().headers()['x-requested-with'] === 'XMLHttpRequest');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  const response = await refresh;
+  await page.waitForFunction(() => !document.querySelector('.modal.show, .modal-backdrop') && !document.querySelector('[data-live-filters][aria-busy="true"]'));
+  assert.equal(new URL(response.url()).searchParams.get('q'), 'Fixture');
+  assert.equal(new URL(response.url()).searchParams.get('mine'), '1');
+  assert.equal(posts.length, before + 1);
+  assert.equal(await page.evaluate(nodes => nodes.every(node => node.isConnected) && nodes[1] === document.querySelector('.teams-workspace'), identities), true);
+  assert.equal(await page.locator('#teamSearch').inputValue(), 'Fixture');
+  await identities.dispose();
+});
+
+test('failed regional refresh keeps the saved board in place and retries GET only', async t => {
+  const page = await pageFor(t, '/guidance/teams?q=Fixture');
+  await page.waitForFunction(() => !!window.SynapseTeamBoard);
+  const workspace = await page.locator('.teams-workspace').elementHandle();
+  let failRead = true;
+  await page.route('**/guidance/teams?*', async route => {
+    if (route.request().headers()['x-requested-with'] === 'XMLHttpRequest' && failRead) {
+      await route.fulfill({ status: 503, contentType: 'text/html', body: 'Temporarily unavailable' });
+    } else await route.continue();
+  });
+  await page.getByRole('link', { name: 'Edit / move', exact: true }).click(); await modalReady(page);
+  const before = posts.length;
+  await page.getByLabel('Title *', { exact: true }).fill('Confirmed save');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry refresh', exact: true }).waitFor();
+  assert.equal(posts.length, before + 1);
+  assert.equal(await workspace.evaluate(node => node.isConnected), true);
+  failRead = false;
+  const refreshed = page.waitForResponse(r => r.request().method() === 'GET' && new URL(r.url()).pathname === '/guidance/teams' && r.status() === 200);
+  await page.getByRole('button', { name: 'Retry refresh', exact: true }).click(); await refreshed;
+  await page.waitForFunction(() => !document.querySelector('[data-live-filters][aria-busy="true"]'));
+  assert.equal(posts.length, before + 1);
+  assert.equal(await workspace.evaluate(node => node.isConnected), true);
+});
+
+test('keyboard card move uses production move endpoint without replacing the workspace and rebinds after filtering', async t => {
+  const page = await pageFor(t, '/clinic/teams?q=Fixture');
+  await page.waitForFunction(() => !!window.SynapseTeamBoard);
+  const workspace = await page.locator('.teams-workspace').elementHandle();
+  const before = posts.length;
+  const move = async () => {
+    const handle = page.locator('[data-task-drag-handle]').first();
+    await handle.focus(); await handle.press('Space'); await handle.press('ArrowRight');
+    const refreshed = page.waitForResponse(r => r.request().method() === 'GET' && new URL(r.url()).pathname === '/clinic/teams' && r.request().headers()['x-requested-with'] === 'XMLHttpRequest');
+    await handle.press('Enter'); await refreshed;
+    await page.waitForFunction(() => !document.querySelector('[data-live-filters][aria-busy="true"]'));
+  };
+  await move();
+  assert.equal(posts.at(-1).path, '/clinic/teams/31/move');
+  assert.equal(new URLSearchParams(posts.at(-1).body).get('status'), 'in_progress');
+  assert.equal(new URLSearchParams(posts.at(-1).body).get('version'), '3');
+  assert.equal(await workspace.evaluate(node => node.isConnected), true);
+  // The fixture returns its original task; a second move proves the refreshed card has a fresh controller.
+  await move(); assert.equal(posts.length, before + 2);
+  assert.equal(new URL(page.url()).searchParams.get('q'), 'Fixture');
+});
 
 async function checklist(page) {
   return JSON.parse(await page.locator('#appFormModal input[name="checklist"]').inputValue());
@@ -193,7 +271,7 @@ test('new task modal initializes Alpine, enforces checklist limit and submits ed
   assert.equal(await add.isEnabled(), true);
   await page.getByLabel('Title *', { exact: true }).fill('Browser task');
   rejectSave = true;
-  const response = page.waitForResponse(r => r.request().method() === 'POST');
+  const response = page.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === '/clinic/teams/store');
   await page.getByRole('button', { name: 'Create task', exact: true }).click();
   await response;
   await page.locator('[data-modal-error]:not(.d-none)').waitFor();

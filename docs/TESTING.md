@@ -151,6 +151,45 @@ encounter-creation transactionality, permission/UI mismatches and other deferred
 findings remain separate work. No migration, grant, private key, operational
 record or hardware gate was changed by this patch.
 
+## Background mutation follow-up verification
+
+The safe `phpunit.ci.xml` baseline now also includes the five background-mutation
+contract classes. At that rollout: **583 tests, 3,265 assertions**, with no
+failures, errors or skips. The guarded five-file fresh-schema command above also
+passed: **25 tests, 147 assertions**. Its guidance fixture now creates an actually
+linked and authenticated synthetic counsellor; production authority and migration
+checks are not bypassed. Runner cleanup was verified to leave no `humus_fresh_`
+schemas. Runner safety tests (4) and Node queue tests (4) passed separately.
+
+The related browser regression matrix passed **494 distinct tests across 25
+suites**, including all modal-forms and BMG cases in completed bounded batches.
+See [background-mutations.md](background-mutations.md#follow-up-regression-closure)
+for the fixture corrections, scope, counts and limitations. These newer results
+supersede earlier unresolved-regression notes for those named checks, not the
+historical full-suite boundary below.
+
+## Authorization remediation verification
+
+The CI baseline now includes `Authorization remediation regressions`:
+`BackendRoleAuthorizationTest`, `DeploymentAuthorizationTest`,
+`SlotsAuthorizationTest`, `GuidanceReadAuthorizationTest`,
+`SurveyTransitionVersionTest`, and `ReferralEncounterAuthorizationTest`. These
+tests use private SQLite fixtures, real current role grants, and expected-denial
+plus legitimate-access controls; routed tests verify denial before controller
+creation.
+
+Latest completed baseline: **683 tests, 8,397 assertions**, no failures, errors or
+skips. The remediation suite accounts for **100 tests**.
+
+The guarded fresh-schema service command (`python tests/_support/run-fresh-database-tests.py`)
+passed **31 tests, 707 assertions**, now also covering `ApprovalAttachmentServiceTest`
+for real MySQL transactions, publish fanout and referral attachment/replay under
+locks. Runner cleanup was verified to leave no `humus_fresh_` schemas.
+
+An isolated diagnostic/regression run also passed **40 tests, 3,642 assertions**
+across the four audit suites. See [AUTHORIZATION_AUDIT.md](AUTHORIZATION_AUDIT.md)
+for the full four-finding remediation map, evidence, and test limitations.
+
 ## Validation boundary
 
 Passing this baseline does not establish that every browser route, historical

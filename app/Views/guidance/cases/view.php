@@ -22,14 +22,16 @@ $sessions = $package['sessions'] ?? [];
 $followups = $package['followups'] ?? [];
 ?>
 
-<div class="guidance-case-workspace">
+<div class="guidance-case-workspace" data-guidance-case="<?= (int) $case['id'] ?>">
 <!-- Case identity stays separate from session and lifecycle actions. -->
 <div class="card border-0 shadow-sm mb-3">
   <div class="card-body p-3">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
       <div class="d-flex align-items-start gap-3 gc-patient-identity">
         <div class="gc-person-icon" aria-hidden="true">
-          <i class="bi bi-person-heart"></i>
+          <img src="<?= esc(site_url('/guidance/cases/' . (int) $case['id'] . '/photo'), 'attr') ?>"
+               alt="" width="48" height="48"
+               onerror="this.onerror=null;this.src='<?= esc(\App\Services\ProfileAvatar::dataUri($patient), 'attr') ?>'">
         </div>
         <div>
           <div class="d-flex flex-wrap align-items-center gap-2 gc-case-heading">
@@ -65,7 +67,7 @@ $followups = $package['followups'] ?? [];
     <h2 id="case-actions-title" class="h6 fw-semibold mb-3">Case workspace</h2>
     <?php if ($case['status'] !== 'closed'): ?>
     <div class="gc-primary-actions">
-      <form action="<?= site_url('/guidance/cases/' . (int) $case['id'] . '/session') ?>" method="POST" class="gc-session-form">
+      <form action="<?= site_url('/guidance/cases/' . (int) $case['id'] . '/session') ?>" method="POST" data-background-submit class="gc-session-form">
         <?= csrf_field() ?>
         <div class="gc-session-type"><label for="case-session-type" class="form-label small fw-semibold">Session type</label>
           <select id="case-session-type" name="session_type" class="form-select" aria-label="Session type" required>
@@ -83,7 +85,7 @@ $followups = $package['followups'] ?? [];
       <div class="gc-status-panel">
         <p class="small text-muted mb-3">Status changes require your explicit confirmation. Closing a session does not close the case.</p>
         <?php if (in_array($case['status'], ['open', 'active'], true)): ?>
-        <form action="<?= site_url('/guidance/cases/' . (int) $case['id'] . '/monitor') ?>" method="POST" class="gc-status-row"
+        <form action="<?= site_url('/guidance/cases/' . (int) $case['id'] . '/monitor') ?>" method="POST" data-background-submit class="gc-status-row"
               data-confirm="Move this case to monitoring? This is an explicit staff decision, not an inferred outcome."
               data-confirm-title="Monitor case" data-confirm-label="Move to monitoring" data-confirm-tone="warning">
           <?= csrf_field() ?>
@@ -91,7 +93,7 @@ $followups = $package['followups'] ?? [];
           <button type="submit" class="btn btn-outline-primary"><i class="bi bi-eye me-2" aria-hidden="true"></i>Move to Monitoring</button>
         </form>
         <?php endif; ?>
-        <form action="<?= site_url('/guidance/cases/' . (int) $case['id'] . '/close') ?>" method="POST" class="gc-status-row"
+        <form action="<?= site_url('/guidance/cases/' . (int) $case['id'] . '/close') ?>" method="POST" data-background-submit class="gc-status-row"
               data-confirm="Close this counseling case? No new sessions can be opened after closure."
               data-confirm-title="Close case" data-confirm-label="Close case" data-confirm-tone="warning">
           <?= csrf_field() ?>
@@ -141,7 +143,7 @@ $followups = $package['followups'] ?? [];
           </div>
           <div>
             <span class="badge bg-warning text-dark me-2">Session In Progress</span>
-            <form action="<?= site_url('/guidance/sessions/' . $activeSession['id'] . '/close') ?>" method="POST" class="d-inline"
+            <form action="<?= site_url('/guidance/sessions/' . $activeSession['id'] . '/close') ?>" method="POST" data-background-submit class="d-inline"
                                       data-confirm="Complete and close this counseling session? Save any changes first. Closing the session does not automatically finalize notes."
                                       data-confirm-title="Close counseling session"
                                       data-confirm-label="Close session"
@@ -155,7 +157,7 @@ $followups = $package['followups'] ?? [];
         </div>
 
         <!-- Notes editor form -->
-        <form action="<?= site_url('/guidance/sessions/' . $activeSession['id'] . '/notes') ?>" method="POST">
+        <form action="<?= site_url('/guidance/sessions/' . $activeSession['id'] . '/notes') ?>" method="POST" data-background-submit>
           <?= csrf_field() ?>
 
           <div class="mb-3">
@@ -178,10 +180,10 @@ $followups = $package['followups'] ?? [];
               <?php endif; ?>
             </div>
             <div class="d-flex flex-wrap gap-2 gc-editor-buttons">
-              <button type="submit" name="action" value="draft" class="btn btn-outline-secondary">
+              <button type="submit" name="action" value="draft" formaction="<?= site_url('/guidance/sessions/' . $activeSession['id'] . '/notes') ?>" class="btn btn-outline-secondary">
                 <i class="bi bi-cloud-arrow-up me-1"></i> Save Draft
               </button>
-              <button type="submit" name="action" value="finalize" class="btn btn-primary">
+              <button type="submit" name="action" value="finalize" formaction="<?= site_url('/guidance/sessions/' . $activeSession['id'] . '/notes') ?>" class="btn btn-primary">
                 <i class="bi bi-lock-fill me-1"></i> Finalize Notes (New Version)
               </button>
             </div>
@@ -239,7 +241,7 @@ $followups = $package['followups'] ?? [];
       <!-- New commitment collapse form -->
       <div class="collapse mb-4" id="newFollowupForm">
         <div class="card bg-light border-0 p-3">
-          <form action="<?= site_url('/guidance/cases/' . $case['id'] . '/followups') ?>" method="POST">
+          <form action="<?= site_url('/guidance/cases/' . $case['id'] . '/followups') ?>" method="POST" data-background-submit>
             <?= csrf_field() ?>
             <div class="row g-2 mb-2">
               <div class="col-md-4">
@@ -285,14 +287,14 @@ $followups = $package['followups'] ?? [];
 
               <?php if ($f['status'] === 'pending'): ?>
                 <div class="gc-followup-actions">
-                <form action="<?= site_url('/guidance/followups/' . $f['id'] . '/missed') ?>" method="POST"
+                <form action="<?= site_url('/guidance/followups/' . $f['id'] . '/missed') ?>" method="POST" data-background-submit
                       data-confirm="Explicitly mark this follow-up missed? A due date alone does not determine this outcome."
                       data-confirm-title="Missed follow-up" data-confirm-label="Mark missed" data-confirm-tone="warning">
                   <?= csrf_field() ?>
                   <label class="small gc-confirm-label"><input type="checkbox" name="confirmed" value="1" required> Confirm missed</label>
                   <button type="submit" class="btn btn-outline-warning btn-sm">Mark Missed</button>
                 </form>
-                <form action="<?= site_url('/guidance/followups/' . $f['id'] . '/complete') ?>" method="POST">
+                <form action="<?= site_url('/guidance/followups/' . $f['id'] . '/complete') ?>" method="POST" data-background-submit>
                   <?= csrf_field() ?>
                   <button type="submit" class="btn btn-outline-success btn-sm">
                     <i class="bi bi-check2 me-1"></i> Mark Done
@@ -309,4 +311,30 @@ $followups = $package['followups'] ?? [];
   </div>
 </div>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+(function () {
+  if (window.synapseGuidanceTabs) return;
+  window.synapseGuidanceTabs = true;
+  // Copy only tab presentation into the detached server main, never note contents.
+  document.addEventListener('synapse:before-swap', event => {
+    const old = event.detail.root.querySelector('[data-guidance-case]');
+    const next = event.detail.incoming?.querySelector('[data-guidance-case]');
+    if (!old || !next || old.dataset.guidanceCase !== next.dataset.guidanceCase) return;
+    const target = old.querySelector('[data-bs-toggle="tab"].active')?.dataset.bsTarget;
+    const tabs = [...next.querySelectorAll('[data-bs-toggle="tab"]')];
+    if (!tabs.some(tab => tab.dataset.bsTarget === target)) return;
+    tabs.forEach(tab => {
+      const active = tab.dataset.bsTarget === target;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      const pane = next.querySelector(tab.dataset.bsTarget);
+      pane?.classList.toggle('active', active);
+      pane?.classList.toggle('show', active);
+    });
+  });
+})();
+</script>
 <?= $this->endSection() ?>

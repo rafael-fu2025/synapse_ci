@@ -210,7 +210,15 @@ async function availabilityFailure(form) {
   assert.match(await feedback.innerText(), /Choose a different slot or correct the form/);
   assert.equal(posts.at(-1).requestedWith, 'XMLHttpRequest');
 }
-async function availabilityReload(page, item, section, provider = '', day = '1', q = '') {
+async function availabilityReload(page, submit, item, section, provider = '', day = '1', q = '') {
+  // Saves may replace main through shell navigation or load a whole new document,
+  // including at the same URL. Neither the URL nor the old workspace proves completion.
+  await page.locator('main').evaluate(main => { main.__beforeAvailabilitySave = true; });
+  await submit();
+  await page.waitForFunction(() => {
+    const main = document.querySelector('main');
+    return main && !main.__beforeAvailabilitySave && main.querySelector('[data-availability-workspace]');
+  });
   await page.waitForURL(url => url.pathname === item.url && url.searchParams.get('section') === section &&
     url.searchParams.get('provider') === provider && url.searchParams.get('day') === day && url.searchParams.get('q') === q);
   await assertWorkspace(page);
@@ -536,7 +544,7 @@ for (const unit of ['clinic', 'guidance']) {
     await page.locator('#staff_assignment_id').locator('..').locator('.bd-select-toggle').click();
     await page.locator('#staff_assignment_id').locator('..').getByRole('option', {name:/Provider Fixture/}).click();
     const date = await chooseDate(page);
-    await page.locator('#appFormModal button').filter({hasText:'09:00'}).click();
+    await page.locator('#appFormModal').getByRole('button', {name:'9:00 AM', exact:true}).click();
     assert.equal(apiCalls.at(-1).searchParams.get('unit'), unit);
     assert.equal(apiCalls.at(-1).searchParams.get('staff_assignment_id'), '7');
     assert.equal(apiCalls.at(-1).searchParams.get('date'), date);
@@ -590,8 +598,9 @@ for (const unit of ['clinic', 'guidance']) {
     await assertAvailabilityContext(page.locator('#departmentEnrollment'), 'enrollment', 'enrollment', 'Employee', '', '4');
     await page.locator('[data-department-staff]').getByRole('checkbox', {name:'Enroll Pending Employee', exact:true}).check();
     const before = posts.length;
-    await page.locator('#departmentEnrollment').evaluate(form => HTMLFormElement.prototype.submit.call(form));
-    await availabilityReload(page, item, 'enrollment', '', '4', 'Employee');
+    await availabilityReload(page,
+      () => page.locator('#departmentEnrollment').evaluate(form => HTMLFormElement.prototype.submit.call(form)),
+      item, 'enrollment', '', '4', 'Employee');
     assert.equal(posts.length, before + 1);
     assert.equal(posts.at(-1).requestedWith, undefined);
     assert.equal(posts.at(-1).fields['person_ids[]'], '71');
@@ -629,8 +638,7 @@ for (const unit of ['clinic', 'guidance']) {
       assert.equal('start_time' in submitted.fields, false);
       assert.equal(await roster.getByRole('checkbox', {name:'Enroll Pending Employee',exact:true}).isChecked(), true);
       failSave = false;
-      await button.click();
-      await availabilityReload(page, item, 'enrollment');
+      await availabilityReload(page, () => button.click(), item, 'enrollment');
       assert.equal(posts.length, before + 2);
       assert.deepEqual(posts.at(-1).fields, {...submitted.fields, csrf_test_name:'refreshed-token'});
     });
@@ -690,8 +698,7 @@ for (const unit of ['clinic', 'guidance']) {
         'days[]':'Tuesday', 'staff_assignment_ids[]':'7', start_time:'09:00', end_time:'12:00', slot_duration_minutes:'30'
       });
       failSave = false;
-      await form.locator('button[type="submit"]').click();
-      await availabilityReload(page, item, 'enrollment');
+      await availabilityReload(page, () => form.locator('button[type="submit"]').click(), item, 'enrollment');
       assert.equal(posts.length, before + 2);
       assert.deepEqual(posts.at(-1).fields, {...submitted.fields, csrf_test_name: 'refreshed-token'});
     });
@@ -753,8 +760,7 @@ for (const unit of ['clinic', 'guidance']) {
     }
     assert.equal(await modal.isVisible(), true);
     failSave = false;
-    await form.locator('button[type="submit"]').click();
-    await availabilityReload(page, item, 'weekly', '7', '2', 'Provider');
+    await availabilityReload(page, () => form.locator('button[type="submit"]').click(), item, 'weekly', '7', '2', 'Provider');
     assert.equal(posts.length, before + 2);
     assert.deepEqual(posts.at(-1).fields, {...submitted.fields, csrf_test_name: 'refreshed-token'});
   });
@@ -764,7 +770,7 @@ for (const unit of ['clinic', 'guidance']) {
     await open(page, item);
     await page.locator('#staff_assignment_id').locator('..').locator('.bd-select-toggle').click();
     await page.locator('#staff_assignment_id').locator('..').getByRole('option', {name:/Provider Fixture/}).click();
-    const slot = page.locator('#appFormModal button').filter({hasText:'09:00'});
+    const slot = page.locator('#appFormModal').getByRole('button', {name:'9:00 AM', exact:true});
     await slot.click();
     assert.equal(await page.locator('#appFormModal button[type="submit"]').isEnabled(), true);
     const before = posts.length;
@@ -888,10 +894,13 @@ test('an in-flight carousel save blocks dismissal and repeated submission until 
   await page.locator('#slideSubmitBtn').click();
   await page.waitForFunction(() => document.querySelector('#slideForm').getAttribute('aria-busy') === 'true');
   await page.locator('#appFormModal button[data-app-modal-close]').click();
-  await page.locator('#appFormModal a[data-app-modal-close]').click();
+  assert.equal(await page.locator('#slideForm').evaluate(form => form.inert), true);
+  // The inert form blocks pointer access; dispatch also exercises the busy guard.
+  await page.locator('#appFormModal a[data-app-modal-close]').dispatchEvent('click');
   await page.evaluate(() => document.querySelector('#slideForm').requestSubmit());
   assert.equal(await page.locator('#appFormModal').isVisible(),true);
   held.release(); saveGate = null;
+  await page.waitForFunction(() => !document.querySelector('#appFormModal'));
   await page.waitForURL(origin + item.parent);
   assert.equal(posts.length,before + 1);
 });
@@ -1016,8 +1025,8 @@ for (const unit of ['clinic', 'guidance']) {
     assert.equal(await remove.locator('[data-availability-feedback]').count(), 0);
     assert.equal(await form.locator('[name="csrf_test_name"]').inputValue(), 'refreshed-token');
     exceptionConflict = false;
-    await form.getByRole('button', {name:'Save exception', exact:true}).click();
-    await availabilityReload(page, item, 'exceptions', '7', '3', 'Provider');
+    await availabilityReload(page, () => form.getByRole('button', {name:'Save exception', exact:true}).click(),
+      item, 'exceptions', '7', '3', 'Provider');
     assert.equal(posts.length, before + 2);
     assert.deepEqual(posts.at(-1).fields, {...submitted.fields, csrf_test_name:'refreshed-token'});
   });
@@ -1042,8 +1051,7 @@ for (const unit of ['clinic', 'guidance']) {
     await form.getByRole('button', {name:'Remove exception', exact:true}).click();
     await confirm.waitFor({state:'visible'});
     assert.equal(posts.length, before);
-    await confirm.locator('[data-confirm-accept]').click();
-    await availabilityReload(page, item, 'exceptions', '7');
+    await availabilityReload(page, () => confirm.locator('[data-confirm-accept]').click(), item, 'exceptions', '7');
     assert.equal(posts.length, before + 1);
     assert.equal(posts.at(-1).path, item.url + '/exceptions/remove');
     assert.equal(posts.at(-1).requestedWith, 'XMLHttpRequest');

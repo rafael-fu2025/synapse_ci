@@ -209,4 +209,25 @@ class App extends BaseConfig
      * @see http://www.w3.org/TR/CSP/
      */
     public bool $CSPEnabled = true;
+
+    /**
+     * Derive the base URL from the current request so the app generates URLs
+     * that match the host it was reached on (localhost or a tunnel).
+     */
+    public function __construct()
+    {
+        parent::__construct();
+
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+
+        if ($host === '') {
+            return;
+        }
+
+        $forwardedProto = strtolower(trim(explode(',', $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')[0]));
+        $isSecure       = (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || $forwardedProto === 'https';
+
+        $this->baseURL = ($isSecure ? 'https' : 'http') . '://' . $host . '/';
+    }
 }

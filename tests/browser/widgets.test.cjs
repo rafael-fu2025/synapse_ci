@@ -679,7 +679,102 @@ check('Escape closes nested month menu then calendar without closing a real Boot
   });
 });
 
+async function addRange(page) {
+  await page.evaluate(() => {
+    const form = document.createElement('form');
+    form.id = 'range-form';
+    form.innerHTML = '<label for="range">Export date range</label>' +
+      '<input id="range" class="form-control" data-datepicker data-target="#range-start" data-range-end="#range-end" data-max-days="31" required>' +
+      '<input id="range-start" type="hidden" name="from" value="2030-01-15">' +
+      '<input id="range-end" type="hidden" name="to" value="2030-01-20">' +
+      '<button type="reset" id="range-reset">Reset range</button>';
+    document.querySelector('#dynamic').append(form);
+    BalayDatepicker.init(form);
+  });
+}
+
+check('date range selects endpoints, highlights days, clears and resets both ISO values', async t => {
+  const { page } = await open(t);
+  await addRange(page);
+  const input = page.locator('#range');
+  const popup = page.locator('.dp-range');
+  assert.equal(await input.inputValue(), '15/01/2030 – 20/01/2030');
+  await input.press('ArrowDown');
+  await popup.locator('[data-date="2030-01-10"]').click();
+  assert.equal(await popup.isVisible(), true);
+  assert.equal(await page.locator('#range-start').inputValue(), '');
+  assert.equal(await page.locator('#range-end').inputValue(), '');
+  assert.equal(await input.evaluate(el => el.checkValidity()), false);
+  await popup.locator('[data-date="2030-01-14"]').click();
+  assert.equal(await input.inputValue(), '10/01/2030 – 14/01/2030');
+  assert.deepEqual(await page.locator('#range-form').evaluate(el => [...new FormData(el).entries()]), [['from', '2030-01-10'], ['to', '2030-01-14']]);
+  await input.press('ArrowDown');
+  assert.equal(await popup.locator('.is-in-range').count(), 5);
+  assert.equal(await popup.locator('.is-selected').count(), 2);
+  await popup.locator('[data-dp-clear]').click();
+  assert.equal(await input.inputValue(), '');
+  assert.equal(await page.locator('#range-end').inputValue(), '');
+  await page.locator('#range-reset').click();
+  await settle(page);
+  assert.equal(await input.inputValue(), '15/01/2030 – 20/01/2030');
+  assert.equal(await page.locator('#range-start').inputValue(), '2030-01-15');
+  assert.equal(await page.locator('#range-end').inputValue(), '2030-01-20');
+});
+
+check('date range validates typed dates, inclusive limits, reversed ranges and keyboard selection', async t => {
+  const { page } = await open(t);
+  await addRange(page);
+  const input = page.locator('#range');
+  for (const value of ['01/01/2030 – 01/02/2030', '20/01/2030 – 10/01/2030', '31/02/2030 – 01/03/2030', '01/01/2030']) {
+    await input.fill(value);
+    await input.press('Tab');
+    assert.equal(await input.evaluate(el => el.checkValidity()), false, value);
+    assert.equal(await page.locator('#range-start').inputValue(), '');
+    assert.equal(await page.locator('#range-end').inputValue(), '');
+  }
+  await input.fill('01/01/2030 – 31/01/2030');
+  await input.press('Tab');
+  assert.equal(await input.evaluate(el => el.checkValidity()), true);
+  assert.equal(await page.locator('#range-end').inputValue(), '2030-01-31');
+  await input.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('.dp-range').isVisible(), true);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter');
+  assert.equal(await input.inputValue(), '01/01/2030 – 02/01/2030');
+  assert.equal(await page.locator('.dp-range').isVisible(), false);
+});
+
 for (const theme of ['light', 'dark']) {
+  check(`${theme} date range fits mobile and handles reverse, same-day and oversized selections`, async t => {
+    const { page } = await open(t);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
+    await addRange(page);
+    const input = page.locator('#range');
+    const popup = page.locator('.dp-range');
+    await input.press('ArrowDown');
+    const box = await popup.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= 375);
+    assert.ok(box.y >= 0 && box.y + box.height <= 812);
+    await popup.locator('[data-date="2030-01-20"]').click();
+    await popup.locator('[data-date="2030-01-10"]').click();
+    assert.equal(await input.inputValue(), '10/01/2030 – 20/01/2030');
+    await input.press('ArrowDown');
+    await popup.locator('[data-date="2030-01-15"]').click();
+    await popup.locator('[data-date="2030-01-15"]').click();
+    assert.equal(await input.inputValue(), '15/01/2030 – 15/01/2030');
+    await input.press('ArrowDown');
+    await popup.locator('[data-date="2030-01-01"]').click();
+    await popup.locator('[data-dp-next]').click();
+    await popup.locator('[data-date="2030-02-01"]').click();
+    assert.equal(await popup.isVisible(), true);
+    assert.match(await popup.locator('.dp-help').textContent(), /at most 31 days/);
+    assert.equal(await page.locator('#range-start').inputValue(), '');
+    assert.equal(await page.locator('#range-end').inputValue(), '');
+    await page.keyboard.press('Escape');
+    assert.equal(await popup.isVisible(), false);
+  });
   check(`${theme} theme has readable computed colors and fixed popup/menu within a narrow viewport`, async t => {
     const { page } = await open(t);
     await page.setViewportSize({ width: 390, height: 700 });

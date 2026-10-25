@@ -11,6 +11,10 @@
   <meta name="csrf-name" content="<?= csrf_token() ?>">
   <meta name="csrf-token" content="<?= csrf_hash() ?>">
   <meta name="csrf-header" content="<?= csrf_header() ?>">
+  <meta name="synapse-login-url" content="<?= esc(site_url('auth/login'), 'attr') ?>">
+  <?php if (config(\Config\Realtime::class)->enabled): ?>
+    <meta name="synapse-realtime-ticket-url" content="<?= esc(site_url('realtime/ticket'), 'attr') ?>">
+  <?php endif; ?>
 
   <!-- Favicons -->
   <link rel="icon" type="image/x-icon" href="<?= base_url('favicon.ico') ?>">
@@ -50,11 +54,6 @@
   <script defer src="<?= base_url('assets/vendor/alpine/alpine.min.js') ?>"></script>
 
   <style>
-    /* Robust sidebar and main layout geometry */
-    :root {
-      --header-height: 64px;
-      --sidebar-width: 280px;
-    }
 
     /* Synapse Logo Light/Night Mode visibility toggle */
     .synapse-logo-light {
@@ -75,92 +74,26 @@
       filter: none !important;
     }
 
-    .header {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: var(--header-height);
-      z-index: 1030;
-    }
 
-    .sidebar {
-      position: fixed;
-      top: var(--header-height);
-      left: 0;
-      bottom: 0;
-      width: var(--sidebar-width);
-      z-index: 1020;
-      background: var(--sidebar-bg);
-      transition: transform 0.3s ease;
-      overflow-y: auto;
-    }
-
-    #main.main {
-      margin-top: var(--header-height);
-      min-height: calc(100vh - var(--header-height));
-      display: flex;
-      flex-direction: column;
-      transition: margin-left 0.3s ease;
-      background-color: var(--na-bg, #f6f7fb);
-    }
-
-    /* Standard desktop & laptop viewports: allocate sidebar margin */
-    @media (min-width: 992px) {
-      .sidebar {
-        transform: translateX(0);
-      }
-      #main.main {
-        margin-left: var(--sidebar-width);
-      }
-      body.sidebar-hidden #main.main {
-        margin-left: 0;
-      }
-      body.sidebar-hidden .sidebar {
-        transform: translateX(-100%);
-      }
-    }
-
-    /* Mobile / Tablet portrait: sidebar is off-canvas by default */
-    @media (max-width: 991px) {
-      .sidebar {
-        transform: translateX(-100%);
-      }
-      body.sidebar-open .sidebar {
-        transform: translateX(0);
-      }
-      #main.main {
-        margin-left: 0;
-      }
-    }
-
-    .main-content {
-      flex: 1 0 auto;
-      padding: 1.5rem 1.75rem;
-      width: 100%;
-    }
-
-    @media (max-width: 768px) {
-      .main-content {
-        padding: 1rem 0.75rem;
-      }
-    }
   </style>
 
 </head>
 
-<body hx-boost="false" data-navigation-scope="<?= esc(hash('sha256', serialize([session()->get('user'), session()->get('tenant_id'), \App\Services\PortalContext::current()])), 'attr') ?>">
+<?php // Path-based workstations share a shell; dedicated hosts retain their portal boundary. ?>
+<body class="app-shell" hx-boost="false" data-navigation-scope="<?= esc(hash('sha256', serialize([session()->get('user'), session()->get('tenant_id'), \App\Services\PortalContext::hostPortal() ?? 'single-host'])), 'attr') ?>">
   <div id="page-styles" hidden><?= $this->renderSection('styles') ?></div>
   <?= $this->include('partials/header') ?>
   <?= $this->include('partials/sidebar') ?>
+  <?= $this->include('partials/search_actions') ?>
+  <?= $this->include('partials/global_search') ?>
 
   <main id="main" class="main">
     <div class="main-content">
       <div class="pagetitle d-flex justify-content-between align-items-center mb-3">
-        <div>
+        <div class="page-title-copy">
           <h1 class="h3 mb-0"><?= esc($pageTitle ?? $title ?? 'Dashboard') ?></h1>
           <?php if (!empty($breadcrumbs)): ?>
-            <nav>
+            <nav aria-label="Breadcrumb">
               <ol class="breadcrumb mb-0">
                 <li class="breadcrumb-item"><a href="<?= site_url('/') ?>">Home</a></li>
                 <?php foreach ($breadcrumbs as $crumb): ?>
@@ -174,7 +107,7 @@
             </nav>
           <?php endif; ?>
         </div>
-        <div>
+        <div class="page-actions">
           <?= $this->renderSection('page_actions') ?>
         </div>
       </div>
@@ -254,7 +187,11 @@
   <script src="<?= base_url('assets/js/datetimepicker.js') ?>"></script>
   <script src="<?= base_url('assets/js/loading.js') ?>"></script>
   <script src="<?= base_url('assets/js/form-loading.js') ?>"></script>
+  <script src="<?= base_url('assets/js/auth-session.js') ?>"></script>
   <script src="<?= base_url('assets/js/csrf.js') ?>"></script>
+  <script src="<?= base_url('assets/js/toast.js') ?>"></script>
+  <script src="<?= base_url('assets/js/realtime.js') ?>"></script>
+  <script src="<?= base_url('assets/js/mis-sync.js') ?>"></script>
   <script src="<?= base_url('assets/js/report-download.js') ?>"></script>
   <script src="<?= base_url('assets/js/notifications.js') ?>"></script>
   <script src="<?= base_url('assets/js/confirm.js') ?>"></script>
@@ -266,10 +203,13 @@
   <script src="<?= base_url('assets/js/survey-builder.js') ?>"></script>
   <script src="<?= base_url('assets/js/profile-settings.js') ?>"></script>
   <script src="<?= base_url('assets/js/form-modal.js') ?>"></script>
+  <script src="<?= base_url('assets/js/responsive-tables.js') ?>"></script>
   <script src="<?= base_url('assets/js/core/main.js') ?>"></script>
   <script src="<?= base_url('assets/js/page-lifecycle.js') ?>"></script>
   <script src="<?= base_url('assets/js/team-chat.js') ?>"></script>
   <script src="<?= base_url('assets/js/navigation.js') ?>"></script>
+  <script src="<?= base_url('assets/js/background-actions.js') ?>"></script>
+  <script src="<?= base_url('assets/js/global-search.js') ?>"></script>
 
   <div id="page-scripts" hidden><?= $this->renderSection('scripts') ?></div>
   <div class="navigation-feedback">

@@ -312,7 +312,7 @@ final class AppointmentController extends BaseController
             $actor = (new AuthenticatedUser())->current();
             if ($actor === null) throw new \DomainException('Please sign in to continue.', 401);
             $unit = (string) ($this->request->getGet('unit') ?? 'clinic');
-            $this->appointmentService->assertStaff($unit, $actor);
+            $this->appointmentService->assertSchedulingPermission($unit, $actor, write: false);
             $slots = $this->appointmentService->getAvailableSlots($unit,
                 (int) $this->request->getGet('staff_assignment_id'), (string) ($this->request->getGet('date') ?? SchedulingClock::today()));
             return $this->response->setJSON(['slots' => $slots]);
@@ -350,7 +350,7 @@ final class AppointmentController extends BaseController
     private function respondToForm(string $message, bool $success, string $redirect, int $status = 422)
     {
         if ($this->request->isAJAX()) {
-            if ($success) {
+            if ($success && $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
             return $this->response->setStatusCode($success ? 200 : $status)->setJSON([
@@ -358,7 +358,11 @@ final class AppointmentController extends BaseController
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
             ]);
         }
-        return $success ? redirect()->to($redirect)->with('success', $message)
-            : redirect()->back()->withInput()->with('error', $message);
+        if ($success) {
+            $response = redirect()->to($redirect);
+            return $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast'
+                ? $response : $response->with('success', $message);
+        }
+        return redirect()->back()->withInput()->with('error', $message);
     }
 }

@@ -43,9 +43,8 @@ final class HttpMisClient implements MisClientInterface
     }
 
     /**
-     * The injectable login transport receives method, URL, header lines, encoded
-     * JSON body and timeout, and returns ['status' => int, 'body' => string].
-     * Directory requests deliberately retain their existing failure contract.
+     * The injectable transport receives method, URL, header lines, encoded
+     * JSON body (null for GET) and timeout, and returns status and body.
      *
      * @param array<string, string> $body
      * @return array<string, mixed>|null
@@ -111,7 +110,7 @@ final class HttpMisClient implements MisClientInterface
      * @param list<string> $headers
      * @return array{status: int, body: string}
      */
-    private function curlLoginRequest(string $method, string $url, array $headers, string $body, int $timeout): array
+    private function curlLoginRequest(string $method, string $url, array $headers, ?string $body, int $timeout): array
     {
         $ch = curl_init($url);
         if ($ch === false) {
@@ -121,7 +120,6 @@ final class HttpMisClient implements MisClientInterface
         try {
             curl_setopt_array($ch, [
                 CURLOPT_CUSTOMREQUEST  => $method,
-                CURLOPT_POSTFIELDS     => $body,
                 CURLOPT_HTTPHEADER     => $headers,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => false,
@@ -130,6 +128,10 @@ final class HttpMisClient implements MisClientInterface
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_SSL_VERIFYHOST => 2,
             ]);
+
+            if ($method !== 'GET') {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+            }
 
             $raw = curl_exec($ch);
             if ($raw === false) {
@@ -178,32 +180,17 @@ final class HttpMisClient implements MisClientInterface
 
     public function fetchDepartments(): array
     {
-        $token = $this->getServiceAccessToken();
-        if ($token === null) {
-            return [];
-        }
-        $res = $this->getJson('/api/v1/employees/departments', $token);
-        return is_array($res['data'] ?? null) ? $res['data'] : [];
+        return $this->fetchReference('/api/v1/employees/departments');
     }
 
     public function fetchPrograms(): array
     {
-        $token = $this->getServiceAccessToken();
-        if ($token === null) {
-            return [];
-        }
-        $res = $this->getJson('/api/v1/students/programs', $token);
-        return is_array($res['data'] ?? null) ? $res['data'] : [];
+        return $this->fetchReference('/api/v1/students/programs', programs: true);
     }
 
     public function fetchYearLevels(): array
     {
-        $token = $this->getServiceAccessToken();
-        if ($token === null) {
-            return [];
-        }
-        $res = $this->getJson('/api/v1/students/levels', $token);
-        return is_array($res['data'] ?? null) ? $res['data'] : [];
+        return $this->fetchReference('/api/v1/students/levels', levels: true);
     }
 
     /**
@@ -219,14 +206,14 @@ final class HttpMisClient implements MisClientInterface
 
         // 1. Generate refresh token
         $genRes = $this->postJson('/api/tokens/generate', [], useApiKey: true);
-        $refreshToken = $genRes['refresh_token'] ?? null;
+        $refreshToken = $genRes['data']['refresh_token'] ?? $genRes['refresh_token'] ?? null;
         if (!is_string($refreshToken) || $refreshToken === '') {
             return null;
         }
 
         // 2. Refresh to get access_token
         $refRes = $this->postJson('/api/tokens/refresh', [], useApiKey: true, bearerToken: $refreshToken);
-        $accessToken = $refRes['access_token'] ?? null;
+        $accessToken = $refRes['data']['access_token'] ?? $refRes['access_token'] ?? null;
         if (is_string($accessToken) && $accessToken !== '') {
             // Cache for 8 minutes (MIS tokens usually valid for 10-15 mins)
             $cache->save('fumis_service_access_token', $accessToken, 480);
@@ -242,41 +229,7 @@ final class HttpMisClient implements MisClientInterface
      */
     private function postJson(string $path, array $body, bool $useApiKey = false, ?string $bearerToken = null): ?array
     {
-        $url = $this->baseUrl . $path;
-        $ch = curl_init($url);
-
-        $headers = [
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ];
-        if ($useApiKey && $this->apiKey !== '') {
-            $headers[] = 'API-Key: ' . $this->apiKey;
-        }
-        if ($bearerToken !== null && $bearerToken !== '') {
-            $headers[] = 'Authorization: Bearer ' . $bearerToken;
-        }
-
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode($body),
-            CURLOPT_HTTPHEADER     => $headers,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => $this->timeout,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-        ]);
-
-        $raw = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($raw === false || $status < 200 || $status >= 300) {
-            return null;
-        }
-
-        $decoded = json_decode((string) $raw, true);
-        return is_array($decoded) ? $decoded : null;
+        return $this->requestJson('POST', $path, $body, $useApiKey, $bearerToken);
     }
 
     /**
@@ -284,36 +237,166 @@ final class HttpMisClient implements MisClientInterface
      */
     private function getJson(string $path, string $bearerToken): ?array
     {
-        $url = $this->baseUrl . $path;
-        $ch = curl_init($url);
+        return $this->requestJson('GET', $path, null, true, $bearerToken);
+    }
 
-        $headers = [
-            'Accept: application/json',
-            'Authorization: Bearer ' . $bearerToken,
-        ];
-        if ($this->apiKey !== '') {
-            $headers[] = 'API-Key: ' . $this->apiKey;
-        }
-
-        curl_setopt_array($ch, [
-            CURLOPT_HTTPGET        => true,
-            CURLOPT_HTTPHEADER     => $headers,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => $this->timeout,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-        ]);
-
-        $raw = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($raw === false || $status < 200 || $status >= 300) {
+    private function requestJson(string $method, string $path, ?array $body, bool $useApiKey, ?string $bearerToken): ?array
+    {
+        $url = parse_url($this->baseUrl);
+        if (trim($this->apiKey) === '' || preg_match('/[\r\n]/', $this->apiKey)
+            || !is_array($url) || ($url['scheme'] ?? null) !== 'https' || empty($url['host'])
+            || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment'])
+            || ($bearerToken !== null && preg_match('/[\r\n]/', $bearerToken))) {
             return null;
         }
+        try {
+            $headers = ['Accept: application/json'];
+            if ($body !== null) {
+                $headers[] = 'Content-Type: application/json';
+            }
+            if ($useApiKey) {
+                $headers[] = 'API-Key: ' . $this->apiKey;
+            }
+            if ($bearerToken !== null) {
+                $headers[] = 'Authorization: Bearer ' . $bearerToken;
+            }
+            $response = ($this->transport)($method, $this->baseUrl . $path, $headers,
+                $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR), $this->timeout);
+            if (!is_array($response) || !is_int($response['status'] ?? null)
+                || $response['status'] < 200 || $response['status'] >= 300 || !is_string($response['body'] ?? null)) {
+                return null;
+            }
+            $decoded = json_decode($response['body'], true, 512, JSON_THROW_ON_ERROR);
+            return is_array($decoded) ? $decoded : null;
+        } catch (\Throwable) {
+            // Upstream bodies and transport errors may contain credentials.
+            return null;
+        }
+    }
 
-        $decoded = json_decode((string) $raw, true);
-        return is_array($decoded) ? $decoded : null;
+    private function fetchReference(string $path, bool $programs = false, bool $levels = false): array
+    {
+        $token = $this->getServiceAccessToken();
+        if ($token === null) {
+            return [];
+        }
+        $rows = [];
+        $limit = null;
+        $maxPage = null;
+        for ($page = 1; $page <= 400; ++$page) {
+            $response = $this->getJson($path . ($page === 1 ? '' : '?page=' . $page . '&limit=' . $limit), $token);
+            $data = $response['data'] ?? null;
+            if (!is_array($data)) {
+                return [];
+            }
+            if ($page === 1 && $levels && !array_is_list($data) && !array_key_exists('data', $data)) {
+                return $this->normalizeGroupedLevels($data);
+            }
+            if ($page === 1 && array_is_list($data)) {
+                return $this->normalizeReferenceRows($data, $programs);
+            }
+            $pageLimit = $this->paginationInteger($data['limit'] ?? null, 10000);
+            $currentPage = $this->paginationInteger($data['current_page'] ?? null, 400);
+            $pageMax = $this->paginationInteger($data['max_page'] ?? null, 400);
+            if (!is_array($data['data'] ?? null) || !array_is_list($data['data'])
+                || $pageLimit === null || $currentPage !== $page || $pageMax === null
+                || $page > $pageMax) {
+                return [];
+            }
+            $limit ??= $pageLimit;
+            $maxPage ??= $pageMax;
+            $count = count($data['data']);
+            if ($limit !== $pageLimit || $maxPage !== $pageMax
+                || $count > $limit || ($page < $maxPage && $count !== $limit)
+                || ($page > 1 && $count === 0) || count($rows) + $count > 10000) {
+                return [];
+            }
+            array_push($rows, ...$data['data']);
+            if ($page === $maxPage) {
+                return $this->normalizeReferenceRows($rows, $programs);
+            }
+        }
+        return [];
+    }
+
+    private function paginationInteger(mixed $value, int $max): ?int
+    {
+        if (is_string($value) && strlen($value) <= strlen((string) $max)
+            && preg_match('/^[1-9][0-9]*$/D', $value)) {
+            $value = (int) $value;
+        }
+        return is_int($value) && $value >= 1 && $value <= $max ? $value : null;
+    }
+
+    private function normalizeReferenceRows(array $rows, bool $programs): array
+    {
+        if (count($rows) > 10000) {
+            return [];
+        }
+        $result = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                return [];
+            }
+            $liveProgram = $programs && array_key_exists('course', $row);
+            $code = $this->referenceText($row[$liveProgram ? 'course' : 'code'] ?? null);
+            $name = $this->referenceText($row[$liveProgram ? 'coursedesc' : 'name'] ?? null);
+            if ($code === null || $name === null) {
+                return [];
+            }
+            $value = ['code' => $code, 'name' => $name];
+            $academicGroup = null;
+            $departmentKey = $liveProgram ? 'department' : 'department_code';
+            if ($programs && ($liveProgram || array_key_exists($departmentKey, $row))) {
+                $department = $this->referenceText($row[$departmentKey] ?? null);
+                if ($department === null) {
+                    return [];
+                }
+                if ($liveProgram) {
+                    // Academic groups and employee departments are distinct taxonomies:
+                    // retain the group for duplicate checks, never infer an employee department FK.
+                    $academicGroup = $department;
+                } else {
+                    $value['department_code'] = $department;
+                }
+            }
+            if (isset($seen[$code])) {
+                // Only identical live program records may be repeated by MIS.
+                if ($liveProgram && $seen[$code]['live'] && $seen[$code]['value'] === $value
+                    && $seen[$code]['group'] === $academicGroup) {
+                    continue;
+                }
+                return [];
+            }
+            $seen[$code] = ['live' => $liveProgram, 'value' => $value, 'group' => $academicGroup];
+            $result[] = $value;
+        }
+        return $result;
+    }
+
+    private function normalizeGroupedLevels(array $groups): array
+    {
+        $rows = [];
+        foreach ($groups as $group => $levels) {
+            $group = $this->referenceText($group);
+            if ($group === null || str_contains($group, ':') || !is_array($levels)) {
+                return [];
+            }
+            foreach ($levels as $code => $label) {
+                $code = $this->referenceText((string) $code);
+                $label = $this->referenceText($label);
+                if ($code === null || $label === null || count($rows) >= 10000) {
+                    return [];
+                }
+                $rows[] = ['code' => $group . ':' . $code, 'name' => $group . ' — ' . $label];
+            }
+        }
+        return $this->normalizeReferenceRows($rows, false);
+    }
+
+    private function referenceText(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
     }
 }

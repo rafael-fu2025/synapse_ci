@@ -22,7 +22,7 @@ function render(url) {
   const link = query => escape(endpoint + '?' + new URLSearchParams(query));
   const key = 'portal-' + url.pathname.split('/').pop();
   return `<!doctype html><html><head><meta name="csrf-name" content="csrf"><meta name="csrf-token" content="fresh"><meta name="csrf-header" content="X-CSRF"></head>
-<body data-navigation-scope="portal:fixture"><main><section data-live-filters data-filter-url="${endpoint}" data-filter-key="${key}">
+<body data-navigation-scope="portal:fixture"><main><section data-live-filters data-filter-url="${endpoint}" data-filter-key="${key}"${p.has('live') ? ' data-live-events="portal.appointments.changed"' : ''}>
 <form method="get" data-filter-form action="${endpoint}"><input name="q" type="search" value="${value('q')}" aria-label="Search">
 <input name="category" value="${value('category')}" aria-label="Category">
 <select name="status" aria-label="Status"><option value="">All</option><option value="open" ${p.get('status') === 'open' ? 'selected' : ''}>Open</option></select>
@@ -65,7 +65,7 @@ after(async () => {
   }
 });
 
-async function open(t, kind = 'surveys', navigation = false) {
+async function open(t, kind = 'surveys', navigation = false, search = '') {
   const context = await browser.newContext();
   const reads = [], mutations = [], errors = [];
   const transport = { intercept: null };
@@ -105,7 +105,7 @@ async function open(t, kind = 'surveys', navigation = false) {
   page.setDefaultTimeout(5000);
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(mutations, []); assert.deepEqual(errors, []); });
-  await page.goto(`${origin}/portal/${kind}`);
+  await page.goto(`${origin}/portal/${kind}${search}`);
   await page.waitForFunction(() => window.SynapseLiveFilters && window.originalForm);
   return { page, reads, transport };
 }
@@ -279,6 +279,41 @@ test('403/non-HTML/redirect and invalid document contracts retain all old region
   transport.intercept = null;
   await page.getByText('Retry', { exact: true }).evaluate(el => { el.parentElement.hidden = false; });
   await page.getByText('Retry', { exact: true }).click(); await shown(page, `bad-${bad.length - 1}|||||1`);
+});
+
+const hint = (page, event = 'portal.appointments.changed') => page.evaluate(event => document.dispatchEvent(new CustomEvent('synapse:realtime-event', { detail: { event, data: {} } })), event);
+
+test('opted-in region refetches silently on its realtime hint and ignores others', async t => {
+  const { page, reads } = await open(t, 'surveys', false, '?live=1&q=seed');
+  assert.equal(reads.length, 0);
+  await hint(page, 'notifications.changed'); await hint(page, 'queue.invalidated');
+  await page.waitForTimeout(500); assert.equal(reads.length, 0);
+  await hint(page); await hint(page); // bursts coalesce
+  await page.waitForFunction(() => document.querySelector('[data-filter-status]').textContent.includes('seed'));
+  await page.waitForTimeout(400); assert.equal(reads.length, 1);
+  assert.equal(reads[0].searchParams.get('q'), 'seed');
+  assert.equal(await page.locator('[data-filter-error]').isHidden(), true);
+});
+
+test('live hints never replace drafts, open editors or a region that did not opt in', async t => {
+  const { page, reads } = await open(t, 'surveys', false, '?live=1');
+  await page.getByLabel('Draft', { exact: true }).fill('keep me');
+  await hint(page); await page.waitForTimeout(700); assert.equal(reads.length, 0);
+  assert.equal(await page.getByLabel('Draft', { exact: true }).inputValue(), 'keep me');
+  const plain = await open(t, 'announcements');
+  await hint(plain.page); await plain.page.waitForTimeout(700); assert.equal(plain.reads.length, 0);
+});
+
+test('background refresh failures stay silent but lost access is reported', async t => {
+  const { page, reads, transport } = await open(t, 'surveys', false, '?live=1');
+  let status = 500;
+  transport.intercept = async route => { await route.fulfill({ status, contentType: 'text/plain', body: 'no' }); return true; };
+  await hint(page); await page.waitForFunction(() => true); await page.waitForTimeout(700);
+  assert.equal(reads.length, 1); assert.equal(await page.locator('[data-filter-error]').isHidden(), true);
+  assert.equal(await page.locator(result).textContent(), 'all|||||1');
+  status = 403; await hint(page);
+  await page.locator('[data-filter-error]').waitFor({ state: 'visible' });
+  assert.equal(await page.locator(result).textContent(), 'all|||||1');
 });
 
 test('dirty POST drafts pause automatic reads; only explicit submit uses shared confirmation', async t => {

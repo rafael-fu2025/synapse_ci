@@ -1,0 +1,88 @@
+.synapse-toast-container {
+  position: fixed;
+  top: calc(var(--header-height, 64px) + 16px + env(safe-area-inset-top, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  z-index: 1090;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+  max-height: calc(100dvh - var(--header-height, 64px) - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+.synapse-toast.toast {
+  --toast-tone: var(--info-color);
+  --bs-toast-bg: var(--surface-color);
+  --bs-toast-color: var(--default-color);
+  --bs-toast-border-color: var(--border-color);
+  width: 100%;
+  flex-shrink: 0;
+  margin: 0;
+  border-inline-start: 4px solid var(--toast-tone);
+  pointer-events: auto;
+}
+
+.synapse-toast[data-type="success"] { --toast-tone: var(--success-color); }
+.synapse-toast[data-type="error"] { --toast-tone: var(--danger-color); }
+.synapse-toast[data-type="warning"] { --toast-tone: var(--warning-color); }
+
+.synapse-toast .toast-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.synapse-toast-icon {
+  color: var(--toast-tone);
+  font-size: 1.125rem;
+  flex-shrink: 0;
+}
+
+.synapse-toast-content {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.synapse-toast-action,
+.synapse-toast-close {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-color);
+  color: var(--default-color);
+  font: inherit;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.synapse-toast-action {
+  margin-top: 8px;
+  padding: 4px 10px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.synapse-toast-action[hidden] { display: none; }
+.synapse-toast-action:disabled { opacity: 0.65; cursor: wait; }
+
+.synapse-toast-close {
+  flex-shrink: 0;
+  width: 32px;
+  padding: 0;
+  font-size: 1.375rem;
+  line-height: 1;
+}
+
+.synapse-toast-action:focus-visible,
+.synapse-toast-close:focus-visible {
+  outline: 2px solid var(--default-color);
+  outline-offset: 2px;
+}

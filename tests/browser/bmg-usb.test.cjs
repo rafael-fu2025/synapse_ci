@@ -190,7 +190,7 @@ test('USB layout is responsive and theme-aware without starting hardware', async
       const { page } = await pageFor(t, { theme, viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 } }, '?gate-off&no-firmware');
       assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      assert.equal(await page.locator('.bmg-usb-workflow li').count(), 3);
+      assert.equal(await page.locator('.bmg-usb-workflow li').count(), 4);
       assert.equal(await page.locator('[data-usb-release] option').textContent(), 'No approved firmware available');
       assert.equal(await control(page, 'select').isEnabled(), true);
       assert.equal(await control(page, 'identify').isDisabled(), true);

@@ -87,6 +87,64 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
         $this->assertSame('completed', $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRow()->status);
     }
 
+    public function testDraftRequiresCsrfAndAjaxSuccessHasNoRedirect(): void
+    {
+        $path = 'clinic/encounters/' . $this->encounterId . '/draft';
+        $this->withSession($this->authSession())->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+            ->post($path, ['chief_complaint' => 'Unsaved'])->assertStatus(403);
+        $result = $this->withSession($this->authSession())->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+            ->post($path, $this->csrfData() + [
+                'chief_complaint' => 'Draft complaint', 'diagnosis' => 'Draft diagnosis',
+                'disposition' => 'sent_home', 'disposition_notes' => 'Draft outcome', 'status' => 'completed',
+            ]);
+        $result->assertStatus(200);
+        $json = json_decode($result->response()->getJSON(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(['success', 'message', 'csrf'], array_keys($json));
+        $this->assertTrue($json['success']);
+        $this->assertSame(csrf_token(), $json['csrf']['name']);
+        $this->assertNotEmpty($json['csrf']['hash']);
+        $this->assertSame('', $result->response()->getHeaderLine('Location'));
+        $row = $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRowArray();
+        $this->assertSame('in_progress', $row['status']);
+        $this->assertSame('Draft complaint', $row['chief_complaint']);
+        $this->assertSame('Draft outcome', $row['disposition_notes']);
+        $this->assertNull($row['completed_at']);
+    }
+
+    public function testAggregateCompletionPersistsFlatFormFields(): void
+    {
+        $result = $this->withSession($this->authSession())->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+            ->post('clinic/encounters/' . $this->encounterId . '/complete', $this->csrfData() + [
+                'chief_complaint' => 'Headache', 'assessment_notes' => 'Observed', 'pulse_bpm' => '72',
+                'diagnosis' => 'Migraine', 'treatment_plan' => 'Rest', 'services_rendered' => 'Exam',
+                'disposition' => 'discharged', 'disposition_notes' => 'Improved', 'follow_up_date' => '',
+            ]);
+        $result->assertStatus(200);
+        $json = json_decode($result->response()->getJSON(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertTrue($json['success']);
+        $this->assertArrayHasKey('redirect', $json);
+        $row = $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRowArray();
+        $this->assertSame('completed', $row['status']);
+        $this->assertSame('Headache', $row['chief_complaint']);
+        $this->assertSame('Improved', $row['disposition_notes']);
+        $this->assertSame('Migraine', (new \App\Models\ClinicTreatmentModel())->findByEncounterId($this->encounterId)['diagnosis']);
+        $this->assertSame(72, (int) (new \App\Models\ClinicVitalsModel())->findByEncounterId($this->encounterId)['pulse_bpm']);
+    }
+
+    public function testAggregateCompletionRejectsExplicitEmptyComplaintWithoutSavingOtherFields(): void
+    {
+        $result = $this->withSession($this->authSession())->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+            ->post('clinic/encounters/' . $this->encounterId . '/complete', $this->csrfData() + [
+                'chief_complaint' => ' ', 'diagnosis' => 'Must not save', 'disposition' => 'discharged',
+            ]);
+        $result->assertStatus(422);
+        $this->assertFalse(json_decode($result->response()->getJSON(), true, 512, JSON_THROW_ON_ERROR)['success']);
+        $row = $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRowArray();
+        $this->assertSame('in_progress', $row['status']);
+        $this->assertSame('Mild cough and cold', $row['chief_complaint']);
+        $this->assertNull((new \App\Models\ClinicTreatmentModel())->findByEncounterId($this->encounterId));
+    }
+
     public function testDispenseRequiresCsrfAndExplicitIdempotencyKey(): void
     {
         $this->receipt();

@@ -114,4 +114,55 @@ final class PersonalPortalCapabilityTest extends FreshDatabaseTestCase
         self::assertSame([], $chart['appointments']);
         self::assertArrayHasKey('student_profile', $chart);
     }
+
+    public function testPortalAppointmentFiltersSortAndOwnership(): void
+    {
+        $personId = (int) $this->actor($this->studentId)['person_id'];
+        $otherPersonId = (int) $this->actor($this->staffId)['person_id'];
+        $appointment = function (string $unit, string $status, string $date) use ($personId): int {
+            $start = $date . ' 09:00:00';
+            $id = (int) (new AppointmentModel())->insert([
+                'tenant_id' => 1,
+                'unit' => $unit,
+                'person_id' => $personId,
+                'starts_at' => $start,
+                'ends_at' => date('Y-m-d H:i:s', strtotime($start . ' +30 minutes')),
+                'local_date' => $date,
+                'status' => $status,
+                'type' => $unit === 'clinic' ? 'routine' : 'initial',
+                'reason' => 'Portal filter fixture ' . $status,
+                'version' => 1,
+            ]);
+            $this->fixtures[] = ['type' => 'appointment', 'id' => $id];
+            return $id;
+        };
+
+        $completed = $appointment('clinic', 'completed', date('Y-m-d', strtotime('-5 days')));
+        $cancelled = $appointment('guidance', 'cancelled', date('Y-m-d', strtotime('-2 days')));
+        $noShow = $appointment('clinic', 'no_show', date('Y-m-d', strtotime('-1 day')));
+        $confirmed = $appointment('guidance', 'confirmed', date('Y-m-d', strtotime('+1 day')));
+        $requested = $appointment('clinic', 'requested', date('Y-m-d', strtotime('+3 days')));
+
+        $service = new PatientHistoryService();
+        $ids = static fn (array $rows): array => array_map('intval', array_column($rows, 'id'));
+
+        self::assertSame([$confirmed, $requested, $noShow, $cancelled, $completed],
+            $ids($service->getPortalAppointments($personId, ['sort' => 'upcoming'])));
+        self::assertSame([$completed, $cancelled, $noShow, $confirmed, $requested],
+            $ids($service->getPortalAppointments($personId, ['sort' => 'date_asc'])));
+        self::assertSame([$requested, $confirmed, $noShow, $cancelled, $completed],
+            $ids($service->getPortalAppointments($personId, ['sort' => 'date_desc'])));
+        self::assertSame([$requested, $noShow, $completed],
+            $ids($service->getPortalAppointments($personId, ['service' => 'clinic'])));
+        self::assertSame([$confirmed, $requested],
+            $ids($service->getPortalAppointments($personId, ['status' => 'active'])));
+        self::assertSame([$completed],
+            $ids($service->getPortalAppointments($personId, ['status' => 'completed'])));
+        self::assertSame([$confirmed, $requested, $noShow, $cancelled, $completed],
+            $ids($service->getPortalAppointments($personId, ['status' => 'bogus'])));
+
+        self::assertSame($requested, (int) $service->getPortalAppointment($personId, $requested)['id']);
+        self::assertNull($service->getPortalAppointment($otherPersonId, $requested));
+        self::assertNull($service->getPortalAppointment($personId, 999999));
+    }
 }

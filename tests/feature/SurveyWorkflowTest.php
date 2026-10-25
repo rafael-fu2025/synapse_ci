@@ -10,16 +10,20 @@ use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\Guidance\SurveyService;
 use App\Services\NotificationService;
-use CodeIgniter\Test\CIUnitTestCase;
+use Tests\Support\FreshDatabaseTestCase;
+use Tests\Support\PublicationRecipientFixtures;
 use CodeIgniter\Test\DatabaseTestTrait;
 use Config\Services;
 use RuntimeException;
-use Tests\Support\InventoryTestDatabase;
+
 
 /** Shared fixture is intentionally in the owned survey test file. */
-abstract class SurveyTestCase extends CIUnitTestCase
+abstract class SurveyTestCase extends FreshDatabaseTestCase
 {
     use DatabaseTestTrait;
+    use PublicationRecipientFixtures;
+
+    protected $DBGroup = 'tests';
 
     protected $migrate = true;
     protected $refresh = false;
@@ -33,7 +37,6 @@ abstract class SurveyTestCase extends CIUnitTestCase
 
     protected function setUp(): void
     {
-        InventoryTestDatabase::verify();
         parent::setUp();
         AuthenticatedUser::clear();
         Services::resetSingle('renderer');
@@ -55,11 +58,12 @@ abstract class SurveyTestCase extends CIUnitTestCase
 
     protected function tearDown(): void
     {
+        // Schema-shape regressions below require surveys from prior tests to be absent.
+        // Retain append-only audit history and identities until the runner drops the schema.
         if (isset($this->tenant)) {
-            foreach (['notifications', 'survey_responses', 'surveys', 'audit_events', 'student_profiles', 'employee_profiles', 'users', 'people'] as $table) {
-                if ($this->db->tableExists($table)) { $this->db->table($table)->where('tenant_id', $this->tenant)->delete(); }
+            foreach (['notifications', 'survey_responses', 'surveys'] as $table) {
+                $this->db->table($table)->where('tenant_id', $this->tenant)->delete();
             }
-            $this->db->table('tenants')->where('id', $this->tenant)->delete();
         }
         foreach ($this->environment as $key => [$process, $env, $server]) {
             $process === false ? putenv($key) : putenv($key . '=' . $process);
@@ -94,8 +98,7 @@ abstract class SurveyTestCase extends CIUnitTestCase
 
     protected function login(array $actor): void
     {
-        AuthenticatedUser::clear();
-        session()->set(['user' => $actor, 'tenant_id' => $this->tenant]);
+        $this->establishPublicationSession($actor);
     }
 
     protected function payload(array $overrides = []): array
@@ -114,7 +117,7 @@ abstract class SurveyTestCase extends CIUnitTestCase
         $this->login($this->admin);
         $survey = $this->surveys->create($this->payload($overrides));
         $id = (int) $survey['id'];
-        $this->surveys->publish($id);
+        $this->surveys->publish($id, $survey['version']);
         return $id;
     }
 
@@ -132,6 +135,39 @@ abstract class SurveyTestCase extends CIUnitTestCase
 
 final class SurveyWorkflowTest extends SurveyTestCase
 {
+    public static function publicationAudiences(): array
+    {
+        return ['all' => ['all'], 'employees' => ['employees'], 'students' => ['students']];
+    }
+
+    /** @dataProvider publicationAudiences */
+    public function testPublicationRecipientsAcrossOperationalRoles(string $audience): void
+    {
+        $cases = $this->publicationRecipientMatrix(fn (string $role, string $profile): array => $this->account($role, $profile));
+        $draft = $this->surveys->create($this->payload(['audience' => $audience,
+            'title' => 'SYNTHETIC PRIVATE PUBLICATION', 'description' => 'SYNTHETIC PRIVATE CONTENT']));
+        $id = (int) $draft['id'];
+        $reviewedDraft = $this->surveys->update($id, $this->payload(['audience' => $audience, 'version' => $draft['version'],
+            'title' => 'SYNTHETIC PRIVATE PUBLICATION', 'description' => 'SYNTHETIC PRIVATE CONTENT']));
+        $this->surveys->listing();
+        $this->assertSame(0, $this->db->table('notifications')->where('tenant_id', $this->tenant)->countAllResults(),
+            'Draft/edit/list must remain quiet.');
+        $this->surveys->publish($id, $reviewedDraft['version']);
+        $this->assertPublicationRecipientMatrix('survey', $id, $audience, $cases,
+            fn (array $actor) => $this->login($actor), fn () => $this->surveys->form($id));
+        $this->assertSame(0, $this->db->table('survey_responses')->where('tenant_id', $this->tenant)->countAllResults(),
+            'Viewing a form or reading its bell must not submit a response.');
+        $this->login($this->admin);
+        $count = $this->db->table('notifications')->where('tenant_id', $this->tenant)->countAllResults();
+        $this->rejected(fn () => $this->surveys->publish($id, $reviewedDraft['version']), 409);
+        // A fresh review permits an explicit published-state no-op and subsequent close.
+        $published = $this->surveys->get($id);
+        $this->surveys->publish($id, $published['version']);
+        $this->surveys->close($id, $published['version']);
+        $this->assertSame($count, $this->db->table('notifications')->where('tenant_id', $this->tenant)->countAllResults(),
+            'Publish retry and closure must not fan out new notices.');
+    }
+
     public function testSurveyInboxUsesGenericPayloadFixedPortalUrlAndPersonOwnedReadMarkers(): void
     {
         $other = $this->account('student');
@@ -173,7 +209,8 @@ final class SurveyWorkflowTest extends SurveyTestCase
     {
         $future = $this->published(['starts_at' => '2099-01-01T12:00']);
         $closed = $this->published();
-        $this->surveys->close($closed);
+        $reviewed = $this->surveys->get($closed);
+        $this->surveys->close($closed, $reviewed['version']);
         $expired = $this->published();
         $this->db->table('surveys')->where('tenant_id', $this->tenant)->where('id', $expired)
             ->update(['ends_at' => '2000-01-01 00:00:00']);
@@ -311,8 +348,15 @@ final class SurveyWorkflowTest extends SurveyTestCase
         foreach (['target_year_levels', 'target_student_categories'] as $name) {
             $column = $this->db->protectIdentifiers($name);
             foreach (['VARCHAR(200) NULL DEFAULT NULL', 'TEXT NOT NULL', "TEXT NULL DEFAULT ('[]')"] as $definition) {
-                $this->db->query('ALTER TABLE ' . $table . ' MODIFY COLUMN ' . $column . ' ' . $definition);
+                // Other test classes may retain valid NULL audience targets in this disposable schema.
+                // Make only the NOT NULL probe representable, then restore those exact values.
+                $nullIds = $definition === 'TEXT NOT NULL'
+                    ? array_column($this->db->table('surveys')->select('id')->where($name, null)->get()->getResultArray(), 'id') : [];
                 try {
+                    if ($nullIds !== []) {
+                        $this->db->table('surveys')->whereIn('id', $nullIds)->update([$name => '[]']);
+                    }
+                    $this->db->query('ALTER TABLE ' . $table . ' MODIFY COLUMN ' . $column . ' ' . $definition);
                     $before = $this->db->query('SHOW CREATE TABLE ' . $table)->getRowArray();
                     try { $migration->up(); $this->fail('Incompatible student targeting column must fail.'); }
                     catch (RuntimeException $e) {
@@ -321,6 +365,10 @@ final class SurveyWorkflowTest extends SurveyTestCase
                     $this->assertSame($before, $this->db->query('SHOW CREATE TABLE ' . $table)->getRowArray());
                 } finally {
                     $this->db->query('ALTER TABLE ' . $table . ' MODIFY COLUMN ' . $column . ' TEXT NULL DEFAULT NULL');
+                    if ($nullIds !== []) {
+                        $this->db->table('surveys')->whereIn('id', $nullIds)->update([$name => null]);
+                        $this->assertSame(count($nullIds), $this->db->table('surveys')->whereIn('id', $nullIds)->where($name, null)->countAllResults());
+                    }
                 }
             }
         }
@@ -361,14 +409,20 @@ final class SurveyWorkflowTest extends SurveyTestCase
 
     public function testPublishIsImmutableAndNotifiesOnlyOnce(): void
     {
-        $id = $this->published();
+        $draft = $this->surveys->create($this->payload());
+        $id = (int) $draft['id'];
+        $this->surveys->publish($id, $draft['version']);
         $count = $this->db->table('notifications')->where('tenant_id', $this->tenant)->where('survey_id', $id)->countAllResults();
         $this->assertGreaterThan(0, $count);
-        $this->surveys->publish($id);
+        $this->rejected(fn () => $this->surveys->publish($id, $draft['version']), 409);
+        // Only a fresh review of the final version may be treated as an idempotent publish.
+        $published = $this->surveys->get($id);
+        $this->surveys->publish($id, $published['version']);
         $this->assertSame($count, $this->db->table('notifications')->where('tenant_id', $this->tenant)->where('survey_id', $id)->countAllResults());
         $this->rejected(fn () => $this->surveys->update($id, $this->payload()), 409);
-        $this->surveys->close($id);
-        $this->rejected(fn () => $this->surveys->publish($id), 409);
+        $this->surveys->close($id, $published['version']);
+        $closed = $this->surveys->get($id);
+        $this->rejected(fn () => $this->surveys->publish($id, $closed['version']), 409);
         $this->login($this->student);
         $this->assertSame([], $this->surveys->available(['status' => 'available'])['items']);
         $this->assertContains($id, array_map('intval', array_column($this->surveys->available(['status' => 'closed'])['items'], 'id')));
@@ -378,6 +432,7 @@ final class SurveyWorkflowTest extends SurveyTestCase
     public function testResponseIsEncryptedIdentifiedAndAuditedWithoutPlaintextProjection(): void
     {
         $id = $this->published();
+        $notifications = $this->db->table('notifications')->where('tenant_id', $this->tenant)->orderBy('id')->get()->getResultArray();
         $this->login($this->student);
         $responseId = $this->surveys->submit($id, $this->validAnswers());
         $stored = $this->db->table('survey_responses')->where('id', $responseId)->get()->getRowArray();
@@ -393,6 +448,8 @@ final class SurveyWorkflowTest extends SurveyTestCase
         $audit = $this->db->table('audit_events')->where('tenant_id', $this->tenant)->get()->getResultArray();
         $this->assertStringNotContainsString('PRIVATE SURVEY ANSWER', json_encode($audit));
         $this->assertContains('guidance.survey.response_read', array_column($audit, 'event_type'));
+        $this->assertSame($notifications, $this->db->table('notifications')->where('tenant_id', $this->tenant)
+            ->orderBy('id')->get()->getResultArray(), 'Submission, form GET and results read must not mutate the bell.');
     }
 
     public function testStrictAnswerValidationDoesNotWriteAnything(): void
@@ -447,16 +504,35 @@ final class SurveyWorkflowTest extends SurveyTestCase
         $workers = [];
         // Inline worker keeps this test self-contained inside the owned write set.
         $code = <<<'PHP'
-require getcwd() . '/vendor/codeigniter4/framework/system/Test/bootstrap.php';
+require getcwd() . '/tests/_support/fresh-framework-bootstrap.php';
 $job = json_decode((string) fgets(STDIN), true, 512, JSON_THROW_ON_ERROR);
 try {
-    \Tests\Support\InventoryTestDatabase::verify($job['database']);
+    $schema = getenv('FRESH_DATABASE_SCHEMA');
+    if (!is_string($schema) || !preg_match('/^humus_fresh_[0-9a-f]{16}$/D', $schema)
+        || $job['database']['database'] !== $schema || $job['database']['hostname'] !== '127.0.0.1'
+        || $job['database']['DBDriver'] !== 'MySQLi' || $job['database']['DSN'] !== ''
+        || $job['database']['DBPrefix'] !== '' || !empty($job['database']['failover'])
+        || !empty($job['database']['pConnect']) || (int) $job['database']['port'] !== (int) getenv('FRESH_DATABASE_PORT')) {
+        throw new RuntimeException('Refusing non-disposable worker database.');
+    }
+    $config = config('Database');
+    $config->defaultGroup = 'tests';
+    foreach (['default', 'tests'] as $group) {
+        $config->$group = $job['database'];
+        if (\Config\Database::connect($group)->query('SELECT DATABASE() AS name')->getRow('name') !== $schema) {
+            throw new RuntimeException('Worker database identity mismatch.');
+        }
+    }
     foreach (['SURVEY_KEY' => $job['key'], 'SURVEY_KEY_VERSION' => '1', 'FUMIS_ENABLED' => 'false'] as $name => $value) {
         putenv($name . '=' . $value);
         $_ENV[$name] = $_SERVER[$name] = $value;
     }
     \Config\Database::connect()->query('SET SESSION innodb_lock_wait_timeout=10');
-    session()->set(['user' => $job['actor'], 'tenant_id' => $job['actor']['tenant_id']]);
+    $identity = (new \App\Services\AuthenticatedUser())->forIdentity((int) $job['actor']['id'], (int) $job['actor']['tenant_id']);
+    if ($identity === null) { throw new RuntimeException('Worker identity not active.'); }
+    session()->set(['user' => $job['actor'], 'tenant_id' => $identity['tenant_id'], '_auth' => [
+        'started_at' => time(), 'last_seen_at' => time(), 'version' => $identity['auth_version'], 'session_id' => session_id(),
+    ]]);
     \App\Services\EngagementAccess::actor();
     echo "READY\n"; flush();
     if (trim((string) fgets(STDIN)) !== 'GO') { throw new RuntimeException('Missing start barrier.'); }
@@ -514,10 +590,10 @@ PHP;
         $survey = $this->surveys->create($this->payload());
         $id = (int) $survey['id'];
         $this->environment('SURVEY_KEY', 'invalid');
-        $this->rejected(fn () => $this->surveys->publish($id), 503);
+        $this->rejected(fn () => $this->surveys->publish($id, $survey['version']), 503);
         $this->assertSame('draft', $this->surveys->get($id)['status']);
         $this->environment('SURVEY_KEY', str_repeat('a1', 32));
-        $this->surveys->publish($id);
+        $this->surveys->publish($id, $survey['version']);
         $this->login($this->student);
         $this->environment('SURVEY_KEY', '');
         $this->rejected(fn () => $this->surveys->submit($id, $this->validAnswers()), 503);

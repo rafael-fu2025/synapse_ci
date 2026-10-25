@@ -10,7 +10,12 @@ $heading = $view === 'month' ? $anchor->format('F Y') : (new DateTimeImmutable($
 $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(array_replace(['date' => $date, 'view' => $view, 'mine' => $mine, 'status' => $status], $changes));
 ?>
 <div class="teams-workspace" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="teams-calendar-<?= esc($unit) ?>">
-  <nav class="d-flex flex-wrap gap-2 mb-3" aria-label="Teams views"><a class="btn btn-outline-secondary" href="<?= esc($teamsUrl) ?>">Team board</a><a class="btn btn-outline-secondary" href="<?= esc($teamsUrl . '?mine=1&view=list') ?>">My tasks</a><a class="btn btn-outline-secondary" href="<?= esc($teamsUrl . '/chat') ?>">Team chat</a><a class="btn btn-primary" href="<?= esc($baseUrl) ?>" aria-current="page">Team calendar</a></nav>
+  <nav class="d-flex flex-wrap align-items-center gap-2 mb-3" aria-label="Teams views">
+    <a class="btn btn-outline-secondary" href="<?= esc($teamsUrl) ?>"><i class="bi bi-kanban me-2" aria-hidden="true"></i>Team board</a>
+    <a class="btn btn-outline-secondary" href="<?= esc($teamsUrl . '?mine=1&view=list') ?>"><i class="bi bi-list-check me-2" aria-hidden="true"></i>My tasks</a>
+    <a class="btn btn-outline-secondary" href="<?= esc($teamsUrl . '/chat') ?>"><i class="bi bi-chat-dots me-2" aria-hidden="true"></i>Team chat</a>
+    <a class="btn btn-primary" href="<?= esc($baseUrl) ?>" aria-current="page"><i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Team calendar</a>
+  </nav>
   <div class="alert alert-light border small"><i class="bi bi-info-circle me-2" aria-hidden="true"></i>Internal events and task deadlines only. This calendar does not reserve patient appointments, block provider availability, or send invitations/reminders. All times are <strong>Asia/Manila</strong>. Do not enter patient details or confidential counseling notes.</div>
   <div data-filter-region="notice">
   <?php if ($truncated): ?><div class="alert alert-warning" role="status">This range contains <?= $totalEvents ?> events and <?= $totalTasks ?> task deadlines. Only the first <?= \App\Services\TeamCalendarService::LIST_LIMIT ?> of each are shown. Switch to Week or My schedule to narrow the range.</div><?php endif; ?>

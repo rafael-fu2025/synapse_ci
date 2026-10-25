@@ -3,6 +3,7 @@
   'use strict';
   if (window.SynapseAvailabilityWorkspace) return;
   let active = null;
+  const committed = new WeakSet();
   function feedback(form, message) {
     let box = form.querySelector('[data-availability-feedback]');
     if (!box) {
@@ -42,7 +43,9 @@
     const root = form.closest?.('[data-availability-workspace]');
     if (!root || !form.matches('form[data-availability-save]') || event.defaultPrevented || !window.fetch) return;
     event.preventDefault();
-    if (active) return;
+    if (active || committed.has(form)) return;
+    const mutations = window.SynapseMutations;
+
     feedback(form, '');
     const job = { form, root, controller: new AbortController(), disposed: false, timedOut: false };
     active = job;
@@ -60,18 +63,36 @@
       finish = window.SynapseLoading?.begin(form, { label: 'Saving availability…', button: event.submitter, disableButton: false }) || finish;
       controls.forEach(([button]) => { button.disabled = true; });
       const response = await fetch(action.href, { method: 'POST', body, credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: job.controller.signal,
-        headers: { 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers() } });
+        headers: { 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}) } });
       window.SynapseCsrf?.fromResponse(response);
       if (!response.headers.get('Content-Type')?.toLowerCase().includes('application/json')) throw new Error('Your session may have expired. Refresh and sign in again before retrying.');
       const payload = await response.json();
       window.SynapseCsrf?.sync(payload.csrf);
       if (!response.ok || payload.success !== true) throw new Error(typeof payload.message === 'string' ? payload.message.slice(0, 1500) : 'Unable to save this change. Review the form and try again.');
+      saved = true;
+      committed.add(form);
+      clearTimeout(timeout);
+      if (typeof payload.redirect !== 'string' || !payload.redirect) throw new Error('The change was saved, but the return address was missing. Do not resubmit; refresh this workspace.');
       const redirect = new URL(payload.redirect, location.href);
       if (redirect.origin !== base.origin || redirect.pathname !== base.pathname || redirect.hash) throw new Error('The change was saved, but the return address was invalid. Refresh this workspace before making another change.');
-      saved = true;
-      // A fresh page reload updates enrollment choices, schedules and optimistic exception tokens together.
-      // The controller retains the selected provider/day/search/section in the fixed workspace URL.
-      location.assign(redirect.href);
+      finish();
+      finish = () => {};
+      controls.forEach(([button, disabled]) => { button.disabled = form.contains(button) ? true : disabled; });
+      form.removeAttribute('aria-busy');
+      if (active === job) active = null;
+      const modal = form.closest('.modal');
+      if (modal && (modal.classList.contains('show') || modal.getAttribute('aria-modal') === 'true')) {
+        const hidden = new Promise(resolve => modal.addEventListener('hidden.bs.modal', resolve, { once: true }));
+        const instance = bootstrap.Modal.getInstance(modal);
+        const hide = () => instance.hide();
+        // If still opening, Bootstrap will ignore the first hide.
+        modal.addEventListener('shown.bs.modal', hide, { once: true });
+        hide();
+        await hidden;
+        modal.removeEventListener('shown.bs.modal', hide);
+      }
+      if (mutations) await mutations.refresh(redirect.href, payload.message, { form });
+      else location.assign(redirect.href);
     } catch (error) {
       if (!job.disposed) feedback(form, job.timedOut ? 'The request timed out; its outcome is unknown. Refresh and review the schedule before retrying.'
         : error.name === 'AbortError' ? 'The request was interrupted. Refresh and review the schedule before retrying.'
@@ -79,8 +100,8 @@
     } finally {
       clearTimeout(timeout);
       finish();
-      controls.forEach(([button, disabled]) => { button.disabled = disabled; });
-      if (active === job && (!saved || job.disposed)) active = null;
+      controls.forEach(([button, disabled]) => { button.disabled = saved && form.contains(button) ? true : disabled; });
+      if (active === job) active = null;
     }
   });
   document.addEventListener('hide.bs.modal', event => {

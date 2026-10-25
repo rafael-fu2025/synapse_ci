@@ -3,6 +3,8 @@
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 $fixture = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
 require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootstrap.php';
+// Keep presentation fixtures isolated from local realtime configuration.
+config(\Config\Realtime::class)->enabled = false;
 $app = config('App');
 $app->baseURL = $fixture['origin'] . ($fixture['basePath'] ?? '') . '/';
 $app->indexPage = $fixture['indexPage'] ?? '';

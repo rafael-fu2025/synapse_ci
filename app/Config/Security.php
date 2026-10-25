@@ -71,7 +71,9 @@ class Security extends BaseConfig
      *
      * Regenerate CSRF Token on every submission.
      */
-    public bool $regenerate = true;
+    // Cookie CSRF is shared across tabs and concurrent form submissions. Rotating
+    // on every POST invalidates other rendered forms before the browser can sync them.
+    public bool $regenerate = false;
 
     /**
      * --------------------------------------------------------------------------

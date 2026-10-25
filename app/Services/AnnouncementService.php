@@ -106,7 +106,7 @@ final class AnnouncementService
 
     private function transition(int $id, string $unit, mixed $version, string $status): array
     {
-        return $this->transaction(function () use ($id, $unit, $version, $status): array {
+        return $this->transaction(function (array &$notifications) use ($id, $unit, $version, $status): array {
             $actor = $this->manager($unit);
             $row = $this->record($id, $actor, $unit, true);
             $this->version($row, $version);
@@ -125,7 +125,7 @@ final class AnnouncementService
             $this->must($this->db->table('announcements')->where('tenant_id', $actor['tenant_id'])->where('id', $id)->update($changes));
             $row = $this->record($id, $actor, $unit);
             if ($status === 'published') {
-                EngagementNotifications::publish('announcement', $id, $actor);
+                $notifications[(int) $actor['tenant_id']] = EngagementNotifications::publish('announcement', $id, $actor);
             }
             $this->audit($status, $row, $actor);
             return $row;
@@ -288,7 +288,7 @@ final class AnnouncementService
         if (!$success) { throw new RuntimeException('Announcement could not be saved.', 503); }
     }
 
-    private function transaction(callable $operation): array
+    private function transaction(callable $operation, ?NotificationInvalidation $invalidation = null): array
     {
         // Refuse caller-owned transactions: never commit (or roll back) another workflow.
         if ($this->db->transDepth !== 0) { throw new RuntimeException('Announcement operations require an independent transaction.', 409); }
@@ -297,16 +297,26 @@ final class AnnouncementService
         if (!$this->db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED') || !$this->db->transBegin()) {
             throw new RuntimeException('Announcement transaction could not begin.', 503);
         }
+        $notifications = [];
         try {
             // Lock before business inserts/FK checks, not by upgrading their shared tenant locks.
             (new AuditService(null, $this->db))->lockTenant((int) $actor['tenant_id']);
-            $result = $operation();
+            $result = $operation($notifications);
             if (!$this->db->transStatus() || !$this->db->transCommit()) { throw new RuntimeException('Announcement transaction failed.', 503); }
-            return $result;
         } catch (Throwable $e) {
             try { $this->db->transRollback(); }
             finally { $this->db->resetTransStatus(); }
             throw $e;
         }
+        // IDs are local to this successful outer commit, never retained for a later operation.
+        try {
+            if ($notifications !== []) {
+                $invalidation ??= new NotificationInvalidation($this->db);
+                foreach ($notifications as $tenant => $ids) $invalidation->publishCommitted((int) $tenant, $ids);
+            }
+        } catch (Throwable) {
+            // Optional realtime setup cannot fail or roll back a committed write.
+        }
+        return $result;
     }
 }

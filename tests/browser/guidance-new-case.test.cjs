@@ -138,7 +138,9 @@ async function freshRegistry(t, deployment) {
         message.text().includes('Alpine Expression Error')) errors.push(message.text());
   });
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'No Alpine/runtime errors'); });
-  await page.goto(origin + deployment.prefix + '/guidance/cases');
+  const response = await page.goto(origin + deployment.prefix + '/guidance/cases');
+  assert.equal(response.status(), 200, `Registry fixture failed to render: ${await response.text()}`);
+  assert.match(await response.text(), /<!doctype html>/i, 'Registry fixture must render the full app shell');
   await page.waitForFunction(() => window.Alpine && window.bootstrap && document.readyState === 'complete');
   assert.equal(await page.evaluate(() => typeof window.newCaseForm), 'function',
     'care-forms.js must register newCaseForm on a cold registry load');

@@ -421,7 +421,7 @@ fieldset:disabled .btn {
 }
 
 /* Brand fills take precedence over descendant text-color utilities. */
-html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-link.active, .bg-primary)[class] :is(i, svg, span, small, strong, .text-primary, .text-muted, .text-dark) {
+html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-link.active, .bg-primary)[class] :is(i, svg, span, small, strong, .text-primary, .text-muted, .text-dark):not(.badge):not(.badge *) {
   color: #ffffff !important;
 }
 
@@ -618,6 +618,17 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
   filter: invert(1) grayscale(100%) brightness(200%);
 }
 
+/* Bootstrap alert fills remain pale, including the post-login welcome alert. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert .btn-close {
+  filter: none;
+  opacity: 0.75;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert .btn-close:hover,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert .btn-close:focus-visible {
+  opacity: 1;
+}
+
 /* -------------------------------------------------------------
  * 9. List Groups & Action Links
  * ------------------------------------------------------------- */
@@ -697,7 +708,7 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
   min-width: 0;
 }
 
-.user-brief .user-email {
+.user-brief .user-name {
   font-size: 0.74rem;
   font-weight: 700;
   color: var(--default-color, #1f2937);
@@ -716,7 +727,7 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
   color: var(--fu-maroon);
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-brief .user-email {
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-brief .user-name {
   color: #f0f0f0 !important;
 }
 

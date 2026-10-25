@@ -31,7 +31,9 @@ final class EmployeeAccessController extends BaseController
         return $this->respond(function () use ($id) {
             (new EmployeeAccessService())->assign($id, $this->request->getPost());
             $message = 'Employee access updated. Existing sessions have been revoked; the employee must sign in again.';
-            session()->setFlashdata('success', $message);
+            if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+                session()->setFlashdata('success', $message);
+            }
             if ($this->json()) return $this->response->setJSON(['success' => true, 'message' => $message,
                 'redirect' => site_url('admin/access'), 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
             return redirect()->to(site_url('admin/access'))->setHeader('Cache-Control', 'private, no-store');

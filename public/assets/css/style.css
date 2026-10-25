@@ -17,4 +17,7 @@
 @import url("core/synapse-widgets.css");
 @import url("navigation.css");
 @import url("loading.css");
+@import url("toast.css");
 @import url("teams.css");
+@import url("responsive-tables.css");
+@import url("global-search.css");

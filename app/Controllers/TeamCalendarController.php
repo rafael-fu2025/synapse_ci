@@ -141,7 +141,9 @@ final class TeamCalendarController extends BaseController
     private function success(string $message, string $unit, array $event)
     {
         $redirect = site_url($unit . '/teams/calendar') . '?' . http_build_query(['date' => $this->local($event['starts_at'])->format('Y-m-d')]);
-        session()->setFlashdata('success', $message);
+        if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+            session()->setFlashdata('success', $message);
+        }
         if ($this->json()) {
             return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => $redirect,
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);

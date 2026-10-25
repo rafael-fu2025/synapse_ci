@@ -175,6 +175,20 @@ td.dp-cell.is-today.is-selected .dp-day {
   border-color: #fff;
 }
 
+/* Range interiors remain readable; solid endpoints mark the exact boundaries. */
+.dp-range td.dp-cell.is-in-range:not(.is-selected) .dp-day {
+  width: 100%;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--fu-maroon, #800000) 14%, var(--surface-color, #fff));
+  color: var(--default-color);
+  opacity: 1;
+}
+
+.dp-range td.dp-cell.is-range-start .dp-day,
+.dp-range td.dp-cell.is-range-end .dp-day {
+  border-radius: 50%;
+}
+
 td.dp-cell.is-disabled {
   cursor: not-allowed;
 }

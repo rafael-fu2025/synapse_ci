@@ -26,6 +26,7 @@ final class AuthController extends BaseController
      */
     public function login()
     {
+        service('response')->setHeader('Cache-Control', 'private, no-store');
         $user = (new AuthenticatedUser())->current();
         if ($user !== null) {
             $role = (string) ($user['role'] ?? 'student');
@@ -33,15 +34,36 @@ final class AuthController extends BaseController
             return redirect()->to(PortalContext::loginLanding($role))->setHeader('Cache-Control', 'private, no-store');
         }
 
+        // A followed fetch redirect must not render HTML or acknowledge the notice.
+        // denied() reads the recorded reason, never calls current() recursively.
+        $request = service('request');
+        if (AuthenticatedUser::isBackgroundRequest($request) || strtoupper($request->getMethod()) !== 'GET') {
+            return AuthenticatedUser::denied($request, false, AuthenticatedUser::AUTHENTICATION_MESSAGE, site_url('auth/login'));
+        }
+
+        $notice = AuthenticatedUser::noticeReason();
+        // Do not repeat an already rendered auth warning on a later document visit.
+        if (in_array(session()->getFlashdata('warning'), [AuthenticatedUser::EXPIRED_MESSAGE,
+            AuthenticatedUser::REAUTHENTICATION_MESSAGE, AuthenticatedUser::AUTHENTICATION_MESSAGE], true)) {
+            session()->remove('warning');
+        }
+        if ($notice !== null) {
+            session()->remove('error');
+            session()->setFlashdata('warning', AuthenticatedUser::noticeMessage($notice));
+        }
+
         $portal = PortalContext::current();
         $portalMeta = PortalContext::metadata($portal);
 
-        return view('auth/login', [
+        $html = view('auth/login', [
             'title'      => 'Sign In - ' . $portalMeta['title'],
             'portal'     => $portal,
             'portalMeta' => $portalMeta,
             'slides'     => $this->carouselService->getSlidesForLogin(),
         ]);
+        // Acknowledge only after the complete login document rendered successfully.
+        session()->remove(['_auth_notice', '_auth_expired']);
+        return $html;
     }
 
     /**
@@ -78,6 +100,12 @@ final class AuthController extends BaseController
         return redirect()->to(PortalContext::loginLanding($role))
             ->setHeader('Cache-Control', 'private, no-store')
             ->with('success', 'Welcome back, ' . $sessionData['name'] . '!');
+    }
+
+    public function confirmLogout()
+    {
+        service('response')->setHeader('Cache-Control', 'private, no-store');
+        return view('auth/logout', ['title' => 'Confirm Sign Out']);
     }
 
     /**

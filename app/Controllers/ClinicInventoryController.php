@@ -398,7 +398,7 @@ final class ClinicInventoryController extends BaseController
     private function respond(bool $success, string $message, string $redirect, array $data = [], int $status = 422)
     {
         if ($this->request->isAJAX()) {
-            if ($success) {
+            if ($success && $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
             return $this->response->setStatusCode($success ? 200 : $status)->setHeader('Cache-Control', 'no-store')->setJSON([

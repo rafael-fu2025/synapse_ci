@@ -11,10 +11,17 @@ use App\Models\PersonModel;
 use App\Models\ProviderAvailabilityModel;
 use App\Models\UserModel;
 use App\Services\CurrentTenant;
+use App\Services\NotificationInvalidation;
 use App\Services\PortalContext;
+use App\Services\WorkflowNotifications;
 
 final class AppointmentService
 {
+    /** @var array<int, true> People whose appointment list changed inside the open transaction. */
+    private array $changedPeople = [];
+    /** A workflow outbox event was recorded in the open transaction and should be delivered right after commit. */
+    private bool $workflowRecorded = false;
+    private ?PersonalQueueInvalidation $personalInvalidation = null;
     private AppointmentModel $appointmentModel;
     private ProviderAvailabilityModel $availabilityModel;
     private AvailabilityExceptionModel $exceptionModel;
@@ -136,17 +143,29 @@ final class AppointmentService
         }
         $start = new \DateTimeImmutable($date . ' ' . $time . ':00', SchedulingClock::timezone());
         $this->assertNotPast($start->format('Y-m-d H:i:s'));
-        $id = $this->appointmentModel->insert([
-            'tenant_id' => CurrentTenant::id(), 'unit' => $unit, 'person_id' => $personId,
-            'staff_assignment_id' => null, 'provider_user_id' => null, 'starts_at' => $start->format('Y-m-d H:i:s'),
-            'ends_at' => $start->modify('+30 minutes')->format('Y-m-d H:i:s'), 'local_date' => $date,
-            'status' => 'requested', 'type' => $type, 'reason' => $reason !== '' ? $reason : null,
-            'booked_by_user_id' => (int) $user['id'], 'version' => 1,
-        ]);
-        if ($id === false) {
-            throw new \RuntimeException('Unable to save appointment request.');
-        }
-        return $this->appointment($unit, (int) $id);
+        return $this->transaction(function () use ($unit, $actor, $personal, $personId, $start, $date, $type, $reason): array {
+            $user = $personal ? $this->assertPersonalPermission($actor, 'portal.appointments.create') : $this->actor($actor);
+            if (!$personal) {
+                $this->assertStaff($unit, $user);
+            } elseif ((int) ($user['person_id'] ?? 0) !== $personId) {
+                throw new \DomainException('Your account must have a valid linked person.', 403);
+            }
+            $this->person($personId);
+            $id = $this->appointmentModel->insert([
+                'tenant_id' => CurrentTenant::id(), 'unit' => $unit, 'person_id' => $personId,
+                'staff_assignment_id' => null, 'provider_user_id' => null, 'starts_at' => $start->format('Y-m-d H:i:s'),
+                'ends_at' => $start->modify('+30 minutes')->format('Y-m-d H:i:s'), 'local_date' => $date,
+                'status' => 'requested', 'type' => $type, 'reason' => $reason !== '' ? $reason : null,
+                'booked_by_user_id' => (int) $user['id'], 'version' => 1,
+            ]);
+            if ($id === false) {
+                throw new \RuntimeException('Unable to save appointment request.');
+            }
+            WorkflowNotifications::record(\Config\Database::connect(), 'appointment_requested_staff', $unit, (int) $id, '1', (int) $user['id']);
+            $this->workflowRecorded = true;
+            $this->changedPeople[$personId] = true;
+            return $this->appointment($unit, (int) $id);
+        });
     }
 
     /** Scheduling identity is independent of login accounts and authorization roles. */
@@ -420,7 +439,7 @@ final class AppointmentService
         if ($version === false) {
             throw new \InvalidArgumentException('An appointment version is required.');
         }
-        return $this->allocate($unit, $providerId, function (array $provider) use ($unit, $id, $start, $end, $version, $user): array {
+        return $this->allocate($unit, $providerId, function (array $provider, array &$notifications) use ($unit, $id, $start, $end, $version, $user): array {
             $appt = $this->lockedAppointment($unit, $id);
             if ($appt['status'] !== 'requested' || (int) $appt['version'] !== $version) {
                 throw new \RuntimeException('Appointment changed. Reload before confirming.', 409);
@@ -436,8 +455,9 @@ final class AppointmentService
                 'confirmed_by_user_id' => (int) $user['id'], 'confirmed_at' => $now,
                 'assigned_by_user_id' => (int) $user['id'], 'assigned_at' => $now, 'version' => $version + 1,
             ]);
+            $this->changedPeople[(int) $appt['person_id']] = true;
             $confirmed = $this->appointment($unit, $id);
-            (new \App\Services\NotificationService())->notifyConfirmation($confirmed);
+            $notifications[(int) $confirmed['tenant_id']] = (new \App\Services\NotificationService())->notifyConfirmation($confirmed);
             return $confirmed;
         });
     }
@@ -466,6 +486,7 @@ final class AppointmentService
             if ($id === false) {
                 throw new \RuntimeException('Unable to book appointment.');
             }
+            $this->changedPeople[(int) $data['person_id']] = true;
             return $this->appointment($unit, (int) $id);
         });
     }
@@ -492,6 +513,9 @@ final class AppointmentService
             $appt = $this->lockedAppointment($unit, $appointmentId);
             if ($personal) {
                 $user = $this->assertPersonalPermission($actor ?? [], 'portal.appointments.create');
+            } elseif ($actor !== null) {
+                $user = $this->actor($actor);
+                $this->assertStaff($unit, $user);
             }
             if ($personal && ($user === null || empty($user['person_id']) || (int) $appt['person_id'] !== (int) $user['person_id'])) {
                 throw new \DomainException('You may only cancel your own appointments.', 403);
@@ -500,17 +524,25 @@ final class AppointmentService
                 throw new \RuntimeException('This appointment can no longer be cancelled.', 409);
             }
             $this->person((int) $appt['person_id']);
-            $this->save($unit, $appointmentId, ['status' => 'cancelled', 'cancellation_reason' => trim($reason), 'version' => (int) $appt['version'] + 1]);
+            $version = (int) $appt['version'] + 1;
+            $this->save($unit, $appointmentId, ['status' => 'cancelled', 'cancellation_reason' => trim($reason), 'version' => $version]);
+            $this->changedPeople[(int) $appt['person_id']] = true;
+            WorkflowNotifications::record(\Config\Database::connect(),
+                $personal ? 'appointment_cancelled_staff' : 'appointment_cancelled_patient',
+                $unit, $appointmentId, (string) $version, $user !== null ? (int) $user['id'] : null);
+            $this->workflowRecorded = true;
             return true;
         });
     }
 
     /** Refresh grants from storage, never trust permissions carried in a submitted/session actor. */
-    public function assertSchedulingPermission(string $unit, array $actor, bool $queue = false): void
+    public function assertSchedulingPermission(string $unit, array $actor, bool $queue = false, bool $write = true): void
     {
         $this->assertStaff($unit, $actor);
         $user = (new \App\Services\AuthenticatedUser())->forIdentity((int) ($actor['id'] ?? 0), CurrentTenant::id());
-        $permission = $queue ? $unit . '.queue.manage' : ($unit === 'clinic' ? 'clinic.appointments.write' : 'guidance.schedule.manage');
+        $permission = $queue ? $unit . '.queue.manage' : ($unit === 'clinic'
+                    ? 'clinic.appointments.' . ($write ? 'write' : 'read')
+                    : 'guidance.schedule.' . ($write ? 'manage' : 'read'));
         if ($user === null || ($user['role'] !== 'superadmin' && !in_array($permission, $user['permissions'], true))) {
             throw new \DomainException('Permission required: ' . $permission, 403);
         }
@@ -720,8 +752,8 @@ final class AppointmentService
 
     private function allocate(string $unit, int $assignmentId, callable $operation): array
     {
-        return $this->transaction(function () use ($unit, $assignmentId, $operation): array {
-            return $operation($this->lockedAssignments($unit, [$assignmentId])[0]);
+        return $this->transaction(function (array &$notifications) use ($unit, $assignmentId, $operation): array {
+            return $operation($this->lockedAssignments($unit, [$assignmentId])[0], $notifications);
         });
     }
 
@@ -761,7 +793,39 @@ final class AppointmentService
         return $rows;
     }
 
-    private function transaction(callable $operation): mixed
+    /**
+     * Deliver the outbox right after commit so the bell does not wait for the once-a-minute scheduled task.
+     * Best effort and idempotent (row locks + processed_at); the scheduler remains the retry/reminder safety net.
+     */
+    private function dispatchRecordedWorkflowEvents(): void
+    {
+        if (!$this->workflowRecorded) {
+            return;
+        }
+        $this->workflowRecorded = false;
+        try {
+            (new WorkflowNotifications())->dispatch(20);
+        } catch (\Throwable) {
+            // The scheduled dispatcher will pick the event up; the committed write must still succeed.
+        }
+    }
+
+    /** Payload-free hint so each person's open portal refreshes its own appointment list; best effort, after commit. */
+    private function publishChangedPeople(int $tenant): void
+    {
+        $people = array_keys($this->changedPeople);
+        $this->changedPeople = [];
+        try {
+            foreach ($people as $person) {
+                $this->personalInvalidation ??= new PersonalQueueInvalidation();
+                $this->personalInvalidation->publish($tenant, (int) $person, PersonalQueueInvalidation::APPOINTMENTS_EVENT);
+            }
+        } catch (\Throwable) {
+            // Periodic reconciliation covers a missed hint; the committed write must still succeed.
+        }
+    }
+
+    private function transaction(callable $operation, ?NotificationInvalidation $invalidation = null): mixed
     {
         $db = \Config\Database::connect();
         if ($db->transDepth !== 0) {
@@ -769,19 +833,35 @@ final class AppointmentService
         }
         // Fresh overlap reads after waiting for the provider mutex, including under MySQL's default RR.
         $db->resetTransStatus();
+        $this->changedPeople = [];
+        $this->workflowRecorded = false;
         if ($db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED') === false || !$db->transBegin()) {
             throw new \RuntimeException('Unable to begin appointment changes.');
         }
+        $notifications = [];
         try {
-            $result = $operation();
+            $result = $operation($notifications);
             if (!$db->transStatus() || !$db->transCommit()) {
                 throw new \RuntimeException('Unable to save appointment changes.');
             }
-            return $result;
         } catch (\Throwable $e) {
+            $this->changedPeople = [];
+            $this->workflowRecorded = false;
             $db->transRollback();
             $db->resetTransStatus();
             throw $e;
         }
+        $this->publishChangedPeople(CurrentTenant::id());
+        $this->dispatchRecordedWorkflowEvents();
+        // IDs are local to this successful outer commit, never retained for a later operation.
+        try {
+            if ($notifications !== []) {
+                $invalidation ??= new NotificationInvalidation($db);
+                foreach ($notifications as $tenant => $ids) $invalidation->publishCommitted((int) $tenant, $ids);
+            }
+        } catch (\Throwable) {
+            // Optional realtime setup cannot fail or roll back a committed write.
+        }
+        return $result;
     }
 }

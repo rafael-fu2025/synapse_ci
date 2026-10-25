@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit bootstrap="vendor/codeigniter4/framework/system/Test/bootstrap.php"
          colors="true" failOnRisky="true" failOnWarning="true" failOnSkipped="true" cacheResult="false">
-    <!-- Explicit DB-free baseline. This is not the entire historical App suite. -->
+    <!-- No external database: explicit baseline plus private SQLite fixtures, never application migrations.
+             This is not the entire historical App suite. -->
     <testsuites>
         <testsuite name="Security and correctness baseline">
             <file>tests/unit/EncryptionServiceTest.php</file>
@@ -20,6 +21,21 @@
             <file>tests/unit/LoginSecurityTest.php</file>
             <file>tests/unit/WebSecurityHeadersTest.php</file>
             <file>tests/unit/LoginPipelineTest.php</file>
+        </testsuite>
+        <testsuite name="Authorization remediation regressions">
+            <file>tests/feature/BackendRoleAuthorizationTest.php</file>
+            <file>tests/feature/DeploymentAuthorizationTest.php</file>
+            <file>tests/unit/SlotsAuthorizationTest.php</file>
+            <file>tests/unit/GuidanceReadAuthorizationTest.php</file>
+            <file>tests/unit/SurveyTransitionVersionTest.php</file>
+            <file>tests/unit/ReferralEncounterAuthorizationTest.php</file>
+        </testsuite>
+        <testsuite name="Background mutation contracts">
+            <file>tests/unit/ContentAdminBackgroundResponseTest.php</file>
+            <file>tests/unit/AppointmentReferralBackgroundResponseTest.php</file>
+            <file>tests/unit/ClinicalBackgroundTest.php</file>
+            <file>tests/unit/CarouselReorderTest.php</file>
+            <file>tests/unit/QueueBackgroundTest.php</file>
         </testsuite>
     </testsuites>
     <php>

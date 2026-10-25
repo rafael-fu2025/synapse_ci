@@ -149,6 +149,55 @@ final class MisSyncAuditTest extends CIUnitTestCase
         }
     }
 
+    public function testProgressFollowsActualStagesAndCompletesOnlyAfterCommit(): void
+    {
+        $trace = [];
+        $observations = [];
+        $client = $this->createMock(MisClientInterface::class);
+        foreach (['fetchDepartments' => 'departments', 'fetchPrograms' => 'programs', 'fetchYearLevels' => 'year_levels'] as $method => $catalog) {
+            $client->expects($this->once())->method($method)->willReturnCallback(function () use (&$trace, $catalog) {
+                $trace[] = $catalog;
+                return $this->catalogs()[$catalog];
+            });
+        }
+        (new MisSyncService($client, $this->db))->sync(function (array $stage) use (&$trace, &$observations) {
+            $trace[] = $stage['percent'];
+            $observations[] = ['stage' => $stage, 'depth' => $this->db->transDepth,
+                'rows' => $this->references()];
+        });
+        $this->assertSame([5, 'departments', 25, 'programs', 45, 'year_levels', 65, 85, 100], $trace);
+        $this->assertSame([
+            ['percent' => 5, 'message' => 'Fetching all departments.'],
+            ['percent' => 25, 'message' => 'Departments validated. Fetching programs.'],
+            ['percent' => 45, 'message' => 'Fetching year levels.'],
+            ['percent' => 65, 'message' => 'Validating catalog relationships.'],
+            ['percent' => 85, 'message' => 'Saving reference catalogs and auditing synchronization.'],
+            ['percent' => 100, 'message' => 'MIS reference catalogs synchronized.'],
+        ], array_column($observations, 'stage'));
+        $this->assertSame([0, 0, 0, 0, 0, 0], array_column($observations, 'depth'));
+        foreach (array_slice($observations, 0, 5) as $observation) {
+            foreach ($observation['rows'] as $rows) { $this->assertSame([], $rows); }
+        }
+        foreach ($observations[5]['rows'] as $rows) { $this->assertCount(1, $rows); }
+        $this->assertTrue((new AuditService(null, $this->db))->verifyChain(1)['valid']);
+    }
+
+    public function testObserverExceptionsNeverInterruptOrRollBackSynchronization(): void
+    {
+        $percentages = [];
+        $depths = [];
+        $result = (new MisSyncService($this->client(), $this->db))->sync(function (array $stage) use (&$percentages, &$depths) {
+            $percentages[] = $stage['percent'];
+            $depths[] = $this->db->transDepth;
+            throw new RuntimeException('Observer unavailable must-not-be-stored');
+        });
+        $this->assertSame([5, 25, 45, 65, 85, 100], $percentages);
+        $this->assertSame([0, 0, 0, 0, 0, 0], $depths);
+        $this->assertSame(1, $result['counts']['departments']['inserted']);
+        $this->assertCount(1, $this->references()['audit_events']);
+        $this->assertTrue((new AuditService(null, $this->db))->verifyChain(1)['valid']);
+    }
+
     public function testAllAllowedRolesStillRequireFreshExplicitPermission(): void
     {
         foreach (['superadmin', 'clinic_admin', 'guidance_admin'] as $role) {
@@ -222,7 +271,10 @@ final class MisSyncAuditTest extends CIUnitTestCase
         $client->method('fetchDepartments')->willReturn($this->catalogs()['departments']);
         $client->method('fetchPrograms')->willThrowException(new RuntimeException('API-Key: must-not-be-stored raw payload'));
         $before = $this->references();
-        $this->rejected(fn () => (new MisSyncService($client, $this->db))->sync(), 503);
+        $stages = [];
+        $progress = function (array $stage) use (&$stages) { $stages[] = [$stage['percent'], $this->db->transDepth]; };
+        $this->rejected(fn () => (new MisSyncService($client, $this->db))->sync($progress), 503);
+        $this->assertSame([[5, 0], [25, 0]], $stages);
         $this->assertSame($before, $this->references());
     }
 
@@ -245,7 +297,10 @@ final class MisSyncAuditTest extends CIUnitTestCase
         $this->db->table('mis_departments')->insert(['tenant_id' => 1, 'code' => 'CCS', 'name' => 'Original', 'synced_at' => '2000-01-01 00:00:00']);
         $this->db->query("CREATE TRIGGER reject_sync_audit BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT, 'must-not-be-stored'); END");
         $before = $this->references();
-        $this->rejected(fn () => (new MisSyncService($this->client(), $this->db))->sync(), 503);
+        $stages = [];
+        $progress = function (array $stage) use (&$stages) { $stages[] = [$stage['percent'], $this->db->transDepth]; };
+        $this->rejected(fn () => (new MisSyncService($this->client(), $this->db))->sync($progress), 503);
+        $this->assertSame([[5, 0], [25, 0], [45, 0], [65, 0], [85, 0]], $stages);
         $this->assertSame($before, $this->references());
         $this->assertSame(0, $this->db->transDepth);
     }
@@ -312,6 +367,76 @@ final class MisSyncAuditTest extends CIUnitTestCase
         $this->assertSame(1, $body['result']['counts']['programs']['inserted']);
         $this->assertArrayHasKey('csrf', $body);
         $this->assertSame(1, count($this->references()['audit_events']));
+    }
+
+    public function testIndexJsonIsReadOnlyLocalTenantScopedAndContainsNoActor(): void
+    {
+        (new MisSyncService($this->client(), $this->db))->sync();
+        $this->db->table('mis_departments')->insert(['tenant_id' => 2, 'code' => 'OTHER',
+            'name' => 'Other tenant', 'synced_at' => '2000-01-01 00:00:00']);
+        $client = $this->createMock(MisClientInterface::class);
+        foreach (['fetchDepartments', 'fetchPrograms', 'fetchYearLevels'] as $method) {
+            $client->expects($this->never())->method($method);
+        }
+        \Config\Services::injectMock('misClient', $client);
+        $before = $this->references();
+        $controller = $this->controller('GET');
+        service('request')->setHeader('Accept', 'application/json');
+        $response = $controller->index();
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
+        $body = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        $status = (new MisSyncService(null, $this->db))->status();
+        $this->assertSame(['catalogs' => $status['catalogs'],
+            'lastSync' => ['occurred_at' => $status['lastSync']['occurred_at']]], $body);
+        $this->assertSame(1, $body['catalogs']['departments']['total']);
+        $this->assertSame($before, $this->references());
+    }
+
+    public function testInvalidProgressIdsAreRejectedWithSafeCsrfJsonBeforeAnyMisOrWrites(): void
+    {
+        $client = $this->createMock(MisClientInterface::class);
+        foreach (['fetchDepartments', 'fetchPrograms', 'fetchYearLevels'] as $method) {
+            $client->expects($this->never())->method($method);
+        }
+        \Config\Services::injectMock('misClient', $client);
+        $before = $this->references();
+        foreach (['short', str_repeat('x', 65), str_repeat('x', 16) . "\n", 'must-not-be-stored!', ['nested'], 123] as $id) {
+            $controller = $this->controller('POST');
+            service('request')->setGlobal('post', [csrf_token() => csrf_hash(), 'progress_id' => $id]);
+            $response = $controller->sync();
+            $this->assertSame(400, $response->getStatusCode(), json_encode($id) . ': ' . $response->getBody());
+            $this->assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
+            $body = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $this->assertSame(['success' => false, 'message' => 'Invalid synchronization progress ID.',
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]], $body);
+            $this->assertSame($before, $this->references());
+        }
+    }
+
+    public function testValidProgressIdsWorkWithDisabledRealtimeWithoutMutatingSharedConfig(): void
+    {
+        $config = config(\Config\Realtime::class);
+        $enabled = $config->enabled;
+        $timeout = $config->publishTimeout;
+        $config->enabled = false;
+        try {
+            foreach ([str_repeat('a', 16), str_repeat('Z_-9', 16)] as $id) {
+                \Config\Services::injectMock('misClient', $this->client());
+                $controller = $this->controller('POST');
+                service('request')->setHeader('Accept', 'application/json');
+                service('request')->setGlobal('post', [csrf_token() => csrf_hash(), 'progress_id' => $id]);
+                $response = $controller->sync();
+                $this->assertSame(200, $response->getStatusCode(), $response->getBody());
+                $body = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+                $this->assertSame(['success', 'message', 'result', 'csrf'], array_keys($body));
+                $this->assertTrue($body['success']);
+                $this->assertSame($timeout, $config->publishTimeout);
+            }
+            $this->assertCount(2, $this->references()['audit_events']);
+        } finally {
+            $config->enabled = $enabled;
+        }
     }
 
     public function testViewLabelsReferenceOnlyAndEscapesStatusAndIncludesPostCsrfForm(): void

@@ -5,10 +5,13 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex gap-2">
+<div class="d-flex flex-wrap gap-2">
   <a href="<?= site_url('/facilities') ?>" class="btn btn-primary btn-sm">
-    <i class="bi bi-arrow-repeat me-1"></i> Drum Rotation
+    <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i> Drum Rotation
   </a>
+  <?php if (!empty($canConfigure)): ?>
+  <a href="<?= esc(site_url('/facilities') . '?create=1', 'attr') ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add drum</a>
+  <?php endif; ?>
 </div>
 <?= $this->endSection() ?>
 

@@ -42,6 +42,8 @@
   z-index: 1090;
   width: 486px;
   max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   padding: 14px;
   background: var(--surface-color, #fff);
   border: 1px solid var(--border-color);
@@ -380,6 +382,32 @@ td.dtp-cell.is-disabled .dtp-day {
 
 .dtp-foot-btn.dtp-btn-apply:hover {
   background: color-mix(in srgb, var(--dtp-primary), black 15%);
+}
+
+/* Stack the combined panes before their minimum widths exceed the popup. */
+@media (max-width: 501px) {
+  .dtp-popup:not(.dtp-time-only) .dtp-body {
+    flex-direction: column;
+  }
+
+  .dtp-popup:not(.dtp-time-only) .dtp-date-pane {
+    flex: none;
+    min-width: 0;
+  }
+
+  .dtp-popup:not(.dtp-time-only) .dtp-time-pane {
+    width: 100%;
+  }
+
+  .dtp-popup:not(.dtp-time-only) .dtp-divider {
+    width: 100%;
+    height: 1px;
+  }
+
+  .dtp-popup:not(.dtp-time-only) .dtp-foot {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
 }
 
 /* Screen-reader-only help line */

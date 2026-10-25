@@ -10,6 +10,9 @@ $canDashboardLink = static fn (string $permission, string $portal = 'main'): boo
 $canExportReports = in_array($dashboardRole, ['superadmin', 'audit_reader', 'report_viewer', 'clinic_admin', 'guidance_admin', 'bmg_admin'], true)
     && $canDashboardLink('reports.read') && $canDashboardLink('reports.export');
 $canSyncMis = in_array($dashboardRole, ['superadmin', 'clinic_admin', 'guidance_admin'], true) && $canDashboardLink('mis.sync');
+$canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
+    || $canDashboardLink('guidance.cases.read', 'guidance')
+    || $canDashboardLink('facilities.read', 'bmg');
 ?>
 
 <?= $this->section('page_actions') ?>
@@ -25,10 +28,10 @@ $canSyncMis = in_array($dashboardRole, ['superadmin', 'clinic_admin', 'guidance_
   </a>
   <?php endif; ?>
   <?php if ($canExportReports): ?>
-  <a href="<?= esc(PortalContext::urlFor('main', 'reports/export')) ?>" class="btn btn-outline-secondary btn-sm">Operational reports</a>
+  <a href="<?= esc(PortalContext::urlFor('main', 'reports/export')) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1" aria-hidden="true"></i> Operational reports</a>
   <?php endif; ?>
   <?php if ($canSyncMis): ?>
-  <a href="<?= esc(PortalContext::urlFor('main', 'admin/mis-sync')) ?>" class="btn btn-outline-secondary btn-sm">MIS reference synchronization</a>
+  <a href="<?= esc(PortalContext::urlFor('main', 'admin/mis-sync')) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i> MIS reference synchronization</a>
   <?php endif; ?>
 </div>
 <?= $this->endSection() ?>
@@ -173,7 +176,7 @@ $canSyncMis = in_array($dashboardRole, ['superadmin', 'clinic_admin', 'guidance_
       <?php endif; ?>
     </div>
 
-    <!-- Right Column: Population Donut & Quick Hub -->
+    <!-- Right Column: Population Donut & Workstation Access -->
     <div class="col-xl-4">
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-transparent py-3">
@@ -189,17 +192,14 @@ $canSyncMis = in_array($dashboardRole, ['superadmin', 'clinic_admin', 'guidance_
         </div>
       </div>
 
+      <?php if ($canAccessConsoles): ?>
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-transparent py-3">
-          <h5 class="card-title mb-0 fw-bold"><?= $canReadAudit ? 'Administration Hub' : 'Campus Services' ?></h5>
+          <h5 class="card-title mb-0 fw-bold">Workstation Consoles</h5>
         </div>
         <div class="card-body p-3">
           <div class="d-grid gap-2">
-            <?php if ($canReadAudit): ?>
-            <a href="<?= esc(PortalContext::urlFor('main', 'admin/audit')) ?>" class="btn btn-outline-primary text-start p-2">
-              <i class="bi bi-shield-check me-2"></i> Audit Chain Ledger
-            </a>
-            <?php endif; ?>
+
             <?php if ($canDashboardLink('clinic.queue.read', 'clinic')): ?>
             <a href="<?= esc(PortalContext::urlFor('clinic', 'clinic/queue')) ?>" class="btn btn-outline-secondary text-start p-2">
               <i class="bi bi-hospital me-2"></i> University Clinic Console
@@ -215,14 +215,11 @@ $canSyncMis = in_array($dashboardRole, ['superadmin', 'clinic_admin', 'guidance_
               <i class="bi bi-recycle me-2"></i> Facilities & BMG Drum Console
             </a>
             <?php endif; ?>
-            <?php if ($canDashboardLink('rbac.manage')): ?>
-            <a href="<?= esc(PortalContext::urlFor('main', 'admin/carousel')) ?>" class="btn btn-outline-secondary text-start p-2">
-              <i class="bi bi-images me-2"></i> Login Carousel Management
-            </a>
-            <?php endif; ?>
+
           </div>
         </div>
       </div>
+      <?php endif; ?>
     </div>
   </section>
 </div>

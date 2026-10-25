@@ -10,19 +10,21 @@ use App\Services\AnnouncementService;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\NotificationService;
-use CodeIgniter\Test\CIUnitTestCase;
+use Tests\Support\FreshDatabaseTestCase;
+use Tests\Support\PublicationRecipientFixtures;
 use CodeIgniter\Test\DatabaseTestTrait;
 use Config\Services;
 use RuntimeException;
-use Tests\Support\InventoryTestDatabase;
+
 
 /** Requires main's engagement services/migration; never runs against the default database. */
-final class AnnouncementWorkflowTest extends CIUnitTestCase
+final class AnnouncementWorkflowTest extends FreshDatabaseTestCase
 {
     use DatabaseTestTrait;
+    use PublicationRecipientFixtures;
 
     protected $DBGroup = 'tests';
-    protected $migrate = false;
+    protected $migrate = true;
     protected $refresh = false;
     protected $namespace = 'App';
 
@@ -36,10 +38,7 @@ final class AnnouncementWorkflowTest extends CIUnitTestCase
 
     protected function setUp(): void
     {
-        InventoryTestDatabase::verify();
-        $this->assertSame('tests', config('Database')->defaultGroup, 'Domain services must use the isolated tests group.');
         parent::setUp();
-        $this->assertTrue($this->migrations->setNamespace('App')->latest('tests'));
         $this->service = new AnnouncementService();
         $now = date('Y-m-d H:i:s');
         $this->db->table('tenants')->insert(['slug' => uniqid('announcement_test_'), 'name' => 'Announcement fixtures',
@@ -57,12 +56,7 @@ final class AnnouncementWorkflowTest extends CIUnitTestCase
 
     protected function tearDown(): void
     {
-        if (isset($this->tenant)) {
-            foreach (['notifications', 'announcements_reads', 'announcements', 'audit_events', 'student_profiles', 'employee_profiles', 'users', 'people'] as $table) {
-                $this->db->table($table)->where('tenant_id', $this->tenant)->delete();
-            }
-            $this->db->table('tenants')->where('id', $this->tenant)->delete();
-        }
+        // Keep append-only audit history intact; the runner drops the entire disposable schema.
         foreach ($this->grants as [$role, $id, $existed]) {
             $this->db->table('role_permissions')->where('role', $role)->where('permission_id', $id)->delete();
             if ($existed) { $this->db->table('role_permissions')->insert(['role' => $role, 'permission_id' => $id]); }
@@ -87,9 +81,7 @@ final class AnnouncementWorkflowTest extends CIUnitTestCase
 
     private function as(array $actor): void
     {
-        AuthenticatedUser::clear();
-        session()->set(['user' => $actor, 'tenant_id' => $this->tenant]);
-        CurrentTenant::set($this->tenant);
+        $this->establishPublicationSession($actor);
     }
 
     private function grant(string $role, string $code): int
@@ -133,6 +125,35 @@ final class AnnouncementWorkflowTest extends CIUnitTestCase
     private function tenantCount(string $table): int
     {
         return $this->db->table($table)->where('tenant_id', $this->tenant)->countAllResults();
+    }
+
+    public static function publicationAudiences(): array
+    {
+        $cases = [];
+        foreach (['clinic', 'guidance'] as $unit) {
+            foreach (['all', 'employees', 'students'] as $audience) {
+                $cases[$unit . '-' . $audience] = [$unit, $audience];
+            }
+        }
+        return $cases;
+    }
+
+    /** @dataProvider publicationAudiences */
+    public function testPublicationRecipientsAcrossOperationalRoles(string $unit, string $audience): void
+    {
+        $cases = $this->publicationRecipientMatrix(fn (string $role, string $profile): array => $this->account($role, $profile));
+        $this->as($unit === 'clinic' ? $this->admin : $this->account('guidance_admin', 'employee'));
+        $before = $this->tenantCount('notifications');
+        $draft = $this->service->create($unit, $this->payload(['audience' => $audience,
+            'title' => 'SYNTHETIC PRIVATE PUBLICATION', 'body' => 'SYNTHETIC PRIVATE CONTENT']));
+        $draft = $this->service->update((int) $draft['id'], $unit, $this->payload(['audience' => $audience,
+            'version' => $draft['version'], 'title' => 'SYNTHETIC PRIVATE PUBLICATION', 'body' => 'SYNTHETIC PRIVATE CONTENT']));
+        $this->service->listing($unit);
+        $this->assertSame($before, $this->tenantCount('notifications'), 'Draft/edit/list must remain quiet.');
+        $notice = $this->service->publish((int) $draft['id'], $unit, $draft['version']);
+        $this->assertPublicationRecipientMatrix('announcement', (int) $notice['id'], $audience, $cases,
+            fn (array $actor) => $this->as($actor), fn () => $this->service->show((int) $notice['id']));
+        $this->assertSame(0, $this->tenantCount('announcements_reads'), 'Bell reads are not content acknowledgements.');
     }
 
     public function testDraftPublishImmutabilityArchiveAndOneNotificationFanout(): void

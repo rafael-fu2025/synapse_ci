@@ -20,7 +20,7 @@ final class WebAccessFilter implements FilterInterface
 
     public function before(RequestInterface $request, $arguments = null)
     {
-        $path = preg_replace('~^index\.php/?~', '', trim($request->getUri()->getPath(), '/'));
+        $path = trim($request->getUri()->getRoutePath(), '/');
         if (is_file(WRITEPATH . 'bmg-maintenance.flag') && preg_match('~^facilities(?:/|$)~', $path)) {
             return service('response')->setStatusCode(503)->setHeader('Cache-Control', 'private, no-store')
                 ->setHeader('Retry-After', '60')->setJSON(['message' => 'Drum operations are temporarily unavailable for maintenance.']);
@@ -30,7 +30,8 @@ final class WebAccessFilter implements FilterInterface
             && (preg_match('~^(clinic|guidance)/(appointments|queue|referrals|announcements|surveys)(?:/|$)~', $path)
                 || preg_match('~^portal/(appointments|referrals|announcements|surveys)(?:/|$)~', $path)
                 || preg_match('~^(referrals|notifications)(?:/|$)~', $path)
-                || $path === 'api/appointments/slots')) {
+                || $path === 'api/appointments/slots' || $path === 'portal/queue'
+                                || preg_match('~^(clinic|guidance)/dashboard/queue-counts$~', $path))) {
             return service('response')->setStatusCode(503)->setHeader('Cache-Control', 'private, no-store')
                 ->setHeader('Retry-After', '60')->setJSON([
                     'message' => 'Scheduling, care coordination, and campus content are temporarily unavailable for maintenance. Please try again later.',
@@ -42,10 +43,13 @@ final class WebAccessFilter implements FilterInterface
         $this->actor = $actor;
         $write = strtoupper($request->getMethod()) !== 'GET';
         try {
-            if (in_array($path, ['portal', 'portal/appointments', 'portal/records'], true)) {
+            if (in_array($path, ['portal', 'portal/appointments', 'portal/records', 'portal/queue'], true)) {
                 // Every alias renders the same combined page, so gate all datasets together.
                 $this->permit('portal.appointments.read');
                 $this->permit('portal.records.read');
+            }
+            if (preg_match('~^portal/appointments/\d+$~', $path)) {
+                $this->permit('portal.appointments.read');
             }
             if (preg_match('~^portal/appointments/(?:clinic|guidance)/(?:create|store|cancel/\\d+)$~', $path)) {
                 $this->permit('portal.appointments.create');

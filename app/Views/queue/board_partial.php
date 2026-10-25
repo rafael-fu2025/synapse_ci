@@ -11,49 +11,34 @@
  * } $summary
  */
 $counts = $summary['counts'];
+$metrics = [
+    ['waiting', 'Waiting', 'primary', 'bi-hourglass-split'],
+    ['called', 'Called', 'warning', 'bi-megaphone'],
+    ['in_consultation', 'In Session', 'info', 'bi-heart-pulse'],
+    ['done', 'Completed', 'success', 'bi-check2-circle'],
+    ['skipped', 'Skipped', 'secondary', 'bi-skip-forward'],
+    ['total', 'Total Patients', 'primary', 'bi-people'],
+];
 $queueActor = session()->get('user');
 $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') === 'superadmin'
     || in_array('guidance.cases.create', $queueActor['permissions'] ?? [], true));
 ?>
 
 <!-- Live KPI Counters -->
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm text-center p-3">
-      <span class="text-muted small text-uppercase fw-semibold">Waiting</span>
-      <h3 class="fw-bold mb-0 text-primary mt-1"><?= $counts['waiting'] ?></h3>
+<div class="row g-3 mb-4 queue-metrics" aria-label="Daily queue totals">
+  <?php foreach ($metrics as [$key, $label, $color, $icon]): ?>
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="card queue-metric mb-0 h-100">
+        <div class="card-body d-flex align-items-center gap-3">
+          <span class="queue-metric-icon text-<?= $color ?> bg-<?= $color ?>-subtle" aria-hidden="true"><i class="bi <?= $icon ?>"></i></span>
+          <div class="min-w-0">
+            <span class="queue-metric-label text-muted"><?= esc($label) ?></span>
+            <div class="queue-metric-value"><?= (int) $counts[$key] ?></div>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm text-center p-3">
-      <span class="text-muted small text-uppercase fw-semibold">Called</span>
-      <h3 class="fw-bold mb-0 text-warning mt-1"><?= $counts['called'] ?></h3>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm text-center p-3">
-      <span class="text-muted small text-uppercase fw-semibold">In Session</span>
-      <h3 class="fw-bold mb-0 text-info mt-1"><?= $counts['in_consultation'] ?></h3>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm text-center p-3">
-      <span class="text-muted small text-uppercase fw-semibold">Completed</span>
-      <h3 class="fw-bold mb-0 text-success mt-1"><?= $counts['done'] ?></h3>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm text-center p-3">
-      <span class="text-muted small text-uppercase fw-semibold">Skipped</span>
-      <h3 class="fw-bold mb-0 text-secondary mt-1"><?= $counts['skipped'] ?></h3>
-    </div>
-  </div>
-  <div class="col-6 col-md-4 col-xl-2">
-    <div class="card border-0 shadow-sm text-center p-3">
-      <span class="text-muted small text-uppercase fw-semibold">Total Patients</span>
-      <h3 class="fw-bold mb-0 text-dark mt-1"><?= $counts['total'] ?></h3>
-    </div>
-  </div>
+  <?php endforeach; ?>
 </div>
 
 <?php if (!empty($summary['no_show'])): ?>
@@ -66,20 +51,18 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
 </div></div>
 <?php endif; ?>
 <!-- Kanban Columns -->
-<div class="row g-3 align-items-start">
+<div class="row g-3 align-items-start queue-columns">
 
   <!-- 1. WAITING COLUMN -->
   <div class="col-12 col-md-6 col-xl-3">
-    <div class="card border-0 shadow-sm bg-light">
-      <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
-        <h6 class="fw-bold mb-0 text-dark">
-          <i class="bi bi-hourglass-split text-primary me-1"></i> Waiting Line
-        </h6>
-        <span class="badge bg-primary rounded-pill"><?= count($summary['waiting']) ?></span>
+    <div class="card queue-column">
+      <div class="card-header queue-column-header">
+        <h6 class="queue-column-title"><span class="queue-status-dot bg-secondary" aria-hidden="true"></span> Waiting Line</h6>
+        <span class="queue-column-count" aria-label="Waiting patients"><?= count($summary['waiting']) ?></span>
       </div>
-      <div class="card-body p-2" style="min-height: 400px; max-height: 700px; overflow-y: auto;">
+      <div class="card-body p-2 queue-column-body">
         <?php if (empty($summary['waiting'])): ?>
-          <div class="text-center py-5 text-muted small">
+          <div class="queue-column-empty text-muted small">
             <i class="bi bi-inbox fs-2 d-block mb-1"></i>
             No patients waiting
           </div>
@@ -128,16 +111,14 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
 
   <!-- 2. CALLED COLUMN -->
   <div class="col-12 col-md-6 col-xl-3">
-    <div class="card border-0 shadow-sm bg-light">
-      <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
-        <h6 class="fw-bold mb-0 text-dark">
-          <i class="bi bi-bell-fill text-warning me-1"></i> Called & Arriving
-        </h6>
-        <span class="badge bg-warning text-dark rounded-pill"><?= count($summary['called']) ?></span>
+    <div class="card queue-column">
+      <div class="card-header queue-column-header">
+        <h6 class="queue-column-title"><span class="queue-status-dot bg-warning" aria-hidden="true"></span> Called & Arriving</h6>
+        <span class="queue-column-count" aria-label="Called patients"><?= count($summary['called']) ?></span>
       </div>
-      <div class="card-body p-2" style="min-height: 400px; max-height: 700px; overflow-y: auto;">
+      <div class="card-body p-2 queue-column-body">
         <?php if (empty($summary['called'])): ?>
-          <div class="text-center py-5 text-muted small">
+          <div class="queue-column-empty text-muted small">
             <i class="bi bi-bell-slash fs-2 d-block mb-1"></i>
             No active calls
           </div>
@@ -195,16 +176,14 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
 
   <!-- 3. IN CONSULTATION COLUMN -->
   <div class="col-12 col-md-6 col-xl-3">
-    <div class="card border-0 shadow-sm bg-light">
-      <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
-        <h6 class="fw-bold mb-0 text-dark">
-          <i class="bi bi-heart-pulse-fill text-info me-1"></i> In Consultation
-        </h6>
-        <span class="badge bg-info rounded-pill"><?= count($summary['in_consultation']) ?></span>
+    <div class="card queue-column">
+      <div class="card-header queue-column-header">
+        <h6 class="queue-column-title"><span class="queue-status-dot bg-primary" aria-hidden="true"></span> In Consultation</h6>
+        <span class="queue-column-count" aria-label="Patients in consultation"><?= count($summary['in_consultation']) ?></span>
       </div>
-      <div class="card-body p-2" style="min-height: 400px; max-height: 700px; overflow-y: auto;">
+      <div class="card-body p-2 queue-column-body">
         <?php if (empty($summary['in_consultation'])): ?>
-          <div class="text-center py-5 text-muted small">
+          <div class="queue-column-empty text-muted small">
             <i class="bi bi-person-check fs-2 d-block mb-1"></i>
             No active session
           </div>
@@ -256,27 +235,27 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
 
   <!-- 4. RECALL & COMPLETED TABBED COLUMN -->
   <div class="col-12 col-md-6 col-xl-3">
-    <div class="card border-0 shadow-sm bg-light">
-      <div class="card-header bg-transparent py-3">
-        <ul class="nav nav-pills card-header-pills small" role="tablist">
+    <div class="card queue-column">
+      <div class="card-header queue-column-header">
+        <ul class="nav queue-history-tabs" role="tablist" aria-label="Queue history">
           <li class="nav-item">
-            <a class="nav-link active py-1 px-2" data-bs-toggle="tab" href="#tab-skipped">
-              Skipped (<?= count($summary['skipped']) ?>)
+            <a class="nav-link active" data-bs-toggle="tab" href="#tab-skipped" role="tab" aria-controls="tab-skipped" aria-selected="true">
+              <span class="queue-status-dot bg-secondary" aria-hidden="true"></span> Skipped <span class="queue-column-count"><?= count($summary['skipped']) ?></span>
             </a>
           </li>
           <li class="nav-item">
-            <a class="nav-link py-1 px-2" data-bs-toggle="tab" href="#tab-done">
-              Done (<?= count($summary['done']) ?>)
+            <a class="nav-link" data-bs-toggle="tab" href="#tab-done" role="tab" aria-controls="tab-done" aria-selected="false">
+              <span class="queue-status-dot bg-success" aria-hidden="true"></span> Done <span class="queue-column-count"><?= count($summary['done']) ?></span>
             </a>
           </li>
         </ul>
       </div>
 
-      <div class="tab-content card-body p-2" style="min-height: 400px; max-height: 700px; overflow-y: auto;">
+      <div class="tab-content card-body p-2 queue-column-body">
         <!-- Skipped Tab -->
         <div class="tab-pane fade show active" id="tab-skipped">
           <?php if (empty($summary['skipped'])): ?>
-            <div class="text-center py-5 text-muted small">
+            <div class="queue-column-empty text-muted small">
               <i class="bi bi-check2-all fs-2 d-block mb-1"></i>
               No skipped patients
             </div>
@@ -310,7 +289,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
         <!-- Done Tab -->
         <div class="tab-pane fade" id="tab-done">
           <?php if (empty($summary['done'])): ?>
-            <div class="text-center py-5 text-muted small">
+            <div class="queue-column-empty text-muted small">
               No completed visits today
             </div>
           <?php else: ?>

@@ -10,6 +10,8 @@ require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootst
 set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
     throw new ErrorException($message, 0, $severity, $file, $line);
 }, E_WARNING | E_NOTICE | E_USER_WARNING | E_USER_NOTICE);
+// Page fixtures must not inherit realtime connections or retry writes from local .env.
+config(\Config\Realtime::class)->enabled = false;
 $app = config('App');
 $app->baseURL = $fixture['origin'] . ($fixture['basePath'] ?? '/');
 $app->indexPage = $fixture['indexPage'] ?? '';
@@ -48,6 +50,14 @@ $batch = ['id' => 31, 'batch_code' => 'BATCH-31', 'status' => 'processing', 'sta
 $data = ['title' => 'Mechanized drum rotation', 'canManage' => !in_array($variant, ['reader', 'config-only'], true), 'canConfigure' => !in_array($variant, ['reader', 'operator', 'operator-idle'], true), 'canHardware' => !in_array($variant, ['reader', 'no-hardware'], true), 'hardwareEnabled' => !in_array($variant, ['gate-off', 'controller-gate-off'], true)];
 $kind = $fixture['kind'];
 if ($kind === 'index') {
+    $data['archivedView'] = ($_GET['view'] ?? '') === 'archived';
+    $data['openCreate'] = ($_GET['create'] ?? '') === '1' && $data['canConfigure'];
+    if ($data['archivedView']) {
+        $detail['unit']['deleted_at'] = '2026-10-18 09:30:00';
+        $detail['unit']['status'] = 'offline';
+        $detail['schedule']['enabled'] = false;
+        $detail['device'] = null;
+    }
     $data['units'] = $variant === 'empty' ? [] : [$detail];
 } elseif ($kind === 'unit_detail') {
     $data += $detail + ['activeBatch' => in_array($variant, ['idle', 'operator-idle'], true) ? null : $batch, 'pastBatches' => $variant === 'empty' ? [] : [array_replace($batch, ['status' => 'released', 'completed_at' => '2026-10-17 09:00:00'])]];

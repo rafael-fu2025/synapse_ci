@@ -1,0 +1,79 @@
+/* Shared Clinic and Guidance queue, using the NiceAdmin theme tokens. */
+.queue-metric.card {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: var(--na-shadow-sm);
+}
+.queue-metric > .card-body { padding: 1rem; min-height: 96px; }
+.queue-metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 1.2rem;
+}
+.queue-metric-label { display: block; font-size: .72rem; font-weight: 600; line-height: 1.4; }
+.queue-metric-value { margin-top: .25rem; color: var(--heading-color); font-size: 1.65rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.queue-columns .queue-column {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface-color) 80%, var(--background-color));
+  box-shadow: none;
+  overflow: hidden;
+}
+.queue-column > .queue-column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  min-height: 59px;
+  padding: 1rem;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
+}
+.queue-column-title { display: inline-flex; align-items: center; gap: .5rem; margin: 0; color: var(--heading-color); font-size: .86rem; font-weight: 700; }
+.queue-status-dot { display: inline-block; width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; }
+.queue-column-count { display: inline-flex; align-items: center; justify-content: center; min-width: 25px; height: 25px; padding: 0 .35rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface-color); color: var(--muted-color); font-size: .76rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+.queue-column-body { min-height: 280px; max-height: 700px; overflow-y: auto; }
+@media (min-width: 1200px) {
+  .app-shell .main-content:has(#queue-board-container) {
+    display: flex;
+    flex-direction: column;
+    height: max(650px, calc(100dvh - var(--header-height)));
+  }
+  .main-content > .section:has(#queue-board-container),
+  #queue-board-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  #queue-board-container > :not(.queue-columns) { flex-shrink: 0; }
+  #queue-board-container > .queue-columns {
+    --bs-gutter-y: 0;
+    flex: 1;
+    min-height: 0;
+    align-items: stretch !important;
+  }
+  #queue-board-container > .queue-columns > [class*="col-"] { display: flex; height: 100%; min-height: 0; }
+  #queue-board-container .queue-column { flex: 1; min-width: 0; min-height: 0; margin-bottom: 0; }
+  #queue-board-container .queue-column-header { flex-shrink: 0; }
+  #queue-board-container .queue-column-body { flex: 1; min-height: 0; max-height: none; }
+}
+.queue-column-empty { padding: 1.5rem .5rem; text-align: center; }
+.queue-column-empty > .bi { display: none !important; }
+.queue-column > .queue-column-header:has(.queue-history-tabs) { padding: 0; }
+.queue-history-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; align-self: stretch; }
+.queue-history-tabs .nav-item { display: flex; min-width: 0; }
+.queue-history-tabs .nav-item + .nav-item { border-left: 1px solid var(--border-color); }
+.queue-history-tabs .nav-link { display: flex; align-items: center; justify-content: center; gap: .4rem; width: 100%; min-height: 58px; padding: .75rem .5rem; color: var(--muted-color); font-size: .8rem; font-weight: 600; background: transparent; border-radius: 0; border-bottom: 3px solid transparent; }
+.queue-history-tabs .nav-link.active { color: var(--fu-maroon-accent); background: var(--na-primary-soft); border-bottom-color: var(--fu-maroon-accent); }
+.queue-history-tabs .nav-link:hover:not(.active) { background: var(--surface-color); color: var(--heading-color); }
+.queue-history-tabs .nav-link:focus-visible { outline: 2px solid var(--fu-maroon-accent); outline-offset: -4px; }
+.queue-history-tabs .nav-link:not(.active) .queue-column-count { background: transparent; }
+@media (min-width: 1200px) and (max-width: 1450px) {
+  .queue-metric > .card-body { flex-direction: column; align-items: flex-start !important; gap: .6rem !important; }
+}

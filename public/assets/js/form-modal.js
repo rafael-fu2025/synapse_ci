@@ -2,6 +2,68 @@
 (function () {
   'use strict';
   let active = null;
+  const committed = new WeakSet();
+
+  function lockSavedForm(form) {
+    committed.add(form);
+    Array.from(form.elements).forEach(control => {
+      if ('disabled' in control) control.disabled = true;
+    });
+  }
+
+  if (!window.SynapseMutations) {
+    const markedSaved = new WeakSet();
+    function canRefresh(form) {
+      return Boolean(window.SynapseNavigation &&
+        !window.SynapseNavigation.hasUnsavedChanges(form));
+    }
+    async function refresh(value, message, { form, scroll = [window.scrollX, window.scrollY], key = 'mutation-refresh' } = {}) {
+      if (form && !markedSaved.has(form)) {
+        lockSavedForm(form);
+        markedSaved.add(form);
+        window.SynapseNavigation?.markSaved(form);
+      }
+      let target;
+      try {
+        if (typeof value !== 'string' || !value.trim()) throw new Error('Missing return address');
+        target = new URL(value, location.href);
+        if (!/^https?:$/.test(target.protocol) || target.username || target.password || target.origin !== location.origin) {
+          target = null;
+          throw new Error('Invalid return address');
+        }
+        if (!canRefresh(form)) throw new Error('Another editor has unsaved changes');
+        const regional = await window.SynapseLiveFilters?.refresh(target.href);
+        if (regional === false) throw new Error('Region refresh failed');
+        // Opted-in workspaces replace only their results; other screens keep the navigation owner.
+        if (regional === true || await window.SynapseNavigation.navigate(target.href, { history: 'replace', scroll, fallback: false })) {
+          window.SynapseToast?.show(message || 'Saved successfully.', { type: 'success', key });
+          return true;
+        }
+      } catch (_) { /* The write is already confirmed. Never offer to repeat it. */ }
+      window.SynapseToast?.show('Saved, but the page could not be refreshed. Do not submit again. Finish any other edits, then retry the page refresh.', {
+        type: 'warning', key, duration: 0,
+        action: target ? { label: 'Retry refresh', run: () => refresh(target.href, message, { form, scroll, key }) } : undefined
+      });
+      return false;
+    }
+    window.SynapseMutations = { canRefresh, refresh };
+  }
+  document.addEventListener('submit', event => {
+    if (committed.has(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
+
+  async function closeSaved(record) {
+    record.saved = true;
+    record.closeRequested = true;
+    const hidden = new Promise(resolve => record.root.addEventListener('hidden.bs.modal', resolve, { once: true }));
+    record.modal.hide();
+    await hidden;
+  }
+  // Uploads retain their dedicated XHR owner, but share the modal's teardown.
+  document.addEventListener('synapse:modal-saved', event => {
+    const { form, done } = event.detail;
+    if (active?.root.contains(form)) done(closeSaved(active));
+  });
 
   // This includes the loading shell and in-flight writes. A write may commit
   // server-side even if its fetch is aborted, so only X/Cancel can leave here.
@@ -74,7 +136,7 @@
       modal.dispose();
       root.remove(); // Datepicker's lifecycle observer disposes its removed fields.
       if (active === record) active = null;
-      if (root.dataset.modalDirect === 'true') location.assign(root.dataset.returnUrl);
+      if (!record.saved && root.dataset.modalDirect === 'true') location.assign(root.dataset.returnUrl);
       else if (opener?.isConnected) {
         const target = opener.getClientRects().length ? opener : opener.closest('.user-dropdown')?.querySelector('.user-trigger');
         target?.focus({ preventScroll: true });
@@ -168,28 +230,42 @@
 
   document.addEventListener('submit', async event => {
     const form = event.target;
-    if (!active || !form.matches('form[data-modal-submit]') || !active.root.contains(form)) return;
+    if (!active || !form.matches('form[data-modal-submit]') || form.id === 'slideForm' || !active.root.contains(form)) return;
     event.preventDefault();
     const record = active;
     if (busy(record.root)) return;
+    const mutations = window.SynapseMutations;
+
     const data = new FormData(form);
     if (event.submitter?.name) data.append(event.submitter.name, event.submitter.value);
-    const buttons = [...form.querySelectorAll('[type="submit"]')];
-    const disabled = buttons.map(button => button.disabled);
+    const controls = Array.from(form.elements).filter(control => 'disabled' in control);
+    const disabled = controls.map(control => control.disabled);
+    const inert = form.inert;
     let saved = false;
     const finish = window.SynapseLoading?.begin(form, { label: 'Saving…', button: event.submitter }) || (() => {});
     form.setAttribute('aria-busy', 'true');
-    buttons.forEach(button => { button.disabled = true; });
+    form.inert = true;
+    controls.forEach(control => { control.disabled = true; });
     record.root.querySelector('[data-modal-error]').classList.add('d-none');
     try {
       const response = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin',
-        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers() } });
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}) } });
       window.SynapseCsrf?.fromResponse(response);
       const payload = await response.json();
       updateCsrf(payload.csrf);
       if (response.ok && payload.success === true) {
         saved = true;
-        location.assign(payload.redirect);
+        committed.add(form);
+        finish();
+        lockSavedForm(form);
+        form.removeAttribute('aria-busy');
+        await closeSaved(record);
+        const workspace = document.querySelector('[data-live-filters][data-mutation-refresh]');
+        const destination = new URL(payload.redirect, location.href);
+        const scoped = workspace && new URL(workspace.dataset.filterUrl, location.href);
+        const returnUrl = scoped && destination.origin === scoped.origin && destination.pathname === scoped.pathname ? location.href : payload.redirect;
+        if (mutations) await mutations.refresh(returnUrl, payload.message, { form });
+        else location.assign(payload.redirect);
       } else {
         error(record.root, payload.message || 'The form could not be saved.');
       }
@@ -199,7 +275,8 @@
       if (!saved) {
         finish();
         form.removeAttribute('aria-busy');
-        buttons.forEach((button, i) => { button.disabled = disabled[i]; });
+        controls.forEach((control, i) => { control.disabled = disabled[i]; });
+        form.inert = inert;
       }
     }
   });

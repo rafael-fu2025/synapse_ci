@@ -21,7 +21,7 @@
 
     <!-- Left 60% Pane: 3-Slide Photo Carousel (hidden on small viewports) -->
     <aside class="col-lg-7 d-none d-lg-block p-2 min-vh-100 auth-photo-aside">
-      <div class="w-100 rounded-4 overflow-hidden position-relative auth-photo-container">
+      <div class="rounded-4 overflow-hidden auth-photo-container">
 
         <!-- Bootstrap 5 Carousel: auto-plays every 6 seconds, no arrows, pill indicators -->
         <div id="loginPhotoCarousel"

@@ -1,0 +1,34 @@
+{
+  "firmware_version": "bmg-commissioning-0.1.0",
+  "purpose": "temporary network commissioning only; motor outputs disabled",
+  "source_path": "C:/Users/udtoh_lmtzs7k/zynapse/bmg_iot/compost/compost.ino",
+  "source_sha256": "23e65287b0979cb0756a42908c0d8257a7841c43060f0633fe943484ff8dcfb2",
+  "source_lines": 1273,
+  "source_config_lines_excluded": [33, 34, 35, 36],
+  "source_hardware": {
+    "motor_in1_gpio": 4,
+    "motor_in2_gpio": 5,
+    "motor_enable_gpio": 6,
+    "motor_enable_polarity": "active high PWM in original; LOW only in adaptation",
+    "i2c_sda_gpio": 8,
+    "i2c_scl_gpio": 9,
+    "i2c_hz": 100000,
+    "rtc": "DS3231; deliberately not initialized or validated by adaptation"
+  },
+  "reused_design": ["WiFi station configuration topology", "15s WiFi connect window", "30s WiFi retry backoff", "5s HTTP connect/read timeouts", "16KiB response limit", "3500ms idle command polling", "5min heartbeat and 10min schedule polling", "Preferences persistence topology"],
+  "intentional_changes": ["mandatory private configuration header", "trusted ArduinoJson parser instead of legacy parser", "Humus commands/command_id/status contract", "all motor writes LOW only", "no run reports or motor execution", "no serial motor controls", "no countdown or offline schedule", "no unverified RTC telemetry", "only disabled schedule versions applied as OFF", "token-and-origin-bound durable acknowledgement high-water mark", "verified TLS CA or explicit local HTTP consent; no insecure TLS"],
+  "dependencies": {"esp32:esp32": "3.3.3", "ArduinoJson": "7.4.2"},
+  "documented_board": {"chip": "ESP32-S3", "revision": "0.2", "flash_mb": 16, "flash_bus": "quad", "psram_mb": 8, "psram_bus": "not yet verified"},
+  "compile_fqbn": "esp32:esp32:esp32s3:FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,PSRAM=disabled",
+  "compile_profile_policy": "commissioning uses no PSRAM; explicitly disabled without inferring the unverified physical PSRAM bus",
+  "compiler_smoke": {
+    "arduino_cli": "1.5.1",
+    "http": "passed with synthetic credentials",
+    "https": "passed with synthetic credentials and deliberately unusable compile-only CA",
+    "hardware_uploaded": false,
+    "flash_recipe_manifest_emitted": false,
+    "export_format": "separate app/bootloader/partitions binaries and 16777216-byte merged binary; build.options.json is build configuration, not a flash map"
+  },
+  "release_fqbn": null,
+  "release_status": "synthetic HTTP/HTTPS compile verified; compile profile is not physical board, TLS, motor or flash acceptance"
+}

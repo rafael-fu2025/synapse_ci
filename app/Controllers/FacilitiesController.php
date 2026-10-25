@@ -79,10 +79,14 @@ final class FacilitiesController extends BaseController
 
     public function index()
     {
-        return $this->respond(fn () => view('facilities/index', $this->access() + [
-            'units' => $this->rotation->overview(), 'title' => 'Drum Rotation',
-            'pageTitle' => 'Drum Rotation',
-        ]));
+        return $this->respond(function () {
+            $archived = $this->request->getGet('view') === 'archived';
+            return view('facilities/index', $this->access() + [
+                'units' => $this->rotation->overview($archived), 'title' => 'Drum Rotation',
+                'pageTitle' => 'Drum Rotation', 'archivedView' => $archived,
+                'openCreate' => !$archived && $this->request->getGet('create') === '1',
+            ]);
+        });
     }
 
     public function unitView(int $id)
@@ -105,6 +109,22 @@ final class FacilitiesController extends BaseController
         return $this->respond(function () use ($id) {
             $this->rotation->saveUnit($id, $this->input(['unit_code', 'name', 'status', 'drum_capacity_kg', 'expected_version']));
             return $this->success('Drum settings saved. Availability does not confirm physical motor state.', $id);
+        });
+    }
+
+    public function archiveUnit(int $id)
+    {
+        return $this->respond(function () use ($id) {
+            $this->rotation->archiveUnit($id, $this->input(['expected_version', 'retirement_confirmed']));
+            return $this->success('Drum archived. History is retained, controller credentials revoked and saved schedule intent disabled. This does not confirm a physical motor stop.', 0);
+        });
+    }
+
+    public function restoreUnit(int $id)
+    {
+        return $this->respond(function () use ($id) {
+            $this->rotation->restoreUnit($id, $this->input(['expected_version']));
+            return $this->success('Drum restored offline. Review its setup and register a controller again before operation.', $id);
         });
     }
 

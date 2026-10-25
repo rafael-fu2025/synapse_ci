@@ -6,7 +6,11 @@ $tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query
 ?>
 <?= $this->extend('layouts/app') ?>
 <?= $this->section('content') ?>
-<section class="portal-engagement" aria-labelledby="campus-updates-title" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="portal-announcements">
+<section class="portal-engagement" aria-labelledby="campus-updates-title"
+         data-live-filters
+         data-filter-url="<?= esc($baseUrl) ?>"
+         data-filter-key="portal-announcements"
+         data-live-events="notifications.changed">
   <header class="pe-header">
     <span class="pe-header-icon" aria-hidden="true"><i class="bi bi-megaphone"></i></span>
     <div><p class="pe-eyebrow">CAMPUS CONNECTION</p><h2 id="campus-updates-title">Campus updates</h2><p class="text-muted mb-0">News and notices from your Clinic and Guidance offices, selected for your university profile.</p></div>

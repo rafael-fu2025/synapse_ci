@@ -73,11 +73,35 @@ final class EncounterService
         ?int $appointmentId = null,
         ?string $chiefComplaint = null
     ): array {
+        return $this->startEncounterIntake($personId, $attendingUserId, $queueEntryId, $appointmentId, $chiefComplaint);
+    }
+
+    /**
+     * Queue-free referral intake; the caller must commit or roll back the whole handoff.
+     * No queue mutation or invalidation is permitted on this caller-owned path.
+     */
+    public function startReferralEncounter(int $personId, int $attendingUserId, ?string $chiefComplaint = null): array
+    {
+        if ($this->db->DBDriver !== 'MySQLi' || $this->db->transDepth !== 1 || !$this->db->transStatus()) {
+            throw new \RuntimeException('Referral intake requires a healthy caller-owned transaction.', 409);
+        }
+        return $this->startEncounterIntake($personId, $attendingUserId, null, null, $chiefComplaint, true);
+    }
+
+    private function startEncounterIntake(
+        int $personId,
+        int $attendingUserId,
+        ?int $queueEntryId,
+        ?int $appointmentId,
+        ?string $chiefComplaint,
+        bool $callerOwned = false
+    ): array {
         self::validateTexts(['chief_complaint' => $chiefComplaint]);
         if ($personId < 1 || $attendingUserId < 1 || ($queueEntryId !== null && $queueEntryId < 1)) {
             throw new \InvalidArgumentException('A patient, explicit actor and valid ticket are required.', 422);
         }
-        $encounterId = $this->transaction(function () use ($personId, $attendingUserId, $queueEntryId, $appointmentId, $chiefComplaint): int {
+        $created = false;
+        $operation = function () use ($personId, $attendingUserId, $queueEntryId, $appointmentId, $chiefComplaint, &$created): int {
             $db = $this->db;
             $tenant = CurrentTenant::id();
             // Serialize direct and queue starts even when no encounter exists yet.
@@ -154,13 +178,19 @@ final class EncounterService
             if ($encounterId === false || (int) $encounterId < 1) {
                 throw new \RuntimeException('Could not create encounter.');
             }
+            $created = true;
             // QueueService must join this connection's transaction, never commit independently.
             if ($queueEntryId !== null) {
                 $this->queueService->startConsultation($queueEntryId, 'clinic');
             }
             return (int) $encounterId;
-        });
-        return $this->getEncounterDetails($encounterId);
+        };
+        $encounterId = $callerOwned ? $operation() : $this->transaction($operation);
+        if ($callerOwned && !$this->db->transStatus()) {
+            throw new \RuntimeException('Referral intake transaction failed.', 409);
+        }
+        $package = $this->getEncounterDetails($encounterId);
+        return $callerOwned ? $package + ['created' => $created] : $package;
     }
 
     /**
@@ -186,42 +216,30 @@ final class EncounterService
             if ($recordedByUserId < 1) {
                 throw new \InvalidArgumentException('An explicit vitals recorder is required.', 422);
             }
-            $weight = $vitals['weight_kg'];
-            $height = !empty($vitals['height_cm']) ? (float) $vitals['height_cm'] : null;
-
-            $bmi = null;
-            if ($weight !== null && $height !== null && $height > 0) {
-                $heightMeters = $height / 100.0;
-                $bmi = round($weight / ($heightMeters * $heightMeters), 2);
-            }
-
-            $now = date('Y-m-d H:i:s');
-            $existing = $this->vitalsModel->findByEncounterId($encounterId);
-
-            $data = [
-                'tenant_id'           => CurrentTenant::id(),
-                'encounter_id'        => $encounterId,
-                'bp_systolic'         => !empty($vitals['bp_systolic']) ? (int) $vitals['bp_systolic'] : null,
-                'bp_diastolic'        => !empty($vitals['bp_diastolic']) ? (int) $vitals['bp_diastolic'] : null,
-                'pulse_bpm'           => !empty($vitals['pulse_bpm']) ? (int) $vitals['pulse_bpm'] : null,
-                'temp_c'              => !empty($vitals['temp_c']) ? (float) $vitals['temp_c'] : null,
-                'spo2_pct'            => $vitals['spo2_pct'],
-                'weight_kg'           => $weight,
-                'height_cm'           => $height,
-                'bmi'                 => $bmi,
-                'recorded_by_user_id' => $recordedByUserId,
-                'recorded_at'         => $now,
-            ];
-
-            $saved = $existing !== null
-                ? $this->vitalsModel->scoped()->update($existing['id'], $data)
-                : $this->vitalsModel->insert($data);
-            if ($saved === false) {
-                throw new \RuntimeException('Could not save vitals.');
-            }
-
-            return $this->vitalsModel->findByEncounterId($encounterId);
+            return $this->persistVitals($encounterId, $vitals, $recordedByUserId);
         });
+    }
+
+    /** The caller owns the transaction and holds the open encounter lock. */
+    private function persistVitals(int $encounterId, array $vitals, int $recordedByUserId): array
+    {
+        $weight = $vitals['weight_kg'];
+        $height = $vitals['height_cm'];
+        $bmi = $weight !== null && $height !== null
+            ? round($weight / (($height / 100.0) ** 2), 2) : null;
+        $existing = $this->vitalsModel->findByEncounterId($encounterId);
+        $data = $vitals + [
+            'tenant_id' => CurrentTenant::id(), 'encounter_id' => $encounterId,
+            'bmi' => $bmi, 'recorded_by_user_id' => $recordedByUserId,
+            'recorded_at' => date('Y-m-d H:i:s'),
+        ];
+        $saved = $existing !== null
+            ? $this->vitalsModel->scoped()->update($existing['id'], $data)
+            : $this->vitalsModel->insert($data);
+        if ($saved === false) {
+            throw new \RuntimeException('Could not save vitals.');
+        }
+        return $this->vitalsModel->findByEncounterId($encounterId);
     }
 
     /**
@@ -252,7 +270,6 @@ final class EncounterService
             }
 
             // Upsert treatment record
-            $existingTreatment = $this->treatmentModel->findByEncounterId($encounterId);
             $treatmentData = [
                 'tenant_id'         => CurrentTenant::id(),
                 'encounter_id'      => $encounterId,
@@ -261,12 +278,7 @@ final class EncounterService
                 'services_rendered' => $servicesRendered ? trim($servicesRendered) : null,
             ];
 
-            $saved = $existingTreatment !== null
-                ? $this->treatmentModel->scoped()->update($existingTreatment['id'], $treatmentData)
-                : $this->treatmentModel->insert($treatmentData);
-            if ($saved === false) {
-                throw new \RuntimeException('Could not save treatment.');
-            }
+            $this->persistTreatment($encounterId, $treatmentData);
 
             return $this->getEncounterDetails($encounterId);
         });
@@ -297,13 +309,27 @@ final class EncounterService
 
     /**
      * Complete an encounter with final outcome and disposition.
+     * Optional flat pending fields are patched under the completion lock before sealing.
+     * Submitting chief_complaint opts into the aggregate UI requirement that it be nonempty.
      */
     public function completeEncounter(
         int $encounterId,
         string $disposition,
         ?string $dispositionNotes = null,
-        ?string $followUpDate = null
+        ?string $followUpDate = null,
+        ?array $pendingDraft = null,
+        ?int $recordedByUserId = null
     ): array {
+        if ($pendingDraft !== null) {
+            $pendingDraft = self::normalizeDraft($pendingDraft);
+            if (array_key_exists('disposition', $pendingDraft)) {
+                $disposition = $pendingDraft['disposition'] ?? '';
+            }
+            if (array_key_exists('chief_complaint', $pendingDraft) && $pendingDraft['chief_complaint'] === null) {
+                throw new \InvalidArgumentException('Chief complaint is required to complete this encounter.', 422);
+            }
+            self::assertDraftRecorder($pendingDraft, $recordedByUserId);
+        }
         if (!in_array($disposition, self::DISPOSITIONS, true)) {
             throw new \InvalidArgumentException('Invalid clinical disposition.', 422);
         }
@@ -323,6 +349,7 @@ final class EncounterService
         if ($db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED') === false || !$db->transBegin()) {
             throw new \RuntimeException('Could not begin encounter completion.');
         }
+        $queueHints = [];
         try {
             $encounter = $db->query('SELECT * FROM ' . $db->protectIdentifiers($db->prefixTable('clinic_encounters')) . ' WHERE tenant_id=? AND id=? AND deleted_at IS NULL FOR UPDATE', [CurrentTenant::id(), $encounterId])->getRowArray();
             if ($encounter === null) {
@@ -332,12 +359,19 @@ final class EncounterService
                 throw new \RuntimeException('Encounter is no longer open.', 409);
             }
 
+            if ($pendingDraft !== null) {
+                $this->persistDraft($encounterId, $pendingDraft, $recordedByUserId);
+                $dispositionNotes = array_key_exists('disposition_notes', $pendingDraft)
+                    ? $pendingDraft['disposition_notes'] : ($dispositionNotes ?? $encounter['disposition_notes'] ?? null);
+                $followUpDate = array_key_exists('follow_up_date', $pendingDraft)
+                    ? $pendingDraft['follow_up_date'] : ($followUpDate ?? $encounter['follow_up_date'] ?? null);
+            }
             $now = date('Y-m-d H:i:s');
             $status = ($disposition === 'referred_to_guidance') ? 'referred' : 'completed';
             if (!$this->encounterModel->scoped()->update($encounterId, [
                 'status'            => $status,
                 'disposition'       => $disposition,
-                'disposition_notes' => $dispositionNotes ? trim($dispositionNotes) : null,
+                'disposition_notes' => $dispositionNotes !== null && trim($dispositionNotes) !== '' ? trim($dispositionNotes) : null,
                 'follow_up_date'    => !empty($followUpDate) ? $followUpDate : null,
                 'completed_at'      => $now,
             ])) {
@@ -345,7 +379,10 @@ final class EncounterService
             }
 
             if (!empty($encounter['queue_entry_id'])) {
-                $this->queueService->completeConsultation((int) $encounter['queue_entry_id'], 'clinic');
+                $this->queueService->captureInvalidations(
+                    fn () => $this->queueService->completeConsultation((int) $encounter['queue_entry_id'], 'clinic'),
+                    $queueHints,
+                );
             }
             if (!$db->transStatus() || !$db->transCommit()) {
                 throw new \RuntimeException('Could not complete encounter.');
@@ -355,7 +392,97 @@ final class EncounterService
             $db->resetTransStatus();
             throw $e;
         }
+        $this->queueService->publishCommittedInvalidations($queueHints);
         return $this->getEncounterDetails($encounterId);
+    }
+
+    public const DRAFT_FIELDS = [
+        'bp_systolic', 'bp_diastolic', 'pulse_bpm', 'temp_c', 'spo2_pct', 'weight_kg', 'height_cm',
+        'chief_complaint', 'assessment_notes', 'diagnosis', 'treatment_plan', 'services_rendered',
+        'disposition', 'disposition_notes', 'follow_up_date',
+    ];
+
+    /** Missing fields are preserved; explicit empty values clear optional fields. */
+    public function saveDraft(int $encounterId, array $draft, int $recordedByUserId): void
+    {
+        $draft = self::normalizeDraft($draft);
+        self::assertDraftRecorder($draft, $recordedByUserId);
+        $this->transaction(function () use ($encounterId, $draft, $recordedByUserId): void {
+            $this->lockOpenEncounter($encounterId);
+            $this->persistDraft($encounterId, $draft, $recordedByUserId);
+        });
+    }
+
+    private static function assertDraftRecorder(array $draft, ?int $actorId): void
+    {
+        if (array_intersect_key($draft, self::VITAL_BOUNDS) !== [] && ($actorId === null || $actorId < 1)) {
+            throw new \InvalidArgumentException('An explicit vitals recorder is required.', 422);
+        }
+    }
+
+    private static function normalizeDraft(array $draft): array
+    {
+        $draft = array_intersect_key($draft, array_flip(self::DRAFT_FIELDS));
+        foreach ($draft as $field => $value) {
+            if (isset(self::VITAL_BOUNDS[$field])) {
+                // Validate supplied values now; validate merged BMI under the encounter lock.
+                $draft[$field] = self::validateVitals([$field => $value])[$field];
+                continue;
+            }
+            if ($value !== null && !is_string($value)) {
+                throw new \InvalidArgumentException('Invalid ' . $field . '.', 422);
+            }
+            if (isset(self::TEXT_LIMITS[$field])) {
+                self::validateTexts([$field => $value]);
+            }
+            $value = $value === null ? null : trim($value);
+            $draft[$field] = $value === '' ? null : $value;
+            if ($field === 'disposition' && $draft[$field] !== null && !in_array($draft[$field], self::DISPOSITIONS, true)) {
+                throw new \InvalidArgumentException('Invalid clinical disposition.', 422);
+            }
+            if ($field === 'follow_up_date' && $draft[$field] !== null) {
+                if (!preg_match('/\A[0-9]{4}-[0-9]{2}-[0-9]{2}\z/D', $draft[$field])) {
+                    throw new \InvalidArgumentException('Follow-up date must be a valid YYYY-MM-DD date.', 422);
+                }
+                $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $draft[$field]);
+                if ($date === false || $date->format('Y-m-d') !== $draft[$field]) {
+                    throw new \InvalidArgumentException('Follow-up date must be a valid YYYY-MM-DD date.', 422);
+                }
+            }
+        }
+        return $draft;
+    }
+
+    /** Patch only whitelisted fields, inside an existing transaction and encounter lock. */
+    private function persistDraft(int $encounterId, array $draft, ?int $recordedByUserId): void
+    {
+        $vitals = array_intersect_key($draft, self::VITAL_BOUNDS);
+        if ($vitals !== []) {
+            $existing = $this->vitalsModel->findByEncounterId($encounterId) ?? [];
+            $this->persistVitals($encounterId, self::validateVitals(array_replace($existing, $vitals)), $recordedByUserId);
+        }
+        $treatment = array_intersect_key($draft, array_flip(['diagnosis', 'treatment_plan', 'services_rendered']));
+        if ($treatment !== []) {
+            $this->persistTreatment($encounterId, $treatment);
+        }
+        $encounter = array_intersect_key($draft, array_flip([
+            'chief_complaint', 'assessment_notes', 'disposition', 'disposition_notes', 'follow_up_date',
+        ]));
+        if ($encounter !== [] && !$this->encounterModel->scoped()->update($encounterId, $encounter)) {
+            throw new \RuntimeException('Could not save encounter draft.');
+        }
+    }
+
+    /** The caller owns the transaction and holds the open encounter lock. */
+    private function persistTreatment(int $encounterId, array $treatment): void
+    {
+        $existing = $this->treatmentModel->findByEncounterId($encounterId);
+        $saved = $existing !== null
+            ? $this->treatmentModel->scoped()->update($existing['id'], $treatment)
+            : $this->treatmentModel->insert($treatment + ['tenant_id' => CurrentTenant::id(), 'encounter_id' => $encounterId]);
+        if ($saved === false) {
+            throw new \RuntimeException('Could not save treatment.');
+        }
     }
 
     private static function validateTexts(array $values): void
@@ -414,12 +541,12 @@ final class EncounterService
         if (!$db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED') || !$db->transBegin()) {
             throw new \RuntimeException('Could not begin Clinic transaction.');
         }
+        $queueHints = [];
         try {
-            $result = $operation();
+            $result = $this->queueService->captureInvalidations($operation, $queueHints);
             if (!$db->transStatus() || !$db->transCommit()) {
                 throw new \RuntimeException('Could not commit Clinic changes.');
             }
-            return $result;
         } catch (\Throwable $e) {
             try {
                 $db->transRollback();
@@ -428,6 +555,8 @@ final class EncounterService
             }
             throw $e;
         }
+        $this->queueService->publishCommittedInvalidations($queueHints);
+        return $result;
     }
 
     /**

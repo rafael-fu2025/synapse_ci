@@ -13,17 +13,16 @@ use App\Models\UserModel;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\Referrals\ReferralService;
-use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
 use CodeIgniter\View\View;
 use Config\Services;
 use DOMDocument;
 use DOMXPath;
-use Tests\Support\InventoryTestDatabase;
+use Tests\Support\FreshDatabaseTestCase;
 
-/** Real route/filter/template contracts; run only through the parent's isolated harness. */
-final class ReferralRoutesTest extends CIUnitTestCase
+/** Real route/filter/template contracts; run through run-fresh-database-tests.py. */
+final class ReferralRoutesTest extends FreshDatabaseTestCase
 {
     use DatabaseTestTrait;
     use FeatureTestTrait;
@@ -42,7 +41,6 @@ final class ReferralRoutesTest extends CIUnitTestCase
 
     protected function setUp(): void
     {
-        InventoryTestDatabase::verify();
         parent::setUp();
         AuthenticatedUser::clear();
         Services::resetSingle('renderer');
@@ -95,17 +93,25 @@ final class ReferralRoutesTest extends CIUnitTestCase
 
     private function account(string $role): array
     {
-        $id = (int) (new UserModel())->insert(['tenant_id' => $this->tenant, 'person_id' => $this->person(),
+        $id = (int) (new UserModel())->insert(['tenant_id' => $this->tenant, 'person_id' => $this->person(['email' => 'staff@example.test']),
             'username' => uniqid('ref_route_staff_'), 'role' => $role, 'status' => 'active']);
         // Cached authority is deliberately forged; database identity/grants must win.
         return ['id' => $id, 'tenant_id' => $this->tenant, 'role' => 'superadmin',
             'permissions' => ['*'], 'logged_in' => true, 'name' => 'Route tester'];
     }
 
+    private function authSession(array $actor): array
+    {
+        $version = (int) $this->db->table('users')->select('auth_version')->where('id', $actor['id'])->get()->getRowArray()['auth_version'];
+        return ['user' => $actor, 'tenant_id' => $this->tenant, '_auth' => [
+            'started_at' => time(), 'last_seen_at' => time(), 'version' => $version, 'session_id' => session_id(),
+        ]];
+    }
+
     private function getAs(array $actor, string $route, array $query = [])
     {
         AuthenticatedUser::clear();
-        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant])->withHeaders([])
+        return $this->withSession($this->authSession($actor))->withHeaders([])
             ->get($route . ($query === [] ? '' : '?' . http_build_query($query)));
     }
 
@@ -118,7 +124,7 @@ final class ReferralRoutesTest extends CIUnitTestCase
         if ($csrf) {
             $data[config('Security')->tokenName] = $hash;
         }
-        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant])
+        return $this->withSession($this->authSession($actor))
             ->withHeaders($ajax ? ['X-Requested-With' => 'XMLHttpRequest'] : [])->post($route, $data);
     }
 
@@ -534,7 +540,7 @@ final class ReferralRoutesTest extends CIUnitTestCase
             $receiver = $source === 'clinic' ? $this->guidance : $this->clinic;
             $base = $ref['target_module'] . '/referrals/' . $ref['id'];
             $this->postAs($receiver, $base . '/acknowledge')->assertStatus(200);
-            $response = $this->postAs($receiver, $base . '/handoff', ['mode' => 'create', 'title' => 'Receiving team support',
+            $response = $this->postAs($receiver, $base . '/handoff?fragment=1', ['mode' => 'create', 'title' => 'Receiving team support',
                 'category' => 'personal', 'patient_person_id' => $this->person(), 'counsellor_user_id' => $this->admin['id'],
                 'attending_user_id' => $this->admin['id']]);
             $response->assertStatus(200);

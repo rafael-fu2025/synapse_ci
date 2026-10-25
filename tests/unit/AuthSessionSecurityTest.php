@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Controllers\AuthController;
 use App\Integrations\Mis\FakeMisClient;
 use App\Models\UserModel;
 use App\Services\AuthenticatedUser;
 use App\Services\AuthService;
 use App\Services\CurrentTenant;
+use CodeIgniter\HTTP\IncomingRequest;
+use CodeIgniter\HTTP\RedirectResponse;
+use CodeIgniter\HTTP\Response;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Database;
+use Config\Services;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 
@@ -147,6 +153,146 @@ final class AuthSessionSecurityTest extends CIUnitTestCase
         $this->assertNull((new AuthenticatedUser())->current());
     }
 
+    public static function timeoutTypes(): iterable
+    {
+        yield 'idle timeout' => [true];
+        yield 'absolute timeout' => [false];
+    }
+
+    private function expireSession(bool $idle): void
+    {
+        $now = time();
+        $auth = session('_auth');
+        $auth['started_at'] = $now - ($idle
+            ? config('Session')->authIdleTimeout + 10
+            : config('Session')->authAbsoluteTimeout + 10);
+        $auth['last_seen_at'] = $idle ? $auth['started_at'] : $now;
+        session()->set('_auth', $auth);
+    }
+
+    private function denialRequest(bool $json = false): IncomingRequest
+    {
+        $request = Services::incomingrequest(null, false);
+        $request->setMethod('GET');
+        $request->setGlobal('get', []);
+        foreach (['X-Requested-With', 'Accept', 'HX-Request', 'X-Up-Version'] as $header) {
+            $request->removeHeader($header);
+        }
+        if ($json) {
+            $request->setHeader('Accept', 'application/json');
+        }
+        Services::injectMock('request', $request);
+        Services::injectMock('response', new Response(config('App')));
+        return $request;
+    }
+
+    #[DataProvider('timeoutTypes')]
+    public function testConfirmedTimeoutSurvivesRepeatedChecksAndGetDenial(bool $idle): void
+    {
+        $this->expireSession($idle);
+        session()->set('theme', 'dark');
+        $authority = new AuthenticatedUser();
+        for ($check = 0; $check < 2; $check++) {
+            $this->assertNull($authority->current());
+            $this->assertNull(session('user'));
+            $this->assertNull(session('_auth'));
+            $this->assertNull(session('tenant_id'));
+            $this->assertTrue(session()->getFlashdata('_auth_expired'));
+        }
+        $this->assertSame('dark', session('theme'));
+
+        // A marker already aged by a request must be retained for the login redirect.
+        $_SESSION['__ci_vars']['_auth_expired'] = 'old';
+        $response = AuthenticatedUser::denied($this->denialRequest(), false, 'Please sign in.', '/auth/login');
+        $this->assertInstanceOf(RedirectResponse::class, $response);
+        $this->assertSame(302, $response->getStatusCode());
+        $this->assertSame(site_url('auth/login'), $response->getHeaderLine('Location'));
+        $this->assertTrue(session()->getFlashdata('_auth_expired'));
+        $this->assertSame('new', $_SESSION['__ci_vars']['_auth_expired']);
+        $this->assertNull(session('error'));
+    }
+
+    #[DataProvider('timeoutTypes')]
+    public function testConfirmedTimeoutOverridesJsonDenialMessage(bool $idle): void
+    {
+        $this->expireSession($idle);
+        $this->assertNull((new AuthenticatedUser())->current());
+        $response = AuthenticatedUser::denied($this->denialRequest(true), false, 'Please sign in.', '/auth/login');
+        $expected = 'Your session has expired. Please sign in again to continue.';
+        $this->assertSame($expected, AuthenticatedUser::EXPIRED_MESSAGE);
+        $this->assertSame(401, $response->getStatusCode());
+        $this->assertSame(['message' => $expected], json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR));
+        $this->assertFalse($response->hasHeader('Location'));
+    }
+
+    public function testFreshUnauthenticatedSessionDoesNotReportExpiry(): void
+    {
+        AuthenticatedUser::clear();
+        $this->assertNull((new AuthenticatedUser())->current());
+        $this->assertNull(session()->getFlashdata('_auth_expired'));
+        $response = AuthenticatedUser::denied($this->denialRequest(true), false, 'Please sign in.', '/auth/login');
+        $this->assertSame(401, $response->getStatusCode());
+        $this->assertSame(['message' => 'Please sign in.'], json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR));
+        AuthenticatedUser::denied($this->denialRequest(), false, 'Please sign in.', '/auth/login');
+        $this->assertSame('Please sign in.', session()->getFlashdata('error'));
+        $this->assertNull(session('_auth_expired'));
+    }
+
+    public function testMalformedMetadataDoesNotReportExpiryEvenWithOldTimestamps(): void
+    {
+        $identity = $_SESSION;
+        $now = time();
+        foreach ([
+            null,
+            ['started_at' => $now - 50000],
+            array_replace($identity['_auth'], ['started_at' => (string) ($now - 50000), 'last_seen_at' => $now - 50000]),
+            array_replace($identity['_auth'], ['started_at' => $now - 50000, 'last_seen_at' => 'not-a-time']),
+            array_replace($identity['_auth'], ['started_at' => $now - 50000, 'last_seen_at' => $now - 50000, 'version' => 0]),
+            array_replace($identity['_auth'], ['started_at' => $now - 50000, 'last_seen_at' => $now - 50000, 'session_id' => 'predecessor-id']),
+            array_replace($identity['_auth'], ['started_at' => $now, 'last_seen_at' => $now - 50000]),
+            array_replace($identity['_auth'], ['last_seen_at' => $now + 100]),
+        ] as $metadata) {
+            $_SESSION = $identity;
+            session()->set('_auth', $metadata);
+            $this->assertNull((new AuthenticatedUser())->current());
+            $this->assertNull(session('user'));
+            $this->assertNull(session('_auth'));
+            $this->assertNull(session('_auth_expired'));
+            $this->assertNull(session()->getFlashdata('_auth_expired'));
+        }
+    }
+
+    public function testLoginConsumesExpiryMarkerAndRendersWarningInsteadOfGenericError(): void
+    {
+        Database::connect()->query('CREATE TABLE carousel_slides (id INTEGER PRIMARY KEY,
+            tenant_id INTEGER, is_active INTEGER, sort_order INTEGER)');
+        $this->denialRequest();
+        $this->expireSession(true);
+        session()->setFlashdata('error', 'Please sign in.');
+
+        $html = (new AuthController())->login();
+
+        $this->assertNull(session('user'));
+        $this->assertNull(session('_auth_expired'));
+        $this->assertNull(session('error'));
+        $this->assertSame(AuthenticatedUser::EXPIRED_MESSAGE, session()->getFlashdata('warning'));
+        $this->assertStringContainsString('alert-warning', $html);
+        $this->assertStringContainsString(AuthenticatedUser::EXPIRED_MESSAGE, $html);
+        $this->assertStringNotContainsString('Please sign in.', $html);
+        $this->assertStringNotContainsString('alert-danger', $html);
+    }
+
+    public function testSuccessfulLoginClearsExpiryMarker(): void
+    {
+        $this->expireSession(true);
+        $this->assertNull((new AuthenticatedUser())->current());
+        $this->assertTrue(session()->getFlashdata('_auth_expired'));
+        $this->assertNotNull((new AuthService(misClient: new FakeMisClient()))->login('owner', 'initial-password'));
+        $this->assertNull(session('_auth_expired'));
+        $this->assertNull(session()->getFlashdata('_auth_expired'));
+        $this->assertNotNull((new AuthenticatedUser())->current());
+    }
+
     public function testActivityRefreshesOnlyIdleClockAndUsesConfiguredLimits(): void
     {
         $auth = session('_auth');
@@ -201,6 +347,8 @@ final class AuthSessionSecurityTest extends CIUnitTestCase
         $user['auth_version'] = 2;
         session()->set('user', $user);
         $this->assertNull((new AuthenticatedUser())->current());
+        $this->assertNull(session('_auth_expired'));
+        $this->assertNull(session()->getFlashdata('_auth_expired'));
     }
 
     public function testPasswordReplacementInvalidatesAllCopiesAndFreshLoginWorks(): void
@@ -244,7 +392,10 @@ final class AuthSessionSecurityTest extends CIUnitTestCase
     public function testLogoutClearsMetadataAndPreservesPreferencesWithoutRevokingOtherDevices(): void
     {
         session()->set('theme', 'dark');
+        session()->setFlashdata('_auth_expired', true);
         (new AuthService(misClient: new FakeMisClient()))->logout();
+        $this->assertNull(session('_auth_expired'));
+        $this->assertNull(session()->getFlashdata('_auth_expired'));
         $this->assertNull(session('user'));
         $this->assertNull(session('_auth'));
         $this->assertSame('dark', session('theme'));

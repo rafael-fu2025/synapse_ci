@@ -23,12 +23,23 @@ catch (error) {
 const publicRoot = path.join(root, 'public');
 const imagePath = path.join(publicRoot, 'fuel-bg.jpg');
 const imageBytes = fs.readFileSync(imagePath);
-const view = fs.readFileSync(path.join(root, 'app/Views/admin/carousel/_form_scripts.php'), 'utf8');
-// Execute the real view's script/style, never a rewritten copy of its logic.
-const formScripts = (view.match(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi) || []).join('\n');
-assert.match(formScripts, /<script>/);
-assert.match(formScripts, /<style>/);
-assert.doesNotMatch(formScripts, /<\?/);
+const renderedScripts = new Map();
+function formScripts(edit) {
+  if (!renderedScripts.has(edit)) {
+    // Render the actual PHP partial with its add/edit identity, not rewritten logic.
+    const view = execFileSync('php', ['tests/_support/render-carousel-upload-fixture.php'], {
+      cwd: root, encoding: 'utf8', timeout: 12_000,
+      input: JSON.stringify({ origin: 'http://127.0.0.1', edit })
+    });
+    assert.doesNotMatch(view, /Fatal error|Warning:|Parse error|"code"\s*:\s*500/);
+    const scripts = (view.match(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi) || []).join('\n');
+    assert.match(scripts, /<script>/);
+    assert.match(scripts, /<style>/);
+    assert.doesNotMatch(scripts, /<\?/);
+    renderedScripts.set(edit, scripts);
+  }
+  return renderedScripts.get(edit);
+}
 let browser;
 const cleanups = new Set();
 
@@ -72,7 +83,9 @@ function fixture({ edit = false, manager = false } = {}) {
       <input type="file" name="${mode}_file" id="${mode}_file" accept="image/*" class="d-none">
       <div class="dz-body">Drag &amp; drop or <span class="upload-browse-link">browse</span></div>
       <div class="dz-preview d-none"></div>
-    </div>`).join('\n');
+    </div>
+    <label for="${mode}_path">Or use an existing ${mode} image path</label>
+    <input type="text" name="${mode}_path" id="${mode}_path" maxlength="255">`).join('\n');
   return `<!doctype html><html lang="en"><head>
     <meta charset="utf-8"><meta name="csrf-token" content="initial-csrf">
     <link rel="icon" href="data:,">
@@ -100,10 +113,11 @@ function fixture({ edit = false, manager = false } = {}) {
       <div class="alert d-none mb-3" id="slideFormAlert" role="alert"></div>
       <button type="submit" id="slideSubmitBtn">${edit ? 'Save Changes' : 'Save Slide'}</button>
       <a href="/admin/carousel">Cancel</a>
-    </form></main>${formScripts}</body></html>`;
+    </form></main>${formScripts(edit)}</body></html>`;
 }
 
 before(async () => {
+  for (const edit of [false, true]) formScripts(edit);
   const executable = executablePath();
   console.log(`Carousel tests Chromium: ${executable}`);
   browser = await playwright.chromium.launch({ headless: true, executablePath: executable, timeout: 20_000 });
@@ -300,7 +314,10 @@ async function successfulSave(f) {
     const form = document.querySelector('#slideForm');
     const button = document.querySelector('#slideSubmitBtn');
     const snapshot = () => ({
-      disabled: button.disabled, busy: form.getAttribute('aria-busy'),
+      disabled: button.disabled, busy: form.getAttribute('aria-busy'), inert: form.inert,
+      nativeControlsLocked: [...form.elements].filter(control => 'disabled' in control).every(control => control.disabled),
+      uploadControlsLocked: ['csrf_test_name', 'title', 'subtitle', 'fit_mode', 'light_file', 'dark_file', 'light_path', 'dark_path']
+        .every(name => form.elements.namedItem(name)?.disabled === true),
       status: form.querySelector('.dz-status').textContent,
       percent: form.querySelector('.dz-pct').textContent,
       progress: form.querySelector('.progress-bar').getAttribute('aria-valuenow'),
@@ -328,11 +345,15 @@ async function successfulSave(f) {
     await bounded(f.managerRequested.promise, 'manager GET to be held');
     const snapshot = await bounded(observed.promise, 'in-page duplicate-submit probe');
     assert.equal(snapshot.error, undefined);
-    const expected = { disabled: true, busy: 'true', status: 'Saved', percent: '100%', progress: '100', success: true };
+    // The POST has finished, but committed saves stay inert and locked until navigation.
+    const expected = {
+      disabled: true, busy: null, inert: true, nativeControlsLocked: true, uploadControlsLocked: true,
+      status: 'Saved', percent: '100%', progress: '100', success: true
+    };
     assert.deepEqual(snapshot.before, expected, 'Success must remain locked after loadend while manager navigation is pending');
     assert.deepEqual(snapshot.after, expected, 'Second click and requestSubmit must not restart an upload');
     assert.equal(snapshot.postCount, expectedPosts, 'Duplicate attempts must not send another POST');
-        assert.equal(f.posts.length, expectedPosts, 'Browser and server POST counters must agree');
+    assert.equal(f.posts.length, expectedPosts, 'Browser and server POST counters must agree');
     assert.equal(f.managerGets(), 1, 'Only the successful save should request the manager');
   } finally {
     // Also release on failed assertions/timeouts, before test/browser teardown.
@@ -364,7 +385,7 @@ async function successfulSave(f) {
 }
 
 for (const edit of [false, true]) {
-  test(`${edit ? 'edit' : 'add'} success stays busy through held manager navigation and blocks duplicate POSTs`, { timeout: 15_000 }, async t => {
+  test(`${edit ? 'edit' : 'add'} success clears busy but stays inert and locked through held manager navigation and blocks duplicate POSTs`, { timeout: 15_000 }, async t => {
     const f = await open(t, { edit });
     if (edit) {
       await f.page.waitForFunction(() => [...document.querySelectorAll('.dz-preview img')].every(img => img.complete && img.naturalWidth > 0));

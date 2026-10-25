@@ -6,12 +6,13 @@
   const form = root.querySelector('#slideForm');
   if (!form || initialized.has(form)) return;
   const alertBox = document.getElementById('slideFormAlert');
-  const submit = document.getElementById('slideSubmitBtn');
+
   const progress = form.querySelector('.carousel-upload-progress');
   const bar = progress.querySelector('.progress-bar');
   const status = progress.querySelector('.dz-status');
   const percent = progress.querySelector('.dz-pct');
   let busy = false;
+  let committed = false;
   const urls = new Set();
   initialized.set(form, urls);
 
@@ -151,11 +152,17 @@
   form.addEventListener('submit', function(e) {
     e.preventDefault();
     validateImages();
-    if (busy || !form.reportValidity()) return;
+    if (busy || committed || !form.reportValidity()) return;
+    const mutations = window.SynapseMutations;
+
     busy = true;
     alertBox.classList.add('d-none');
     const data = new FormData(form);
-    submit.disabled = true;
+    const controls = Array.from(form.elements).filter(control => 'disabled' in control);
+    const disabled = controls.map(control => control.disabled);
+    const inert = form.inert;
+    form.inert = true;
+    controls.forEach(control => { control.disabled = true; });
     form.setAttribute('aria-busy', 'true');
     progress.classList.remove('d-none');
     setProgress(0);
@@ -165,6 +172,7 @@
     xhr.open('POST', form.action);
     xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
     xhr.setRequestHeader('Accept', 'application/json');
+    if (mutations) xhr.setRequestHeader('X-Synapse-Feedback', 'toast');
     Object.entries(window.SynapseCsrf?.headers() || {}).forEach(([name, value]) => xhr.setRequestHeader(name, value));
     xhr.upload.addEventListener('progress', function(event) {
       if (event.lengthComputable) {
@@ -174,7 +182,7 @@
         percent.textContent = 'Sending…';
       }
     });
-    xhr.addEventListener('load', function() {
+    xhr.addEventListener('load', async function() {
       window.SynapseCsrf?.fromResponse(xhr);
       let payload;
       try { payload = JSON.parse(xhr.responseText); } catch (_) { payload = null; }
@@ -190,9 +198,16 @@
         setProgress(100);
         status.textContent = 'Saved';
         showAlert(payload.message, true);
-        // Back to the manager, where the refreshed list and its thumbnails
-        // confirm the saved slide and the form is empty for the next one.
-        window.location.assign(payload.redirect);
+        committed = true;
+        busy = false;
+        form.removeAttribute('aria-busy');
+        let closed = Promise.resolve();
+        document.dispatchEvent(new CustomEvent('synapse:modal-saved', {
+          detail: { form, done: promise => { closed = promise; } }
+        }));
+        await closed;
+        if (mutations) await mutations.refresh(payload.redirect, payload.message, { form });
+        else window.location.assign(payload.redirect);
       } else {
         status.textContent = 'Not saved';
         showAlert(payload?.message || (xhr.status === 413
@@ -210,7 +225,8 @@
       // unlocking here would allow a second create request on slow navigation.
       if (saved) return;
       busy = false;
-      submit.disabled = false;
+      controls.forEach((control, i) => { control.disabled = disabled[i]; });
+      form.inert = inert;
       form.removeAttribute('aria-busy');
     });
     xhr.send(data);

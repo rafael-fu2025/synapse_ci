@@ -13,14 +13,13 @@ use App\Models\UserModel;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\Referrals\ReferralService;
-use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use Config\Services;
 use RuntimeException;
-use Tests\Support\InventoryTestDatabase;
+use Tests\Support\FreshDatabaseTestCase;
 
-/** Domain integration only: requires referral migration/notification integration and the isolated harness. */
-final class ReferralWorkflowTest extends CIUnitTestCase
+/** Domain integration only; run through run-fresh-database-tests.py. */
+final class ReferralWorkflowTest extends FreshDatabaseTestCase
 {
     use DatabaseTestTrait;
 
@@ -39,7 +38,6 @@ final class ReferralWorkflowTest extends CIUnitTestCase
 
     protected function setUp(): void
     {
-        InventoryTestDatabase::verify();
         parent::setUp();
         AuthenticatedUser::clear();
         $mis = $this->createMock(MisClientInterface::class);
@@ -64,7 +62,7 @@ final class ReferralWorkflowTest extends CIUnitTestCase
         // Only delete this test's tenant fixtures, never shared seed identities.
         if (isset($this->tenant)) {
             foreach ([$this->tenant, ...$this->foreignTenants] as $tenant) {
-                foreach (['notifications', 'referrals', 'clinic_encounters', 'counselling_cases', 'users', 'people'] as $table) {
+                foreach (['notifications', 'workflow_events', 'referrals', 'clinic_encounters', 'counselling_cases', 'users', 'people'] as $table) {
                     $this->db->table($table)->where('tenant_id', $tenant)->delete();
                 }
                 $this->db->table('tenants')->where('id', $tenant)->delete();
@@ -296,6 +294,112 @@ final class ReferralWorkflowTest extends CIUnitTestCase
         $this->rejected(409, fn () => $this->service->handoff($id, ['mode' => 'create'], $this->clinic));
     }
 
+    public function testReferralIntakeRequiresHealthyOuterTransactionAndNeverCommitsIt(): void
+    {
+        $intake = new \App\Services\Clinic\EncounterService();
+        $this->rejected(409, fn () => $intake->startReferralEncounter($this->patient, $this->clinic['id'], 'Synthetic intake'));
+        $observer = \Config\Database::connect('tests', false);
+        $this->db->transBegin();
+        try {
+            $this->rejected(0, fn () => $intake->startEncounter($this->patient, $this->clinic['id']));
+            $this->assertSame(1, $this->db->transDepth);
+            $this->assertTrue($this->db->transStatus());
+            $this->db->transBegin();
+            $this->rejected(409, fn () => $intake->startReferralEncounter($this->patient, $this->clinic['id']));
+            $this->assertSame(2, $this->db->transDepth);
+            $this->db->transRollback();
+            $status = new \ReflectionProperty($this->db, 'transStatus');
+            $status->setValue($this->db, false);
+            $this->rejected(409, fn () => $intake->startReferralEncounter($this->patient, $this->clinic['id']));
+            $this->assertFalse($this->db->transStatus());
+            $this->db->resetTransStatus();
+            $package = $intake->startReferralEncounter($this->patient, $this->clinic['id'], 'Synthetic intake');
+            $this->assertTrue($package['created']);
+            $this->assertSame(1, $this->db->transDepth);
+            $this->assertTrue($this->db->transStatus());
+            $this->assertSame(0, $observer->table('clinic_encounters')->where('tenant_id', $this->tenant)->countAllResults());
+            foreach (['queue_entries', 'appointments'] as $table) {
+                $this->assertSame(0, $this->db->table($table)->where('tenant_id', $this->tenant)->countAllResults());
+            }
+        } finally {
+            while ($this->db->transDepth > 0) $this->db->transRollback();
+            $this->db->resetTransStatus();
+            $observer->close();
+        }
+        $this->assertSame(0, $this->db->table('clinic_encounters')->where('tenant_id', $this->tenant)->countAllResults());
+        $standalone = $intake->startEncounter($this->patient, $this->clinic['id'], null, null, 'Standalone intake');
+        $this->assertSame(0, $this->db->transDepth);
+        $this->assertNotEmpty($standalone['encounter']['id']);
+    }
+
+    public function testClinicCreateModeReusesExistingVisitWithoutOverwritingIt(): void
+    {
+        $ref = $this->ready(true);
+        $visit = $this->encounter($this->patient);
+        $result = $this->service->handoff((int) $ref['id'], ['mode' => 'create'], $this->clinic);
+        $this->assertFalse($result['created']);
+        $this->assertSame($visit, $result['target_id']);
+        $this->assertSame('PRIVATE COMPLAINT', (new ClinicEncounterModel())->find($visit)['chief_complaint']);
+        $this->assertSame(1, $this->db->table('clinic_encounters')->where('tenant_id', $this->tenant)->countAllResults());
+    }
+
+    public function testMaximumLengthReferralSummaryCanCreateEitherTarget(): void
+    {
+        $description = str_repeat('界', 2000);
+        foreach ([false, true] as $reverse) {
+            $issuer = $reverse ? $this->guidance : $this->clinic;
+            $receiver = $reverse ? $this->clinic : $this->guidance;
+            $ref = $this->service->createReferral(array_replace($this->data($reverse), [
+                'reason_description' => $description,
+            ]), $issuer);
+            $id = (int) $ref['id'];
+            $this->service->acknowledge($id, $receiver['id'], $receiver);
+            $result = $this->service->handoff($id, [
+                'mode' => 'create', 'title' => 'Long referral', 'category' => 'personal',
+            ], $receiver);
+            $this->assertTrue($result['created']);
+            $stored = (new ReferralModel())->find($id);
+            $this->assertSame($description, $stored['reason_description']);
+            if ($reverse) {
+                $visit = (new ClinicEncounterModel())->find($result['target_id']);
+                $this->assertLessThanOrEqual(255, mb_strlen($visit['chief_complaint']));
+                $this->assertStringStartsWith('Referral ' . $ref['referral_code'], $visit['chief_complaint']);
+            }
+        }
+    }
+
+    public function testFailedTargetLinkRollsBackNewTargetAndAllowsRetry(): void
+    {
+        foreach ([false, true] as $reverse) {
+            $ref = $this->ready($reverse);
+            $actor = $reverse ? $this->clinic : $this->guidance;
+            $targetTable = $reverse ? 'clinic_encounters' : 'counselling_cases';
+            $field = $reverse ? 'target_encounter_id' : 'target_case_id';
+            $id = (int) $ref['id'];
+            $name = $this->db->protectIdentifiers(uniqid('ref_handoff_failure_'));
+            $table = $this->db->protectIdentifiers($this->db->prefixTable('referrals'));
+            $this->assertNotFalse($this->db->query("CREATE TRIGGER {$name} BEFORE UPDATE ON {$table} FOR EACH ROW BEGIN IF NEW.id = {$id} AND NEW.{$field} IS NOT NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fixture handoff failure'; END IF; END"));
+            $failure = null;
+            try {
+                try {
+                    $this->service->handoff($id, ['mode' => 'create', 'title' => 'Rollback target', 'category' => 'personal'], $actor);
+                } catch (\Throwable $e) {
+                    $failure = $e;
+                }
+            } finally {
+                $this->db->query("DROP TRIGGER IF EXISTS {$name}");
+            }
+            $this->assertNotNull($failure);
+            $this->assertSame(0, $this->db->transDepth);
+            $this->assertTrue($this->db->transStatus());
+            $this->assertSame(0, $this->db->table($targetTable)->where('tenant_id', $this->tenant)->countAllResults());
+            $stored = (new ReferralModel())->find($id);
+            $this->assertSame('acknowledged', $stored['status']);
+            $this->assertNull($stored[$field]);
+            $this->assertTrue($this->service->handoff($id, ['mode' => 'create', 'title' => 'Retry target', 'category' => 'personal'], $actor)['created']);
+        }
+    }
+
     public function testClinicLinkRequiresSamePatientOpenTenantAndTargetRole(): void
     {
         $ref = $this->ready(true);
@@ -418,6 +522,21 @@ final class ReferralWorkflowTest extends CIUnitTestCase
         return $rows[0];
     }
 
+    public function testConcurrentSameReferralHandoffsReuseOneTarget(): void
+    {
+        foreach ([false, true] as $reverse) {
+            $ref = $this->ready($reverse);
+            $job = ['operation' => 'handoff', 'id' => (int) $ref['id'],
+                'clinic' => $reverse, 'actor' => $reverse ? $this->clinic : $this->guidance];
+            $rows = $this->raceCases([$job, $job]);
+            $this->assertCount(2, $rows);
+            $this->assertSame($rows[0]['id'], $rows[1]['id']);
+            $this->assertSame(1, count(array_filter(array_column($rows, 'created'))));
+            $this->assertSame(1, $this->db->table($reverse ? 'clinic_encounters' : 'counselling_cases')
+                ->where('tenant_id', $this->tenant)->countAllResults());
+        }
+    }
+
     public function testConcurrentDifferentReferralHandoffsAllocateDifferentCases(): void
     {
         $first = $this->ready();
@@ -471,7 +590,11 @@ $job = json_decode((string) fgets(STDIN), true, 512, JSON_THROW_ON_ERROR);
 require $job['bootstrap'];
 config('Database')->tests = $job['database'];
 config('Database')->defaultGroup = 'tests';
-\Tests\Support\InventoryTestDatabase::verify();
+$schema = $job['database']['database'];
+if (!preg_match('/^humus_fresh_[0-9a-f]{16}$/D', $schema)
+    || \Config\Database::connect()->query('SELECT DATABASE() AS name')->getRowArray()['name'] !== $schema) {
+    throw new \RuntimeException('Referral worker requires the disposable parent schema.');
+}
 \App\Services\CurrentTenant::set($job['tenant']);
 $db = \Config\Database::connect();
 $db->query('SET SESSION innodb_lock_wait_timeout = 10');
@@ -496,7 +619,9 @@ try {
             if (!$db->transStatus() || !$db->transCommit()) throw new \RuntimeException('Worker commit failed.');
         }
     }
-    $row = $db->table('counselling_cases')->select('id,case_number')->where('id', $id)->get()->getRowArray();
+    $row = $db->table(!empty($job['clinic']) ? 'clinic_encounters' : 'counselling_cases')
+        ->select(!empty($job['clinic']) ? 'id' : 'id,case_number')->where('id', $id)->get()->getRowArray();
+    if ($job['operation'] === 'handoff') $row['created'] = $result['created'];
     echo json_encode(['result' => $row], JSON_THROW_ON_ERROR) . "\n";
 } catch (\Throwable $e) {
     if ($db->transDepth > 0) $db->transRollback();

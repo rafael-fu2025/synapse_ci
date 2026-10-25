@@ -15,10 +15,10 @@ helper(['url', 'form']);
 session()->set(['tenant_id' => 1, 'user' => ['id' => 7, 'person_id' => 1, 'name' => 'Synthetic Counsellor', 'username' => 'fixture', 'role' => 'counsellor', 'permissions' => ['referrals.create'], 'logged_in' => true]]);
 $status = in_array($fixture['status'] ?? '', ['active', 'monitoring', 'closed'], true) ? $fixture['status'] : 'active';
 $active = !empty($fixture['active']) && $status !== 'closed';
-$case = ['id' => 10, 'person_id' => 1, 'case_number' => 'SYNTHETIC-010', 'status' => $status, 'title' => 'Campus adjustment and wellbeing support', 'category' => 'personal', 'opened_at' => '2026-10-17 08:00:00'];
+$case = ['id' => 10, 'person_id' => 1, 'tenant_id' => 1, 'case_number' => 'SYNTHETIC-010', 'status' => $status, 'title' => 'Campus adjustment and wellbeing support', 'category' => 'personal', 'opened_at' => '2026-10-17 08:00:00'];
 $session = ['id' => 21, 'session_number' => 1, 'session_type' => 'regular', 'status' => 'completed', 'started_at' => '2026-10-17 09:00:00', 'counsellor_name' => 'Synthetic Counsellor'];
 $package = ['student' => null, 'employee' => ['department' => 'Synthetic Department', 'position' => 'Synthetic Employee'],
-    'patient' => ['kind' => 'employee', 'first_name' => 'Synthetic', 'last_name' => 'Client', 'mis_id' => 'FIXTURE-001'],
+    'patient' => ['id' => 1, 'tenant_id' => 1, 'kind' => 'employee', 'first_name' => 'Synthetic', 'last_name' => 'Client', 'mis_id' => 'FIXTURE-001'],
     'sessions' => [$session], 'followups' => [['id' => 30, 'action_plan' => 'Synthetic follow-up commitment for layout verification only.', 'status' => 'pending', 'due_date' => '2030-10-20']]];
 $activeSession = $active ? array_replace($session, ['id' => 22, 'session_number' => 2, 'status' => 'in_progress']) : null;
 echo view('guidance/cases/view', compact('case', 'package', 'activeSession') + ['title' => $case['title'], 'decryptedNote' => null,

@@ -8,6 +8,8 @@ use App\Libraries\TablePage;
 use App\Models\PersonModel;
 use App\Services\Clinic\EncounterService;
 use App\Services\NotificationService;
+use App\Services\NotificationInvalidation;
+use App\Services\WorkflowNotifications;
 use App\Models\ReferralModel;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
@@ -163,10 +165,17 @@ final class ReferralService
             throw new RuntimeException('Invalid referral reason or priority.', 422);
         }
 
+        if ($encounter !== null) {
+            $this->authorize($fresh, 'clinic.encounters.read', 'clinic');
+        }
         $description = trim($description);
-        return $this->transaction(function () use ($actor, $issuer, $source, $target, $patient, $encounter, $reason, $description, $priority, $key): array {
-            $fresh = $this->actor($issuer, $actor, 'referrals.create', $source);
+        return $this->transaction(function (array &$notifications) use ($actor, $issuer, $source, $target, $patient, $encounter, $reason, $description, $priority, $key): array {
             $this->referralModel->lockTenant();
+            // The mutex may have waited while the issuer's role or grants changed.
+            $fresh = $this->actor($issuer, $actor, 'referrals.create', $source);
+            if ($encounter !== null) {
+                $this->authorize($fresh, 'clinic.encounters.read', 'clinic');
+            }
             $payload = [
                 'patient_person_id' => $patient, 'source_module' => $source, 'target_module' => $target,
                 'source_encounter_id' => $encounter, 'reason_code' => $reason,
@@ -211,7 +220,7 @@ final class ReferralService
                 throw new RuntimeException('Referral could not be created.', 422);
             }
             $referral = $this->record((int) $id);
-            (new NotificationService())->notifyReferral($referral);
+            $notifications[(int) $referral['tenant_id']] = (new NotificationService())->notifyReferral($referral);
             return $this->visibleReferral($referral, $fresh);
         });
     }
@@ -367,6 +376,7 @@ final class ReferralService
             if (!in_array($mode, ['create', 'link'], true)) {
                 throw new RuntimeException('Choose create or link.', 422);
             }
+            $created = false;
             if ($mode === 'link') {
                 $target = $this->targetRecord($ref, self::positiveId($data['target_id'] ?? null), $fresh, true);
                 $targetId = (int) $target['id'];
@@ -376,8 +386,10 @@ final class ReferralService
                 $summary = 'Referral ' . $ref['referral_code'] . ' from ' . ucfirst($ref['source_module']) . ': '
                     . mb_substr(trim((string) ($ref['reason_description'] ?? $ref['reason_code'])), 0, 2000);
                 if ($clinic) {
-                    $package = (new EncounterService())->startEncounter((int) $ref['patient_person_id'], (int) $fresh['id'], null, null, $summary);
+                    $package = (new EncounterService())->startReferralEncounter((int) $ref['patient_person_id'], (int) $fresh['id'],
+                        mb_substr($summary, 0, EncounterService::TEXT_LIMITS['chief_complaint']));
                     $targetId = self::positiveId($package['encounter']['id'] ?? null);
+                    $created = $package['created'];
                 } else {
                     $title = $data['title'] ?? null;
                     $category = $data['category'] ?? null;
@@ -387,6 +399,7 @@ final class ReferralService
                     }
                     $package = $this->caseService->createCase((int) $ref['patient_person_id'], (int) $fresh['id'], trim($title), $category, $summary);
                     $targetId = self::positiveId($package['case']['id'] ?? null);
+                    $created = true;
                 }
                 $this->targetRecord($ref, $targetId, $fresh, true);
             }
@@ -394,7 +407,9 @@ final class ReferralService
                 $field => $targetId, 'status' => $clinic ? 'under_review' : 'converted_to_case',
                 'assigned_user_id' => $fresh['id'],
             ]);
-            return $this->handoffResult($this->record($id), $targetId, $mode === 'create', $fresh);
+            WorkflowNotifications::record(Database::connect(), 'referral_handoff', $ref['source_module'], $id,
+                ($clinic ? 'encounter_' : 'case_') . $targetId, (int) $fresh['id']);
+            return $this->handoffResult($this->record($id), $targetId, $created, $fresh);
         });
     }
 
@@ -456,6 +471,13 @@ final class ReferralService
             }
             $this->validateLinks($ref);
             $this->transition($ref, $from, $changes);
+            $kind = match ($changes['status']) {
+                'acknowledged' => 'referral_acknowledged',
+                'under_review' => 'referral_reviewed',
+                'closed' => 'referral_closed',
+            };
+            WorkflowNotifications::record(Database::connect(), $kind, $ref['source_module'], $id,
+                $changes['status'], (int) $fresh['id']);
             return $this->visibleReferral($this->record($id), $fresh);
         });
     }
@@ -514,7 +536,7 @@ final class ReferralService
         }
     }
 
-    private function transaction(callable $operation): array
+    private function transaction(callable $operation, ?NotificationInvalidation $invalidation = null): array
     {
         $db = Database::connect();
         if ($db->transDepth !== 0) {
@@ -524,15 +546,15 @@ final class ReferralService
         if (!$db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED') || !$db->transBegin()) {
             throw new RuntimeException('Referral transaction could not begin.', 409);
         }
+        $notifications = [];
         try {
-            $result = $operation();
+            $result = $operation($notifications);
             if ($db->transStatus() === false) {
                 throw new RuntimeException('Referral transaction failed.', 409);
             }
             if (!$db->transCommit()) {
                 throw new RuntimeException('Referral transaction could not commit.', 409);
             }
-            return $result;
         } catch (\Throwable $e) {
             try {
                 $db->transRollback();
@@ -541,5 +563,15 @@ final class ReferralService
             }
             throw $e;
         }
+        // IDs are local to this successful outer commit, never retained for a later operation.
+        try {
+            if ($notifications !== []) {
+                $invalidation ??= new NotificationInvalidation($db);
+                foreach ($notifications as $tenant => $ids) $invalidation->publishCommitted((int) $tenant, $ids);
+            }
+        } catch (\Throwable) {
+            // Optional realtime setup cannot fail or roll back a committed write.
+        }
+        return $result;
     }
 }

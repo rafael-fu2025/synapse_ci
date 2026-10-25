@@ -4,6 +4,13 @@
 
 The `core/` directory contains tokens, base rules, layout rules, and reusable component rules. The `pages/` directory contains page-family rules. `dashboard.css` currently holds the dashboard and remaining page-specific tail of the former monolith; additional page-family extraction should be incremental and validated visually.
 
+## Responsive application shell
+
+- `body.app-shell` opts the shared PHP layout into the application geometry in `core/layout.css`; keep layout rules out of inline view styles.
+- The application sidebar is a drawer below 992px and a collapsible rail at 992px and above. `core/main.js` uses the same breakpoint and synchronizes visibility, keyboard focus, and `aria-expanded`.
+- Mobile page actions wrap below the title with 44px touch targets. Header menus stay inside the viewport and scroll independently on short screens.
+- Run `node --test tests/browser/mobile-layout.test.cjs` for the light/dark 320–1440px shell matrix, drawer dismissal, and long-title/action overflow checks.
+
 ## Theme contrast contract
 
 - `core/tokens.css` owns the neutral dark palette for both `html[data-theme="dark"]` and the legacy `body.dark-mode` hook. Do not redeclare a separate blue palette in layout or page styles.

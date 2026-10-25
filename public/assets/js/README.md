@@ -1,6 +1,43 @@
 # JavaScript organization
 
-`core/main.js` owns persistent shell controls, theme persistence, and initial Bootstrap/editor/icon setup. `sidebar-state.js` restores sidebar scroll before paint.
+`core/main.js` owns persistent shell controls, theme persistence, and initial Bootstrap/editor/icon setup. `sidebar-state.js` restores sidebar scroll and the desktop collapsed preference before paint.
+
+## Sidebar rail
+
+The application shell keeps its branding inside the sidebar. At widths of 992px and above, the header toggle switches between the full navigation and a 72px icon rail (`body.sidebar-collapsed`). The sidebar remains interactive in either desktop state; the header and content follow its width. `synapse-sidebar-collapsed` in local storage remembers the preference. Smaller screens retain the full drawer with overlay, Escape dismissal, and focus trapping.
+
+Collapsed desktop navigation uses dedicated Bootstrap hover/focus tooltips placed to the right in `body`, avoiding clipping by the scrolling sidebar. They are disabled when expanded or on mobile, and dismissed when scrolling, navigating, or opening a modal. These instances are owned by the sidebar code rather than the generic tooltip initializer. Icon-only links retain accessible labels.
+
+Run `node --test tests/browser/sidebar-rail.test.cjs` and `node --test tests/browser/mobile-layout.test.cjs` for branding, rail geometry, tooltips, persistence, and mobile drawer coverage.
+
+## Background saves and floating feedback
+
+`toast.js` owns the persistent, keyed `SynapseToast.show(message, options)` banners. `background-actions.js` owns only explicit `form[data-background-submit]` small mutations, after shared confirmation. It submits once with the current CSRF token and refreshes the current URL through the existing document-navigation lifecycle; it does not blanket-intercept every POST.
+
+`form-modal.js` exposes `SynapseMutations.refresh(url, message, { form, scroll })` for modal and specialized owners. Confirmed forms are locked and marked saved individually. Other drafts remain editable; if they prevent refreshing, a sticky warning offers a GET-only retry, never another POST. `canRefresh(form)` is a refresh-safety query, not a reason to block saving two independently edited forms. Feedback-owned requests send `X-Synapse-Feedback: toast` so participating controllers do not queue a duplicate success flash.
+
+See [`docs/background-mutations.md`](../../../docs/background-mutations.md) for the screen/function map, intentional navigation exceptions, extension contract, and validation limitations.
+
+## Authentication recovery
+
+`auth-session.js` is loaded before `csrf.js` in the authenticated shell. The shared
+`SynapseCsrf.fromResponse(response)` response hook also passes Fetch/XHR responses
+to `SynapseAuth.handle`; new request owners must call it before reading a body.
+An explicit 401 with `X-Synapse-Auth` and the canonical same-origin
+`X-Synapse-Login` triggers one full-document `location.replace` to login. It does
+not guess from error text, blanket-intercept fetch, store drafts/reasons in browser
+storage, or replay a POST. A bare 401, permission 403, CSRF failure, or network
+failure is not evidence of session expiry.
+
+The server keeps a non-flash pending authentication notice until a real login
+document is rendered. Background/HTMX/fragment requests and progressive navigation
+(`X-Synapse-Navigation: 1`) return the auth contract instead of consuming the login
+banner. Proven timeout says the session expired; invalid/revoked authentication
+asks for sign-in again; missing session/cookie with no provable cause says only
+that sign-in is required. Initial login and deliberate logout remain distinct.
+
+Run `node --test tests/browser/auth-session.test.cjs` and
+`php vendor/bin/phpunit tests/unit/AuthFailureContractTest.php --no-coverage`.
 
 ## Request-scoped loading
 
@@ -9,6 +46,14 @@
 `form-loading.js` enhances only unclaimed native submissions, after confirmation/validation and AJAX handlers. It keeps the native submitter enabled so its name/value and overrides serialize correctly, prevents duplicate submissions, and restores controls on `pageshow`. AJAX forms must own cleanup on failure; successful redirecting writes stay busy until the destination loads. Use `data-loading="false"` on a native form or submitter to opt out. No global `fetch` patch or artificial progress/duration is used.
 
 Run `node --test tests/browser/loading.test.cjs` for request lifecycle, races, failure cleanup, reduced motion, and real native POST coverage.
+
+## Global navigation search
+
+`global-search.js` opens a shared-style Bootstrap modal from the header or `Ctrl/Cmd + K`. It searches only server-rendered sidebar links and the permission-checked generic form links in `partials/search_actions.php`; it never fetches or indexes patient records, case content, or other personal data. Pages inherit sidebar role/workspace visibility. New action shortcuts must enforce their destination's permissions and use `PortalContext::urlFor()`.
+
+Arrow keys select results, Enter opens them, and Escape closes search and restores focus. The search uses the same centered container, theme styling, backdrop, scroll locking, focus trap, and fade lifecycle as confirmation dialogs. It preserves modal-form markers and ordinary navigation behavior, and does not interrupt an existing dialog. Result activation waits for `hidden.bs.modal` so the backdrop and scroll lock are removed before handing off to a form modal. Sidebar links are read again on each open; shell identity changes continue to require full navigation.
+
+Run `node --test tests/browser/global-search.test.cjs` and `php vendor/bin/phpunit --no-coverage tests/unit/SearchActionsViewTest.php` for interaction, responsive layout, and action-visibility coverage.
 
 ## Progressive navigation
 

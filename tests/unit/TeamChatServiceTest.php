@@ -35,6 +35,18 @@ final class TeamChatServiceTest extends TestCase
         foreach (['attachments', 'patient_id', 'sender_user_id', 'tenant_id', 'unit', 'draft', 'recipient_id'] as $field) {
             yield [$base + [$field => 1]];
         }
+        foreach ([null, '1', [1, '1'], range(1, 21), [0], ['x' => 1]] as $ids) {
+            yield [$base + ['task_ids' => $ids]];
+        }
+        yield [$base + ['task_id' => 1, 'task_ids' => [2]]];
+        foreach ([0, false, [], '01'] as $reply) { yield [$base + ['reply_to_id' => $reply]]; }
+        foreach ([null, 'bad', [null], [['user_id' => 1, 'start' => 0, 'length' => 100]],
+            [['user_id' => 1, 'start' => 0, 'length' => 1, 'name' => 'Forged']],
+            [['user_id' => 1, 'start' => 0, 'length' => 2], ['user_id' => 2, 'start' => 1, 'length' => 1]]] as $mentions) {
+            yield [$base + ['mentions' => $mentions]];
+        }
+        yield [array_replace($base, ['body' => '😀@A', 'mentions' => [['user_id' => 1, 'start' => 1, 'length' => 2]]])];
+        yield [array_replace($base, ['body' => '😀@A', 'mentions' => [['user_id' => 1, 'start' => 0, 'length' => 1]]])];
         yield [[]];
     }
 
@@ -56,6 +68,18 @@ final class TeamChatServiceTest extends TestCase
         $this->assertSame(12, $data['task_id']);
         $this->assertSame(0, $this->invoke('integer', '0', true));
         $this->assertSame(PHP_INT_MAX, $this->invoke('integer', (string) PHP_INT_MAX, false));
+    }
+
+    public function testMentionOffsetsUseUtf16AndRequireExactMemberName(): void
+    {
+        $input = ['body' => '😀 @Zoë', 'client_nonce' => '01234567-89ab-4cde-8fab-0123456789ab',
+            'mentions' => [['user_id' => '2', 'start' => '3', 'length' => '4']]];
+        $data = $this->invoke('payload', $input);
+        $this->assertSame([['user_id' => 2, 'start' => 3, 'length' => 4]], $data['mentions']);
+        $this->assertNull($this->invoke('validateMentions', $data, [['id' => 2, 'name' => 'Zoë']]));
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionCode(422);
+        $this->invoke('validateMentions', $data, [['id' => 2, 'name' => 'Zoe']]);
     }
 
     public function testForgeDeclarationsPreserveMysqlTypesAndScopeConstraints(): void
@@ -96,11 +120,29 @@ final class TeamChatServiceTest extends TestCase
         $this->assertSame(['type' => 'BIGINT', 'unsigned' => true, 'default' => 0], $reads['last_read_message_id']);
     }
 
+    public function testReferenceMigrationAddsNullableMetadataWithoutReplacingLegacyColumns(): void
+    {
+        require_once APPPATH . 'Database/Migrations/2026-10-25-000001_AddTeamChatReferences.php';
+        $db = new \CodeIgniter\Database\MySQLi\Connection(['DBDriver' => 'MySQLi']);
+        $forge = $this->createMock(\CodeIgniter\Database\Forge::class);
+        $forge->method('getConnection')->willReturn($db);
+        $forge->expects($this->once())->method('addColumn')->with('team_chat_messages', [
+            'task_ids' => ['type' => 'TEXT', 'null' => true],
+            'mentions' => ['type' => 'TEXT', 'null' => true],
+            'reply_to_id' => ['type' => 'BIGINT', 'unsigned' => true, 'null' => true],
+        ]);
+        $forge->expects($this->once())->method('dropColumn')
+            ->with('team_chat_messages', ['task_ids', 'mentions', 'reply_to_id']);
+        $migration = new \App\Database\Migrations\AddTeamChatReferences($forge);
+        $migration->up();
+        $migration->down();
+    }
+
     public function testOnlyRequestedPublicOperationsExist(): void
     {
         $methods = array_map(static fn ($method) => $method->name,
             (new ReflectionClass(TeamChatService::class))->getMethods(ReflectionMethod::IS_PUBLIC));
         sort($methods);
-        $this->assertSame(['__construct', 'context', 'history', 'markRead', 'send'], $methods);
+        $this->assertSame(['__construct', 'context', 'history', 'markRead', 'send', 'tasks'], $methods);
     }
 }

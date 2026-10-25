@@ -8,6 +8,7 @@ use App\Models\AuditEventModel;
 use App\Services\Audit\AuditService;
 use App\Services\AuthenticatedUser;
 use App\Services\PortalContext;
+use App\Services\WorkflowNotifications;
 use CodeIgniter\Database\BaseConnection;
 use Config\Database;
 use DateTimeImmutable;
@@ -40,11 +41,11 @@ final class BmgRotationService
         $this->db = $db ?? Database::connect();
     }
 
-    public function overview(): array
+    public function overview(bool $archived = false): array
     {
-        $actor = $this->actor('facilities.read');
+        $actor = $archived ? $this->configurationActor() : $this->actor('facilities.read');
         $units = $this->db->table('bmg_units')->where('tenant_id', $actor['tenant_id'])
-            ->where('deleted_at', null)->orderBy('id')->limit(200)->get()->getResultArray();
+            ->where($archived ? 'deleted_at !=' : 'deleted_at', null)->orderBy('id')->limit(200)->get()->getResultArray();
         return array_map(fn (array $unit): array => $this->detail($unit), $units);
     }
 
@@ -101,6 +102,74 @@ final class BmgRotationService
         });
     }
 
+    /** Retirement acknowledges checked physical safety, independently of the server hardware gate. */
+    public function archiveUnit(int $id, array $data): array
+    {
+        $actor = $this->configurationActor();
+        $this->keys($data, ['expected_version', 'retirement_confirmed']);
+        if (!in_array($data['retirement_confirmed'] ?? null, [true, '1'], true)) {
+            throw new InvalidArgumentException('retirement_confirmed must be true or "1" to acknowledge checked physical safety.');
+        }
+        return $this->locked((int) $actor['tenant_id'], function () use ($actor, $id, $data): array {
+            $fresh = $this->configurationActor();
+            if ($fresh['id'] !== $actor['id'] || $fresh['tenant_id'] !== $actor['tenant_id']) {
+                throw new RuntimeException('Configuration actor changed.', 403);
+            }
+            $tenant = (int) $fresh['tenant_id'];
+            $this->findUnit($tenant, $id);
+            $this->expectVersion($tenant, $id, $data['expected_version'] ?? null);
+            if ($this->db->table('bmg_batches')->where('tenant_id', $tenant)->where('unit_id', $id)
+                ->whereIn('status', ['processing', 'awaiting_output', 'curing'])->countAllResults() > 0) {
+                throw new RuntimeException('Units with active batches cannot be archived.', 409);
+            }
+            $revoked = $this->retireBindings($tenant, $id, (int) $fresh['id']);
+            $now = $this->now();
+            $this->db->table('bmg_units')->where('tenant_id', $tenant)->where('id', $id)
+                ->update(['status' => 'offline', 'deleted_at' => $now, 'updated_at' => $now]);
+            $version = $this->scheduleView($tenant, $id)['version'];
+            $this->audit($fresh, 'bmg_unit', $id, 'archive', ['schedule_version' => $version, 'revoked_device_count' => $revoked]);
+            return ['unit_id' => $id, 'schedule_version' => $version];
+        });
+    }
+
+    public function restoreUnit(int $id, array $data): array
+    {
+        $actor = $this->configurationActor();
+        $this->keys($data, ['expected_version']);
+        return $this->locked((int) $actor['tenant_id'], function () use ($actor, $id, $data): array {
+            $fresh = $this->configurationActor();
+            if ($fresh['id'] !== $actor['id'] || $fresh['tenant_id'] !== $actor['tenant_id']) {
+                throw new RuntimeException('Configuration actor changed.', 403);
+            }
+            $tenant = (int) $fresh['tenant_id'];
+            $unit = $this->db->table('bmg_units')->where('tenant_id', $tenant)->where('id', $id)
+                ->where('deleted_at !=', null)->get()->getRowArray();
+            if ($unit === null) { throw new RuntimeException('Archived unit not found.', 404); }
+            $this->expectVersion($tenant, $id, $data['expected_version'] ?? null);
+            if ($this->db->table('bmg_units')->where('tenant_id', $tenant)->where('unit_code', $unit['unit_code'])
+                ->where('id !=', $id)->countAllResults() > 0) {
+                throw new RuntimeException('Unit code already exists.', 409);
+            }
+            $revoked = $this->retireBindings($tenant, $id, (int) $fresh['id']);
+            $this->db->table('bmg_units')->where('tenant_id', $tenant)->where('id', $id)
+                ->update(['deleted_at' => null, 'status' => 'offline', 'updated_at' => $this->now()]);
+            $this->audit($fresh, 'bmg_unit', $id, 'restore', [
+                'schedule_version' => $this->scheduleView($tenant, $id)['version'], 'revoked_device_count' => $revoked]);
+            return $this->detail($this->findUnit($tenant, $id));
+        });
+    }
+
+    /** Preserve history, but never allow old intent or credentials to operate a retired unit. */
+    private function retireBindings(int $tenant, int $unit, int $actor): int
+    {
+        $this->disable($tenant, $unit, $actor);
+        $devices = $this->db->table('bmg_devices')->where('tenant_id', $tenant)->where('unit_id', $unit)->countAllResults();
+        $now = $this->now();
+        $this->db->table('bmg_devices')->where('tenant_id', $tenant)->where('unit_id', $unit)
+            ->update(['status' => 'revoked', 'unit_id' => null, 'revoked_at' => $now, 'updated_at' => $now]);
+        return $devices;
+    }
+
     /** Full replacement: expected_version required, enabled, times (0..8 HH:MM), duration_seconds, optional pwm. */
     public function saveSchedule(int $unitId, array $data): array
     {
@@ -146,7 +215,7 @@ final class BmgRotationService
                 throw new RuntimeException('Enabling requires an active unit and exactly one bound active device.', 409);
             }
             $this->persistSchedule($tenant, $unitId, (int) $actor['id'], $enabled, $times, $duration, $pwm);
-            $this->cancelCommands($tenant, $unitId);
+            $this->cancelCommands($tenant, $unitId, (int) $actor['id']);
             $this->audit($actor, 'bmg_unit', $unitId, 'schedule', $this->scheduleView($tenant, $unitId));
             return $this->scheduleView($tenant, $unitId);
         });
@@ -244,7 +313,7 @@ final class BmgRotationService
             $this->expireCommands($tenant, (int) $device['id']);
             if ($kind === 'stop') {
                 // A delayed run must never be delivered after a stop request.
-                $this->cancelCommands($tenant, $unitId);
+                $this->cancelCommands($tenant, $unitId, (int) $actor['id']);
             } elseif ($this->db->table('bmg_rotation_commands')->where('tenant_id', $tenant)->where('unit_id', $unitId)
                 ->where('status', 'pending')->countAllResults() > 0) {
                 throw new RuntimeException('A command is already pending.', 409);
@@ -338,6 +407,9 @@ final class BmgRotationService
             }
             $this->db->table('bmg_rotation_runs')->insert($facts + ['tenant_id' => (int) $device['tenant_id'],
                 'device_id' => (int) $device['id'], 'unit_id' => (int) $device['unit_id'], 'run_uid' => $uid, 'created_at' => $this->now()]);
+            if (in_array($state, ['failed', 'interrupted'], true)) {
+                WorkflowNotifications::record($this->db, 'bmg_run_' . $state, 'facilities', (int) $this->db->insertID(), 'reported');
+            }
             return ['status' => 'created', 'run_uid' => $uid];
         });
     }
@@ -377,6 +449,7 @@ final class BmgRotationService
             } else {
                 $this->db->table('bmg_rotation_commands')->where('tenant_id', $device['tenant_id'])->where('id', $id)
                     ->update(['status' => 'acknowledged', 'ack_status' => $status, 'ack_message' => $message, 'acknowledged_at' => $this->now()]);
+                                    WorkflowNotifications::record($this->db, 'bmg_command_' . $status, 'facilities', $id, 'terminal');
             }
             return ['status' => 'acknowledged', 'command_id' => $id];
         });
@@ -484,13 +557,25 @@ final class BmgRotationService
     {
         $old = $this->scheduleView($tenant, $unit);
         $this->persistSchedule($tenant, $unit, $actor, false, $old['times'], $old['duration_seconds'], null);
-        $this->cancelCommands($tenant, $unit);
+        $this->cancelCommands($tenant, $unit, $actor);
     }
 
-    private function cancelCommands(int $tenant, int $unit): void
+    private function cancelCommands(int $tenant, int $unit, ?int $actor = null): void
     {
-        $this->db->table('bmg_rotation_commands')->where('tenant_id', $tenant)->where('unit_id', $unit)
-            ->where('status', 'pending')->update(['status' => 'cancelled']);
+        $commands = $this->db->table('bmg_rotation_commands')->select('id, tenant_id, created_by_user_id')
+            ->where('tenant_id', $tenant)->where('unit_id', $unit)->where('status', 'pending')->get()->getResultArray();
+        foreach ($commands as $command) {
+            $this->terminalCommand($command, 'cancelled', $actor);
+        }
+    }
+
+    private function terminalCommand(array $command, string $status, ?int $actor = null): void
+    {
+        $this->db->table('bmg_rotation_commands')->where('tenant_id', $command['tenant_id'])->where('id', $command['id'])
+            ->where('status', 'pending')->update(['status' => $status]);
+        if ($this->db->affectedRows() === 1) {
+            WorkflowNotifications::record($this->db, 'bmg_command_' . $status, 'facilities', (int) $command['id'], 'terminal', $actor);
+        }
     }
 
     /** Recheck persisted intent at delivery/ack time, including changes outside this service. */
@@ -507,16 +592,19 @@ final class BmgRotationService
                 || (int) $command['unit_id'] !== (int) $unit['id']
                 || $command['created_at'] < $device['rotation_bound_at']
                 || ($command['command'] === 'run_now' && $unit['status'] !== 'active')) {
-                $this->db->table('bmg_rotation_commands')->where('tenant_id', $tenant)->where('id', $command['id'])
-                    ->where('status', 'pending')->update(['status' => 'cancelled']);
+                $this->terminalCommand($command, 'cancelled');
             }
         }
     }
 
     private function expireCommands(int $tenant, int $device): void
     {
-        $this->db->table('bmg_rotation_commands')->where('tenant_id', $tenant)->where('device_id', $device)
-            ->where('status', 'pending')->where('expires_at <=', $this->now())->update(['status' => 'expired']);
+        $commands = $this->db->table('bmg_rotation_commands')->select('id, tenant_id, created_by_user_id')
+            ->where('tenant_id', $tenant)->where('device_id', $device)
+            ->where('status', 'pending')->where('expires_at <=', $this->now())->get()->getResultArray();
+        foreach ($commands as $command) {
+            $this->terminalCommand($command, 'expired');
+        }
     }
 
     private function authenticate(string $token): array

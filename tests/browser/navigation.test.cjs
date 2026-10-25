@@ -165,14 +165,14 @@ async function pageFor(t, route, options = {}) {
   })), { scope: true, main: 1, scripts: 1, styles: 1, navigation: 'function', lifecycle: 'function' }, 'Rendered layout must supply the navigation contract');
   await page.waitForFunction(() => Boolean(history.state?.__synapseNavigation));
   await page.evaluate(() => {
-    window.shellIdentity = [document.body, document.querySelector('#header'), document.querySelector('#sidebar'), document.querySelector('.sidebar-nav')];
+    window.shellIdentity = [document.body, document.querySelector('.header, #header'), document.querySelector('#app-sidebar, #sidebar'), document.querySelector('.sidebar-nav')];
     window.initialMain = document.querySelector('#main');
   });
   return { page, documents, requests };
 }
 
 async function assertShell(page) {
-  assert.equal(await page.evaluate(() => window.shellIdentity?.every((element, index) => element === [document.body, document.querySelector('#header'), document.querySelector('#sidebar'), document.querySelector('.sidebar-nav')][index])), true, 'Body/header/sidebar/nav must retain object identity');
+  assert.equal(await page.evaluate(() => window.shellIdentity?.every((element, index) => element === [document.body, document.querySelector('.header, #header'), document.querySelector('#app-sidebar, #sidebar'), document.querySelector('.sidebar-nav')][index])), true, 'Body/header/sidebar/nav must retain object identity');
 }
 
 async function clickRoute(page, route) {
@@ -191,6 +191,26 @@ async function traverse(page, direction, route) {
   }), direction);
   await settled(page, route);
 }
+
+test('single-host scopes are route-independent while dedicated host scopes stay isolated', () => {
+  const scope = (host, route, kind) => {
+    const result = spawnSync('php', ['tests/_support/render-modal-fixture.php'], {
+      cwd: root, input: JSON.stringify({ origin: `http://${host}:8080`, path: route, kind }),
+      encoding: 'utf8', timeout: 10000
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const match = result.stdout.match(/data-navigation-scope="([^"]+)"/);
+    assert.ok(match, 'Real layout must declare a navigation scope');
+    return match[1];
+  };
+  const shared = scope('172.16.153.237', '/admin/carousel', 'manager');
+  assert.equal(scope('172.16.153.237', '/clinic/appointments', 'clinic-list'), shared);
+  assert.equal(scope('172.16.153.237', '/guidance/appointments', 'guidance-list'), shared);
+  const clinic = scope('clinic.localhost', '/clinic/appointments', 'clinic-list');
+  const guidance = scope('guidance.localhost', '/guidance/appointments', 'guidance-list');
+  const main = scope('synapse.localhost', '/admin/carousel', 'manager');
+  assert.equal(new Set([shared, clinic, guidance, main]).size, 4, 'Host-bound and single-host shells must not share scopes');
+});
 
 test('actual PHP shell wiring, sidebar identity, server active route, title and focus', { timeout: 30_000 }, async t => {
   const { page, documents, requests } = await pageFor(t, '/admin/carousel');
@@ -228,13 +248,16 @@ test('actual PHP shell wiring, sidebar identity, server active route, title and 
 
 test('real carousel CSS applies initially, leaves with appointments and returns with carousel', { timeout: 20_000 }, async t => {
   const { page, documents } = await pageFor(t, '/admin/carousel');
-  // A persistent probe detects leaked page CSS even when carousel rows are gone.
+  // Keep the stylesheet's scope outside the swapped main to detect leaked CSS.
   await page.evaluate(() => {
+    const scope = document.createElement('div');
+    scope.className = 'carousel-admin';
+    scope.hidden = true;
     const probe = document.createElement('div');
     probe.id = 'carousel-style-probe';
     probe.className = 'slide-row dragging';
-    probe.hidden = true;
-    document.body.append(probe);
+    scope.append(probe);
+    document.body.append(scope);
   });
   const opacity = () => page.locator('#carousel-style-probe').evaluate(element => getComputedStyle(element).opacity);
   assert.equal(await opacity(), '0.5', 'Actual carousel stylesheet must apply on initial render');
@@ -396,7 +419,14 @@ for (const failure of ['http', 'network', 'timeout']) {
     const { page, documents } = await pageFor(t, '/navigation-fixture/a', failure === 'timeout' ? {
       init: () => {
         const original = window.setTimeout;
-        window.setTimeout = function(callback, delay, ...args) { return original.call(this, callback, delay === 20000 ? 80 : delay, ...args); };
+        let injectTimeout = true;
+        window.setTimeout = function(callback, delay, ...args) {
+          if (injectTimeout && delay === 20000) {
+            injectTimeout = false;
+            return original.call(this, callback, 80, ...args);
+          }
+          return original.call(this, callback, delay, ...args);
+        };
       }
     } : {});
     let fail = true;

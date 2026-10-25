@@ -1,6 +1,6 @@
 <header class="header">
   <div class="header-left">
-    <button class="sidebar-toggle" title="Toggle Sidebar" aria-label="Toggle sidebar">
+    <button class="sidebar-toggle" type="button" data-bs-toggle="tooltip" data-bs-title="Toggle sidebar" data-bs-placement="bottom" aria-label="Toggle sidebar" aria-controls="app-sidebar" aria-expanded="false">
       <span class="menu-lines" aria-hidden="true">
         <span></span>
         <span></span>
@@ -8,28 +8,15 @@
       </span>
     </button>
 
-    <a href="<?= site_url('/') ?>" class="header-brand d-flex align-items-center text-decoration-none" aria-label="SYNAPSE home">
-      <span class="header-logo d-flex align-items-center">
-        <!-- Light mode mark (Synapse Maroon) -->
-        <img src="<?= base_url('assets/img/brand/synapse-maroon.png') ?>"
-             alt="SYNAPSE"
-             class="synapse-logo-light"
-             style="height: 38px; width: auto; object-fit: contain;">
-
-        <!-- Dark mode mark (Synapse White) -->
-        <img src="<?= base_url('assets/img/brand/synapse-white.png') ?>"
-             alt="SYNAPSE"
-             class="synapse-logo-dark"
-             style="height: 38px; width: auto; object-fit: contain;">
-      </span>
-      <div class="header-context ms-2 d-flex flex-column justify-content-center">
-        <strong class="header-context-title fs-5 fw-bold mb-0" style="letter-spacing: 0.04em; line-height: 1.1;">SYNAPSE</strong>
-        <span class="header-context-tagline text-muted" style="font-size: 0.68rem; font-weight: 600; letter-spacing: 0.02em; line-height: 1.1;">Foundation University</span>
-      </div>
-    </a>
   </div>
 
-  <div class="header-search-wrap flex-grow-1 mx-3 d-none d-md-block"></div>
+  <div class="header-search-wrap flex-grow-1 mx-3">
+    <button type="button" class="header-action global-search-trigger" data-search-open aria-haspopup="dialog" aria-controls="globalSearchDialog" aria-label="Search pages and actions" aria-keyshortcuts="Control+k Meta+k" hidden>
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <span class="global-search-trigger-label">Search pages and actions…</span>
+      <kbd data-search-shortcut aria-hidden="true">Ctrl K</kbd>
+    </button>
+  </div>
 
   <div class="header-right">
     <div class="header-actions-desktop d-flex align-items-center gap-2">
@@ -51,6 +38,7 @@
         $userEmail = !empty($currentUser['email']) 
             ? $currentUser['email'] 
             : 'user@foundationu.com';
+        $userName = trim((string) ($currentUser['name'] ?? '')) ?: ($currentUser['username'] ?? 'User');
         $roleLabel = ucwords(str_replace('_', ' ', $role));
         $profileDefaultAvatar = \App\Services\ProfileAvatar::dataUri($currentUser ?? []);
         $profilePhotoUrl = $profileDefaultAvatar;
@@ -61,13 +49,13 @@
         }
       ?>
       <div class="header-action-wrap dropdown user-dropdown"
-           data-bs-title="Account: <?= esc($userEmail) ?> (<?= esc($roleLabel) ?>)"
+           data-bs-title="Account: <?= esc($userName) ?> (<?= esc($roleLabel) ?>)"
            data-bs-toggle="tooltip"
            data-bs-placement="bottom">
-        <button class="dropdown-toggle user-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User account and profile menu">
+        <button type="button" class="dropdown-toggle user-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User account and profile menu">
           <img src="<?= esc($profilePhotoUrl) ?>" alt="User Avatar" class="user-avatar" data-profile-avatar onerror="this.onerror=null;this.src='<?= esc($profileDefaultAvatar, 'attr') ?>'">
           <div class="user-brief d-none d-md-flex text-start">
-            <span class="user-email" placeholder="user@foundationu.com"><?= esc($userEmail) ?></span>
+            <span class="user-name"><?= esc($userName) ?></span>
             <span class="user-role"><?= esc($roleLabel) ?></span>
           </div>
         </button>

@@ -6,7 +6,11 @@ $tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query
 ?>
 <?= $this->extend('layouts/app') ?>
 <?= $this->section('content') ?>
-<section class="portal-engagement" aria-labelledby="campus-surveys-title" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="portal-surveys">
+<section class="portal-engagement" aria-labelledby="campus-surveys-title"
+         data-live-filters
+         data-filter-url="<?= esc($baseUrl) ?>"
+         data-filter-key="portal-surveys"
+         data-live-events="notifications.changed">
   <header class="pe-header"><span class="pe-header-icon" aria-hidden="true"><i class="bi bi-clipboard-check"></i></span><div><p class="pe-eyebrow">CAMPUS VOICES</p><h2 id="campus-surveys-title">Your voice matters</h2><p class="text-muted mb-0">Share your perspective, track what you’ve submitted, and see when surveys close.</p></div></header>
   <?php if (!($hasProfile ?? false)): ?><div class="alert alert-warning"><i class="bi bi-shield-exclamation me-1" aria-hidden="true"></i><strong>University profile required.</strong> Personal surveys are addressed to linked student and employee profiles. An administrative account without one cannot participate.</div><?php endif; ?>
   <div class="pe-privacy"><i class="bi bi-shield-lock" aria-hidden="true"></i><p class="mb-0"><strong>These surveys are identified, not anonymous.</strong> Your name and answers may be read by authorized Guidance administrators and supervisors. You can submit each survey once.</p></div>

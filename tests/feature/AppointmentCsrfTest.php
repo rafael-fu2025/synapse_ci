@@ -131,34 +131,41 @@ final class AppointmentCsrfTest extends CIUnitTestCase
         $response->assertStatus(403);
         $response->assertSee('Reload this page');
         $this->assertFalse($response->isRedirect());
+        $this->assertStringContainsString('This request was not processed', $response->response()->getBody());
+        $this->assertNotNull($response->response()->getCookie(config('Security')->cookieName), 'Rejected browser posts receive a fresh CSRF cookie');
     }
 
-    public function testValidationReturnsRotatedTokenThatWorksAndOldTokenIsRejected(): void
+    public function testValidationAndSuccessfulWritesKeepCookieTokenValidForOtherOpenForms(): void
     {
         $token = $this->tokenForNextRequest();
         $response = $this->submit('portal/appointments/clinic/store', [config('Security')->tokenName => $token]);
         $response->assertStatus(422);
         $json = json_decode($response->getJSON(), true);
         $this->assertFalse($json['success']);
-        $this->assertNotSame($token, $json['csrf']['hash']);
-        $this->assertSame($json['csrf']['hash'], $response->response()->getCookie(config('Security')->cookieName)->getValue());
+        $this->assertSame($token, $json['csrf']['hash']);
+
+        // A form rendered before the validation POST still carries the same cookie-bound token.
+        $anotherOpenFormToken = $token;
         $nextToken = $this->tokenForNextRequest($json['csrf']['hash']);
         $response = $this->submit('portal/appointments/clinic/store', $this->requestPayload() + [config('Security')->tokenName => $nextToken]);
         $response->assertStatus(200);
         $json = json_decode($response->getJSON(), true);
         $this->assertTrue($json['success']);
-        $this->tokenForNextRequest($json['csrf']['hash']);
-        $this->submit('portal/appointments/clinic/store', $this->requestPayload() + [config('Security')->tokenName => $nextToken])->assertStatus(403);
+        $this->assertSame($anotherOpenFormToken, $json['csrf']['hash']);
+
+        // A second outstanding form in another tab can submit using the original token.
+        $this->tokenForNextRequest($anotherOpenFormToken);
+        $this->submit('portal/appointments/clinic/store', $this->requestPayload() + [config('Security')->tokenName => $anotherOpenFormToken])->assertStatus(200);
     }
 
-    public function testDirectPostRedirectIncludesRotatedCookie(): void
+    public function testDirectPostDoesNotRotateSharedCookieToken(): void
     {
         $token = $this->tokenForNextRequest();
         $response = $this->submit('portal/appointments/clinic/store', $this->requestPayload() + [config('Security')->tokenName => $token], false);
         $response->assertRedirectTo('/portal');
+        $this->assertFalse(config('Security')->regenerate, 'Cookie CSRF tokens remain stable across tabs and POST requests.');
         $cookie = $response->response()->getCookie(config('Security')->cookieName);
-        $this->assertNotNull($cookie);
-        $this->assertNotSame($token, $cookie->getValue());
+        $this->assertTrue($cookie === null || $cookie->getValue() === $token, 'A successful POST cannot invalidate a form already open in another tab.');
     }
 
     public function testValidTokensReachConfirmationAvailabilityCancellationAndCheckIn(): void

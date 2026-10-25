@@ -166,6 +166,55 @@ final class BackendRoleAuthorizationTest extends CIUnitTestCase
         });
     }
 
+    private function installedBoundary(string $role, string $method, string $route, string $baseURL, string $indexPage)
+    {
+        session()->set($this->identity($role));
+        $app = clone config('App');
+        $app->baseURL = $baseURL;
+        $app->indexPage = $indexPage;
+        $uri = new \CodeIgniter\HTTP\SiteURI($app, $route);
+        $this->assertSame($route, $uri->getRoutePath());
+        $request = new \CodeIgniter\HTTP\IncomingRequest($app, $uri, null, new \CodeIgniter\HTTP\UserAgent());
+        $request->setMethod($method);
+        $request->setHeader('Accept', 'application/json');
+        Services::injectMock('request', $request);
+        Services::injectMock('response', new \CodeIgniter\HTTP\Response($app));
+        return (new WebAccessFilter())->before($request);
+    }
+
+    public function testInstallationPathsPreserveRecordAssignmentAndTenantDenials(): void
+    {
+        $owner = $this->db->table('users')->where('username', 'counsellor')->get()->getRowArray();
+        foreach ([[501, 1, (int) $owner['id']], [502, 1, 999], [503, 2, (int) $owner['id']]] as [$id, $tenant, $counsellor]) {
+            $this->db->table('counselling_cases')->insert(['id' => $id, 'tenant_id' => $tenant,
+                'person_id' => (int) $owner['person_id'], 'counsellor_user_id' => $counsellor, 'status' => 'open']);
+        }
+        foreach (['http://localhost/', 'http://localhost/campus/', 'http://localhost/campus/public/'] as $baseURL) {
+            foreach (['', 'index.php', 'front.php'] as $indexPage) {
+                $this->assertNull($this->installedBoundary('counsellor', 'GET', 'guidance/cases/501', $baseURL, $indexPage));
+                $this->assertSame(403, $this->installedBoundary('counsellor', 'GET', 'guidance/cases/502', $baseURL, $indexPage)->getStatusCode());
+                $this->assertSame(403, $this->installedBoundary('counsellor', 'POST', 'guidance/cases/502/close', $baseURL, $indexPage)->getStatusCode());
+                $this->assertSame(404, $this->installedBoundary('counsellor', 'GET', 'guidance/cases/503', $baseURL, $indexPage)->getStatusCode());
+                $this->assertNull($this->installedBoundary('guidance_supervisor', 'GET', 'guidance/cases/502', $baseURL, $indexPage));
+            }
+        }
+    }
+
+    public function testInstallationPathsPreserveFreshReadAndWriteGrantRevocation(): void
+    {
+        $this->revoke('clinic_staff', 'clinic.queue.read');
+        $this->revoke('clinic_staff', 'clinic.queue.manage');
+        foreach (['http://localhost/', 'http://localhost/campus/', 'http://localhost/campus/public/'] as $baseURL) {
+            foreach (['', 'index.php', 'front.php'] as $indexPage) {
+                foreach (['GET' => 'clinic/queue', 'POST' => 'clinic/queue/call-next'] as $method => $route) {
+                    $this->assertSame(403, $this->installedBoundary('clinic_staff', $method, $route, $baseURL, $indexPage)->getStatusCode());
+                    $this->assertNull($this->installedBoundary('clinic_admin', $method, $route, $baseURL, $indexPage));
+                    $this->assertSame(403, $this->installedBoundary('student', $method, $route, $baseURL, $indexPage)->getStatusCode());
+                }
+            }
+        }
+    }
+
     private function revoke(string $role, string $code): void
     {
         $permission = $this->db->table('permissions')->where('code', $code)->get()->getRowArray();

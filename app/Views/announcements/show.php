@@ -12,7 +12,7 @@
       <?php if ($announcement['ends_at'] !== null): ?><p class="small text-muted">Available until <?= esc($announcementDate($announcement['ends_at'], 'd M Y, g:i A')) ?> (Asia/Manila)</p><?php endif; ?>
       <div class="pe-card-footer">
         <?php if ($announcement['read_at'] === null): ?>
-        <div><form method="POST" action="<?= esc(site_url('/portal/announcements/' . (int) $announcement['id'] . '/read')) ?>"><?= csrf_field() ?><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-2" aria-hidden="true"></i>Mark as read</button></form><p class="form-text mb-0">Records that you marked this notice read, not acknowledgement or comprehension.</p></div>
+        <div><form method="POST" data-background-submit action="<?= esc(site_url('/portal/announcements/' . (int) $announcement['id'] . '/read')) ?>"><?= csrf_field() ?><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-2" aria-hidden="true"></i>Mark as read</button></form><p class="form-text mb-0">Records that you marked this notice read, not acknowledgement or comprehension.</p></div>
         <?php else: ?><p class="pe-completion"><i class="bi bi-check-circle" aria-hidden="true"></i>Marked read <?= esc($announcementDate($announcement['read_at'], 'd M Y, g:i A')) ?> (Asia/Manila)</p><?php endif; ?>
       </div>
     </div></article>

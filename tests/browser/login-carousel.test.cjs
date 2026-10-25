@@ -14,6 +14,7 @@ const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_mo
 const layout = fs.readFileSync(path.join(root, 'app/Views/layouts/auth.php'), 'utf8');
 const css = layout.match(/<style>([\s\S]*?)<\/style>/)[1];
 const login = fs.readFileSync(path.join(root, 'app/Views/auth/login.php'), 'utf8');
+const themeToggle = login.slice(login.indexOf('<div class="position-fixed'), login.indexOf('</div>') + '</div>'.length);
 const aside = login.slice(login.indexOf('<aside '), login.indexOf('</aside>') + '</aside>'.length);
 const slides = ['red', 'blue', 'green'].map((color, i) => ({
   title: 'Slide ' + i, subtitle: '', fit_mode: i === 0 ? 'cover' : 'contain_blur',
@@ -45,8 +46,11 @@ before(async () => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(`<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8"><link rel="icon" href="data:,">
         <link rel="stylesheet" href="/assets/vendor/bootstrap/css/bootstrap.min.css">
+        <link rel="stylesheet" href="/assets/vendor/bootstrap-icons/bootstrap-icons.css">
         <link rel="stylesheet" href="/assets/css/style.css"><style>${css}</style></head>
-        <body><main class="container-fluid p-0"><div class="row g-0">${rendered.stdout}</div></main>
+        <body>${themeToggle}<main class="container-fluid p-0 auth-main-wrapper min-vh-100"><div class="row g-0 min-vh-100">${rendered.stdout}
+          ${url.searchParams.has('tall') ? '<section class="col-12 col-lg-5 auth-pane" style="min-height:850px">Enlarged sign-in content fixture</section>' : ''}
+        </div></main>
         <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
         <script>window.addEventListener('load',()=>{const el=document.getElementById('loginPhotoCarousel');
           bootstrap.Carousel.getInstance(el)?.dispose();
@@ -91,6 +95,17 @@ for (const theme of ['light', 'dark']) {
       height: el.getBoundingClientRect().height, background: getComputedStyle(el).backgroundColor,
       expected: window.innerHeight - parseFloat(getComputedStyle(document.documentElement).fontSize)
     }));
+    const indicators = await page.locator('.auth-carousel-indicators button').evaluateAll(buttons => buttons.map(el => {
+      const style = getComputedStyle(el);
+      return { height: el.getBoundingClientRect().height, width: el.getBoundingClientRect().width,
+        radius: parseFloat(style.borderTopLeftRadius), border: parseFloat(style.borderTopWidth), active: el.classList.contains('active') };
+    }));
+    indicators.forEach(indicator => {
+      assert.equal(indicator.height, 6);
+      assert.equal(indicator.width, indicator.active ? 40 : 24);
+      assert.ok(indicator.radius >= indicator.height / 2, 'Carousel indicators must have fully rounded ends');
+      assert.equal(indicator.border, 0, 'Bootstrap indicator borders must not flatten the pill');
+    });
     assert.equal(geometry.height, geometry.expected);
     assert.notEqual(geometry.background, 'rgb(172, 30, 55)');
     assert.equal(await page.locator('.carousel-item').first().locator('.auth-slide-img-bg').count(), 0);
@@ -125,6 +140,72 @@ for (const theme of ['light', 'dark']) {
       images.filter(image => getComputedStyle(image).display !== 'none').map(image => getComputedStyle(image).filter));
     assert.equal(blur.length, 1);
     assert.ok(blur[0].includes('blur(22px)'));
+  });
+}
+
+for (const theme of ['light', 'dark']) {
+  test(`${theme}: login theme icon is centered in its circular button`, async t => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    t.after(() => context.close());
+    const page = await context.newPage();
+    await page.goto(`${origin}/fixture?theme=${theme}`);
+    await page.evaluate(() => document.fonts.ready);
+    const alignment = await page.locator('#authThemeToggle').evaluate(button => {
+      const icons = [...button.querySelectorAll('.bi')].filter(el => getComputedStyle(el).display !== 'none');
+      const holder = button.getBoundingClientRect();
+      const icon = icons[0].getBoundingClientRect();
+      return { visible: icons.length, x: Math.abs(icon.left + icon.width / 2 - holder.left - holder.width / 2),
+        y: Math.abs(icon.top + icon.height / 2 - holder.top - holder.height / 2),
+        pseudoDisplay: getComputedStyle(icons[0], '::before').display };
+    });
+    assert.equal(alignment.visible, 1);
+    assert.ok(alignment.x <= 1 && alignment.y <= 1, 'Theme icon must be centered on both axes');
+    assert.equal(alignment.pseudoDisplay, 'block', 'Icon must not use an inline baseline offset');
+  });
+  test(`${theme}: login banner close icons stay dark on light alert fills and dismiss correctly`, async t => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+    t.after(() => context.close());
+    const page = await context.newPage();
+    await page.goto(`${origin}/fixture?theme=${theme}&tall=1`);
+    await page.waitForFunction(() => window.carousel);
+    for (const variant of ['info', 'warning', 'danger', 'success']) {
+      await page.locator('.auth-pane').evaluate((pane, variant) => {
+        pane.innerHTML = `<div class="alert alert-${variant} alert-dismissible show" role="alert">Message<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`;
+      }, variant);
+      const close = page.locator('.auth-pane .btn-close');
+      const style = await close.evaluate(el => {
+        const css = getComputedStyle(el);
+        return { filter: css.filter, opacity: Number(css.opacity), size: parseFloat(css.backgroundSize), top: parseFloat(css.top), right: parseFloat(css.right), rem: parseFloat(getComputedStyle(document.documentElement).fontSize) };
+      });
+      assert.equal(style.filter, 'none', 'Dark-mode inversion must not whiten the glyph on a pale banner');
+      assert.ok(style.opacity >= 0.75);
+      assert.equal(style.size, 0.625 * style.rem);
+      assert.deepEqual([style.top, style.right], [0.25 * style.rem, 0.25 * style.rem]);
+      await close.click();
+      assert.equal(await page.locator('.auth-pane .alert').count(), 0);
+    }
+  });
+  test(`${theme}: carousel fills the column when zoom-equivalent sign-in content exceeds the viewport`, async t => {
+    const context = await browser.newContext({ viewport: { width: 1024, height: 600 }, reducedMotion: 'reduce' });
+    t.after(() => context.close());
+    const page = await context.newPage();
+    await page.goto(`${origin}/fixture?theme=${theme}&tall=1`);
+    await page.waitForFunction(() => window.carousel);
+    const geometry = await page.evaluate(() => {
+      const photo = document.querySelector('.auth-photo-container').getBoundingClientRect();
+      const aside = document.querySelector('.auth-photo-aside').getBoundingClientRect();
+      const pane = document.querySelector('.auth-pane').getBoundingClientRect();
+      const carousel = document.querySelector('#loginPhotoCarousel').getBoundingClientRect();
+      return { photoHeight: photo.height, carouselHeight: carousel.height, gap: pane.bottom - photo.bottom,
+        inset: photo.top - aside.top, asideBottom: aside.bottom, paneBottom: pane.bottom,
+        pageHeight: document.documentElement.scrollHeight, width: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth };
+    });
+    assert.ok(geometry.photoHeight > 600, 'Photo must grow with the content rather than stop at the viewport');
+    assert.equal(geometry.carouselHeight, geometry.photoHeight);
+    assert.equal(geometry.asideBottom, geometry.paneBottom);
+    assert.equal(geometry.gap, geometry.inset, 'Keep only the intended inset below the photo');
+    assert.ok(geometry.scrollWidth <= geometry.width, 'No horizontal overflow at enlarged zoom');
   });
 }
 

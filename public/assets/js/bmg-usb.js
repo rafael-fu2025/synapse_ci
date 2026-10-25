@@ -77,7 +77,8 @@
         && el('isolated').checked && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(el('release').value);
     }
     function update() {
-      el('select').disabled = !supported || busy || monitoring || dead;
+      const setupBusy = root.dataset.setupBusy === '1';
+      el('select').disabled = !supported || busy || monitoring || dead || setupBusy;
       el('identify').disabled = !port || !el('isolated').checked || busy || monitoring || dead;
       el('monitor').disabled = !port || !el('isolated').checked || busy || monitoring || dead;
       el('disconnect').disabled = !port || busy || dead;
@@ -85,6 +86,8 @@
       el('flash').disabled = !gate() || busy || monitoring || dead;
       el('release').disabled = busy || dead;
       el('isolated').disabled = busy || dead;
+      if (setupBusy) ['identify', 'monitor', 'disconnect', 'stop-monitor', 'flash', 'release', 'isolated'].forEach(name => { el(name).disabled = true; });
+      root.dispatchEvent(new CustomEvent('synapse:bmg-usb-state', { detail: { busy, writing, monitoring } }));
     }
     function alive() { if (dead || lost || !root.isConnected) throw new Error('Workspace left; operation stopped. Partial firmware may be present.'); }
     function isolated() { alive(); if (!el('isolated').checked) throw new Error('Physical motor isolation is required.'); }
@@ -115,7 +118,7 @@
       try { await closing; } finally { closing = null; }
     }
     function run(task) {
-      if (busy || dead) return;
+      if (busy || dead || root.dataset.setupBusy === '1') return;
       busy = true; update();
       operation = (async () => {
         try { await task(); }
@@ -296,7 +299,7 @@
       status('Receive-only monitor at 115200 baud. Motor state is not established by serial output.');
     }
     const click = event => {
-      const button = event.target.closest('button'); if (!button || button.disabled) return;
+      const button = event.target.closest('button'); if (!button || button.disabled || root.dataset.setupBusy === '1') return;
       if (button === el('clear')) { el('log').textContent = ''; return; }
       if (button === el('select')) {
         // requestPort must remain directly inside this user gesture, before any await.
@@ -339,7 +342,7 @@
       ? 'Web Serial available. Select a USB serial adapter explicitly; nothing connects automatically.'
       : 'USB unavailable. Use desktop Chrome or Edge in a secure context (HTTPS or localhost) with Web Serial enabled.';
     update();
-    return { root, get active() { return busy; }, get needsCleanup() { return monitoring || !!reader || !!transport; },
+    return { root, update, get active() { return busy; }, get needsCleanup() { return monitoring || !!reader || !!transport; },
       dispose() {
         if (dead) return operation;
         dead = true; clearIdentity(); el('log').textContent = ''; requests.forEach(controller => controller.abort());
@@ -350,7 +353,23 @@
         update(); return done;
       } };
   }
-  window.SynapseBmgUsb = { initialize };
+  window.SynapseBmgUsb = {
+    initialize,
+    canSetup(root) { return current?.root === root && !!current.update && !current.active && !current.needsCleanup && !retiring.size; },
+    refresh(root) { if (current?.root === root) current.update?.(); },
+    selectBuild(root, release) {
+      if (current?.root !== root || !current.update || current.active || current.needsCleanup
+        || !release || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(release.id)
+        || !['name', 'chip_family', 'flash_size'].every(key => typeof release[key] === 'string' && release[key].length > 0 && release[key].length <= 200)) return false;
+      const select = root.querySelector('[data-usb-release]');
+      let option = Array.from(select.options).find(item => item.value === release.id);
+      if (!option) { option = document.createElement('option'); option.value = release.id; select.append(option); }
+      option.textContent = `${release.name} · ${release.chip_family} · ${release.flash_size}`;
+      select.value = release.id;
+      current.update();
+      return true;
+    }
+  };
   document.addEventListener('synapse:page-load', initialize);
   document.addEventListener('synapse:before-navigate', event => {
       if (current?.active) { event.preventDefault(); return; }

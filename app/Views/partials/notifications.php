@@ -1,4 +1,4 @@
-<?php $notificationDestinations = \App\Services\NotificationService::destinationUrls(); ?>
+<?php $notificationDestinations ??= \App\Services\NotificationService::destinationUrls(); ?>
 <div class="header-action-wrap dropdown notification-dropdown" data-notifications
      data-list-url="<?= esc(site_url('/notifications'), 'attr') ?>"
      data-read-base="<?= esc(site_url('/notifications'), 'attr') ?>"
@@ -6,8 +6,23 @@
      data-portal-url="<?= esc($notificationDestinations['portal'], 'attr') ?>"
      data-clinic-referrals-url="<?= esc($notificationDestinations['clinicReferrals'], 'attr') ?>"
      data-guidance-referrals-url="<?= esc($notificationDestinations['guidanceReferrals'], 'attr') ?>"
+     data-clinic-referral-history-url="<?= esc($notificationDestinations['clinicReferralHistory'] ?? '', 'attr') ?>"
+     data-guidance-referral-history-url="<?= esc($notificationDestinations['guidanceReferralHistory'] ?? '', 'attr') ?>"
+     data-clinic-appointments-url="<?= esc($notificationDestinations['clinicAppointments'] ?? '', 'attr') ?>"
+     data-guidance-appointments-url="<?= esc($notificationDestinations['guidanceAppointments'] ?? '', 'attr') ?>"
+     data-clinic-referral-sent-url="<?= esc($notificationDestinations['clinicReferralSent'] ?? '', 'attr') ?>"
+     data-guidance-referral-sent-url="<?= esc($notificationDestinations['guidanceReferralSent'] ?? '', 'attr') ?>"
+     data-guidance-cases-url="<?= esc($notificationDestinations['guidanceCases'] ?? '', 'attr') ?>"
+     data-clinic-inventory-url="<?= esc($notificationDestinations['clinicInventory'] ?? '', 'attr') ?>"
+     data-facilities-operations-url="<?= esc($notificationDestinations['facilitiesOperations'] ?? '', 'attr') ?>"
      data-announcements-url="<?= esc($notificationDestinations['announcements'], 'attr') ?>"
      data-surveys-url="<?= esc($notificationDestinations['surveys'], 'attr') ?>"
+     data-clinic-teams-url="<?= esc($notificationDestinations['clinicTeams'], 'attr') ?>"
+     data-clinic-team-calendar-url="<?= esc($notificationDestinations['clinicTeamCalendar'], 'attr') ?>"
+     data-guidance-teams-url="<?= esc($notificationDestinations['guidanceTeams'], 'attr') ?>"
+     data-guidance-team-calendar-url="<?= esc($notificationDestinations['guidanceTeamCalendar'], 'attr') ?>"
+     data-facilities-teams-url="<?= esc($notificationDestinations['facilitiesTeams'], 'attr') ?>"
+     data-facilities-team-calendar-url="<?= esc($notificationDestinations['facilitiesTeamCalendar'], 'attr') ?>"
      data-bs-title="Notifications" data-bs-toggle="tooltip" data-bs-placement="bottom">
   <button class="header-action dropdown-toggle" type="button" id="notificationBell"
           data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
@@ -28,7 +43,7 @@
       <li class="p-3 small text-muted">Loading notifications…</li>
     </ul>
     <div class="notification-footer">
-      <a href="<?= esc($notificationDestinations['portal'], 'attr') ?>">My appointments <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      <a href="<?= esc(site_url('notifications/inbox'), 'attr') ?>">View all notifications <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
     </div>
   </div>
 </div>

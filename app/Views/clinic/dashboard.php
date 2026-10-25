@@ -12,7 +12,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="page-dashboard nd-dashboard">
+<div class="page-dashboard nd-dashboard" data-queue-dashboard="clinic" data-queue-counts-url="<?= site_url('/clinic/dashboard/queue-counts') ?>" data-queue-date="<?= esc(\App\Services\Scheduling\SchedulingClock::today(), 'attr') ?>">
   <!-- Welcome Banner -->
   <div class="card border-0 shadow-sm text-white p-4 mb-4" style="background: linear-gradient(135deg, var(--fu-maroon, #800000) 0%, #5a0000 100%) !important;">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -30,15 +30,16 @@
     </div>
   </div>
 
+  <p class="small text-muted mb-3" data-queue-feedback role="status" hidden></p>
   <!-- NiceAdmin v3 KPI Rail -->
   <section class="row g-3 mb-4 nd-kpi-rail">
     <div class="col-xxl-3 col-md-6">
       <article class="nd-kpi-card nd-kpi-leads">
         <span class="nd-kpi-icon"><i class="bi bi-people"></i></span>
         <span class="nd-kpi-label">Today's Patient Queue</span>
-        <strong class="nd-kpi-value"><?= number_format($queueWaiting + $queueCalled) ?></strong>
-        <span class="nd-kpi-trend <?= ($queueWaiting > 0) ? 'up' : '' ?>">
-          <i class="bi bi-clock"></i> <?= $queueWaiting ?> waiting, <?= $queueCalled ?> called
+        <strong class="nd-kpi-value" data-queue-count="queueToday"><?= number_format($queueWaiting + $queueCalled) ?></strong>
+        <span class="nd-kpi-trend <?= ($queueWaiting > 0) ? 'up' : '' ?>" data-queue-trend="queueWaiting">
+          <i class="bi bi-clock"></i> <span data-queue-count="queueWaiting" data-queue-format="plain"><?= $queueWaiting ?></span> waiting, <span data-queue-count="queueCalled" data-queue-format="plain"><?= $queueCalled ?></span> called
         </span>
       </article>
     </div>
@@ -49,7 +50,7 @@
         <span class="nd-kpi-label">Consultations Completed</span>
         <strong class="nd-kpi-value"><?= number_format($encountersCount) ?></strong>
         <span class="nd-kpi-trend up">
-          <i class="bi bi-check2-circle"></i> <?= $queueCompleted ?> completed today
+          <i class="bi bi-check2-circle"></i> <span data-queue-count="queueCompleted" data-queue-format="plain"><?= $queueCompleted ?></span> completed today
         </span>
       </article>
     </div>
@@ -107,7 +108,7 @@
             </div>
             <div>
               <span>Today's Active Queue</span>
-              <strong><?= number_format($queueWaiting + $queueCalled) ?></strong>
+              <strong data-queue-count="queueToday"><?= number_format($queueWaiting + $queueCalled) ?></strong>
             </div>
             <div>
               <span>Appointments</span>
@@ -210,6 +211,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= base_url('assets/js/queue-live.js') ?>"></script>
 <script>
   (function() {
     'use strict';

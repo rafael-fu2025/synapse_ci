@@ -4,18 +4,17 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
-use App\Models\AuditEventModel;
+use App\Services\Audit\AuditExplorer;
+use App\Services\Audit\AuditExplorerQuery;
 use App\Services\Audit\AuditService;
 
 final class AuditController extends BaseController
 {
     private AuditService $auditService;
-    private AuditEventModel $auditModel;
 
     public function __construct()
     {
         $this->auditService = new AuditService();
-        $this->auditModel = new AuditEventModel();
     }
 
     /**
@@ -23,16 +22,28 @@ final class AuditController extends BaseController
      */
     public function index()
     {
-        $events = $this->auditModel->scoped()
-            ->select('audit_events.*, u.username as actor_name')
-            ->join('users u', 'u.id = audit_events.actor_user_id', 'left')
-            ->orderBy('audit_events.id', 'DESC')
-            ->findAll(100);
+        $query = AuditExplorerQuery::fromQuery($this->request->getGet());
+        $page = ['events' => [], 'older_cursor' => null, 'newer_cursor' => null];
+        if ($query->errors === []) {
+            $page = (new AuditExplorer())->page($query);
+        } else {
+            $this->response->setStatusCode(400);
+        }
+        $url = static fn (?string $cursor = null, string $direction = 'older'): string =>
+            site_url('/admin/audit') . '?' . http_build_query($query->parameters($cursor, $direction));
 
         return view('admin/audit', [
             'title'       => 'Audit Trail',
             'pageTitle'   => 'Cryptographic Audit Ledger',
-            'events'      => $events,
+            'events'      => $page['events'],
+            'filters'     => $query->filters,
+            'filterErrors' => $query->errors,
+            'hasCursor'   => $query->cursor !== null,
+            'pagination'  => [
+                'first_url' => $url(),
+                'older_url' => $page['older_cursor'] === null ? null : $url($page['older_cursor']),
+                'newer_url' => $page['newer_cursor'] === null ? null : $url($page['newer_cursor'], 'newer'),
+            ],
             'breadcrumbs' => [
                 ['label' => 'Governance', 'url' => site_url('/admin/audit')],
                 ['label' => 'Audit Ledger', 'url' => ''],
@@ -48,11 +59,25 @@ final class AuditController extends BaseController
         $result = $this->auditService->verifyChain();
 
         if ($result['valid']) {
-            $msg = "Cryptographic chain verified: All {$result['verified_count']} audit records intact without tampering.";
-            return redirect()->to('/admin/audit')->with('success', $msg);
+            $msg = "Hash-chain verification passed for {$result['verified_count']} tenant audit records. No external checkpoint was checked.";
+        } else {
+            $location = $result['broken_id'] === null ? 'an invalid event ID' : 'audit event ID #' . $result['broken_id'];
+            $msg = "INTEGRITY ALERT: Hash-chain verification failed at {$location}. Investigate possible corruption or tampering.";
         }
 
-        $msg = "INTEGRITY ALERT: Cryptographic chain broken at audit event ID #{$result['broken_id']}. Tampering detected.";
-        return redirect()->to('/admin/audit')->with('error', $msg);
+        if ($this->request->isAJAX() || str_contains(strtolower($this->request->getHeaderLine('Accept')), 'json')) {
+            if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+                session()->setFlashdata($result['valid'] ? 'success' : 'error', $msg);
+            }
+            return $this->response->setStatusCode($result['valid'] ? 200 : 422)
+                ->setHeader('Cache-Control', 'private, no-store')->setJSON([
+                    'success' => $result['valid'], 'message' => $msg,
+                    'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
+                ]);
+        }
+
+        $redirect = redirect()->to('/admin/audit');
+        return $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast'
+            ? $redirect : $redirect->with($result['valid'] ? 'success' : 'error', $msg);
     }
 }

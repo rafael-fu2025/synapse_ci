@@ -12,7 +12,7 @@ const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
 let browser, server, origin, failSave = false, saveGate;
-const posts = [], requests = [], cache = new Map();
+const posts = [], allPosts = [], requests = [], cache = new Map();
 function render(requestPath) {
   if (cache.has(requestPath)) return cache.get(requestPath);
   const result = spawnSync('php', ['tests/_support/render-referral-fixture.php'], {
@@ -41,7 +41,15 @@ before(async () => {
     if (req.method === 'POST') {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
-      posts.push({ path: url.pathname, fields: fields(Buffer.concat(chunks).toString()) });
+      const post = { path: url.pathname, fields: fields(Buffer.concat(chunks).toString()) };
+      allPosts.push(post);
+      // Startup services (for example /realtime/ticket) are not referral saves.
+      if (!/^\/(?:clinic|guidance)\/referrals(?:\/|$)/.test(url.pathname)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Not provided by this referral fixture.' }));
+        return;
+      }
+      posts.push(post);
       if (saveGate) await saveGate;
       res.writeHead(failSave ? 422 : 200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: !failSave, message: failSave ? 'Correct the shared summary.' : 'Saved',
@@ -215,7 +223,7 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
         if (mode === 'create') assert.match(await page.locator('#appFormModal').innerText(), /patient is present/);
       }
       let release; saveGate = new Promise(resolve => { release = resolve; }); t.after(() => release());
-      const before = posts.length;
+      const before = posts.length, allBefore = allPosts.length;
       await page.locator('#appFormModal button[type=submit]').click();
       await page.waitForFunction(() => document.querySelector('#appFormModal button[type=submit]').disabled);
       await page.locator('#appFormModal form').evaluate(f => f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
@@ -223,7 +231,8 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
       assert.equal(await page.locator('#appFormModal').isVisible(), true);
       release(); saveGate = null;
       await page.waitForFunction(() => !document.querySelector('#appFormModal'));
-      assert.equal(posts.length, before + 1);
+      assert.equal(posts.length, before + 1,
+        `Expected exactly one referral mutation; all POST paths: ${JSON.stringify(allPosts.slice(allBefore).map(post => post.path))}`);
       assert.equal(posts.at(-1).path, base + '/2/handoff');
       assert.equal(posts.at(-1).fields.mode, mode);
       assert.equal(Object.hasOwn(posts.at(-1).fields, 'target_id'), mode === 'link');

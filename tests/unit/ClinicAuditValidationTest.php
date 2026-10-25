@@ -14,7 +14,10 @@ final class ClinicAuditValidationTest extends TestCase
 {
     private function service(): EncounterService
     {
-        return (new \ReflectionClass(EncounterService::class))->newInstanceWithoutConstructor();
+        $service = (new \ReflectionClass(EncounterService::class))->newInstanceWithoutConstructor();
+        $queue = (new \ReflectionClass(\App\Services\Scheduling\QueueService::class))->newInstanceWithoutConstructor();
+        (new \ReflectionProperty($service, 'queueService'))->setValue($service, $queue);
+        return $service;
     }
 
     public static function invalidVitals(): iterable
@@ -94,6 +97,59 @@ final class ClinicAuditValidationTest extends TestCase
         $this->service()->completeEncounter(1, $outcome, followUpDate: $date);
     }
 
+    public static function invalidDrafts(): iterable
+    {
+        yield [['chief_complaint' => []]];
+        yield [['diagnosis' => false]];
+        yield [['disposition_notes' => str_repeat('x', 10001)]];
+        yield [['bp_systolic' => '301']];
+        yield [['weight_kg' => []]];
+        yield [['follow_up_date' => '2026-02-30']];
+        yield [['disposition' => 'unknown']];
+    }
+
+    #[DataProvider('invalidDrafts')]
+    public function testInvalidDraftIsRejectedBeforeDatabaseAccess(array $draft): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionCode(422);
+        $this->service()->saveDraft(42, $draft, 1);
+    }
+
+    #[DataProvider('invalidDrafts')]
+    public function testInvalidPendingCompletionIsRejectedBeforeDatabaseAccess(array $draft): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionCode(422);
+        $this->service()->completeEncounter(42, 'discharged', pendingDraft: $draft, recordedByUserId: 1);
+    }
+
+    public function testDraftNormalizationPreservesPresenceAndWhitelistsFields(): void
+    {
+        $draft = (new \ReflectionMethod(EncounterService::class, 'normalizeDraft'))->invoke(null, [
+            'diagnosis' => '', 'chief_complaint' => '  Headache  ', 'spo2_pct' => '0',
+            'follow_up_date' => '', 'disposition' => '', 'status' => 'completed',
+            'tenant_id' => 999, 'recorded_by_user_id' => 999,
+        ]);
+        $this->assertSame(['diagnosis' => null, 'chief_complaint' => 'Headache', 'spo2_pct' => 0,
+            'follow_up_date' => null, 'disposition' => null], $draft);
+        $this->assertArrayNotHasKey('assessment_notes', $draft);
+    }
+
+    public function testExplicitBlankChiefComplaintCannotCompleteAggregateVisit(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionCode(422);
+        $this->service()->completeEncounter(42, 'discharged', pendingDraft: ['chief_complaint' => '  ']);
+    }
+
+    public function testAggregateVitalsRequireExplicitRecorder(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionCode(422);
+        $this->service()->completeEncounter(42, 'discharged', pendingDraft: ['pulse_bpm' => '72']);
+    }
+
     public function testTransactionRollsBackAndPreservesQueueFailure(): void
     {
         $db = $this->createMock(BaseConnection::class);
@@ -133,7 +189,7 @@ final class ClinicAuditValidationTest extends TestCase
     public static function closedWrites(): iterable
     {
         foreach (['completed', 'referred', 'cancelled'] as $status) {
-            foreach (['vitals', 'assessment', 'complete'] as $operation) {
+            foreach (['vitals', 'assessment', 'draft', 'complete'] as $operation) {
                 yield [$status, $operation];
             }
         }
@@ -165,6 +221,7 @@ final class ClinicAuditValidationTest extends TestCase
         match ($operation) {
             'vitals' => $service->recordVitals(42, [], 1),
             'assessment' => $service->recordAssessment(42),
+            'draft' => $service->saveDraft(42, ['diagnosis' => 'Draft'], 1),
             'complete' => $service->completeEncounter(42, 'discharged'),
         };
     }

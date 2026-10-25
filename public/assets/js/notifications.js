@@ -1,4 +1,4 @@
-/** NiceAdmin v3 personal notification menu; private, bounded polling, POST-only read state. */
+/** Private notification menu; realtime invalidation, bounded reconciliation, POST-only read state. */
 (function () {
   'use strict';
   const root = document.querySelector('[data-notifications]');
@@ -10,7 +10,18 @@
   const list = root.querySelector('[data-notification-list]');
   const markAll = root.querySelector('[data-notification-mark-all]');
   const feedback = root.querySelector('[data-notification-error]');
-  let controller, timer, pollGeneration = 0, generation = 0, writing = false, unread = 0, stopped = false;
+  let controller, timer, invalidationTimer, pollGeneration = 0, generation = 0, writing = false, unread = 0, stopped = false;
+  let ready = window.SynapseRealtime?.status === 'ready', refreshing = false, dirty = false, unconfirmed = false;
+    const unconfirmedMessage = 'Could not confirm read state; refresh/retry.';
+
+  function invalidate() {
+    dirty = true;
+    if (stopped || document.hidden || writing || refreshing || invalidationTimer) return;
+    invalidationTimer = setTimeout(() => {
+      invalidationTimer = null;
+      void refresh();
+    }, 100);
+  }
 
   function httpDestination(value) {
     try {
@@ -20,7 +31,14 @@
     } catch (_) { return null; }
   }
   const destinations = new Set([root.dataset.portalUrl, root.dataset.clinicReferralsUrl, root.dataset.guidanceReferralsUrl,
-      root.dataset.announcementsUrl, root.dataset.surveysUrl]
+      root.dataset.clinicReferralHistoryUrl, root.dataset.guidanceReferralHistoryUrl,
+      root.dataset.clinicAppointmentsUrl, root.dataset.guidanceAppointmentsUrl,
+      root.dataset.clinicReferralSentUrl, root.dataset.guidanceReferralSentUrl,
+      root.dataset.guidanceCasesUrl, root.dataset.clinicInventoryUrl, root.dataset.facilitiesOperationsUrl,
+            root.dataset.announcementsUrl, root.dataset.surveysUrl,
+      root.dataset.clinicTeamsUrl, root.dataset.clinicTeamCalendarUrl,
+      root.dataset.guidanceTeamsUrl, root.dataset.guidanceTeamCalendarUrl,
+      root.dataset.facilitiesTeamsUrl, root.dataset.facilitiesTeamCalendarUrl]
     .map(value => httpDestination(value)?.href).filter(Boolean));
   const portalUrl = httpDestination(root.dataset.portalUrl)?.href;
   function destination(item) {
@@ -41,6 +59,25 @@
     unread = 0;
     count.textContent = 'Sign in again to check notifications.';
     bell.setAttribute('aria-label', 'Notifications');
+  }
+  const teamNotices = {
+    'Team event invitation': 'bi bi-calendar-plus',
+    'Team event updated': 'bi bi-calendar-check',
+    'Team event cancelled': 'bi bi-calendar-x',
+    'Team event participation removed': 'bi bi-calendar-x',
+    'Team task assigned': 'bi bi-list-task',
+    'Team task assignment removed': 'bi bi-list-task',
+    'Team task updated': 'bi bi-list-task',
+    'Team task status changed': 'bi bi-list-task',
+    'Team task comment': 'bi bi-chat-left-text',
+  };
+  function workflowIcon(title) {
+    if (title.startsWith('Appointment ') || title === 'Upcoming appointment') return 'bi bi-calendar-check';
+    if (title.startsWith('Referral ')) return 'bi bi-arrow-left-right';
+    if (title.startsWith('Follow-up ')) return 'bi bi-journal-check';
+    if (title.startsWith('Medicine stock ') || title === 'Expired medicine stock') return 'bi bi-capsule';
+    if (title.startsWith('BMG ')) return 'bi bi-gear';
+    return null;
   }
   function render(payload) {
     if (!payload || !Array.isArray(payload.items) || !Number.isInteger(payload.unread_count) || payload.unread_count < 0) {
@@ -70,8 +107,9 @@
       icon.className = 'notification-icon success';
       icon.setAttribute('aria-hidden', 'true');
       const glyph = document.createElement('i');
-      glyph.className = ({ 'Incoming referral': 'bi bi-arrow-left-right', 'New announcement': 'bi bi-megaphone',
-              'New survey': 'bi bi-clipboard-check' })[item.title] || 'bi bi-calendar-check';
+      const teamNotice = Object.hasOwn(teamNotices, item.title);
+      glyph.className = (teamNotice ? teamNotices[item.title] : null) || ({ 'Incoming referral': 'bi bi-arrow-left-right', 'New announcement': 'bi bi-megaphone',
+              'New survey': 'bi bi-clipboard-check' })[item.title] || workflowIcon(item.title) || 'bi bi-calendar-check';
       icon.append(glyph);
       const content = document.createElement('span');
       content.className = 'notification-content';
@@ -80,37 +118,44 @@
       title.textContent = item.title;
       const text = document.createElement('span');
       text.className = 'notification-text';
-      text.textContent = item.message;
-      const time = document.createElement('span');
+      // Team content stays in the authorized board/calendar, not the shared header.
+      const message = teamNotice
+        ? (item.title.startsWith('Team event ') ? 'Open your team calendar for details.' : 'Open your team board for details.')
+        : item.message;
+      text.textContent = message;
+      const time = document.createElement('time');
       time.className = 'notification-time';
       time.textContent = typeof item.created_at === 'string' ? item.created_at.slice(0, 16).replace('T', ' ') : '';
-      time.title = 'Application local time';
+      if (typeof item.created_at === 'string') time.dateTime = item.created_at;
+      time.title = 'Philippine time (Asia/Manila, UTC+08:00)';
       content.append(title, text, time);
       link.append(dot, icon, content);
-      if (!item.read_at) link.setAttribute('aria-label', `Unread: ${item.title}. ${item.message}`);
+      if (!item.read_at) link.setAttribute('aria-label', `Unread: ${item.title}. ${message}`);
       li.append(link);
       fragment.append(li);
     }
     if (!fragment.childNodes.length) {
       const empty = document.createElement('li');
       empty.className = 'p-3 small text-muted';
-      empty.textContent = 'No notifications yet. Appointments, announcements, and surveys will appear here.';
+      empty.textContent = 'No notifications yet. Appointments, referrals, team events and tasks, announcements, and surveys will appear here.';
       fragment.append(empty);
     }
     list.replaceChildren(fragment);
     markAll.disabled = writing || unread === 0;
     feedback.classList.add('d-none');
   }
-  async function request(url, write) {
-    const options = { credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+  async function request(url, write, owner = controller) {
+    const options = { credentials: 'same-origin', cache: 'no-store', signal: owner.signal,
       headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } };
     if (write) {
       options.method = 'POST';
       options.headers = { ...options.headers, ...window.SynapseCsrf?.headers() };
     }
     const response = await fetch(url, options);
+    if (owner.signal.aborted) throw new DOMException('Request cancelled.', 'AbortError');
     window.SynapseCsrf?.fromResponse(response);
     const payload = await response.json();
+    if (owner.signal.aborted) throw new DOMException('Request cancelled.', 'AbortError');
     window.SynapseCsrf?.sync(payload.csrf);
     if (response.status === 401 || response.status === 403) {
       const failure = new Error('Your session or security token changed. Refresh the page or sign in again.');
@@ -120,18 +165,43 @@
     if (!response.ok || response.redirected) throw new Error('Notifications are temporarily unavailable. Please retry.');
     return payload;
   }
+  async function boundedRequest(url, write, owner) {
+    let timeout;
+    try {
+      // Bound fetch and JSON together, even when either ignores abort.
+      return await Promise.race([
+        request(url, write, owner),
+        new Promise((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error('Notifications request timed out.'));
+            owner.abort();
+          }, 10000);
+        }),
+      ]);
+    } finally { clearTimeout(timeout); }
+  }
   async function refresh() {
-    if (writing || stopped || document.hidden) return;
+    if (writing || stopped || document.hidden || refreshing) return;
+    clearTimeout(invalidationTimer);
+    invalidationTimer = null;
+    dirty = false;
+    refreshing = true;
     controller?.abort();
     controller = new AbortController();
+    const owner = controller;
     const current = ++generation;
     try {
-      const payload = await request(root.dataset.listUrl, false);
-      if (current === generation && !stopped) render(payload);
+      const payload = await boundedRequest(root.dataset.listUrl, false, owner);
+      if (current === generation && !stopped) { render(payload); unconfirmed = false; }
     } catch (failure) {
       if (failure.name !== 'AbortError' && current === generation && !stopped) {
         if (failure.authentication) clear();
-        error('Unable to refresh notifications. Please retry or sign in again.');
+        error(unconfirmed ? unconfirmedMessage : 'Unable to refresh notifications. Please retry or sign in again.');
+      }
+    } finally {
+      if (current === generation) {
+        refreshing = false;
+        if (dirty) invalidate();
       }
     }
   }
@@ -140,30 +210,41 @@
     // Recheck the clicked href as well as the API payload, including after DOM changes.
     const targetUrl = destination({ url: target });
     writing = true;
+    refreshing = false;
+    clearTimeout(invalidationTimer);
+    invalidationTimer = null;
     root.setAttribute('aria-busy', 'true');
     markAll.disabled = true;
     controller?.abort();
     controller = new AbortController();
+    const owner = controller;
     const current = ++generation;
     let navigate = false;
     try {
       const url = id ? root.dataset.readBase.replace(/\/$/, '') + '/' + id + '/read' : root.dataset.readAllUrl;
-      const payload = await request(url, true);
+      const payload = await boundedRequest(url, true, owner);
       if (current === generation && !stopped) {
         render(payload);
+        unconfirmed = false;
         navigate = Boolean(id);
       }
     } catch (failure) {
       if (failure.name !== 'AbortError' && current === generation && !stopped) {
         if (failure.authentication) clear();
-        error('Could not mark notifications read. Your unread state has not been cleared locally; retry or refresh.');
+        unconfirmed = true;
+        error(unconfirmedMessage);
+        // The write may have committed. Reconcile with GET, never replay the POST.
+        dirty = true;
       }
     } finally {
-      writing = false;
-      root.removeAttribute('aria-busy');
-      markAll.disabled = unread === 0;
+      if (current === generation) {
+        writing = false;
+        root.removeAttribute('aria-busy');
+        markAll.disabled = unread === 0;
+        if (dirty && !navigate) invalidate();
+      }
     }
-    if (navigate && targetUrl) {
+    if (navigate && targetUrl && current === generation && !stopped) {
       if (new URL(targetUrl).origin === location.origin && window.SynapseNavigation) {
         void window.SynapseNavigation.navigate(targetUrl);
       } else {
@@ -195,17 +276,36 @@
     timer = setTimeout(async () => {
       await refresh();
       if (poll === pollGeneration) schedule();
-    }, 30000);
+    }, ready ? 60000 : 30000);
   }
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       ++pollGeneration;
       clearTimeout(timer);
-      if (!writing) { ++generation; controller?.abort(); }
+      clearTimeout(invalidationTimer);
+      invalidationTimer = null;
+      if (!writing) { ++generation; refreshing = false; controller?.abort(); }
     } else { refresh(); schedule(); }
   });
-  window.addEventListener('pagehide', () => { stopped = true; ++generation; ++pollGeneration; clearTimeout(timer); controller?.abort(); });
-  window.addEventListener('pageshow', event => { if (event.persisted) { stopped = false; refresh(); schedule(); } });
+  document.addEventListener('synapse:realtime-event', event => {
+    if (event.detail?.event === 'notifications.changed') invalidate();
+  });
+  document.addEventListener('synapse:realtime-status', event => {
+    const next = event.detail?.status === 'ready';
+    if (next === ready) return;
+    ready = next;
+    schedule();
+    if (ready) invalidate();
+  });
+  window.addEventListener('pagehide', () => {
+    stopped = true; ++generation; ++pollGeneration; refreshing = false; writing = false;
+    root.removeAttribute('aria-busy');
+    markAll.disabled = unread === 0;
+    clearTimeout(timer); clearTimeout(invalidationTimer); invalidationTimer = null; controller?.abort();
+  });
+  window.addEventListener('pageshow', event => {
+    if (event.persisted) { stopped = false; ready = window.SynapseRealtime?.status === 'ready'; refresh(); schedule(); }
+  });
   // The shell persists: refresh its data without starting another poll loop.
   document.addEventListener('synapse:page-load', refresh);
   if (!window.SynapseNavigation || document.readyState !== 'loading') refresh();

@@ -13,10 +13,10 @@
 <td><div class="d-flex flex-wrap gap-2">
 <?php if ($notice['status'] === 'draft'): ?>
 <a class="btn btn-outline-primary btn-sm" href="<?= esc($url . '/edit') ?>" data-app-modal-open>Edit draft</a>
-<form action="<?= esc($url . '/publish') ?>" method="POST" data-confirm="Publish this announcement to the selected audience? Its text, audience and visibility dates cannot be edited afterward." data-confirm-title="Publish announcement" data-confirm-label="Publish announcement" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $notice['version'] ?>"><button class="btn btn-primary btn-sm" type="submit">Publish</button></form>
+<form action="<?= esc($url . '/publish') ?>" method="POST" data-background-submit data-confirm="Publish this announcement to the selected audience? Its text, audience and visibility dates cannot be edited afterward." data-confirm-title="Publish announcement" data-confirm-label="Publish announcement" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $notice['version'] ?>"><button class="btn btn-primary btn-sm" type="submit">Publish</button></form>
 <?php endif; ?>
 <?php if ($notice['status'] !== 'archived'): ?>
-<form action="<?= esc($url . '/archive') ?>" method="POST" data-confirm="Archive this announcement? It will no longer be visible in the portal and cannot be republished." data-confirm-title="Archive announcement" data-confirm-label="Archive announcement" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $notice['version'] ?>"><button class="btn btn-outline-secondary btn-sm" type="submit">Archive</button></form>
+<form action="<?= esc($url . '/archive') ?>" method="POST" data-background-submit data-confirm="Archive this announcement? It will no longer be visible in the portal and cannot be republished." data-confirm-title="Archive announcement" data-confirm-label="Archive announcement" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $notice['version'] ?>"><button class="btn btn-outline-secondary btn-sm" type="submit">Archive</button></form>
 <?php endif; ?>
 <?php if ($notice['published_at'] !== null): ?><a class="btn btn-outline-secondary btn-sm" href="<?= esc($baseUrl . '?' . http_build_query(['reads' => $notice['id'], 'page' => $pagination['page']])) ?>">Read history</a><?php endif; ?>
 </div></td></tr>

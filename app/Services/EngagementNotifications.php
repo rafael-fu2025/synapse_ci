@@ -11,7 +11,8 @@ use RuntimeException;
 /** Publication fanout shares the existing bell; content is re-authorized on every inbox read. */
 final class EngagementNotifications
 {
-    public static function publish(string $kind, int $id, array $actor): void
+    /** Return inserted IDs for NotificationInvalidation::publishCommitted after the parent commits. */
+    public static function publish(string $kind, int $id, array $actor): array
     {
         $db = Database::connect();
         if ($db->transDepth < 1 || !$db->transStatus()) { throw new RuntimeException('Publication requires an active transaction.'); }
@@ -37,13 +38,16 @@ final class EngagementNotifications
         elseif ($row['audience'] === 'all') { $people->groupStart()->where('sp.id IS NOT NULL', null, false)->orWhere('ep.id IS NOT NULL', null, false)->groupEnd(); }
         else { throw new RuntimeException('Invalid publication audience.'); }
         EngagementAudience::recipients($people, $row);
+        $inserted = [];
         foreach ($people->get()->getResultArray() as $person) {
             $key = ['tenant_id' => $current['tenant_id'], 'recipient_person_id' => $person['id'], $column => $id, 'type' => $type];
             if ($db->table('notifications')->where($key)->countAllResults() > 0) { continue; }
             if (!$db->table('notifications')->insert($key + ['created_at' => gmdate('Y-m-d H:i:s'), 'read_at' => null])) {
                 throw new RuntimeException('Unable to save publication notifications.');
             }
+            $inserted[] = (int) $db->insertID();
         }
+        return $inserted;
     }
 
     /** Correlated EXISTS for the existing notifications query, with fresh profile membership. */

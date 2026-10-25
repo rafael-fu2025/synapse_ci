@@ -45,6 +45,7 @@ final class TeamCalendarService
     public const LIST_LIMIT = 250;
     public const PARTICIPANT_LIMIT = 100;
     private BaseConnection $db;
+    private TeamsNotifications $notifications;
 
     public function __construct()
     {
@@ -121,7 +122,9 @@ final class TeamCalendarService
             ]));
             $id = (int) $this->db->insertID();
             $this->replaceParticipants($unit, $id, $ids, $context['actor']);
-            return $this->event($unit, $id, $context);
+            $event = $this->event($unit, $id, $context);
+            $this->notifications->enqueue($event, $context['actor'], TeamsNotifications::eventPlan(null, $event));
+            return $event;
         });
     }
 
@@ -150,11 +153,18 @@ final class TeamCalendarService
             unset($data['participant_ids']);
             if (!$cancel) { $this->validateParticipants($ids, $context); }
             if ($cancel && $event['status'] === 'cancelled') { return $event; }
+            $unchanged = $cancel || $ids === $event['participant_ids'];
+            foreach ($data as $field => $value) {
+                if ($event[$field] !== $value) { $unchanged = false; }
+            }
+            if ($unchanged) { return $event; }
             $this->must($this->scope('team_events', $unit, $context['actor'])->where('id', $id)->where('version', $version)
                 ->update($data + ['version' => $version + 1, 'updated_at' => gmdate('Y-m-d H:i:s')]));
             if ($this->db->affectedRows() !== 1) { throw new RuntimeException('Event changed. Reload before saving.', 409); }
             if (!$cancel) { $this->replaceParticipants($unit, $id, $ids, $context['actor']); }
-            return $this->event($unit, $id, $context);
+            $updated = $this->event($unit, $id, $context);
+            $this->notifications->enqueue($updated, $context['actor'], TeamsNotifications::eventPlan($event, $updated));
+            return $updated;
         });
     }
 
@@ -348,12 +358,14 @@ final class TeamCalendarService
     {
         return $this->guard(function () use ($operation): array {
             if ($this->db->transDepth !== 0) { throw new RuntimeException('An independent team calendar transaction is required.', 409); }
+            $this->notifications = new TeamsNotifications($this->db);
             $this->db->resetTransStatus();
             $this->must($this->db->transBegin());
             try {
                 $result = $operation();
                 if (!$this->db->transStatus()) { throw new RuntimeException('Team calendar transaction failed.', 503); }
                 $this->must($this->db->transCommit());
+                $this->notifications->publishCommitted();
                 return $result;
             } catch (Throwable $e) {
                 try { $this->db->transRollback(); }

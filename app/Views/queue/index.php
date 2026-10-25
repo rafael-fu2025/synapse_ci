@@ -1,5 +1,9 @@
 <?= $this->extend('layouts/app') ?>
 
+<?= $this->section('styles') ?>
+<link href="<?= base_url('assets/css/queue.css') ?>" rel="stylesheet">
+<?= $this->endSection() ?>
+
 <?= $this->section('page_actions') ?>
 <div class="d-flex align-items-center gap-2">
   <button type="button"
@@ -18,13 +22,13 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
   <div>
     <h2 class="h5 fw-bold mb-0 text-dark">
       <?= ($unit === 'clinic') ? 'University Clinic Queue Board' : 'Guidance & Counseling Queue Board' ?>
     </h2>
     <span class="text-muted small">
-      Live daily queue · Auto-syncs every 15s
+      Daily queue · Refreshes automatically
     </span>
   </div>
 
@@ -51,11 +55,12 @@
 
 <div id="queue-action-error" class="alert alert-warning" role="alert" hidden></div>
 
-<!-- Dynamic HTMX Queue Board Container (refreshes automatically every 15 seconds) -->
+<!-- Queue-only invalidation refresh; 15s fallback / 60s ready reconciliation. -->
 <div id="queue-board-container"
      hx-get="<?= site_url($unit . '/queue/board') ?>"
      hx-include="#queueDateFilter_iso"
-     hx-trigger="every 15s"
+     data-queue-unit="<?= esc($unit, 'attr') ?>"
+     hx-trigger="queue:refresh"
      hx-swap="innerHTML">
   <?= $this->include('queue/board_partial', ['summary' => $summary, 'unit' => $unit]) ?>
 </div>
@@ -68,14 +73,15 @@
         <h5 class="modal-title fw-bold" id="walkinModalLabel">
           <i class="bi bi-ticket-perforated text-primary me-2"></i> Register Walk-in Patient
         </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" :disabled="submitting"></button>
       </div>
 
-      <form action="<?= site_url($unit . '/queue/walkin') ?>" method="POST">
+      <form action="<?= site_url($unit . '/queue/walkin') ?>" method="POST" x-ref="form" @submit="submitTicket($event)">
         <?= csrf_field() ?>
         <input type="hidden" name="person_id" :value="selectedPerson?.id">
 
-        <div class="modal-body p-4">
+        <div class="modal-body p-4" :inert="submitting || committed">
+          <div class="alert alert-warning" role="alert" x-show="feedback" x-text="feedback" x-cloak></div>
           <!-- Search box -->
           <div class="mb-3">
             <label class="form-label fw-semibold">Search Student or Employee</label>
@@ -119,7 +125,7 @@
                 <h6 class="fw-bold text-dark mt-1 mb-0" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name) : ''"></h6>
                 <div class="text-muted small" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></div>
               </div>
-              <button type="button" class="btn btn-sm btn-link text-danger p-0" @click="selectedPerson = null">Change</button>
+              <button type="button" class="btn btn-sm btn-link text-danger p-0" @click="changePerson()">Change</button>
             </div>
           </div>
 
@@ -144,8 +150,8 @@
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="!selectedPerson">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" :disabled="submitting">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="!selectedPerson || submitting || committed">
             <i class="bi bi-plus-circle me-1"></i> Issue Queue Ticket
           </button>
         </div>
@@ -177,37 +183,194 @@
   });
 
   function walkinSearch() {
+    let request = null;
+    let sequence = 0;
+    let events = null;
+    let backgroundPending = false;
+
     return {
       searchTerm: '',
       results: [],
       selectedPerson: null,
       loading: false,
+      submitting: false,
+      committed: false,
+      feedback: '',
 
-      async searchPatient() {
-        if (this.searchTerm.trim().length < 2) {
-          this.results = [];
+      init() {
+        events = new AbortController();
+        this.$root.addEventListener('hide.bs.modal', event => {
+          if (event.target === this.$root && this.submitting) event.preventDefault();
+        }, { signal: events.signal });
+        this.$root.addEventListener('hidden.bs.modal', event => {
+          if (event.target === this.$root && !this.committed) this.discardDraft();
+        }, { signal: events.signal });
+        window.addEventListener('pageshow', () => { this.submitting = false; }, { signal: events.signal });
+        document.addEventListener('synapse:before-navigate', event => {
+          if (backgroundPending) event.preventDefault();
+        }, { signal: events.signal });
+        window.addEventListener('beforeunload', event => {
+          if (!backgroundPending) return;
+          event.preventDefault();
+          event.returnValue = '';
+        }, { signal: events.signal });
+      },
+
+      destroy() {
+        this.cancelSearch();
+        events?.abort();
+      },
+
+      cancelSearch() {
+        ++sequence;
+        request?.abort();
+        request = null;
+        this.loading = false;
+      },
+
+      discardDraft() {
+        this.cancelSearch();
+        this.selectedPerson = null;
+        this.searchTerm = '';
+        this.results = [];
+        this.feedback = '';
+        // Native reset restores priority and clears only this form's navigation dirty state.
+        this.$refs.form.reset();
+      },
+
+      async submitTicket(event) {
+        if (this.submitting || this.committed || !this.selectedPerson) {
+          event.preventDefault();
           return;
         }
+        if (event.defaultPrevented) return;
+        // Without the shared refresh/feedback helpers, retain the native POST contract.
+        if (!window.fetch || !window.SynapseMutations || !window.SynapseToast) {
+          this.submitting = true;
+          setTimeout(() => {
+            if (event.defaultPrevented) this.submitting = false;
+          }, 0);
+          return;
+        }
+        event.preventDefault();
+        const form = this.$refs.form;
+        const submitter = event.submitter;
+        const method = submitter?.getAttribute('formmethod') || form.method;
+        const target = submitter?.getAttribute('formtarget') || form.target;
+        const tell = message => {
+          this.feedback = message;
+          window.SynapseToast.show(message, { type: 'error', key: 'queue-walkin' });
+        };
+        let url;
+        try {
+          url = new URL(submitter?.getAttribute('formaction') || form.action, location.href);
+        } catch (_) {
+          tell('This action must be submitted to a valid page on this site.');
+          return;
+        }
+        if (method.toUpperCase() !== 'POST' || (target && target !== '_self')
+            || url.origin !== location.origin || url.username || url.password) {
+          tell('This action must be submitted to a valid page on this site.');
+          return;
+        }
+        const body = submitter ? new FormData(form, submitter) : new FormData(form);
+        const controls = [...form.querySelectorAll('button, input, select, textarea')]
+          .map(control => [control, control.disabled]);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000);
+        this.cancelSearch();
+        backgroundPending = true;
+        this.submitting = true;
+        this.feedback = '';
+        form.setAttribute('aria-busy', 'true');
+        controls.forEach(([control]) => { control.disabled = true; });
+        const unlock = () => {
+          backgroundPending = false;
+          this.submitting = false;
+          form.removeAttribute('aria-busy');
+          controls.forEach(([control, disabled]) => { control.disabled = disabled; });
+        };
+        try {
+          const response = await fetch(url.href, {
+            method: 'POST', body, credentials: 'same-origin', redirect: 'error', signal: controller.signal,
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest',
+              'X-Synapse-Feedback': 'toast', ...window.SynapseCsrf?.headers() }
+          });
+          window.SynapseCsrf?.fromResponse(response);
+          if (!(response.headers.get('Content-Type') || '').toLowerCase().includes('application/json')) {
+            throw new Error('The response could not be verified. Review the queue before retrying.');
+          }
+          const payload = await response.json();
+          window.SynapseCsrf?.sync(payload.csrf);
+          if (!response.ok || payload.success !== true) {
+            throw new Error(typeof payload.message === 'string' ? payload.message : 'The ticket could not be issued.');
+          }
+          this.committed = true;
+          unlock();
+          await this.$nextTick();
+          if (this.$root.classList.contains('show')) {
+            await new Promise(resolve => {
+              this.$root.addEventListener('hidden.bs.modal', resolve, { once: true });
+              bootstrap.Modal.getOrCreateInstance(this.$root).hide();
+            });
+          }
+          await window.SynapseMutations.refresh(location.href, payload.message, { form });
+        } catch (error) {
+          tell(this.committed
+            ? 'Ticket issued, but refreshing failed. Do not submit again; reload to review the queue.'
+            : error instanceof TypeError || error.name === 'AbortError'
+              ? 'The response was interrupted; a ticket may have been issued. Review the queue before retrying.'
+              : error.message);
+        } finally {
+          clearTimeout(timeout);
+          if (!this.committed) unlock();
+        }
+      },
 
+      async searchPatient() {
+        this.cancelSearch();
+        this.results = [];
+        const term = this.searchTerm.trim();
+        if (term.length < 2 || this.selectedPerson || this.submitting || this.committed || !this.$root.classList.contains('show')) return;
+
+        const current = sequence;
+        const controller = new AbortController();
+        request = controller;
         this.loading = true;
         try {
-          const res = await fetch(`<?= site_url('/api/patients/search?q=') ?>${encodeURIComponent(this.searchTerm)}`);
+          const res = await fetch(`<?= site_url('/api/patients/search?q=') ?>${encodeURIComponent(term)}`, { signal: controller.signal });
+          if (controller.signal.aborted || window.SynapseCsrf?.fromResponse(res)) return;
           if (res.ok) {
             const data = await res.json();
-            this.results = data.results || [];
+            if (current === sequence && this.searchTerm.trim() === term) {
+              this.results = Array.isArray(data.results) ? data.results : [];
+            }
           }
         } catch (e) {
-          console.error(e);
+          if (e.name !== 'AbortError' && current === sequence) console.error(e);
         } finally {
-          this.loading = false;
+          if (current === sequence) {
+            request = null;
+            this.loading = false;
+          }
         }
       },
 
       selectPerson(p) {
+        if (this.submitting || this.committed) return;
+        this.cancelSearch();
         this.selectedPerson = p;
+        this.results = [];
+      },
+
+      changePerson() {
+        if (this.submitting || this.committed) return;
+        this.cancelSearch();
+        this.selectedPerson = null;
         this.results = [];
       }
     };
   }
 </script>
+<script src="<?= base_url('assets/js/queue-realtime.js') ?>"></script>
 <?= $this->endSection() ?>

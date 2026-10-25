@@ -30,6 +30,8 @@ final class TeamTaskServiceIntegrationTest extends CIUnitTestCase
             'DBDebug' => true, 'foreignKeys' => true, 'busyTimeout' => 1000,
         ];
         $this->db = Database::connect();
+        require_once ROOTPATH . 'tests/_support/TeamsNotificationFixture.php';
+        \Tests\Support\TeamsNotificationFixture::install($this->db);
         $this->db->query('CREATE TABLE isolated_tenants (id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT)');
         $this->db->query('CREATE TABLE isolated_people (id INTEGER PRIMARY KEY, tenant_id INTEGER, first_name TEXT,
             last_name TEXT, mis_id TEXT, email TEXT, deleted_at TEXT)');
@@ -79,6 +81,97 @@ final class TeamTaskServiceIntegrationTest extends CIUnitTestCase
     private function full(array $task): array
     {
         return array_intersect_key($task, array_flip(['title', 'description', 'status', 'priority', 'assignee_user_id', 'due_date', 'version']));
+    }
+
+    private function alerts(): array
+    {
+        return array_map(static fn (array $row): array => [(int) $row['recipient_user_id'], $row['type']],
+            $this->db->table('notifications')->orderBy('id')->get()->getResultArray());
+    }
+
+    public function testTaskNotificationMatrixAcrossAllUnits(): void
+    {
+        foreach (['clinic' => [1, 2, 3], 'guidance' => [5, 6, 9], 'facilities' => [7, 8, 9]] as $unit => [$owner, $first, $second]) {
+            $this->signIn($owner);
+            $task = $this->tasks->create($unit, ['title' => 'Work', 'assignee_user_id' => $first]);
+            $this->assertSame([[$first, 'team_task_assigned']], $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+            $task = $this->tasks->update($unit, $task['id'], array_replace($this->full($task), [
+                'assignee_user_id' => $second, 'status' => 'in_progress',
+            ]));
+            $expected = [[$first, 'team_task_unassigned'], [$second, 'team_task_assigned']];
+            usort($expected, static fn ($a, $b) => $a[0] <=> $b[0]);
+            $this->assertSame($expected, $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+            $this->signIn($second);
+            $task = $this->tasks->move($unit, $task['id'], ['version' => $task['version'], 'status' => 'done']);
+            $this->assertSame([[$owner, 'team_task_status']], $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+            $this->tasks->comment($unit, $task['id'], ['body' => 'Private fixture comment']);
+            $this->assertSame([[$owner, 'team_task_commented']], $this->alerts());
+            $row = $this->db->table('notifications')->get()->getRowArray();
+            $this->assertGreaterThan(0, (int) $row['team_comment_id']);
+            $this->assertStringNotContainsString('Private fixture comment', json_encode($row));
+            $this->db->table('notifications')->where('id >', 0)->delete();
+        }
+    }
+
+    public function testTaskMaterialEditsNotifyOnlyOwnerAndAssignee(): void
+    {
+        $task = $this->tasks->create('clinic', ['title' => 'Work', 'assignee_user_id' => 2]);
+        $this->db->table('notifications')->where('id >', 0)->delete();
+        $this->signIn(4);
+        foreach (['title' => 'Revised', 'due_date' => '2027-01-01', 'priority' => 'high',
+            'description' => 'Revised description', 'checklist' => [['text' => 'Item', 'done' => false]]] as $field => $value) {
+            $task = $this->tasks->update('clinic', $task['id'], array_replace($this->full($task), [$field => $value]));
+            $this->assertSame([[1, 'team_task_updated'], [2, 'team_task_updated']], $this->alerts());
+            $this->db->table('notifications')->where('id >', 0)->delete();
+        }
+        $this->tasks->comment('clinic', $task['id'], ['body' => 'Comment from manager']);
+        $this->assertSame([[1, 'team_task_commented'], [2, 'team_task_commented']], $this->alerts());
+    }
+
+    public function testTaskUnchangedEditsAndUnassignmentDoNotSpam(): void
+    {
+        $task = $this->tasks->create('clinic', ['title' => 'Work', 'assignee_user_id' => 2]);
+        $this->db->table('notifications')->where('id >', 0)->delete();
+        $same = $this->tasks->update('clinic', $task['id'], $this->full($task));
+        $this->assertSame($task['version'], $same['version']);
+        $same = $this->tasks->move('clinic', $task['id'], ['version' => 1, 'status' => 'todo']);
+        $this->assertSame(1, $same['version']);
+        $this->assertSame([], $this->alerts());
+        $this->tasks->update('clinic', $task['id'], array_replace($this->full($task), ['assignee_user_id' => null]));
+        $this->assertSame([[2, 'team_task_unassigned']], $this->alerts());
+    }
+
+    public function testNotificationFailureRollsBackTaskActivityAndComment(): void
+    {
+        $task = $this->tasks->create('clinic', ['title' => 'Work', 'assignee_user_id' => 2]);
+        $this->db->table('notifications')->where('id >', 0)->delete();
+        $this->db->query("CREATE TRIGGER fail_alert BEFORE INSERT ON isolated_notifications BEGIN SELECT RAISE(ABORT, 'fixture failure'); END");
+        $this->fails(503, fn () => $this->tasks->move('clinic', $task['id'], ['version' => 1, 'status' => 'done']));
+        $this->assertSame(1, $this->tasks->detail('clinic', $task['id'])['version']);
+        $this->assertSame(1, $this->db->table('team_task_activity')->countAllResults());
+        $this->fails(503, fn () => $this->tasks->comment('clinic', $task['id'], ['body' => 'Comment']));
+        $this->assertSame(0, $this->db->table('team_task_comments')->countAllResults());
+        $this->assertSame(1, $this->db->table('team_task_activity')->countAllResults());
+        $this->assertSame([], $this->alerts());
+    }
+
+    public function testNotificationRecipientRevalidationAndIdempotency(): void
+    {
+        $task = $this->tasks->create('clinic', ['title' => 'Work']);
+        $actor = $this->tasks->context('clinic')['actor'];
+        $this->db->table('people')->where('id', 3)->update(['deleted_at' => '2026-10-01 00:00:00']);
+        $this->db->transBegin();
+        $producer = new \App\Services\TeamsNotifications($this->db);
+        $plan = array_fill_keys([1, 2, 3, 5, 10, 11, 12], 'team_task_updated');
+        $producer->enqueue($task, $actor, $plan);
+        $producer->enqueue($task, $actor, $plan);
+        $this->assertSame([[2, 'team_task_updated']], $this->alerts());
+        $this->db->transRollback();
+        $this->assertSame([], $this->alerts());
+        $this->fails(503, fn () => $producer->enqueue($task, $actor, $plan));
     }
 
     public function testAuthoritativeContextNamesAndRoleMembership(): void

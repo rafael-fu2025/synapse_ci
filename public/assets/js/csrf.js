@@ -17,6 +17,7 @@
     if (csrf.header && meta('csrf-header')) meta('csrf-header').content = csrf.header;
   }
   function fromResponse(response) {
+    if (window.SynapseAuth?.handle(response)) return true;
     const get = name => response?.headers?.get ? response.headers.get(name) : response?.getResponseHeader?.(name);
     const hash = get('X-CSRF-TOKEN');
     const name = get('X-CSRF-NAME') || meta('csrf-name')?.content;

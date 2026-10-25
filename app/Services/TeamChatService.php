@@ -21,9 +21,12 @@ final class TeamChatService
     public const PAGE_LIMIT = 40;
     private BaseConnection $db;
 
-    public function __construct()
+    private readonly ?\Closure $invalidate;
+
+    public function __construct(?BaseConnection $db = null, ?callable $invalidate = null)
     {
-        $this->db = Database::connect();
+        $this->db = $db ?? Database::connect();
+        $this->invalidate = $invalidate === null ? null : \Closure::fromCallable($invalidate);
     }
 
     /** Same actor, members and canManage contract as TeamTaskService. */
@@ -59,7 +62,7 @@ final class TeamChatService
         });
     }
 
-    /** Only body, client_nonce (UUID v4), and optional nullable task_id are accepted. */
+    /** Immutable text, task references, UTF-16 mention ranges and optional channel reply. */
     public function send(string $unit, array $input): array
     {
         $context = $this->context($unit);
@@ -73,18 +76,27 @@ final class TeamChatService
             if (!$this->db->transBegin()) { throw new RuntimeException('Team chat unavailable.', 503); }
             $duplicate = false;
             try {
-                if ($data['task_id'] !== null) {
-                    $query = $this->scope('team_tasks', $unit, $actor)->where('id', $data['task_id'])
+                foreach ($data['task_ids'] as $taskId) {
+                    $query = $this->scope('team_tasks', $unit, $actor)->where('id', $taskId)
                         ->whereIn('status', ['todo', 'in_progress', 'blocked']);
                     $task = $this->db->DBDriver === 'MySQLi'
                         ? $this->db->query($query->getCompiledSelect() . ' FOR UPDATE')->getRowArray()
                         : $query->get()->getRowArray();
                     if ($task === null) { throw new RuntimeException('Task must be active in this department.', 422); }
                 }
+                $fresh = $this->context($unit);
+                $this->validateMentions($data, $fresh['members']);
+                if ($data['reply_to_id'] !== null && $this->scope('team_chat_messages', $unit, $actor)
+                    ->where('id', $data['reply_to_id'])->countAllResults() !== 1) {
+                    throw new RuntimeException('Reply must exist in this department.', 422);
+                }
+                $context = $fresh;
+                $taskIds = json_encode($data['task_ids'], JSON_THROW_ON_ERROR);
+                $mentions = json_encode($data['mentions'], JSON_THROW_ON_ERROR);
                 // Bind text separately so driver SQL error strings do not contain the body.
                 $table = $this->db->protectIdentifiers($this->db->prefixTable('team_chat_messages'));
                 $sql = 'INSERT INTO ' . $table
-                    . ' (tenant_id, unit, sender_user_id, client_nonce, body, task_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)';
+                    . ' (tenant_id, unit, sender_user_id, client_nonce, body, task_id, task_ids, mentions, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
                 $mysql = $this->db->DBDriver === 'MySQLi';
                 $statement = $mysql ? $this->db->connID->prepare($sql) : $this->db->prepare(static fn () => $sql);
                 try {
@@ -92,12 +104,12 @@ final class TeamChatService
                     if ($mysql) {
                         // CI's MySQL prepared binder treats numeric strings as doubles.
                         // Explicit string binding preserves bodies like "000123" verbatim.
-                        $statement->bind_param('isissis', $actor['tenant_id'], $unit, $actor['id'],
-                            $data['client_nonce'], $data['body'], $data['task_id'], $now);
+                        $statement->bind_param('isississis', $actor['tenant_id'], $unit, $actor['id'],
+                            $data['client_nonce'], $data['body'], $data['task_id'], $taskIds, $mentions, $data['reply_to_id'], $now);
                         $ok = $statement->execute();
                     } else {
                         $ok = $statement->execute($actor['tenant_id'], $unit, $actor['id'], $data['client_nonce'],
-                            $data['body'], $data['task_id'], $now);
+                            $data['body'], $data['task_id'], $taskIds, $mentions, $data['reply_to_id'], $now);
                     }
                     if ($ok === false) {
                         throw new RuntimeException('Team chat unavailable.', 503);
@@ -125,7 +137,27 @@ final class TeamChatService
                 }
                 throw $e;
             }
+            $this->changed($actor, $unit);
             return $this->message($row, $context);
+        });
+    }
+
+    /** Authorized active tasks only; no descriptions or unbounded client-selected limits. */
+    public function tasks(string $unit, array $filters = []): array
+    {
+        $actor = $this->context($unit)['actor'];
+        $this->keys($filters, ['q']);
+        $q = $filters['q'] ?? '';
+        if (!is_string($q) || !mb_check_encoding($q, 'UTF-8') || mb_strlen($q, 'UTF-8') > 200) {
+            throw new RuntimeException('Search must be at most 200 text characters.', 422);
+        }
+        return $this->storage(function () use ($unit, $actor, $q): array {
+            $query = $this->scope('team_tasks', $unit, $actor)->select('id,title')
+                ->whereIn('status', ['todo', 'in_progress', 'blocked']);
+            if (trim($q) !== '') { $query->like('title', $this->db->escapeLikeString(trim($q)), 'both', true); }
+            return ['tasks' => array_map(static fn (array $row): array => [
+                'id' => (int) $row['id'], 'title' => $row['title'],
+            ], $query->orderBy('id', 'DESC')->limit(self::PAGE_LIMIT)->get()->getResultArray())];
         });
     }
 
@@ -152,8 +184,25 @@ final class TeamChatService
                     ->where('last_read_message_id <', $id)->update(['last_read_message_id' => $id])) {
                 throw new RuntimeException('Team chat unavailable.', 503);
             }
-            return $this->summary($unit, $actor);
+            $changed = $this->db->affectedRows() > 0;
+            $summary = $this->summary($unit, $actor);
+            // These independent statements have autocommitted; notify only this user's tabs.
+            if ($changed) $this->changed($actor, $unit, (int) $actor['id']);
+            return $summary;
         });
+    }
+
+    private function changed(array $actor, string $unit, ?int $onlyUser = null): void
+    {
+        try {
+            if ($this->invalidate !== null) {
+                ($this->invalidate)((int) $actor['tenant_id'], $unit, $onlyUser);
+            } else {
+                (new TeamChatInvalidation())->publish((int) $actor['tenant_id'], $unit, $onlyUser);
+            }
+        } catch (Throwable) {
+            // A committed chat write must never fail because realtime is unavailable.
+        }
     }
 
     private function summary(string $unit, array $actor): array
@@ -175,10 +224,25 @@ final class TeamChatService
         }
         $task = $row['task_id'] === null ? null : $this->scope('team_tasks', $row['unit'], $context['actor'])
             ->select('title')->where('id', $row['task_id'])->get()->getRowArray();
+        $tasks = [];
+        foreach ($this->taskIds($row) as $id) {
+            $linked = $this->scope('team_tasks', $row['unit'], $context['actor'])
+                ->select('id,title')->where('id', $id)->get()->getRowArray();
+            if ($linked !== null) { $tasks[] = ['id' => (int) $linked['id'], 'title' => $linked['title']]; }
+        }
+        $names = array_column($context['members'], 'name', 'id');
+        $mentions = array_map(static fn (array $mention): array => $mention + [
+            'name' => $names[$mention['user_id']] ?? 'Former member',
+        ], $this->storedMentions($row));
+        $reply = ($row['reply_to_id'] ?? null) === null ? null : $this->scope('team_chat_messages', $row['unit'], $context['actor'])
+            ->where('id', $row['reply_to_id'])->get()->getRowArray();
+        $replyTo = $reply === null ? null : ['id' => (int) $reply['id'],
+            'sender_name' => $names[$reply['sender_user_id']] ?? 'Former member', 'body' => $reply['body']];
         return ['id' => (int) $row['id'], 'body' => $row['body'],
             'task_id' => $row['task_id'] === null ? null : (int) $row['task_id'], 'task_title' => $task['title'] ?? null,
             'sender_user_id' => (int) $row['sender_user_id'], 'sender_name' => $name, 'created_at' => $row['created_at'],
-            'client_nonce' => (int) $row['sender_user_id'] === (int) $context['actor']['id'] ? $row['client_nonce'] : null];
+            'client_nonce' => (int) $row['sender_user_id'] === (int) $context['actor']['id'] ? $row['client_nonce'] : null,
+            'tasks' => $tasks, 'mentions' => $mentions, 'reply_to' => $replyTo];
     }
 
     private function nonce(string $unit, array $actor, string $nonce): ?array
@@ -189,7 +253,9 @@ final class TeamChatService
 
     private function retry(array $row, array $data, array $context): array
     {
-        if ($row['body'] !== $data['body'] || ($row['task_id'] === null ? null : (int) $row['task_id']) !== $data['task_id']) {
+        if ($row['body'] !== $data['body'] || ($row['task_id'] === null ? null : (int) $row['task_id']) !== $data['task_id']
+            || $this->taskIds($row) !== $data['task_ids'] || $this->storedMentions($row) !== $data['mentions']
+            || (($row['reply_to_id'] ?? null) === null ? null : (int) $row['reply_to_id']) !== $data['reply_to_id']) {
             throw new RuntimeException('Client nonce already used for different contents.', 409);
         }
         return $this->message($row, $context);
@@ -197,7 +263,7 @@ final class TeamChatService
 
     private function payload(array $input): array
     {
-        $this->keys($input, ['body', 'client_nonce', 'task_id']);
+        $this->keys($input, ['body', 'client_nonce', 'task_id', 'task_ids', 'mentions', 'reply_to_id']);
         $body = $input['body'] ?? null;
         if (!is_string($body) || !mb_check_encoding($body, 'UTF-8') || mb_strlen($body, 'UTF-8') > 2000
             || preg_match('/\S/u', $body) !== 1 || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $body)) {
@@ -207,8 +273,85 @@ final class TeamChatService
         if (!is_string($nonce) || !preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i', $nonce)) {
             throw new RuntimeException('Client nonce must be a UUID v4.', 422);
         }
-        return ['body' => $body, 'client_nonce' => strtolower($nonce),
-            'task_id' => ($input['task_id'] ?? null) === null ? null : $this->integer($input['task_id'], false)];
+        $ids = $input['task_ids'] ?? [];
+        if (!is_array($ids) || !array_is_list($ids) || count($ids) > 20
+            || (array_key_exists('task_ids', $input) && $input['task_ids'] === null)) {
+            throw new RuntimeException('Task references must be a list of at most 20 unique identifiers.', 422);
+        }
+        $ids = array_map(fn ($id): int => $this->integer($id, false), $ids);
+        if (count(array_unique($ids)) !== count($ids)) { throw new RuntimeException('Duplicate task references.', 422); }
+        $legacy = ($input['task_id'] ?? null) === null ? null : $this->integer($input['task_id'], false);
+        if ($legacy !== null) {
+            if (!array_key_exists('task_ids', $input)) { $ids = [$legacy]; }
+            elseif (($ids[0] ?? null) !== $legacy) { throw new RuntimeException('Conflicting task references.', 422); }
+        }
+        $mentions = $input['mentions'] ?? [];
+        if (!is_array($mentions) || !array_is_list($mentions) || count($mentions) > 2000
+            || (array_key_exists('mentions', $input) && $input['mentions'] === null)) {
+            throw new RuntimeException('Mentions must be a list.', 422);
+        }
+        $boundaries = $this->utf16Boundaries($body);
+        $ranges = [];
+        foreach ($mentions as $mention) {
+            if (!is_array($mention)) { throw new RuntimeException('Invalid mention.', 422); }
+            $this->keys($mention, ['user_id', 'start', 'length']);
+            $id = $this->integer($mention['user_id'] ?? null, false);
+            $start = $this->integer($mention['start'] ?? null, true);
+            $length = $this->integer($mention['length'] ?? null, false);
+            if ($length > 4000 || $start > 4000 || !isset($boundaries[$start], $boundaries[$start + $length])) {
+                throw new RuntimeException('Mention must use valid UTF-16 text boundaries.', 422);
+            }
+            $ranges[] = ['user_id' => $id, 'start' => $start, 'length' => $length];
+        }
+        usort($ranges, static fn (array $a, array $b): int => $a['start'] <=> $b['start']);
+        $end = 0;
+        foreach ($ranges as $range) {
+            if ($range['start'] < $end) { throw new RuntimeException('Mentions must not overlap.', 422); }
+            $end = $range['start'] + $range['length'];
+        }
+        return ['body' => $body, 'client_nonce' => strtolower($nonce), 'task_ids' => $ids,
+            'task_id' => $ids[0] ?? null, 'mentions' => $ranges,
+            'reply_to_id' => ($input['reply_to_id'] ?? null) === null ? null : $this->integer($input['reply_to_id'], false)];
+    }
+
+    private function taskIds(array $row): array
+    {
+        return ($row['task_ids'] ?? null) === null
+            ? ($row['task_id'] === null ? [] : [(int) $row['task_id']])
+            : json_decode($row['task_ids'], true, 512, JSON_THROW_ON_ERROR);
+    }
+
+    private function storedMentions(array $row): array
+    {
+        return ($row['mentions'] ?? null) === null ? [] : json_decode($row['mentions'], true, 512, JSON_THROW_ON_ERROR);
+    }
+
+    /** Map JavaScript code-unit offsets to UTF-8 bytes, excluding surrogate interiors. */
+    private function utf16Boundaries(string $body): array
+    {
+        $boundaries = [0 => 0];
+        $offset = $bytes = 0;
+        foreach (preg_split('//u', $body, -1, PREG_SPLIT_NO_EMPTY) as $character) {
+            $size = strlen($character);
+            $offset += $size === 4 ? 2 : 1;
+            $bytes += $size;
+            $boundaries[$offset] = $bytes;
+        }
+        return $boundaries;
+    }
+
+    private function validateMentions(array $data, array $members): void
+    {
+        $names = array_column($members, 'name', 'id');
+        $boundaries = $this->utf16Boundaries($data['body']);
+        foreach ($data['mentions'] as $mention) {
+            $start = $boundaries[$mention['start']];
+            $end = $boundaries[$mention['start'] + $mention['length']];
+            if (!isset($names[$mention['user_id']])
+                || substr($data['body'], $start, $end - $start) !== '@' . $names[$mention['user_id']]) {
+                throw new RuntimeException('Mention must match a current department member and their @name.', 422);
+            }
+        }
     }
 
     private function integer(mixed $value, bool $zero): int
@@ -239,7 +382,7 @@ final class TeamChatService
     private function ready(): void
     {
         $this->storage(function (): array {
-            foreach (['team_chat_messages' => ['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'created_at'],
+            foreach (['team_chat_messages' => ['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'task_ids', 'mentions', 'reply_to_id', 'created_at'],
                 'team_chat_reads' => ['tenant_id', 'unit', 'user_id', 'last_read_message_id'],
                 'team_tasks' => ['id', 'tenant_id', 'unit', 'title', 'status']] as $table => $fields) {
                 if (!$this->db->tableExists($table) || array_diff($fields, $this->db->getFieldNames($table)) !== []) {

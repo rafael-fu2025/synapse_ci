@@ -71,6 +71,22 @@ Vagrantfile
 # Screenshot/preview output from local design and contrast checks.
 /writable/*-preview/
 /writable/*-previews/
+
+# Local audit explorer responsive-render checks.
+/writable/audit-responsive-artifacts/
+/writable/audit-responsive-render.php
+/writable/audit-responsive.cjs
+
+# One-off local module development and workflow scripts.
+/writable/install-workflow-notifications-task.py
+/writable/verify-windowless-workflow.py
+/writable/teams-development-migrate.php
+/writable/workflow-development-migrate.php
+/writable/workflow-development-status.php
+/writable/workflow-notifications-run.php
+/writable/workflow-notifications-task.xml
+/writable/chat-development-migrate.php
+/writable/chat-development-smoke.php
 # Uploaded member photos are personal data, not source.
 /writable/profile-photos/*
 !/writable/profile-photos/index.html
@@ -114,12 +130,15 @@ vendor/
 /public/assets/vendor/*
 !/public/assets/vendor/esptool-js/
 !/public/assets/vendor/esptool-js/**
+!/public/assets/vendor/bmg-gear/
+!/public/assets/vendor/bmg-gear/**
 
 #-------------------------
 # Local Tool State
 #-------------------------
 # Agent/tool session history and hook state (per-machine, per-session).
 .mimosa/
+.zcode/
 
 #-------------------------
 # IDE / Development Files

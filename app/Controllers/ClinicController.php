@@ -279,13 +279,35 @@ final class ClinicController extends BaseController
     public function complete(int $id)
     {
         try {
-            $this->authorizeEncounter(true);
+            $actorId = $this->authorizeEncounter(true);
             $this->encounterService->completeEncounter($id, $this->inventoryPostString('disposition'),
-                $this->inventoryPostString('disposition_notes'), $this->inventoryPostString('follow_up_date'));
+                pendingDraft: $this->encounterDraftFields(), recordedByUserId: $actorId);
             return $this->inventoryFormResponse(true, 'Visit completed and sealed successfully.', '/clinic/encounters', 200);
         } catch (\Throwable $e) {
             return $this->inventoryFailure($e, '/clinic/encounters/' . $id);
         }
+    }
+
+    public function saveDraft(int $id)
+    {
+        try {
+            $actorId = $this->authorizeEncounter(true);
+            $this->encounterService->saveDraft($id, $this->encounterDraftFields(), $actorId);
+            if ($this->request->isAJAX()) {
+                return $this->response->setHeader('Cache-Control', 'no-store')->setJSON([
+                    'success' => true, 'message' => 'Encounter draft saved.',
+                    'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
+                ]);
+            }
+            return redirect()->to('/clinic/encounters/' . $id)->with('success', 'Encounter draft saved.');
+        } catch (\Throwable $e) {
+            return $this->inventoryFailure($e, '/clinic/encounters/' . $id);
+        }
+    }
+
+    private function encounterDraftFields(): array
+    {
+        return array_intersect_key($this->request->getPost(), array_flip(EncounterService::DRAFT_FIELDS));
     }
 
     /**
@@ -356,16 +378,23 @@ final class ClinicController extends BaseController
      */
     public function updateHealth(int $personId)
     {
-        $this->historyService->updateHealthProfile($personId, [
-            'blood_type'                     => $this->request->getPost('blood_type'),
-            'allergies'                      => $this->request->getPost('allergies'),
-            'chronic_conditions'             => $this->request->getPost('chronic_conditions'),
-            'emergency_contact_name'         => $this->request->getPost('emergency_contact_name'),
-            'emergency_contact_phone'        => $this->request->getPost('emergency_contact_phone'),
-            'emergency_contact_relationship' => $this->request->getPost('emergency_contact_relationship'),
-        ]);
+        try {
+            $this->historyService->updateHealthProfile($personId, [
+                'blood_type'                     => $this->request->getPost('blood_type'),
+                'allergies'                      => $this->request->getPost('allergies'),
+                'chronic_conditions'             => $this->request->getPost('chronic_conditions'),
+                'emergency_contact_name'         => $this->request->getPost('emergency_contact_name'),
+                'emergency_contact_phone'        => $this->request->getPost('emergency_contact_phone'),
+                'emergency_contact_relationship' => $this->request->getPost('emergency_contact_relationship'),
+            ]);
+        } catch (\Throwable $error) {
+            if (!$this->request->isAJAX()) {
+                throw $error;
+            }
+            return $this->inventoryFailure($error, '/clinic/patients/' . $personId);
+        }
 
-        return redirect()->to('/clinic/patients/' . $personId)->with('success', 'Health profile updated successfully.');
+        return $this->inventoryFormResponse(true, 'Health profile updated successfully.', '/clinic/patients/' . $personId, 200);
     }
 
     /**
@@ -460,7 +489,7 @@ final class ClinicController extends BaseController
     private function inventoryFormResponse(bool $success, string $message, string $redirect, int $status, array $data = [])
     {
         if ($this->request->isAJAX()) {
-            if ($success) {
+            if ($success && $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
             return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store')->setJSON([

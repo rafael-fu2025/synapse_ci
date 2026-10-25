@@ -11,15 +11,16 @@ use App\Models\UserModel;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\NotificationService;
+use App\Services\PortalContext;
 use App\Services\Referrals\ReferralService;
-use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use Config\Services;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
-use Tests\Support\InventoryTestDatabase;
+use Tests\Support\FreshDatabaseTestCase;
 
-/** Integration only; run through the parent's isolated harness, never the main schema. */
-final class ReferralNotificationTest extends CIUnitTestCase
+/** Integration only; run through run-fresh-database-tests.py, never the main schema. */
+final class ReferralNotificationTest extends FreshDatabaseTestCase
 {
     use DatabaseTestTrait;
 
@@ -37,7 +38,6 @@ final class ReferralNotificationTest extends CIUnitTestCase
 
     protected function setUp(): void
     {
-        InventoryTestDatabase::verify();
         parent::setUp();
         AuthenticatedUser::clear();
         $mis = $this->createMock(MisClientInterface::class);
@@ -58,7 +58,7 @@ final class ReferralNotificationTest extends CIUnitTestCase
             $this->db->query('DROP TRIGGER IF EXISTS ' . $this->db->protectIdentifiers($this->trigger));
         }
         foreach ($this->tenants as $tenant) {
-            foreach (['notifications', 'referrals', 'appointments', 'users', 'people'] as $table) {
+            foreach (['notifications', 'workflow_events', 'referrals', 'appointments', 'users', 'people'] as $table) {
                 $this->db->table($table)->where('tenant_id', $tenant)->delete();
             }
             $this->db->table('tenants')->where('id', $tenant)->delete();
@@ -95,7 +95,10 @@ final class ReferralNotificationTest extends CIUnitTestCase
 
     private function login(array $actor): void
     {
-        session()->set(['tenant_id' => $actor['tenant_id'], 'user' => $actor]);
+        $version = (int) $this->db->table('users')->select('auth_version')->where('id', $actor['id'])->get()->getRowArray()['auth_version'];
+        session()->set(['tenant_id' => $actor['tenant_id'], 'user' => $actor, '_auth' => [
+            'started_at' => time(), 'last_seen_at' => time(), 'version' => $version, 'session_id' => session_id(),
+        ]]);
         CurrentTenant::set((int) $actor['tenant_id']);
     }
 
@@ -177,6 +180,109 @@ final class ReferralNotificationTest extends CIUnitTestCase
         $this->create(true);
         $this->login($this->clinic);
         $this->assertSame(site_url('/clinic/referrals?tab=incoming'), $service->ownInbox()['items'][0]['url']);
+    }
+
+    public static function referralDirections(): array
+    {
+        return ['clinic to guidance' => [false], 'guidance to clinic' => [true]];
+    }
+
+    #[DataProvider('referralDirections')]
+    public function testClosedReceivedNoticeRetainsHistoryReadStateAndInvalidation(bool $reverse): void
+    {
+        $ref = $this->create($reverse);
+        $receiver = $reverse ? $this->clinic : $this->guidance;
+        $sender = $reverse ? $this->guidance : $this->clinic;
+        $unit = $ref['target_module'];
+        $portal = $reverse ? PortalContext::PORTAL_CLINIC : PortalContext::PORTAL_GUIDANCE;
+        $historyKey = $reverse ? 'clinicReferralHistory' : 'guidanceReferralHistory';
+        $historyUrl = PortalContext::urlFor($portal, '/' . $unit . '/referrals?tab=history');
+        $this->assertSame($historyUrl, NotificationService::destinationUrls()[$historyKey]);
+        $notice = $this->notices()[0];
+        $id = (int) $notice['id'];
+        $service = new NotificationService();
+        $referrals = new ReferralService();
+        $this->login($receiver);
+
+        foreach (['submitted', 'acknowledged', 'under_review', 'closed'] as $status) {
+            match ($status) {
+                'acknowledged' => $referrals->acknowledge((int) $ref['id'], (int) $receiver['id'], $receiver),
+                'under_review' => $referrals->review((int) $ref['id'], (int) $receiver['id'], $receiver),
+                'closed' => $referrals->close((int) $ref['id'], $receiver),
+                default => null,
+            };
+            $inbox = $service->ownInbox();
+            $this->assertSame(1, $inbox['unread_count']);
+            $this->assertCount(1, $inbox['items']);
+            $item = $inbox['items'][0];
+            $this->assertSame($id, $item['id']);
+            $this->assertNull($item['read_at']);
+            $this->assertSame($status === 'closed' ? $historyUrl
+                : PortalContext::urlFor($portal, '/' . $unit . '/referrals?tab=incoming'), $item['url']);
+            $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'url'], array_keys($item));
+            $this->assertStringNotContainsString('SECRET', json_encode($inbox));
+            $this->assertTrue($service->canReceiveInvalidation($this->tenant, (int) $receiver['id'], [$id]));
+            $this->assertFalse($service->canReceiveInvalidation($this->tenant, (int) $sender['id'], [$id]));
+            $this->assertSame([$notice], $this->notices(), 'Transitions must preserve the original received notice.');
+        }
+
+        $service->markRead($id);
+        $inbox = $service->ownInbox();
+        $this->assertSame(0, $inbox['unread_count']);
+        $this->assertSame($historyUrl, $inbox['items'][0]['url']);
+        $this->assertNotNull($inbox['items'][0]['read_at']);
+        $this->assertTrue($service->canReceiveInvalidation($this->tenant, (int) $receiver['id'], [$id]));
+        $readNotice = $this->notices()[0];
+        $service->markRead($id);
+        $service->markAllRead();
+        $this->assertSame([$readNotice], $this->notices());
+    }
+
+    #[DataProvider('referralDirections')]
+    public function testDeletedReferredPatientSuppressesOpenAndClosedNoticesWithoutMarkingThem(bool $reverse): void
+    {
+        $open = $this->create($reverse);
+        $closed = $this->create($reverse);
+        $receiver = $reverse ? $this->clinic : $this->guidance;
+        $referrals = new ReferralService();
+        $referrals->acknowledge((int) $closed['id'], (int) $receiver['id'], $receiver);
+        $referrals->close((int) $closed['id'], $receiver);
+        $visible = $this->create($reverse, ['patient_person_id' => $this->person()]);
+        $rows = $this->notices();
+        $hiddenIds = [(int) $rows[0]['id'], (int) $rows[1]['id']];
+        $visibleId = (int) $rows[2]['id'];
+        $service = new NotificationService();
+        $this->login($receiver);
+        $this->assertSame(3, $service->ownInbox()['unread_count']);
+        foreach ($hiddenIds as $id) {
+            $this->assertTrue($service->canReceiveInvalidation($this->tenant, (int) $receiver['id'], [$id]));
+        }
+
+        $this->db->table('people')->where('tenant_id', $this->tenant)->where('id', $this->patient)
+            ->update(['deleted_at' => date('Y-m-d H:i:s')]);
+        $inbox = $service->ownInbox();
+        $this->assertSame(1, $inbox['unread_count']);
+        $this->assertSame([$visibleId], array_column($inbox['items'], 'id'));
+        $this->assertStringNotContainsString('SECRET', json_encode($inbox));
+        foreach ($hiddenIds as $id) {
+            $this->assertFalse($service->canReceiveInvalidation($this->tenant, (int) $receiver['id'], [$id]));
+            $this->rejected(404, fn () => $service->markRead($id));
+        }
+        $this->assertFalse($service->canReceiveInvalidation($this->tenant, (int) $receiver['id'], $hiddenIds));
+        $this->assertTrue($service->canReceiveInvalidation($this->tenant, (int) $receiver['id'], [$visibleId]));
+        $service->markAllRead();
+        $after = $this->notices();
+        $this->assertSame($rows[0], $after[0]);
+        $this->assertSame($rows[1], $after[1]);
+        $this->assertNotNull($after[2]['read_at']);
+        $this->assertSame(0, $service->ownInbox()['unread_count']);
+        $this->assertStringNotContainsString('SECRET', json_encode($after));
+
+        $this->db->table('people')->where('tenant_id', $this->tenant)->where('id', $this->patient)->update(['deleted_at' => null]);
+        $restored = $service->ownInbox();
+        $this->assertSame(2, $restored['unread_count']);
+        $this->assertCount(3, $restored['items']);
+        $this->assertSame([$rows[0], $rows[1], $after[2]], $this->notices(), 'Suppression must not erase history or read state.');
     }
 
     public function testBmgAndForgedSourceCannotCreateNotifications(): void

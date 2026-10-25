@@ -144,7 +144,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
   </div>
 
   <!-- Right Side: Tabbed History & Details -->
-  <div class="col-lg-8">
+  <div class="col-lg-8" data-patient-chart="<?= (int) $person['id'] ?>">
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-transparent border-bottom p-0">
         <ul class="nav nav-tabs nav-tabs-bordered" role="tablist">
@@ -274,7 +274,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
 
         <!-- Tab 3: Update Health Profile Form -->
         <div class="tab-pane fade" id="tab-edit-health">
-          <form action="<?= site_url('/clinic/patients/' . $person['id'] . '/health') ?>" method="POST">
+          <form action="<?= site_url('/clinic/patients/' . $person['id'] . '/health') ?>" method="POST" data-background-submit>
             <?= csrf_field() ?>
 
             <div class="row g-3 mb-4">
@@ -348,4 +348,29 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
     </div>
   </div>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script>
+(function () {
+  if (window.synapsePatientTabs) return;
+  window.synapsePatientTabs = true;
+  document.addEventListener('synapse:before-swap', event => {
+    const old = event.detail.root.querySelector('[data-patient-chart]');
+    const next = event.detail.incoming?.querySelector('[data-patient-chart]');
+    if (!old || !next || old.dataset.patientChart !== next.dataset.patientChart) return;
+    const target = old.querySelector('[data-bs-toggle="tab"].active')?.dataset.bsTarget;
+    const tabs = [...next.querySelectorAll('[data-bs-toggle="tab"]')];
+    if (!tabs.some(tab => tab.dataset.bsTarget === target)) return;
+    tabs.forEach(tab => {
+      const active = tab.dataset.bsTarget === target;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      const pane = next.querySelector(tab.dataset.bsTarget);
+      pane?.classList.toggle('active', active);
+      pane?.classList.toggle('show', active);
+    });
+  });
+})();
+</script>
 <?= $this->endSection() ?>

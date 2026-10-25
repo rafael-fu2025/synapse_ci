@@ -22,6 +22,8 @@ SYNAPSE is the rebuilt university healthcare, counseling, and environmental oper
 
 ## Architectural Overview
 
+**Optional realtime transport:** Workerman provides an opt-in authenticated WebSocket foundation alongside CodeIgniter. Existing notification, queue, and chat polling remains unchanged. MIS reference synchronization uses private realtime stage-progress events; the planned BMG RPM gauge is not implemented yet. See [Realtime setup and integration](docs/REALTIME.md) for private keys, the separate server process, deployment limits, and future telemetry integration.
+
 ```
                      ┌─────────────────────────────────────────────────────────────┐
                      │                  Campus MIS API Gateway                     │
@@ -108,6 +110,10 @@ Client (Browser) ──POST /auth/login──▶ Synapse Backend (cURL) ──PO
    - Academic Programs: `mis_programs` (mirrored from `/api/v1/students/programs`)
    - Year Levels: `mis_year_levels` (mirrored from `/api/v1/students/levels`)
    - University Departments: `mis_departments` (mirrored from `/api/v1/employees/departments`)
+   - The HTTP adapter supports nested service-token envelopes and fetches every catalog page before synchronization. Missing, inconsistent, or failed pages reject the whole catalog; pagination is bounded to 400 pages and 10,000 rows.
+   - Live program `course`/`coursedesc` fields become local `code`/`name`. Identical live program records are coalesced; conflicting duplicates are rejected. The source academic `department` grouping is not an employee department code, so no relationship is inferred or stored from it. Explicit canonical `department_code` links remain validated.
+   - Grouped year levels use qualified codes such as `College:1` and group-prefixed names, preserving distinct school levels rather than merging repeated numeric codes. Existing references missing from a successful response are retained.
+   - The sync page shows actual stage progress through private Workerman events correlated to that submission. Only a confirmed database commit reaches completion; without realtime, it shows a waiting indicator until the POST response arrives. In-flight navigation and duplicate submits are blocked; uncertain outcomes require checking local status before retrying.
 
 ### Login compatibility port from the legacy MIS integration
 
@@ -285,10 +291,10 @@ New appointment confirmations now create a persistent **in-app notification** fo
 
 - **What the patient sees:** **My Appointments** shows the service, final date, start/end time, assigned staff (when present), and **Confirmed** status. Pending requests retain “Preferred time—not yet confirmed.” Clicking a notification opens `/portal#my-appointments`; the portal table is refreshed through navigation, not independently live-polled.
 - **Delivery:** the bell refreshes at page load, when opened, on returning to a visible tab, and every **30 seconds while visible**. Polling pauses in hidden tabs and stops on navigation. This is not WebSocket instant delivery, email, SMS, or OS/device push. Notifications remain available for the next sign-in if the person is offline.
-- **Identity and confidentiality:** ownership is `(tenant_id, recipient_person_id)`, not a login user or department role. Patients without a local user link can receive a notice and see it after their first successful MIS login. Appointment notices remain personal; receiving-team referral notices are a separate account-owned, currently authorized channel described below. Superadmin does not bypass notification ownership. A person-less break-glass account has an empty inbox. Notification content is generic and excludes service-specific concerns, appointment reasons, diagnoses, and counseling notes; appointment details remain in the authenticated personal portal.
-- **Atomic delivery:** confirmation and notification insert share one database transaction. A notification insert failure rolls back confirmation. A unique appointment/type/version key prevents duplicate notices for a repeated event. Merely requesting or checking in an appointment does not create a confirmation notice; cancellation notifications are not part of this slice.
+- **Identity and confidentiality:** ownership is `(tenant_id, recipient_person_id)`, not a login user or department role. Patients without a local user link can receive a notice and see it after their first successful MIS login. Appointment notices remain personal; receiving-team referral notices are a separate account-owned, currently authorized channel described below. Superadmin does not bypass notification ownership. A person-less break-glass account cannot receive personal/referral/publication notices; it may receive explicitly addressed, currently authorized Teams or staff workflow notices. Notification content is generic and excludes service-specific concerns, appointment reasons, diagnoses, and counseling notes; appointment details remain in the authenticated personal portal.
+- **Atomic delivery:** confirmation and notification insert share one database transaction. A notification insert failure rolls back confirmation. A unique appointment/type/version key prevents duplicate notices for a repeated event. Merely requesting or checking in an appointment does not create a confirmation notice; new cancellation and staff-request alerts use the separate workflow outbox described below.
 - **Read state:** opening the dropdown does not mark anything read. Item clicks and **Mark all read** use CSRF-protected POSTs, with shared token synchronization. A failed read request shows an error and does not navigate or optimistically clear unread items. Read state persists across sessions/devices. The menu shows the latest ten notices and `99+` when the unread count reaches its capped query limit of 100; Mark all read applies to the full personal inbox.
-- **UI safety:** light/dark and mobile layouts reuse the new NiceAdmin styles. The bell tooltip is disabled while its menu is open so it cannot cover actions. JSON content is rendered as text, navigation is restricted to the exact configured personal-portal or clinic/guidance incoming-inbox URLs, and notice content is not stored in local/session storage. Private API responses use `Cache-Control: private, no-store`.
+- **UI safety:** light/dark and mobile layouts reuse the new NiceAdmin styles. The bell tooltip is disabled while its menu is open so it cannot cover actions. JSON content is rendered as text, navigation is restricted to exact configured personal-portal, publication, referral folders, Teams board/calendar and authorized scheduling/case/inventory/Facilities URLs, and notice content is not stored in local/session storage. Private API responses use `Cache-Control: private, no-store`.
 
 | Notification route | Behavior |
 |---|---|
@@ -300,6 +306,27 @@ New appointment confirmations now create a persistent **in-app notification** fo
 **Migration:** `2026-10-16-000002_CreateNotifications` adds the notification table, same-tenant foreign keys, inbox index, and unique confirmation-event key. It was applied to local `humus_db` after a fresh native backup and an isolated restore rehearsal of **38 tables / 5,443 rows**. Existing data was fingerprint-verified unchanged and maintenance was cleared. The notification table starts empty: old confirmations are **not** retroactively backfilled. No live MIS calls, mail/SMS providers, or external messaging credentials are required for these in-app notices.
 
 Development helpers: `notification-development-migrate.php` (guarded exact migration), `notification-development-smoke.php` (read-only), and `python writable/isolated-inventory-harness.py --validate-notifications --backup-stem=<literal verified backup stem>` (bounded restore rehearsal). Browser validation: `node --test tests/browser/notifications.test.cjs`.
+
+### Teams notifications and referral handoff reliability
+
+Teams now creates persistent, generic in-app notices for event invitations, participant changes, material event updates/cancellation, task assignment/reassignment, material task/status changes and task comments. Recipients are current eligible same-tenant workstation members, excluding the actor; unchanged saves do not generate duplicates. Chat retains its existing unread channel behavior, not a bell broadcast. See [Teams notification matrix and deployment](docs/TEAMS.md#teams-bell-notifications).
+
+**Deployment:** apply `2026-10-23-000002_AddTeamsNotifications` using the normal backed-up migration workflow before deploying notification-producing writes. The migration was tested on disposable schemas and subsequently applied to local `humus_db` with operator approval on 2026-10-23 (batch 29), after a native backup. Verification preserved all 5,953 original non-history rows across 56 tables; no other pending migrations were applied. Old events/tasks are not automatically backfilled. No email/SMS/device-push provider is added.
+
+Referral Clinic intake now joins the referral's existing transaction through a narrowly scoped queue-free API, instead of attempting an independent nested transaction. New visit creation and referral linkage therefore commit/roll back together; repeated handoffs reuse the linked/open visit rather than creating orphans. Intake chief-complaint text is bounded to its 255-character field while the complete shared referral summary remains on the referral. Both Clinic and Guidance create/link/retry/close paths, stale/permission guards and rollback are covered by guarded disposable-schema regressions. Unexpected controller failures log technical exception metadata without patient content.
+
+```sh
+python tests/_support/run-fresh-database-tests.py tests/feature/ReferralRoutesTest.php tests/feature/ReferralWorkflowTest.php tests/feature/ReferralNotificationTest.php
+node --test tests/browser/referrals.test.cjs
+```
+
+### Notification coverage across workstations
+
+See [Notification coverage — Clinic, Guidance and BMG](docs/NOTIFICATION_COVERAGE.md) for the audit baseline and [Workflow notifications](docs/WORKFLOW_NOTIFICATIONS.md) for the implemented extension. Appointment requests/cancellations, referral acknowledgment/review/handoff/closure, Guidance follow-up due/overdue, stock/expiry conditions and BMG command/fault/offline/recovery alerts now use an identifier-only transactional outbox and a finite tenant-scoped scanner/dispatch worker. Recipient authority is checked at delivery and on every bell read; generic text excludes confidential records. Stable event/episode keys prevent duplicate fanout and repeated-scan spam.
+
+**Local deployment active:** `2026-10-23-000003_AddWorkflowNotifications` and `2026-10-23-000004_CreateWorkflowAlertStates` were applied to local `humus_db` with operator approval on 2026-10-23 (batch 30), after a native backup and preservation checks. Windows task `Synapse-Workflow-Notifications-Tenant-1` now scans/dispatches every minute for verified tenant 1 while the current local user is logged in, without elevated/SYSTEM credentials. Controlled and timed runs succeeded with zero failures; the initial two inventory events produced ten notices, without duplicates on later runs. All fifty pre-existing notification/read states were preserved. Other environments still need the backed-up migrations and a recurring worker; do not deploy notification-producing code without the schema. See the workflow guide for backup/evidence paths, task/log details and signed-out limitations. The first scan evaluates current overdue/stock/device conditions; it does not recreate historical request/referral transitions. See the workflow guide for thresholds, retry limits and safety boundaries. Confidential notes, routine drafts/telemetry and chat broadcasts remain excluded.
+
+The coverage audit repaired closed-referral notice routing to History, removed-patient notice eligibility and stalled read/read-all requests. Reads now have a ten-second fetch/body deadline and safe GET reconciliation without automatic POST replay. Existing publication tests now verify current authentication and Clinic/Guidance/BMG profile-based recipients on disposable schemas. No new notification type/migration or live alert backfill was introduced by this audit.
 
 ### Student and employee profile settings
 
@@ -350,6 +377,8 @@ Validation: the isolated inventory/pagination suite passed **306 tests / 2,948 a
   - *Step 2: Assessment:* Chief complaint, physical observations, clinical diagnosis, and treatment plan.
   - *Step 3: FEFO Dispensing:* Real-time stock availability with automatic expiration-based batch deduction.
   - *Step 4: Outcome & Referral:* Final disposition (`discharged`, `sent_home`, `admitted`, `referred_to_guidance`) with automated queue completion.
+  - *Draft saving:* Clinical changes save before switching steps or leaving through a same-window link. Save & Continue advances without reloading. Unsaved, saving, saved, and retry states are visible; failed saves retain input and block navigation. Closing/reloading the browser warns when unsaved input remains. Drafts allow incomplete assessments; completion requires a chief complaint.
+  - *Safe completion:* Save & Complete Encounter submits all current clinical fields and outcome; persistence and encounter/queue closure share one transaction. Medicine dispensing remains an explicit, separately confirmed inventory operation. Unfinished medicine entries must be dispensed or explicitly discarded before completion. No clinical drafts are stored in browser storage.
 - **Patient Health Charts:** Comprehensive history of past visits, vital trends over time, chronic conditions, and emergency contacts.
 
 #### Medicine inventory (`/clinic/inventory`)
@@ -430,6 +459,7 @@ Development helpers: `writable/referral-development-migrate.php` (guarded exact 
 **Entry point:** `/facilities` → **Drum Rotation**. This initial operational phase replaces the old sensor/compliance screens; existing historical tables remain untouched.
 
 - **Drum configuration:** explicit code/name, required capacity in kg, and availability. Unit availability is not controller connectivity or motor state. Configuration needs fresh `facilities.configure` and `facilities.manage` grants; operators retain batch operations but cannot reconfigure drums.
+- **Drum records:** Add drum is available from the overview, facilities dashboard and drum detail; the latter two open the overview's create dialog. Manage drum reads a record and Edit drum updates it. Archive is the delete operation: it requires a retirement acknowledgement and current schedule version, blocks active batches, disables saved intent, cancels pending commands and revokes/unbinds controllers atomically. No batch/report/audit rows are permanently deleted, and old unit codes remain reserved. Configuration admins can view Archived drums and restore a record as offline with schedule disabled and credentials still revoked. Neither archiving nor restoring verifies a physical motor stop or bypasses hardware gates.
 - **Schedules:** up to eight distinct daily Manila times, duration 1–600 seconds, no overlapping windows including midnight. New schedules are disabled. Writes require the current `expected_version`; stale forms return 409. Saved intent and timestamped device-applied versions are shown separately.
 - **Controller management:** hashed credentials, direct one-time/no-store token response, explicit binding cutoff, credential rotation/revocation. Tokens cannot act as human users. Old bindings are not automatically trusted or upgraded.
 - **Manual controls:** queued run/stop requests with expiry, device-owned acknowledgement and history. An acknowledgement is a device claim, not independent evidence of movement. Web stop, revocation, maintenance, and the server gate are **not physical emergency stops** and cannot revoke instructions already cached by offline firmware.
@@ -437,7 +467,7 @@ Development helpers: `writable/referral-development-migrate.php` (guarded exact 
 - **Safe defaults:** `BMG_HARDWARE_ENABLED=false`; enabling schedules and issuing commands additionally require an explicit `facilities.hardware.manage` grant. Registration/credential rotation require configuration access only and remain available with hardware disabled; they disable the saved schedule and cancel pending commands without starting the motor. Neither migration nor fresh-install seeding assigns that grant, including to superadmin. Database-backed permissions, tenant locks, audit transactions, CSRF and inline form errors protect human operations.
 - **Excluded:** temperature, moisture, oxygen, pH, environmental sensors, calibration and EPA/sanitation assessments. The retired `/facilities/batch/{id}/log` route no longer exists.
 
-**USB workspace:** configuration admins can open **USB installer & serial monitor** from a drum's device section. Explicit Web Serial port selection, confirmed ESP32 identification and receive-only monitoring are available independently of motor control. A separate approved-release installer verifies downloads and flash readback; it requires explicit commissioning permission, `BMG_USB_FLASH_ENABLED=true`, motor control off, maintenance, disabled schedule, matching registered chip and fresh authorization. Both gates remain off and the approved catalog is empty until actual compatible firmware is reviewed. There is no editor/compiler, arbitrary upload, automatic registration or reboot. See [BMG USB commissioning](docs/BMG_USB.md) for browser support, private release configuration, physical safety and recovery.
+**USB workspace:** configuration admins can open **USB installer & serial monitor** from a drum's device section. Explicit Web Serial port selection, confirmed ESP32 identification and receive-only monitoring are available independently of motor control. A separate approved-release installer verifies downloads and flash readback; it requires explicit commissioning permission, `BMG_USB_FLASH_ENABLED=true`, motor control off, maintenance, disabled schedule, matching registered chip and fresh authorization. Both hardware/installation gates remain off by default. The guided Wi-Fi/token form can now compile a reviewed, motor-disabled network-commissioning adaptation of Zynapse's `compost.ino` using a privately configured local Arduino CLI. Signed per-device builds are separate from the shared catalog, expire after 30 minutes, and retain all installation checks. An advanced local editor opens `.ino` files and exports a complete project ZIP; custom source is not sent to the server compiler. There is no arbitrary server-side compilation, automatic registration, flashing, reboot or motor enabling. See [BMG USB commissioning](docs/BMG_USB.md) for browser support, private release configuration, physical safety and recovery.
 
 **Remaining phases:** scheduled offline/missed-run alert processing and BMG bell notifications, broader reports/exports, team-assignment administration, and hardware/firmware acceptance. The initial phase has no background watchdog or BMG notification fanout; existing appointment/content/referral notices are unchanged. No live device or motor behavior has been verified.
 
@@ -706,6 +736,55 @@ Then you can open the exact local subdomain equivalents directly:
 - `http://clinic.localhost:8080` $\rightarrow$ Clinic Staff Console
 - `http://guidance.localhost:8080` $\rightarrow$ Guidance Counselor Console
 - `http://bmg.localhost:8080` $\rightarrow$ Facilities Operations Console
+
+### 7. Sharing the Dev Server (Tunnel & Same-Wi-Fi)
+
+`app/Config/App.php` derives `baseURL` from each request (`HTTP_HOST` plus `X-Forwarded-Proto`), so redirects, form actions, and asset URLs always follow the host the request arrived on. No `.env` change is needed when the access URL changes, and each host keeps its own session.
+
+Quick tunnels and LAN access both expose a `CI_ENVIRONMENT = development` instance (debugbar included). Share the URL only with people who need it, and stop the tunnel when finished.
+
+#### Cloudflare Quick Tunnel (teammates outside your network)
+
+One-time download (Windows):
+```bash
+mkdir -p "$USERPROFILE/tools"
+curl -L -o "$USERPROFILE/tools/cloudflared.exe" \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+```
+
+Start a tunnel to the dev server:
+```bash
+"$USERPROFILE/tools/cloudflared.exe" tunnel --no-autoupdate --url "http://[::1]:8080"
+```
+
+The public `https://<random>.trycloudflare.com` URL is printed in the log. Quick-tunnel hostnames are ephemeral: each restart issues a new one, so share the new link. Stop it with `taskkill //PID <cloudflared-pid> //F` (find the PID with `tasklist | grep cloudflared`) or Ctrl+C in its terminal.
+
+#### Same Wi-Fi (LAN) access
+
+Bind the dev server to all IPv4 interfaces:
+```bash
+php spark serve --host 0.0.0.0 --port 8080
+```
+
+Find the machine's Wi-Fi IPv4 address:
+```bash
+ipconfig
+```
+
+Teammates on the same network open `http://<your-wifi-ipv4>:8080`. Caveats:
+- The network must allow client-to-client traffic; hotspot or guest networks with client isolation will block it.
+- Windows Firewall must allow inbound TCP 8080 for `php.exe`; adding a rule requires an elevated shell.
+- The address is DHCP-assigned and can change.
+
+To keep the tunnel running alongside LAN access, restart cloudflared against the IPv4 loopback after binding the server to `0.0.0.0`:
+```bash
+"$USERPROFILE/tools/cloudflared.exe" tunnel --no-autoupdate --url "http://127.0.0.1:8080"
+```
+This issues a new trycloudflare hostname.
+
+#### VS Code port forwarding
+
+VS Code forwards IPv4 `127.0.0.1`. If forwarding fails while the app works at `localhost`, the dev server is likely listening only on IPv6 (`[::1]`). Restart it with `--host 0.0.0.0` as described above.
 
 ---
 

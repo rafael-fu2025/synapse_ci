@@ -35,7 +35,31 @@ class WebCsrfFilter implements FilterInterface
                 return $response->setJSON(['success' => false, 'message' => $message, 'reload' => true,
                     'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
             }
-            return $response->setBody(esc($message));
+            service('security')->generateHash();
+            if (strtoupper($request->getMethod()) === 'POST'
+                && trim($request->getUri()->getRoutePath(), '/') === 'auth/login') {
+                // Discard the rejected credentials; recover with a fresh GET, never replay the POST.
+                session()->remove('_ci_old_input');
+                $redirect = redirect()->to(site_url('auth/login'), 303)
+                    ->setHeader('Cache-Control', 'private, no-store')
+                    ->with('warning', 'Your sign-in page has expired or is no longer valid. Please sign in again.');
+                if (config('Security')->csrfProtection === 'cookie') {
+                    $redirect->withCookies();
+                }
+                return $redirect;
+            }
+            if (strtoupper($request->getMethod()) === 'POST'
+                && trim($request->getUri()->getRoutePath(), '/') === 'auth/logout') {
+                // Require a new, explicit submission; never sign out or replay a rejected POST.
+                $redirect = redirect()->to(site_url('auth/logout/confirm'), 303)
+                    ->setHeader('Cache-Control', 'private, no-store')
+                    ->with('logout_warning', 'Sign out was not completed because your security token expired or was invalid. Please confirm below to sign out.');
+                if (config('Security')->csrfProtection === 'cookie') {
+                    $redirect->withCookies();
+                }
+                return $redirect;
+            }
+            return $response->setBody(esc($message . ' This request was not processed. A fresh security token was issued; reload this page and retry.'));
         }
         return null;
     }

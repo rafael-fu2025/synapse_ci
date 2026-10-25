@@ -31,6 +31,44 @@ ledger or a production-security certification:
 - Legacy v1 events retain their original hash omissions and delimiter ambiguity.
   Introducing v2 does not retroactively strengthen or certify those fields.
 
+## Audit Explorer
+
+`GET /admin/audit` remains protected by `audit.read`. The reader supports exact
+`event_type`, `action`, `entity_type`, `entity_id`, and `actor_user_id` filters,
+plus inclusive `from`/`to` calendar dates (`YYYY-MM-DD`). Dates use the existing
+server ledger timezone; this change does not convert historical timestamps.
+`entity_id` remains text, while actor IDs and navigation cursors must be positive
+BIGINT UNSIGNED decimals. Invalid filters return HTTP 400 without querying events.
+
+`per_page` accepts 25, 50 (default), or 100. Events are displayed in descending ID
+order. `cursor=<event-id>&direction=older|newer` uses keyset navigation, not offsets
+or total-count scans. Both directions and filters are shareable in the URL; applying
+filters resets navigation. New appends can appear when navigating newer or returning
+to latest matching events: this is a live reader, not a frozen export snapshot.
+An out-of-range cursor has a latest-matching recovery link.
+
+Both event queries and the current-username join are tenant scoped. Existing
+role-change details remain available; there is no general payload search, raw
+payload inspector, or audit CSV export in this milestone. Verification still checks
+the whole tenant chain from genesis, not the visible page or filtered subset.
+
+Migration `2026-10-23-000001_AddAuditExplorerIndexes` adds nonunique tenant/ID,
+tenant/event-type/ID, and tenant/actor/ID indexes. Existing time and entity indexes
+are retained. The migration does not modify ledger rows, hashes, or triggers.
+Review pending migrations and schedule index creation for the deployment database;
+large-table DDL may block traffic. The application reader works without these new
+indexes, but large ledgers should install them before broad use. No live database
+migration is automatically performed by adding this code.
+
+Database-free query/view tests and disposable SQLite reader/migration tests:
+
+```sh
+php vendor/bin/phpunit --no-coverage tests/unit/AuditExplorerQueryTest.php tests/unit/AuditExplorerTest.php tests/unit/AuditExplorerViewTest.php tests/unit/AuditExplorerDatabaseTest.php
+```
+
+These tests do not replace MySQL/MariaDB deployment verification or actual query-plan
+review on a representative ledger.
+
 ## Format compatibility
 
 Migration `2026-10-19-000003_HardenAuditLedger` adds

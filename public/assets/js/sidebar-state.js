@@ -2,6 +2,20 @@
 (function () {
   'use strict';
 
+  if (document.body.classList.contains('app-shell')) {
+    let collapsed = document.body.classList.contains('sidebar-collapsed');
+    try {
+      const saved = localStorage.getItem('synapse-sidebar-collapsed');
+      if (saved !== null) collapsed = saved === '1';
+    } catch (_) { /* Keep the default when storage is unavailable. */ }
+    // Remember mobile loads too, without changing the drawer's initial layout.
+    document.body.dataset.sidebarCollapsed = String(collapsed);
+    if (window.matchMedia('(min-width: 992px)').matches) {
+      document.body.classList.remove('sidebar-hidden');
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+    }
+  }
+
   const nav = document.querySelector('.sidebar-nav');
   if (!nav) return;
   const key = 'synapse-sidebar-scroll';

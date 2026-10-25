@@ -36,7 +36,7 @@ class Filters extends BaseFilters
         'auth'          => \App\Filters\AuthFilter::class,
         'portal_access' => \App\Filters\PortalAccessFilter::class,
         'portal_host' => \App\Filters\PortalHostFilter::class,
-        'toolbar'       => DebugToolbar::class,
+        'toolbar'       => \App\Filters\BmgPrivateToolbar::class,
         'honeypot'      => Honeypot::class,
         'invalidchars'  => InvalidChars::class,
         'secureheaders' => SecureHeaders::class,

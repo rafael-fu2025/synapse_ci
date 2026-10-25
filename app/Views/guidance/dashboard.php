@@ -12,7 +12,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="page-dashboard nd-dashboard">
+<div class="page-dashboard nd-dashboard" data-queue-dashboard="guidance" data-queue-counts-url="<?= site_url('/guidance/dashboard/queue-counts') ?>" data-queue-date="<?= esc(\App\Services\Scheduling\SchedulingClock::today(), 'attr') ?>">
   <!-- Welcome Banner -->
   <div class="card border-0 shadow-sm text-white p-4 mb-4" style="background: linear-gradient(135deg, var(--fu-maroon, #800000) 0%, #5a0000 100%) !important;">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -30,6 +30,7 @@
     </div>
   </div>
 
+  <p class="small text-muted mb-3" data-queue-feedback role="status" hidden></p>
   <!-- NiceAdmin v3 KPI Rail -->
   <section class="row g-3 mb-4 nd-kpi-rail">
     <div class="col-xxl-3 col-md-6">
@@ -58,8 +59,8 @@
       <article class="nd-kpi-card nd-kpi-cycle">
         <span class="nd-kpi-icon"><i class="bi bi-clock-history"></i></span>
         <span class="nd-kpi-label">Waiting Queue Today</span>
-        <strong class="nd-kpi-value"><?= number_format($queueToday) ?></strong>
-        <span class="nd-kpi-trend <?= ($queueToday > 0) ? 'up' : '' ?>">
+        <strong class="nd-kpi-value" data-queue-count="queueToday"><?= number_format($queueToday) ?></strong>
+        <span class="nd-kpi-trend <?= ($queueToday > 0) ? 'up' : '' ?>" data-queue-trend="queueToday">
           <i class="bi bi-people"></i> Walk-in consultations
         </span>
       </article>
@@ -98,7 +99,7 @@
             </div>
             <div>
               <span>Today's Queue</span>
-              <strong><?= number_format($queueToday) ?></strong>
+              <strong data-queue-count="queueToday"><?= number_format($queueToday) ?></strong>
             </div>
           </div>
           <div id="guidanceActivityChart" class="nd-chart-canvas"></div>
@@ -208,6 +209,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<script src="<?= base_url('assets/js/queue-live.js') ?>"></script>
 <script>
   (function() {
     'use strict';

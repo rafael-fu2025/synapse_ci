@@ -85,7 +85,9 @@ final class QuestionBankController extends BaseController
 
     private function success(string $message)
     {
-        session()->setFlashdata('success', $message);
+        if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+            session()->setFlashdata('success', $message);
+        }
         if ($this->json()) return $this->response->setJSON(['success' => true, 'message' => $message,
             'redirect' => site_url('guidance/question-bank'), 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
         return redirect()->to(site_url('guidance/question-bank'))->setHeader('Cache-Control', 'private, no-store');

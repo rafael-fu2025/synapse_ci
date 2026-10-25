@@ -24,21 +24,139 @@
 
   /**
    * Sidebar toggle (collapse/expand)
-   * Matches demo behavior: uses .sidebar-hidden on body to slide sidebar off-canvas
+   * App-shell desktops keep an interactive rail; demos retain off-canvas behavior.
    */
-  if (select('.sidebar-toggle') || select('.toggle-sidebar-btn')) {
-    const onToggle = function(e) {
+  const sidebar = select('.sidebar');
+  const sidebarToggles = document.querySelectorAll('.sidebar-toggle, .toggle-sidebar-btn');
+  const appShell = document.body.classList.contains('app-shell');
+  const sidebarDesktop = window.matchMedia(appShell
+    ? '(min-width: 992px)' : '(min-width: 1200px)');
+  let collapsedPreference = document.body.dataset.sidebarCollapsed !== undefined
+    ? document.body.dataset.sidebarCollapsed === 'true'
+    : document.body.classList.contains('sidebar-collapsed');
+  let drawerOpener = null;
+  const sidebarTips = new Map();
+  let sidebarTipsEnabled = false;
+  const railCollapsed = () => appShell && sidebarDesktop.matches
+    && document.body.classList.contains('sidebar-collapsed');
+  const hideSidebarTips = () => sidebarTips.forEach(tip => tip.hide());
+  const syncSidebarTips = () => {
+    const enabled = railCollapsed();
+    if (enabled === sidebarTipsEnabled) return;
+    sidebarTipsEnabled = enabled;
+    sidebarTips.forEach(tip => {
+      if (enabled) tip.enable();
+      else { tip.hide(); tip.disable(); }
+    });
+  };
+  if (appShell) {
+    document.querySelectorAll('.sidebar-nav a.nav-link').forEach(link => {
+      const label = link.querySelector('.nav-text')?.textContent.trim();
+      if (!label) return;
+      if (!link.hasAttribute('aria-label') && !link.hasAttribute('aria-labelledby')) {
+        link.setAttribute('aria-label', label);
+      }
+      link.setAttribute('data-sidebar-tooltip', '');
+      if (!window.bootstrap?.Tooltip) return;
+      // This persistent navigation is owned here, not by the generic initializer.
+      bootstrap.Tooltip.getInstance(link)?.dispose();
+      const tip = new bootstrap.Tooltip(link, {
+        title: label, container: 'body', placement: 'right', trigger: 'hover focus',
+        html: false, animation: false, delay: 0
+      });
+      tip.disable();
+      sidebarTips.set(link, tip);
+    });
+    document.querySelector('.sidebar-nav')?.addEventListener('click', hideSidebarTips, { capture: true });
+    sidebar?.addEventListener('scroll', hideSidebarTips, { capture: true, passive: true });
+    window.addEventListener('scroll', hideSidebarTips, { capture: true, passive: true });
+    window.addEventListener('resize', hideSidebarTips, { passive: true });
+    window.addEventListener('pagehide', hideSidebarTips);
+    document.addEventListener('show.bs.modal', hideSidebarTips);
+    document.addEventListener('synapse:before-navigate', hideSidebarTips);
+    if (sidebarDesktop.matches) document.body.classList.remove('sidebar-hidden');
+  }
+  const sidebarVisible = () => sidebarDesktop.matches
+    ? appShell || !document.body.classList.contains('sidebar-hidden')
+    : document.body.classList.contains('sidebar-open');
+  const syncSidebar = () => {
+    const visible = sidebarVisible();
+    sidebarToggles.forEach(btn => {
+      btn.setAttribute('aria-expanded', String(visible && !railCollapsed()));
+      const label = sidebarDesktop.matches
+        ? (visible && !railCollapsed() ? 'Collapse sidebar' : 'Expand sidebar')
+        : (visible ? 'Close navigation' : 'Open navigation');
+      btn.setAttribute('aria-label', label);
+      if (btn.matches('[data-bs-toggle="tooltip"]') && btn.getAttribute('data-bs-title') !== label) {
+        btn.setAttribute('data-bs-title', label);
+        const tip = window.bootstrap?.Tooltip.getInstance(btn);
+        if (tip) {
+          tip.hide();
+          tip.setContent({ '.tooltip-inner': label });
+        }
+      }
+    });
+    syncSidebarTips();
+    if (sidebar) {
+      sidebar.inert = !visible;
+      sidebar.setAttribute('aria-hidden', String(!visible));
+    }
+  };
+  const closeSidebar = (restoreFocus = false) => {
+    document.body.classList.remove('sidebar-open');
+    syncSidebar();
+    if (restoreFocus) (drawerOpener || sidebarToggles[0])?.focus();
+  };
+  sidebarToggles.forEach(btn => {
+    btn.addEventListener('click', e => {
       e.preventDefault();
-      if (window.innerWidth >= 1200) {
-        document.body.classList.toggle('sidebar-hidden');
+      if (sidebarDesktop.matches) {
+        if (appShell) {
+          collapsedPreference = document.body.classList.toggle('sidebar-collapsed');
+          document.body.dataset.sidebarCollapsed = String(collapsedPreference);
+          try {
+            localStorage.setItem('synapse-sidebar-collapsed', collapsedPreference ? '1' : '0');
+          } catch (_) { /* The rail still works when storage is disabled or full. */ }
+        } else {
+          document.body.classList.toggle('sidebar-hidden');
+        }
       } else {
+        drawerOpener = btn;
         document.body.classList.toggle('sidebar-open');
       }
-    };
-    document.querySelectorAll('.sidebar-toggle, .toggle-sidebar-btn').forEach(btn => {
-      btn.addEventListener('click', onToggle);
+      syncSidebar();
+      if (!sidebarDesktop.matches && sidebarVisible()) {
+        sidebar?.querySelector('.sidebar-close, a[href]')?.focus();
+      }
     });
-  }
+  });
+  select('.sidebar-overlay')?.addEventListener('click', () => closeSidebar(true));
+  document.addEventListener('keydown', e => {
+    if (sidebarDesktop.matches || !sidebarVisible()) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSidebar(true);
+    }
+    if (e.key === 'Tab' && sidebar) {
+      const controls = [...sidebar.querySelectorAll('a[href], button:not([disabled]), [tabindex="0"]')]
+        .filter(el => el.getClientRects().length && !el.closest('[inert]'));
+      const first = controls[0], last = controls[controls.length - 1];
+      if (first && (e.shiftKey ? document.activeElement === first : document.activeElement === last)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    }
+  });
+  sidebarDesktop.addEventListener('change', () => {
+    if (appShell && sidebarDesktop.matches) {
+      document.body.classList.remove('sidebar-hidden');
+      document.body.classList.toggle('sidebar-collapsed', collapsedPreference);
+    }
+    closeSidebar();
+  });
+  // Navigation closes the persistent drawer by changing the body class.
+  new MutationObserver(syncSidebar).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  syncSidebar();
 
   /**
    * Sidebar submenu accordion (matches demo's open/close with smooth maxHeight animation)
@@ -171,7 +289,7 @@
   if (sidebarClose) {
     sidebarClose.addEventListener('click', function(e) {
       e.preventDefault();
-      document.body.classList.remove('sidebar-open');
+      closeSidebar(true);
     });
   }
 
@@ -278,7 +396,19 @@
   /**
    * Initiate Bootstrap tooltips with hover-only trigger (auto-dismiss on click)
    */
-  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  const mobileTooltips = window.matchMedia('(max-width: 767.98px)');
+  // Guard the shared show event so dynamically loaded tooltips follow the same rule.
+  document.addEventListener('show.bs.tooltip', function(event) {
+    if (mobileTooltips.matches) event.preventDefault();
+  });
+  mobileTooltips.addEventListener('change', function() {
+    if (!mobileTooltips.matches) return;
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(element) {
+      bootstrap.Tooltip.getInstance(element)?.hide();
+    });
+  });
+
+  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]:not([data-sidebar-tooltip])'));
   tooltipTriggerList.map(function(el) {
     var tip = new bootstrap.Tooltip(el, { trigger: 'hover' });
     el.addEventListener('click', function() {
@@ -287,16 +417,27 @@
     return tip;
   });
 
-  // Automatically dismiss open tooltips when any dropdown opens
+  function dropdownTooltips(toggle) {
+    var root = toggle.closest('.dropdown') || toggle;
+    var triggers = Array.from(root.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    if (root.matches('[data-bs-toggle="tooltip"]')) triggers.push(root);
+    return triggers.map(function(el) {
+      return bootstrap.Tooltip.getInstance(el);
+    }).filter(Boolean);
+  }
+
+  // Wrapper tooltips must stay disabled while their dropdown is open.
   document.addEventListener('show.bs.dropdown', function(e) {
-    var toggles = e.target.querySelectorAll('[data-bs-toggle="tooltip"]');
-    toggles.forEach(function(t) {
-      var tip = bootstrap.Tooltip.getInstance(t);
-      if (tip) tip.hide();
+    dropdownTooltips(e.target).forEach(function(tip) {
+      tip.hide();
+      tip.disable();
     });
-    var tipSelf = bootstrap.Tooltip.getInstance(e.target);
-    if (tipSelf) tipSelf.hide();
-    document.querySelectorAll('.tooltip').forEach(t => t.remove());
+  });
+
+  document.addEventListener('hidden.bs.dropdown', function(e) {
+    dropdownTooltips(e.target).forEach(function(tip) {
+      tip.enable();
+    });
   });
 
   /**

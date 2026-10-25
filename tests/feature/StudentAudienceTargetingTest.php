@@ -43,7 +43,7 @@ final class StudentAudienceTargetingTest extends SurveyTestCase
     {
         $this->login($this->admin);
         $survey = $this->surveys->create($this->payload($target + ['audience' => 'students']));
-        $this->surveys->publish((int) $survey['id']);
+        $this->surveys->publish((int) $survey['id'], $survey['version']);
         $announcements = new AnnouncementService();
         $notice = $announcements->create('clinic', $target + ['audience' => 'students', 'title' => 'Targeted notice', 'body' => 'Only selected students.']);
         $notice = $announcements->publish((int) $notice['id'], 'clinic', $notice['version']);
@@ -165,7 +165,7 @@ final class StudentAudienceTargetingTest extends SurveyTestCase
         $survey = $this->surveys->update((int) $survey['id'], $this->payload(['version' => $survey['version'], 'audience' => 'students']));
         $this->assertNull($survey['target_year_levels']);
         $this->assertNull($survey['target_student_categories']);
-        $this->surveys->publish((int) $survey['id']);
+        $this->surveys->publish((int) $survey['id'], $survey['version']);
         $this->rejected(fn () => $this->surveys->update((int) $survey['id'], $this->payload(['version' => $survey['version'], 'audience' => 'students', 'target_year_levels' => [4]])), 409);
         $service = new AnnouncementService();
         $notice = $service->create('clinic', ['title' => 'x', 'body' => 'x', 'audience' => 'students', 'target_year_levels' => [2]]);
@@ -245,7 +245,7 @@ final class StudentAudienceTargetingTest extends SurveyTestCase
         $this->login($this->admin);
         $draft = $this->surveys->create($this->payload(['audience' => 'students', 'target_year_levels' => [2]]));
         $this->db->table('surveys')->where('id', $draft['id'])->update(['target_year_levels' => '["2"]']);
-        $this->rejected(fn () => $this->surveys->publish((int) $draft['id']), 503);
+        $this->rejected(fn () => $this->surveys->publish((int) $draft['id'], $draft['version']), 503);
         $this->assertSame('draft', $this->db->table('surveys')->where('id', $draft['id'])->get()->getRow('status'));
     }
 

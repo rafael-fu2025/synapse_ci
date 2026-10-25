@@ -245,9 +245,10 @@
     }
     const approvedEdits = editVersion;
     // A script already executing cannot be rolled back safely. Use a clean document in that case.
-    if (committing) { fullNavigation(url.href); return false; }
+    if (committing) { if (options.fallback !== false) fullNavigation(url.href); return false; }
     const old = shell(document);
-    if (!old || authPath.test(url.pathname)) { fullNavigation(url.href); return false; }
+    if (authPath.test(url.pathname)) { fullNavigation(url.href); return false; }
+    if (!old) { if (options.fallback !== false) fullNavigation(url.href); return false; }
     if (!popEntry) rememberScroll();
     pending?.abort();
     const controller = new AbortController();
@@ -263,20 +264,20 @@
         method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'follow',
         referrer: currentUrl, referrerPolicy: 'same-origin', signal: controller.signal,
         // Do not send HX-Request/X-Requested-With: this request needs the full server document.
-        headers: { Accept: 'text/html', ...window.SynapseCsrf?.headers() }
+        headers: { Accept: 'text/html', 'X-Synapse-Navigation': '1', ...window.SynapseCsrf?.headers() }
       });
       if (token !== sequence) return false;
       if (controller.signal.aborted) throw new Error('Navigation was interrupted.');
       const finalUrl = urlFor(response.url || url.href);
-      if (!finalUrl) { fullNavigation(url.href); return false; }
-      window.SynapseCsrf?.fromResponse(response);
+      if (!finalUrl) { if (options.fallback !== false) fullNavigation(url.href); return false; }
+      if (window.SynapseCsrf?.fromResponse(response)) return false;
       if ([401, 403, 419].includes(response.status) || authPath.test(finalUrl.pathname)) {
         fullNavigation(finalUrl.href);
         return false;
       }
       if (!response.ok) throw new Error(`Page request failed (${response.status}).`);
       if (!/\btext\/html\b/i.test(response.headers.get('Content-Type') || '')) {
-        fullNavigation(finalUrl.href);
+        if (options.fallback !== false) fullNavigation(finalUrl.href);
         return false;
       }
       const text = await response.text();
@@ -285,9 +286,14 @@
       const incomingDocument = new DOMParser().parseFromString(text, 'text/html');
       const incoming = shell(incomingDocument);
       // An incoming base would change every relative URL. Let the browser handle that document.
-      if (!incoming || incoming.scope !== old.scope || incomingDocument.querySelector('base') ||
-          linkSignature(old.nav, currentUrl) !== linkSignature(incoming.nav, finalUrl.href)) {
+      if (incoming && (incoming.scope !== old.scope ||
+          linkSignature(old.nav, currentUrl) !== linkSignature(incoming.nav, finalUrl.href))) {
+        // An identity/permission change must replace the privileged shell as well.
         fullNavigation(finalUrl.href);
+        return false;
+      }
+      if (!incoming || incomingDocument.querySelector('base')) {
+        if (options.fallback !== false) fullNavigation(finalUrl.href);
         return false;
       }
       // URL fragments are never sent to the server. Preserve the requested anchor
@@ -301,7 +307,7 @@
       // Keep script execution controlled, including any legacy scripts embedded in main.
       const sources = [...Array.from(incoming.main.querySelectorAll('script')).filter(executable), ...incoming.pageScripts.querySelectorAll('script')];
       main.querySelectorAll('script').forEach(script => { if (executable(script)) script.remove(); });
-      if (pageStyles.querySelector('script')) { fullNavigation(finalUrl.href); return false; }
+      if (pageStyles.querySelector('script')) { if (options.fallback !== false) fullNavigation(finalUrl.href); return false; }
       const csrf = csrfFromDocument(incomingDocument);
       // The outgoing page stays usable during a request. Do not discard edits
       // made after the user originally approved leaving it.
@@ -363,7 +369,7 @@
       if (destructive) { fullNavigation(url.href); return false; }
       if (controller.signal.aborted && !timedOut) return false;
       if (popEntry) restorePop(popEntry);
-      failed = { url: url.href, options: { history: options.history, scroll: options.scroll } };
+      failed = { url: url.href, options: { history: options.history, scroll: options.scroll, fallback: options.fallback } };
       announce(timedOut ? 'Loading timed out. Retry or open the full page.' : 'Unable to load the page. Your current page has been kept. Retry or open the full page.', url.href);
       return false;
     } finally {
@@ -378,6 +384,12 @@
 
   window.SynapseNavigation = {
     navigate,
+    hasUnsavedChanges(exceptForm) {
+      return Array.from(dirty).some(form => form !== exceptForm && form.isConnected && isDirtyForm(form));
+    },
+    markSaved(form) {
+      dirty.delete(form);
+    },
     // Fragment owners update the address without replacing their current page.
     // Keep those entries in the same history sequence as full content swaps.
     updateHistory(value, mode = 'replace') {

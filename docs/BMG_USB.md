@@ -8,10 +8,107 @@ BMG-role account with `facilities.read`, `facilities.manage` and
 `facilities.configure`; a cached superadmin role does not replace these grants.
 Identification and monitoring work independently of the motor/flash gates.
 
-This is the first-stage USB installer and monitor, **not a code editor or compiler**.
-It does not automatically configure Wi-Fi, provision credentials, register a device,
-start the motor, or import old firmware. No device was connected or flashed during
-implementation. Real hardware acceptance remains required.
+The workspace now provides a guided **Connect & identify → Configure & build →
+Install → Verify network** workflow. Enter Wi-Fi settings and a newly issued device
+token in the browser; an enabled local Arduino CLI builds the reviewed, credential-free
+network-commissioning adaptation of `zynapse/bmg_iot/compost/compost.ino`.
+
+**This release is network commissioning only: motor outputs are hard-disabled.**
+It does not execute rotation schedules, accept motor-run requests, or verify an RTC.
+The original sketch uses an older API and unsafe-to-assume boot/serial behavior;
+it is not copied unchanged or automatically flashed. No device was connected or
+flashed during implementation. Physical board and motor acceptance remain required.
+
+## Simplest setup procedure
+
+1. In **Manage drum**, set the drum to **maintenance**, keep its schedule disabled,
+   and register its controller using the detected ROM MAC. Copy the one-time token
+   from registration. The server stores only its hash and cannot show it again.
+2. Physically isolate motor power. Open the USB workspace and select/identify the
+   controller in Step 1; review the separate reset-safety confirmation.
+3. In Step 2 enter SSID, Wi-Fi password, a backend address reachable from the ESP32,
+   and the current device token. The ESP32 uses 2.4 GHz Wi-Fi. The guided build requires
+   an 8–63-byte Wi-Fi password or a 64-character hexadecimal PSK; open Wi-Fi is not
+   supported by this form. SSIDs are limited to 32 bytes.
+4. Use the server's reachable LAN address, **not `localhost` or `127.0.0.1`**. A
+   subdirectory and `index.php` base path are supported, without the appended device
+   API path. Plain HTTP requires explicit trusted-LAN acknowledgement; the token is
+   unencrypted on that network. HTTPS requires a valid reviewed root CA PEM; no
+   insecure certificate bypass is supplied.
+5. Click **Compile reviewed network firmware**. It can take nearly three minutes.
+   Compilation does not open USB or install firmware. The successful private build
+   is selected for Step 3; entered password/token fields are cleared.
+6. Explicitly install in Step 3 once existing commissioning grants and gates permit
+   it. The same chip/MAC, version, integrity, readback and isolation checks still apply.
+   No automatic reboot, erase-all or motor enabling is performed.
+7. Review local reset safety while motor power remains isolated. After an explicit
+   physical reset, use Step 4 to inspect backend heartbeat/firmware receipt timestamps.
+   Historical status is not proof of a newly received heartbeat or motor safety.
+
+The PHP development server normally listens only on localhost. An ESP cannot reach
+that binding over Wi-Fi. For a deliberately trusted LAN test, the operator can start
+`php spark serve --host 0.0.0.0 --port 8080` and configure Windows Firewall to permit
+only the intended private network. **This exposes the authenticated web application
+to that network**; do not use it on an untrusted/public network. No listener or firewall
+rule is changed automatically. Use a properly configured HTTPS deployment instead
+for production.
+
+## Local compiler configuration
+
+The reviewed profile uses ESP32 core **3.3.3**, ArduinoJson **7.4.2**, explicit
+ESP32-S3 QIO / 16 MB flash / 16 MB partition layout, and **PSRAM disabled** because
+this commissioning image does not need it. It does not infer the actual PSRAM bus.
+`app/Config/BmgBuild.php` pins the profile and credential-free source hashes.
+
+```ini
+bmgbuild.enabled = true
+bmgbuild.cli = 'ABSOLUTE_PATH_TO_ARDUINO_CLI_EXECUTABLE'
+bmgbuild.signingKey = 'INDEPENDENT_PRIVATE_RANDOM_SECRET_OF_AT_LEAST_32_BYTES'
+bmgbuild.timeoutSeconds = 180
+```
+
+Use lowercase **`bmgbuild`** in `.env`. Generate the signing secret using
+`php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"`; never reuse other application
+keys. The current local checkout has a private compiler path and generated key
+configured. This does not enable `BMG_USB_FLASH_ENABLED`, assign a commissioning
+grant, or change `BMG_HARDWARE_ENABLED`.
+
+Only canonical server-side sources are compiled. Requests cannot select a command,
+file path, build profile or arbitrary source. The CLI runs without a shell, has a
+180-second compile deadline, a disk limit and a single-build lock, and never runs
+an upload command. Network/toolchain dependency installation is an administrator
+operation, never part of a web request.
+
+Build inputs generate a private configuration header. Temporary sources, headers,
+logs and intermediates are removed; the binaries **still contain the credentials**.
+At most two current builds per user/unit are retained. Signed private artifacts
+expire after 30 minutes and require the same current owner, tenant, unit, bound
+device credential, disabled schedule version and commissioning state. They are not
+added to the shared release catalog. Cleanup occurs during subsequent builds;
+expiry denies access but is not a background secure-erasure guarantee.
+
+The backend derives sparse flash parts from the actual expanded pinned-core upload
+recipe, verifies their trusted locations and reuses catalog integrity/range checks.
+It never guesses offsets, executes the upload recipe or uses the full merged image,
+which could erase NVS. Passwords/tokens are not sent in compiler arguments or logged;
+BMG credential/build/download/API requests skip debug-toolbar collection. Restrict
+private filesystem access and do not enable upstream request-body logging.
+
+## Advanced local source editor
+
+The collapsed source editor can load reviewed sanitized source, open a local `.ino`,
+and export an Arduino project ZIP in the browser. The ZIP includes the edited sketch,
+reviewed policy helper, placeholder `device_config.h.example` and instructions.
+**Form credentials are not inserted into the editor or ZIP.** The ZIP does contain
+the exact editor contents: a local sketch you open or edit may already contain
+embedded secrets, so protect and inspect exports before sharing. Copy the example
+to a private header in Arduino IDE and configure it yourself for a custom local build.
+
+Editing/uploading source disables guided compilation until reviewed source is reset.
+Custom source is **local/export-only**, not compiled on the web server or automatically
+approved for installation. Arbitrary C++ can change safety behavior and read build-host
+files; exposing a general web compiler would need an independently isolated sandbox
+and review flow. Successful compilation is not board or motor safety acceptance.
 
 ## Browser and safety requirements
 
@@ -64,9 +161,11 @@ require explicit user reconnection.
 
 ## Approving firmware
 
-**The catalog is empty intentionally.** No `.ino` is treated as a flashable binary,
-no legacy credentials are copied, and there is no arbitrary binary upload endpoint.
-The backend never compiles source or invokes a shell/compiler.
+**The shared catalog is empty until an administrator approves a release.** Private
+per-device builds are supplied separately by the trusted-template builder above.
+No `.ino` is treated as a flashable binary, no legacy credentials are copied, and
+there is no arbitrary binary upload endpoint. The builder invokes only its fixed
+local compile command without a shell; it never accepts arbitrary source.
 
 An administrator/developer must first build and review firmware that implements
 Synapse's actual rotation API and safe boot behavior. Validate the board model,

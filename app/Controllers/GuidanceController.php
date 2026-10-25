@@ -178,6 +178,25 @@ final class GuidanceController extends BaseController
         ]);
     }
 
+    /** Case access filters protect the subject's private photo just like the workspace. */
+    public function casePhoto(int $id)
+    {
+        $package = $this->caseService->getCaseDetails($id);
+        $patient = $package['patient'];
+        $photos = new \App\Services\ProfilePhotoService();
+        $path = $photos->path((int) $package['case']['tenant_id'], (int) $patient['id']);
+        $bytes = is_file($path) ? @file_get_contents($path) : false;
+        $type = 'image/webp';
+        if ($bytes === false) {
+            $bytes = \App\Services\ProfileAvatar::svg($patient);
+            $type = 'image/svg+xml';
+        }
+        return $this->response->setHeader('Content-Type', $type)
+            ->setHeader('Cache-Control', 'private, no-store')
+            ->setHeader('X-Content-Type-Options', 'nosniff')
+            ->setHeader('Cross-Origin-Resource-Policy', 'same-origin')->setBody($bytes);
+    }
+
     /**
      * Create case form.
      */
@@ -487,16 +506,20 @@ final class GuidanceController extends BaseController
             [$status, $message] = $this->safeFailure($error, 'mutation');
             if ($this->wantsJson()) {
                 return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store')
-                    ->setJSON(['success' => false, 'message' => $message]);
+                    ->setJSON(['success' => false, 'message' => $message,
+                        'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
             }
             // Do not flash request input: it can contain confidential note plaintext.
             return ($status === 422 ? redirect()->back() : redirect()->to($fallback))->with('error', $message);
         }
         $url = site_url($url);
         if ($this->wantsJson()) {
-            session()->setFlashdata('success', $message);
+            if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+                session()->setFlashdata('success', $message);
+            }
             return $this->response->setStatusCode(200)->setHeader('Cache-Control', 'no-store')
-                ->setJSON(['success' => true, 'message' => $message, 'redirect' => $url]);
+                ->setJSON(['success' => true, 'message' => $message, 'redirect' => $url,
+                    'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
         }
         return redirect()->to($url)->with('success', $message);
     }

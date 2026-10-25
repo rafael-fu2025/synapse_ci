@@ -56,6 +56,29 @@
       transition: none !important;
     }
 
+    .auth-pane .alert {
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      padding: 0.75rem 2.25rem 0.75rem 0.875rem;
+    }
+
+    .auth-pane .alert.alert-dismissible .btn-close {
+      top: 0.25rem;
+      right: 0.25rem;
+      width: 1rem;
+      height: 1rem;
+      padding: 0.5rem;
+      background-size: 0.625rem;
+      /* Alert fills stay light in dark mode; do not invert the dismiss glyph. */
+      filter: none;
+      opacity: 0.75;
+    }
+
+    .auth-pane .alert-dismissible .btn-close:hover,
+    .auth-pane .alert-dismissible .btn-close:focus-visible {
+      opacity: 1;
+    }
+
     /* Theme-aware logo/image visibility toggles */
     .synapse-logo-light {
       display: block !important;
@@ -85,10 +108,14 @@
       color: #f0f0f0 !important;
     }
 
+    .auth-photo-aside {
+      position: relative;
+    }
+
     .auth-photo-container {
+      position: absolute;
+      inset: 0.5rem;
       background-color: var(--surface-color, #ffffff);
-      height: calc(100vh - 1rem);
-      min-height: calc(100vh - 1rem);
       border: 0 !important;
       outline: 0 !important;
       box-shadow: none !important;
@@ -221,10 +248,10 @@
       justify-content: center;
     }
 
-    .auth-carousel-indicators button {
+    #loginPhotoCarousel .auth-carousel-indicators [data-bs-target] {
       width: 24px;
       height: 6px;
-      border-radius: 3px;
+      border-radius: 999px;
       background-color: rgba(255,255,255,0.5);
       border: 0;
       padding: 0;
@@ -232,12 +259,15 @@
       transition: width 0.3s ease, background-color 0.3s ease;
     }
 
-    .auth-carousel-indicators button.active {
+    #loginPhotoCarousel .auth-carousel-indicators [data-bs-target].active {
       width: 40px;
       background-color: #ffffff;
     }
 
     .auth-theme-toggle {
+      padding: 0;
+      gap: 0;
+      line-height: 1;
       background-color: #ffffff;
       border: 1px solid #dee2e6;
       color: #495057;
@@ -249,6 +279,20 @@
       background-color: #f8f9fa;
       color: var(--fu-maroon, #800000);
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .auth-theme-toggle > .bi {
+      width: 1em;
+      height: 1em;
+      margin: 0;
+      flex: 0 0 auto;
+      line-height: 1;
+    }
+
+    .auth-theme-toggle > .bi::before {
+      display: block;
+      vertical-align: 0;
+      line-height: 1;
     }
 
     .auth-theme-toggle .theme-icon-light {

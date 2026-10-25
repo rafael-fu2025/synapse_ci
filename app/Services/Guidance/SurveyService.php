@@ -8,6 +8,7 @@ use App\Services\Audit\AuditService;
 use App\Services\EngagementAccess;
 use App\Services\EngagementAudience;
 use App\Services\EngagementNotifications;
+use App\Services\NotificationInvalidation;
 use App\Services\PortalContent;
 use App\Services\Reporting\ExportAccess;
 use App\Services\Reporting\ExportCsv;
@@ -82,11 +83,12 @@ final class SurveyService
         });
     }
 
-    public function publish(int $id): void
+    public function publish(int $id, mixed $version = null): void
     {
         $actor = $this->staff();
-        $this->transaction(function () use ($id, $actor): void {
+        $this->transaction(function (array &$notifications) use ($id, $actor, $version): void {
             $row = $this->record($id, $actor, true);
+            $this->transitionVersion($row, $version);
             if ($row['status'] === 'published') { return; }
             if ($row['status'] !== 'draft') { throw new RuntimeException('This survey cannot be published.', 409); }
             $this->questions(json_decode($row['questions_json'], true, 512, JSON_THROW_ON_ERROR));
@@ -105,22 +107,35 @@ final class SurveyService
             if ($row['ends_at'] !== null && $row['ends_at'] <= $this->now()) {
                 throw new RuntimeException('The survey closing time must be in the future.', 422);
             }
-            $this->must(Database::connect()->table('surveys')->where('tenant_id', $actor['tenant_id'])->where('id', $id)
-                ->update(['status' => 'published', 'published_at' => $this->now(), 'updated_at' => $this->now()]));
-            EngagementNotifications::publish('survey', $id, $actor);
+            $db = Database::connect();
+            $this->must($db->table('surveys')->where('tenant_id', $actor['tenant_id'])->where('id', $id)
+                ->where('version', $version)
+                ->update(['status' => 'published', 'version' => (int) $row['version'] + 1,
+                    'published_at' => $this->now(), 'updated_at' => $this->now()]));
+            if ($db->affectedRows() !== 1) {
+                throw new RuntimeException('Survey changed. Reload before changing its state.', 409);
+            }
+            $notifications[(int) $actor['tenant_id']] = EngagementNotifications::publish('survey', $id, $actor);
             $this->audit('published', $id, $actor);
         });
     }
 
-    public function close(int $id): void
+    public function close(int $id, mixed $version = null): void
     {
         $actor = $this->staff();
-        $this->transaction(function () use ($id, $actor): void {
+        $this->transaction(function () use ($id, $actor, $version): void {
             $row = $this->record($id, $actor, true);
+            $this->transitionVersion($row, $version);
             if ($row['status'] === 'closed') { return; }
             if ($row['status'] !== 'published') { throw new RuntimeException('Only published surveys can be closed.', 409); }
-            $this->must(Database::connect()->table('surveys')->where('tenant_id', $actor['tenant_id'])->where('id', $id)
-                ->update(['status' => 'closed', 'closed_at' => $this->now(), 'updated_at' => $this->now()]));
+            $db = Database::connect();
+            $this->must($db->table('surveys')->where('tenant_id', $actor['tenant_id'])->where('id', $id)
+                ->where('version', $version)
+                ->update(['status' => 'closed', 'version' => (int) $row['version'] + 1,
+                    'closed_at' => $this->now(), 'updated_at' => $this->now()]));
+            if ($db->affectedRows() !== 1) {
+                throw new RuntimeException('Survey changed. Reload before changing its state.', 409);
+            }
             $this->audit('closed', $id, $actor);
         });
     }
@@ -582,7 +597,7 @@ final class SurveyService
             $response === null ? $metadata : ['response_id' => $response], (int) $actor['id'], $actor['role']);
     }
 
-    private function transaction(callable $callback): mixed
+    private function transaction(callable $callback, ?NotificationInvalidation $invalidation = null): mixed
     {
         $db = Database::connect();
         if ($db->transDepth !== 0) { throw new RuntimeException('Survey operations require an independent transaction.', 409); }
@@ -591,16 +606,35 @@ final class SurveyService
         if (($db->DBDriver === 'MySQLi' && !$db->query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED')) || !$db->transBegin()) {
             throw new RuntimeException('Survey transaction could not begin.', 503);
         }
+        $notifications = [];
         try {
             // Keep the tenant-first lock order shared by all audit writers, including BMG.
             (new AuditService(null, $db))->lockTenant((int) $actor['tenant_id']);
-            $result = $callback();
+            $result = $callback($notifications);
             if (!$db->transStatus() || !$db->transCommit()) { throw new RuntimeException('Unable to save survey.', 503); }
-            return $result;
         } catch (Throwable $e) {
             try { $db->transRollback(); }
             finally { $db->resetTransStatus(); }
             throw $e;
+        }
+        // IDs are local to this successful outer commit, never retained for a later operation.
+        try {
+            if ($notifications !== []) {
+                $invalidation ??= new NotificationInvalidation($db);
+                foreach ($notifications as $tenant => $ids) $invalidation->publishCommitted((int) $tenant, $ids);
+            }
+        } catch (Throwable) {
+            // Optional realtime setup cannot fail or roll back a committed write.
+        }
+        return $result;
+    }
+
+    /** Check under the record lock, even for no-ops: old approval cannot approve a newer revision. */
+    private function transitionVersion(array $row, mixed $version): void
+    {
+        if ((!is_string($version) && !is_int($version)) || !preg_match('/\A[1-9][0-9]*\z/D', (string) $version)
+            || (string) $row['version'] !== (string) $version) {
+            throw new RuntimeException('Survey changed. Reload before changing its state.', 409);
         }
     }
 

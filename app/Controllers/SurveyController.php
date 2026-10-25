@@ -74,7 +74,7 @@ final class SurveyController extends BaseController
     public function publish(int $id)
     {
         try {
-            (new SurveyService())->publish($id);
+            (new SurveyService())->publish($id, $this->request->getPost('version'));
             return $this->success('Survey published. Questions and targeting are now immutable.');
         } catch (Throwable $e) { return $this->failure($e); }
     }
@@ -82,7 +82,7 @@ final class SurveyController extends BaseController
     public function close(int $id)
     {
         try {
-            (new SurveyService())->close($id);
+            (new SurveyService())->close($id, $this->request->getPost('version'));
             return $this->success('Survey closed. Existing responses remain available.');
         } catch (Throwable $e) { return $this->failure($e); }
     }
@@ -129,7 +129,9 @@ final class SurveyController extends BaseController
 
     private function success(string $message)
     {
-        session()->setFlashdata('success', $message);
+        if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
+            session()->setFlashdata('success', $message);
+        }
         if ($this->request->isAJAX()) {
             return $this->response->setHeader('Cache-Control', 'private, no-store')->setJSON([
                 'success' => true, 'message' => $message, 'redirect' => site_url('guidance/surveys'),

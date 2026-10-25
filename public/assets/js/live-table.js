@@ -106,6 +106,7 @@
           headers: { 'Accept': 'text/html, application/json', 'X-Requested-With': 'XMLHttpRequest' }
         });
         if (token !== sequence || requestController.signal.aborted) return;
+        if (window.SynapseCsrf?.fromResponse(response)) return;
         if (response.redirected) throw new Error('Your session or access changed. Reload this page to sign in or check access.');
         if (!response.ok) {
           let message = response.status === 403 ? 'Your session or access changed. Reload this page to check access.' : 'Unable to load results. Please retry.';

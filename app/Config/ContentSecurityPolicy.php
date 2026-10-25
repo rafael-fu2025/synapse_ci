@@ -15,6 +15,20 @@ use CodeIgniter\Config\BaseConfig;
  */
 class ContentSecurityPolicy extends BaseConfig
 {
+    public function __construct()
+    {
+        parent::__construct();
+        $realtime = config(Realtime::class);
+        if ($realtime->enabled) {
+            try {
+                $realtime->assertValid();
+                $sources = is_array($this->connectSrc) ? $this->connectSrc : [$this->connectSrc];
+                $this->connectSrc = array_values(array_unique([...$sources, ...$realtime->socketOrigins()]));
+            } catch (\Throwable) {
+                // Invalid realtime configuration must not broaden the connection policy.
+            }
+        }
+    }
     // -------------------------------------------------------------------------
     // Broadbrush CSP management
     // -------------------------------------------------------------------------

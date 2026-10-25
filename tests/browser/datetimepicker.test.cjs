@@ -108,6 +108,114 @@ after(async () => {
   await new Promise(resolve => server?.close(resolve));
 });
 
+async function assertHorizontalBounds(popup, viewportWidth) {
+  const geometry = await popup.evaluate(el => {
+    const bounds = el.getBoundingClientRect();
+    return {
+      left: bounds.left, right: bounds.right,
+      clientWidth: el.clientWidth, scrollWidth: el.scrollWidth,
+      overflow: [...el.querySelectorAll('*')].flatMap(child => {
+        const rect = child.getBoundingClientRect();
+        if (!rect.width || !rect.height) return [];
+        return rect.left < bounds.left - 1 || rect.right > bounds.right + 1
+          ? [{ tag: child.tagName, className: child.className, left: rect.left, right: rect.right }] : [];
+      }),
+    };
+  });
+  assert.ok(geometry.left >= 7 && geometry.right <= viewportWidth - 7, JSON.stringify(geometry));
+  assert.ok(geometry.scrollWidth <= geometry.clientWidth + 1, JSON.stringify(geometry));
+  assert.deepEqual(geometry.overflow, [], 'Every rendered descendant must fit horizontally');
+}
+
+async function assertReachable(control, viewportHeight) {
+  await control.scrollIntoViewIfNeeded();
+  const reachable = await control.evaluate((el, height) => {
+    const rect = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return rect.top >= 0 && rect.bottom <= height && (hit === el || el.contains(hit));
+  }, viewportHeight);
+  assert.ok(reachable, `${await control.getAttribute('class')} must be visible and hit-testable`);
+}
+
+for (const theme of ['light', 'dark']) {
+  for (const width of [320, 390]) {
+    test(`Time-only picker remains usable at ${width}x240 (${theme})`, { timeout: 15_000 }, async () => {
+      const page = await browser.newPage({ viewport: { width, height: 240 }, reducedMotion: 'reduce' });
+      page.setDefaultTimeout(5000);
+      try {
+        await page.goto(`${origin}/fixture?time=1`);
+        await page.locator('html').evaluate((el, value) => el.dataset.theme = value, theme);
+        await page.click('#scheduleTime');
+        const popup = page.locator('.dtp-time-only');
+        await assertHorizontalBounds(popup, width);
+        assert.equal(await popup.locator('.dtp-date-pane, .dtp-divider').count(), 0);
+        assert.equal(Math.round((await popup.boundingBox()).width), 260);
+        assert.equal(await popup.locator('.dtp-body').evaluate(el => getComputedStyle(el).flexDirection), 'row');
+        assert.ok(await popup.evaluate(el => el.scrollHeight > el.clientHeight));
+        const bounds = await popup.boundingBox();
+        assert.ok(bounds.y >= 7 && bounds.y + bounds.height <= 233);
+        await popup.locator('.dtp-minutes-wheel [data-val="59"]').click();
+        await popup.locator('.dtp-ampm-wheel [data-val="PM"]').click();
+        for (const action of ['now', 'clear', 'apply']) {
+          await assertReachable(popup.locator(`[data-dtp-${action}]`), 240);
+        }
+        await assertHorizontalBounds(popup, width);
+        await popup.locator('[data-dtp-apply]').click();
+        assert.equal(await popup.isVisible(), false);
+        assert.equal(await page.locator('#scheduleTime').inputValue(), '08:59 PM');
+        assert.equal(await page.locator('#scheduleValue').inputValue(), '20:59');
+      } finally {
+        await page.close();
+      }
+    });
+  }
+  for (const width of [320, 390, 768, 1280]) {
+    for (const height of [800, 320]) {
+      test(`Combined picker fits and applies at ${width}x${height} (${theme})`, { timeout: 15_000 }, async () => {
+        const page = await browser.newPage({ viewport: { width, height }, reducedMotion: 'reduce' });
+        page.setDefaultTimeout(5000);
+        try {
+          await page.goto(`${origin}/fixture`);
+          await page.locator('html').evaluate((el, value) => el.dataset.theme = value, theme);
+          await page.click('#surveyStartDisplay');
+          const popup = page.locator('.dtp-popup');
+          await assertHorizontalBounds(popup, width);
+          const date = await popup.locator('.dtp-date-pane').boundingBox();
+          const time = await popup.locator('.dtp-time-pane').boundingBox();
+          if (width < 500) {
+            assert.ok(time.y >= date.y + date.height, 'Narrow panes must stack');
+          } else {
+            assert.ok(time.x >= date.x + date.width, 'Wide panes must remain side by side');
+            assert.ok(Math.abs(time.y - date.y) <= 1);
+          }
+          const bounds = await popup.boundingBox();
+          assert.ok(bounds.y >= 7 && bounds.y + bounds.height <= height - 7);
+          if (height === 320) {
+            assert.ok(await popup.evaluate(el => el.scrollHeight > el.clientHeight), 'Short popup must scroll vertically');
+          }
+          await popup.locator('td[data-date="2030-01-20"]').click();
+          await popup.locator('.dtp-hours-wheel [data-val="2"]').click();
+          await popup.locator('.dtp-minutes-wheel [data-val="59"]').click();
+          await popup.locator('.dtp-ampm-wheel [data-val="PM"]').click();
+          assert.equal(await popup.locator('.dtp-time-readout').textContent(), '02:59 PM');
+          assert.equal(await page.locator('#surveyStart').inputValue(), '2030-01-20T14:59');
+          for (const action of ['now', 'clear', 'apply']) {
+            await assertReachable(popup.locator(`[data-dtp-${action}]`), height);
+          }
+          await assertHorizontalBounds(popup, width);
+          await popup.locator('[data-dtp-apply]').click();
+          assert.equal(await popup.isVisible(), false);
+          assert.equal(await page.locator('#surveyStartDisplay').inputValue(), '20/01/2030 02:59 PM');
+          assert.equal(await page.locator('#surveyStart').inputValue(), '2030-01-20T14:59');
+          assert.equal(await page.locator('#model').textContent(), '2030-01-20T14:59');
+        } finally {
+          await page.close();
+        }
+      });
+    }
+  }
+}
+
 test('Time-only mode shares wheels, submits HH:mm, and validates typed input without a calendar', async () => {
   const page = await browser.newPage({ viewport: { width: 375, height: 700 } });
   await page.goto(`${origin}/fixture?time=1`);

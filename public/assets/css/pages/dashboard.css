@@ -3140,6 +3140,12 @@
   box-shadow: 0 24px 44px -24px rgba(2, 8, 28, 0.74), 0 14px 28px -18px rgba(8, 18, 44, 0.82);
 }
 
+/* Donut center labels must follow the active theme, not ApexCharts' default fill. */
+.apexcharts-datalabel-label,
+.apexcharts-datalabel-value {
+  fill: var(--default-color) !important;
+}
+
 /* Chart specific dark mode */
 [data-theme=dark] .apexcharts-tooltip,
 [data-theme=dark] .apexcharts-xaxistooltip,

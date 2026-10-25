@@ -57,15 +57,17 @@ before(async () => {
           ...(reply.headerOnly ? {} : { csrf }) })); return;
       }
       const url = new URL(req.url, origin);
-      const assetPath = url.pathname.replace(/^\/campus\/assets\//, '/assets/');
-      if (assetPath.startsWith('/assets/')) {
+      const assetPath = url.pathname.replace(/^\/campus\//, '/');
+      const rootAsset = ['/drum-maroon.png', '/drum-whte.png', '/favicon.ico', '/favicon-192.png', '/favicon-180.png'].includes(assetPath);
+      if (assetPath.startsWith('/assets/') || rootAsset) {
         const file = path.resolve(root, 'public', '.' + assetPath);
-        if (!file.startsWith(path.join(root, 'public', 'assets') + path.sep) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+        if ((!rootAsset && !file.startsWith(path.join(root, 'public', 'assets') + path.sep)) || !fs.existsSync(file) || !fs.statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
         const ext = path.extname(file);
-        res.setHeader('Content-Type', ext === '.js' ? 'text/javascript' : ext === '.css' ? 'text/css' : 'application/octet-stream');
+        res.setHeader('Content-Type', ext === '.js' ? 'text/javascript' : ext === '.css' ? 'text/css' : ext === '.png' ? 'image/png' : 'application/octet-stream');
         res.end(fs.readFileSync(file)); return;
       }
-      const kind = url.pathname === deploymentFor(url.pathname).facilities ? 'index' : url.pathname === '/token' ? 'device_token' : 'unit_detail';
+      if (/\.(?:png|js|css)$/i.test(assetPath)) { res.writeHead(404); res.end('Not an allowed static asset'); return; }
+            const kind = url.pathname === deploymentFor(url.pathname).facilities ? 'index' : url.pathname === '/token' ? 'device_token' : 'unit_detail';
       res.setHeader('Content-Type', 'text/html'); res.end(render(kind, req.url));
     } catch (error) { res.writeHead(500); res.end(String(error.stack)); }
   });
@@ -85,7 +87,11 @@ after(async () => { await browser?.close(); server?.close(); });
 async function pageFor(t, url = '/facilities/unit/11', theme = 'light', mobile = false) {
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 }, reducedMotion: 'reduce' });
   await context.addInitScript(theme => localStorage.setItem('na-dark-mode', theme === 'dark' ? '1' : '0'), theme);
-  await context.route('**/*', route => route.request().url().startsWith(origin + '/') ? route.continue() : route.fulfill({ status: 200, body: '' }));
+  await context.route('**/*', route => {
+      // Unrelated global notification polling must not hit the synthetic app router.
+      if (new URL(route.request().url()).pathname.endsWith('/assets/js/notifications.js')) return route.fulfill({ contentType: 'text/javascript', body: '' });
+      return route.request().url().startsWith(origin + '/') ? route.continue() : route.fulfill({ status: 200, body: '' });
+    });
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(20000);
@@ -124,6 +130,26 @@ async function chooseScheduleTime(page, input, hour, minute, period) {
   await popup.locator('[data-dtp-apply]').click();
   await popup.waitFor({ state: 'hidden' });
 }
+test('gear assets are static local files at root and campus deployments', async t => {
+  for (const basePath of ['/', '/campus/']) {
+    for (const filename of ['drum-maroon.png', 'drum-whte.png', 'assets/js/bmg-gear-renderer.js']) {
+      const response = await fetch(origin + basePath + filename);
+      assert.equal(response.status, 200);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      assert.deepEqual(bytes, fs.readFileSync(path.join(root, 'public', filename)), 'Serve exact asset bytes, never fixture HTML');
+      assert.match(response.headers.get('content-type'), filename.endsWith('.png') ? /image\/png/ : /text\/javascript/);
+    }
+    for (const filename of ['drum-other.png', 'assets/../drum-other.png', 'assets/missing.js']) {
+      assert.equal((await fetch(origin + basePath + filename)).status, 404, 'Unknown assets must not fall through into app fixtures');
+    }
+    const page = await pageFor(t, basePath + 'facilities');
+    assert.equal(new URL(await page.locator('.bmg-drum-art-light').getAttribute('src')).pathname, basePath + 'drum-maroon.png');
+    assert.equal(new URL(await page.locator('.bmg-drum-art-dark').getAttribute('src')).pathname, basePath + 'drum-whte.png');
+    await page.waitForFunction(() => document.querySelector('[data-bmg-gear]').hasAttribute('data-gear-ready'));
+    assert.ok(await page.locator('[data-bmg-gear-canvas]').isVisible());
+  }
+});
+
 test('overview, empty states and permitted create modal', async t => {
   const page = await pageFor(t, '/facilities?variant=empty');
   await page.getByRole('heading', { name: 'No drums registered' }).waitFor();
@@ -155,7 +181,7 @@ test('capacity is required, bounded and blank on create; create and edit submit 
   await page.locator('#unitModal button[type="submit"]').click(); await page.waitForURL('**/facilities/units/store');
   assert.equal(posts.at(-1).fields.drum_capacity_kg, '125.25');
   const edit = await pageFor(t);
-  assert.match(await edit.locator('main').textContent(), /Capacity:\s*275\.50 kg/);
+  assert.match(await edit.locator('.row[aria-label="Drum at a glance"]').textContent(), /Capacity\s*275\.50 kg/);
   await edit.getByRole('button', { name: 'Edit drum', exact: true }).click();
   assert.equal(await edit.getByLabel('Capacity (kg)', { exact: true }).inputValue(), '275.50');
   await edit.getByLabel('Capacity (kg)', { exact: true }).fill('300.75');
@@ -203,8 +229,11 @@ test('hardware and explicit permission gates fail closed', async t => {
     assert.equal(await page.getByRole('button', { name: 'Request web stop', exact: true }).isDisabled(), true);
     if (variant === 'reader') assert.equal(await page.locator('[data-bmg-schedule], #unitModal, #deviceModal, #cancelBatchModal').count(), 0);
     else {
-      assert.equal(await page.locator('#scheduleEnabled').isDisabled(), true);
-      assert.equal(await page.locator('[data-bs-target="#deviceModal"]').isEnabled(), true);
+      if (['maintenance', 'unbound'].includes(variant)) assert.equal(await page.locator('#scheduleEnabled').isDisabled(), true);
+      else assert.equal(await page.locator('[data-bmg-schedule], #scheduleEnabled').count(), 0, 'Gated schedule cannot be edited or enabled');
+      const registration = page.locator('#bmg-device [data-bs-target="#deviceModal"]');
+      assert.equal(await registration.isEnabled(), true);
+      assert.equal(await page.locator('[data-bs-target="#deviceModal"]').count(), variant === 'unbound' ? 2 : 1, 'Only unbound drums get a checklist registration shortcut');
       assert.equal(await page.locator('#deviceModal button[type="submit"]').isEnabled(), true);
       if (variant !== 'unbound') assert.equal(await page.getByRole('button', { name: 'Revoke device', exact: true }).isEnabled(), true);
       assert.match(await page.locator('#deviceGateHelp').textContent(), /firmware and safety verification/);
@@ -215,12 +244,12 @@ test('every versioned form carries the current schedule version including zero',
   for (const [variant, expected] of [['', '3'], ['zero-version', '0']]) {
     const page = await pageFor(t, '/facilities/unit/11?variant=' + variant);
     const forms = page.locator('main form').filter({ has: page.locator('[name="expected_version"]') });
-    assert.equal(await forms.count(), 6);
+    assert.equal(await forms.count(), 7);
     const versions = await forms.evaluateAll(forms => forms.map(form => {
       const fields = [...form.querySelectorAll('[name="expected_version"]')];
       return [fields.length, fields[0].type, new FormData(form).get('expected_version')];
     }));
-    assert.deepEqual(versions, Array.from({ length: 6 }, () => [1, 'hidden', expected]));
+    assert.deepEqual(versions, Array.from({ length: 7 }, () => [1, 'hidden', expected]));
     assert.equal(await page.locator('#startBatchModal [name="expected_version"], #completeBatchModal [name="expected_version"], #cancelBatchModal [name="expected_version"]').count(), 0);
   }
 });
@@ -440,10 +469,15 @@ test('escaping, dark/mobile layout and rotation-only fields', async t => {
   const page = await pageFor(t, '/facilities/unit/11?variant=malicious', 'dark', true);
   assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
   assert.equal(await page.evaluate(() => window.bmgXss), undefined);
-  assert.equal(await page.locator('main img').count(), 0);
+  assert.equal(await page.locator('main img[src="x"], main [onerror]').count(), 0, 'Malicious content must not become executable markup');
+    assert.equal(await page.locator('main img').count(), 2, 'Only the two real decorative fallback images are present');
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   const names = await page.locator('main [name]').evaluateAll(items => items.map(item => item.name));
-  assert.equal(names.some(name => /temperature|moisture|oxygen|quality_grade|pwm|sanitation/i.test(name)), false);
+  assert.equal(names.some(name => /temperature|moisture|oxygen|quality_grade|sanitation/i.test(name)), false);
+    const pwm = page.locator('#schedulePwm[name="pwm"]');
+    assert.equal(await pwm.count(), 1, 'PWM is an optional rotation setting, not environmental telemetry');
+    assert.equal(await pwm.getAttribute('min'), '1');
+    assert.equal(await pwm.getAttribute('max'), '255');
   assert.match(await page.locator('main').textContent(), /not verified drum rotation/);
 });
 test('AJAX schedule errors retain fields, render escaped messages and refresh CSRF before retry', async t => {
@@ -551,10 +585,11 @@ for (const { facilities: base } of deployments) {
     await overview.getByLabel('Capacity (kg)', { exact: true }).fill('125.25');
     const count = posts.length;
     responses.push({ redirect: base });
-    await Promise.all([
-      overview.waitForEvent('framenavigated', frame => frame === overview.mainFrame()),
-      overview.locator('#unitModal button[type="submit"]').click()
-    ]);
+    assert.equal(await overview.evaluate(() => typeof window.SynapseMutations?.refresh), 'function');
+    const overviewMain = await overview.locator('main').elementHandle();
+    await overview.locator('#unitModal button[type="submit"]').click();
+    await overview.waitForFunction(main => !main.isConnected, overviewMain);
+    await overview.waitForURL(origin + base);
     assert.equal(overview.url(), origin + base);
     await overview.locator('#unitModal.show').waitFor({ state: 'hidden' });
     assert.equal(posts.length, count + 1);
@@ -572,7 +607,9 @@ for (const { facilities: base } of deployments) {
       const redirect = action === base ? base + '/unit/11?audit=saved' : base;
       const before = posts.length;
       responses.push({ redirect: origin + redirect });
+      const main = await page.locator('main').elementHandle();
       await confirmSchedule(page);
+      await page.waitForFunction(main => !main.isConnected, main);
       await page.waitForURL(origin + redirect);
       assert.equal(posts.length, before + 1);
       assert.equal(posts.at(-1).url, action);
@@ -598,24 +635,54 @@ for (const { facilities: base } of deployments) {
       assert.deepEqual(attemptedPosts, [], action);
     }
   });
-  test(`facilities URL audit: bad ${base} success redirects never navigate`, async t => {
+  test(`facilities URL audit: bad ${base} success redirects never navigate or replay locked late submits`, async t => {
     t.after(() => { responses.length = 0; });
-    const page = await pageFor(t, base + '/unit/11');
-    const form = page.locator('[data-bmg-schedule]');
-    const originalUrl = page.url();
-    const navigations = [];
-    page.on('request', request => { if (request.isNavigationRequest()) navigations.push(request.url()); });
     for (const redirect of rejectedFacilitiesUrls(base)) {
+      // A confirmed write consumes this form, even when its return URL is invalid.
+      // Only an authoritative GET supplies an independent editor for the next case.
+      const page = await pageFor(t, base + '/unit/11');
+      const form = page.locator('[data-bmg-schedule]');
+      const originalUrl = page.url();
+      const navigations = [];
+      const requests = [];
+      page.on('request', request => {
+        requests.push(request.url());
+        if (request.isNavigationRequest()) navigations.push(request.url());
+      });
+      let release;
+      const wait = new Promise(resolve => { release = resolve; });
+      t.after(() => release());
       const count = posts.length;
-      responses.push({ redirect });
+      responses.push({ redirect, wait });
       await confirmSchedule(page);
+      await page.waitForFunction(() => document.querySelector('[data-bmg-schedule]').getAttribute('aria-busy') === 'true');
+      assert.equal(await form.getByRole('button', { name: 'Save schedule', exact: true }).isDisabled(), true, redirect);
+      await form.evaluate(form => form.requestSubmit());
+      await page.waitForTimeout(100);
+      assert.equal(posts.length, count + 1, 'No duplicate POST while the confirmed request is pending: ' + redirect);
+      release();
       await form.locator('[data-bmg-submit-error]').waitFor();
       await page.waitForFunction(() => !document.querySelector('[data-bmg-schedule]').hasAttribute('aria-busy'));
       assert.match(await form.locator('[data-bmg-submit-error]').textContent(), /invalid facilities redirect/, redirect);
+      assert.match(await form.locator('[data-bmg-submit-error]').textContent(), /save succeeded.*Do not resubmit/, redirect);
+      assert.equal(await form.locator('input, select, textarea, button').evaluateAll(controls => controls.every(control => control.disabled)), true, redirect);
+
+      // Exercise the committed guard through real consent, without unlocking controls.
+      await form.evaluate(form => form.requestSubmit());
+      await page.locator('#synapseConfirmModal.show').waitFor();
+      await page.locator('[data-confirm-accept]').click();
+      await page.locator('#synapseConfirmModal').waitFor({ state: 'hidden' });
+      await page.waitForTimeout(100);
+      assert.equal(await form.getByRole('button', { name: 'Save schedule', exact: true }).isDisabled(), true, redirect);
       assert.equal(page.url(), originalUrl, redirect);
-      assert.equal(posts.length, count + 1, redirect);
+      assert.equal(posts.length, count + 1, 'No POST replay after confirmed success: ' + redirect);
       assert.equal(posts.at(-1).url, base + '/unit/11/schedule', redirect);
+      assert.equal(posts.at(-1).headers['x-requested-with'], 'XMLHttpRequest', redirect);
+      assert.equal(posts.at(-1).headers['x-csrf-token'], posts.at(-1).fields.csrf_test_name, redirect);
+      assert.equal(posts.at(-1).fields.expected_version, '3', redirect);
+      assert.deepEqual(requests, [origin + base + '/unit/11/schedule'], 'Only the intended POST is requested: ' + redirect);
       assert.deepEqual(navigations, [], redirect);
+      await page.context().close();
     }
   });
 }
@@ -635,10 +702,12 @@ test('overview and drum layout adapt to both themes and narrow screens', async t
     for (const mobile of [false, true]) {
       const suffix = `${theme}-${mobile ? 'mobile' : 'desktop'}`;
       const overview = await pageFor(t, '/facilities', theme, mobile);
-      assert.equal(await overview.locator('.bmg-stat').count(), 4);
+      const summary = overview.locator('.row[aria-label="Drums at a glance"]');
+      assert.equal(await summary.locator(':scope > .col-sm-6.col-xl-3 > .card > .card-body').count(), 4);
+      assert.equal(await summary.locator(':scope > div').evaluateAll(elements => elements.filter(el => Math.abs(el.getBoundingClientRect().top - elements[0].getBoundingClientRect().top) < 1).length), mobile ? 1 : 4);
       assert.equal(await overview.locator('.bmg-drum-card').count(), 1);
       assert.equal(await overview.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-      const contrast = await overview.locator('.bmg-stat-label').first().evaluate(element => {
+      const contrast = await summary.locator('.small.text-muted').first().evaluate(element => {
         const luminance = color => {
           const rgb = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
             const channel = value / 255;
@@ -647,7 +716,7 @@ test('overview and drum layout adapt to both themes and narrow screens', async t
           return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
         };
         const foreground = luminance(getComputedStyle(element).color);
-        const background = luminance(getComputedStyle(element.closest('.bmg-stat')).backgroundColor);
+        const background = luminance(getComputedStyle(element.closest('.card')).backgroundColor);
         return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
       });
       assert.ok(contrast >= 4.5, `Summary label contrast ${contrast} in ${theme}`);
@@ -655,8 +724,10 @@ test('overview and drum layout adapt to both themes and narrow screens', async t
       fs.mkdirSync(previews, { recursive: true });
       await overview.screenshot({ path: path.join(previews, `overview-${suffix}.png`), fullPage: true });
       const detail = await pageFor(t, '/facilities/unit/11', theme, mobile);
-      assert.equal(await detail.locator('.bmg-stat').count(), 4);
-      assert.equal(await detail.locator('.bmg-section-nav a').count(), 5);
+      const detailSummary = detail.locator('.row[aria-label="Drum at a glance"]');
+      assert.equal(await detailSummary.locator(':scope > .col-sm-6.col-xl-3 > .card > .card-body').count(), 4);
+      assert.equal(await detailSummary.locator(':scope > div').evaluateAll(elements => elements.filter(el => Math.abs(el.getBoundingClientRect().top - elements[0].getBoundingClientRect().top) < 1).length), mobile ? 1 : 4);
+      assert.equal(await detail.locator('nav.nav.nav-pills[aria-label="Drum sections"] a.nav-link').count(), 6);
       assert.equal(await detail.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       assert.equal(await detail.locator('.bmg-aside > section').first().getAttribute('id'), 'bmg-batch');
       const columns = await detail.locator('.bmg-detail-grid').evaluate(element => getComputedStyle(element).gridTemplateColumns.split(' ').length);

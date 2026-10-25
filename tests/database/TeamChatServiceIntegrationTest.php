@@ -32,6 +32,8 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
             'DBDebug' => true, 'foreignKeys' => true, 'busyTimeout' => 1000,
         ];
         $this->db = Database::connect();
+        require_once ROOTPATH . 'tests/_support/TeamsNotificationFixture.php';
+        \Tests\Support\TeamsNotificationFixture::install($this->db);
         $this->db->query('CREATE TABLE isolated_tenants (id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT)');
         $this->db->query('CREATE TABLE isolated_people (id INTEGER PRIMARY KEY, tenant_id INTEGER, first_name TEXT,
             last_name TEXT, mis_id TEXT, email TEXT, deleted_at TEXT)');
@@ -55,8 +57,10 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
         require_once APPPATH . 'Database/Migrations/2026-10-19-000002_CreateTeamChat.php';
         (new CreateTeamTasks())->up();
         (new CreateTeamChat())->up();
+        require_once APPPATH . 'Database/Migrations/2026-10-25-000001_AddTeamChatReferences.php';
+        (new \App\Database\Migrations\AddTeamChatReferences())->up();
         $this->tasks = new TeamTaskService();
-        $this->chat = new TeamChatService();
+        $this->chat = new TeamChatService($this->db, static fn () => null);
         $this->signIn(1);
     }
 
@@ -87,6 +91,49 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
     private function input(string $body = 'Hello'): array
     {
         return ['body' => $body, 'client_nonce' => sprintf('01234567-89ab-4cde-8fab-%012d', ++$this->sequence)];
+    }
+
+    public function testChatKeepsUnreadTreatmentWithoutBellPreviewsOrBroadcastRows(): void
+    {
+        $input = $this->input('Confidential synthetic message');
+        $message = $this->chat->send('clinic', $input);
+        $this->chat->send('clinic', $input);
+        $this->assertSame(0, $this->db->table('notifications')->countAllResults());
+        $this->assertSame(0, $this->chat->history('clinic')['unread_count']);
+        $this->signIn(2);
+        $this->assertSame(1, $this->chat->history('clinic')['unread_count']);
+        $this->chat->markRead('clinic', ['last_read_id' => $message['id']]);
+        $this->assertSame(0, $this->chat->history('clinic')['unread_count']);
+        $this->assertSame(0, $this->db->table('notifications')->countAllResults());
+    }
+
+    public function testHintsFollowCommittedWritesButNotRetriesOrFailures(): void
+    {
+        $hints = [];
+        $chat = new TeamChatService($this->db, function (...$hint) use (&$hints) {
+            $this->assertSame(0, $this->db->transDepth);
+            $this->assertSame(1, $this->db->table('team_chat_messages')->countAllResults());
+            $hints[] = $hint;
+            throw new RuntimeException('Mock transport unavailable');
+        });
+        $input = $this->input();
+        $message = $chat->send('clinic', $input);
+        $this->assertSame([[1, 'clinic', null]], $hints);
+        $this->assertSame($message, $chat->send('clinic', $input));
+        $this->fails(422, fn () => $chat->send('clinic', $this->input() + ['task_id' => 999]));
+        $this->fails(409, fn () => $chat->send('clinic', array_replace($input, ['body' => 'Conflict'])));
+        $this->assertCount(1, $hints);
+        $chat->markRead('clinic', ['last_read_id' => $message['id']]);
+        $this->assertSame([[1, 'clinic', null], [1, 'clinic', 1]], $hints);
+        $chat->markRead('clinic', ['last_read_id' => $message['id']]);
+        $chat->markRead('clinic', ['last_read_id' => 0]);
+        $this->assertCount(2, $hints);
+        $this->db->transBegin();
+        try {
+            $this->fails(409, fn () => $chat->send('clinic', $this->input()));
+            $this->fails(409, fn () => $chat->markRead('clinic', ['last_read_id' => $message['id']]));
+        } finally { $this->db->transRollback(); }
+        $this->assertCount(2, $hints);
     }
 
     public function testContextDelegatesAuthoritativeDepartmentMembership(): void
@@ -123,7 +170,8 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
         $input = $this->input("  Text <b>not HTML</b>\n😀  ") + ['task_id' => (string) $task['id']];
         $before = gmdate('Y-m-d H:i:s');
         $message = $this->chat->send('clinic', $input);
-        $this->assertSame(['id', 'body', 'task_id', 'task_title', 'sender_user_id', 'sender_name', 'created_at', 'client_nonce'], array_keys($message));
+        $this->assertSame(['id', 'body', 'task_id', 'task_title', 'sender_user_id', 'sender_name', 'created_at', 'client_nonce',
+                    'tasks', 'mentions', 'reply_to'], array_keys($message));
         $this->assertSame($input['body'], $message['body']);
         $this->assertSame($task['id'], $message['task_id']);
         $this->assertSame('Staff meeting', $message['task_title']);
@@ -245,6 +293,93 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
         $message = $this->chat->send('clinic', $this->input() + ['task_id' => $clinic['id']]);
         $this->assertSame('Clinic', $message['task_title']);
         $this->assertStringNotContainsString('PRIVATE', json_encode($message));
+    }
+
+    public function testMultipleReferencesMentionsRepliesAndImmutableRetry(): void
+    {
+        $first = $this->tasks->create('clinic', ['title' => 'First']);
+        $second = $this->tasks->create('clinic', ['title' => 'Second']);
+        $parent = $this->chat->send('clinic', $this->input('Parent'));
+        $input = $this->input('😀 @Person 2') + ['task_ids' => [$first['id'], $second['id']],
+            'mentions' => [['user_id' => 2, 'start' => 3, 'length' => 9]], 'reply_to_id' => $parent['id']];
+        $message = $this->chat->send('clinic', $input);
+        $this->assertSame([['id' => $first['id'], 'title' => 'First'], ['id' => $second['id'], 'title' => 'Second']], $message['tasks']);
+        $this->assertSame($first['id'], $message['task_id']);
+        $this->assertSame([['user_id' => 2, 'start' => 3, 'length' => 9, 'name' => 'Person 2']], $message['mentions']);
+        $this->assertSame(['id' => $parent['id'], 'sender_name' => 'Person 1', 'body' => 'Parent'], $message['reply_to']);
+        $this->assertSame($message, $this->chat->send('clinic', $input));
+        $this->assertSame($message, $this->chat->history('clinic')['messages'][1]);
+        foreach ([['task_ids' => [$first['id']]], ['mentions' => []], ['reply_to_id' => null],
+            ['mentions' => [['user_id' => 3, 'start' => 3, 'length' => 9]]]] as $change) {
+            $this->fails(409, fn () => $this->chat->send('clinic', array_replace($input, $change)));
+        }
+        $this->db->table('users')->where('id', 2)->update(['status' => 'suspended']);
+        $this->assertSame($message['id'], $this->chat->send('clinic', $input)['id']);
+        $this->fails(422, fn () => $this->chat->send('clinic', array_replace($input, $this->input($input['body']))));
+        $this->assertSame(2, $this->db->table('team_chat_messages')->countAllResults());
+    }
+
+    public function testReferencesAndMentionsCannotCrossChannelOrTenant(): void
+    {
+        $local = $this->tasks->create('clinic', ['title' => 'Local']);
+        $parent = $this->chat->send('clinic', $this->input());
+        $this->signIn(11);
+        $foreign = $this->tasks->create('clinic', ['title' => 'Foreign']);
+        $this->fails(422, fn () => $this->chat->send('clinic', $this->input() + ['reply_to_id' => $parent['id']]));
+        $this->signIn(9);
+        $other = $this->chat->send('guidance', $this->input());
+        $otherTask = $this->tasks->create('guidance', ['title' => 'Other']);
+        $this->signIn(1);
+        foreach ([$other['id'], 9999] as $id) {
+            $this->fails(422, fn () => $this->chat->send('clinic', $this->input() + ['reply_to_id' => $id]));
+        }
+        foreach ([$foreign['id'], $otherTask['id'], 9999] as $id) {
+            $this->fails(422, fn () => $this->chat->send('clinic', $this->input() + ['task_ids' => [$local['id'], $id]]));
+        }
+        foreach ([5, 11, 12, 9999] as $id) {
+            $this->fails(422, fn () => $this->chat->send('clinic', $this->input('@Person ' . $id) + [
+                'mentions' => [['user_id' => $id, 'start' => 0, 'length' => strlen('@Person ' . $id)]]]));
+        }
+        $this->fails(422, fn () => $this->chat->send('clinic', $this->input('@Person 3') + [
+            'mentions' => [['user_id' => 2, 'start' => 0, 'length' => 9]]]));
+        $this->assertSame(2, $this->db->table('team_chat_messages')->countAllResults());
+        $this->assertSame(0, $this->db->transDepth);
+    }
+
+    public function testTaskSearchIsScopedActiveBoundedAndMinimal(): void
+    {
+        $local = $this->tasks->create('clinic', ['title' => 'Needle', 'description' => 'PRIVATE']);
+        $done = $this->tasks->create('clinic', ['title' => 'Needle done']);
+        $this->tasks->move('clinic', $done['id'], ['status' => 'done', 'version' => 1]);
+        $this->signIn(11);
+        $this->tasks->create('clinic', ['title' => 'Needle foreign']);
+        $this->signIn(9);
+        $this->tasks->create('guidance', ['title' => 'Needle other']);
+        $this->signIn(1);
+        $this->assertSame(['tasks' => [['id' => $local['id'], 'title' => 'Needle']]], $this->chat->tasks('clinic', ['q' => 'Needle']));
+        $this->assertSame(['tasks' => []], $this->chat->tasks('clinic', ['q' => '%']));
+        foreach ([['q' => []], ['q' => str_repeat('x', 201)], ['limit' => 100]] as $filters) {
+            $this->fails(422, fn () => $this->chat->tasks('clinic', $filters));
+        }
+        for ($i = 0; $i < 42; ++$i) { $this->tasks->create('clinic', ['title' => 'Task ' . $i]); }
+        $this->assertCount(40, $this->chat->tasks('clinic')['tasks']);
+        $this->signIn(6);
+        $this->fails(403, fn () => $this->chat->tasks('clinic'));
+    }
+
+    public function testLegacyRowsAndRequiredMetadataMigration(): void
+    {
+        $task = $this->tasks->create('clinic', ['title' => 'Legacy']);
+        $input = $this->input() + ['task_id' => $task['id']];
+        $this->db->table('team_chat_messages')->insert(['tenant_id' => 1, 'unit' => 'clinic', 'sender_user_id' => 1,
+            'body' => $input['body'], 'client_nonce' => $input['client_nonce'], 'task_id' => $task['id'], 'created_at' => gmdate('Y-m-d H:i:s')]);
+        $message = $this->chat->send('clinic', $input);
+        $this->assertSame([['id' => $task['id'], 'title' => 'Legacy']], $message['tasks']);
+        $this->assertSame([], $message['mentions']);
+        $this->assertNull($message['reply_to']);
+        (new \App\Database\Migrations\AddTeamChatReferences())->down();
+        $this->db->resetDataCache();
+        $this->fails(503, fn () => $this->chat->history('clinic'));
     }
 
     public function testReadCursorIsMonotonicAndUnreadExcludesSelf(): void
@@ -422,12 +557,16 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
         $fields = $this->db->getFieldData('team_chat_messages');
         $types = [];
         foreach ($fields as $field) { $types[$field->name] = strtoupper($field->type); }
-        $this->assertSame(['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'created_at'], array_keys($types));
+        $this->assertSame(['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'created_at',
+                    'task_ids', 'mentions', 'reply_to_id'], array_keys($types));
         $this->assertSame('INTEGER', $types['id']);
         $this->assertSame('INT', $types['tenant_id']);
         $this->assertSame('VARCHAR', $types['unit']);
         $this->assertSame('VARCHAR', $types['client_nonce']);
         $this->assertSame('TEXT', $types['body']);
+        $this->assertSame('TEXT', $types['task_ids']);
+        $this->assertSame('TEXT', $types['mentions']);
+        $this->assertSame('BIGINT', $types['reply_to_id']);
         $indexes = $this->db->getIndexData('team_chat_messages');
         $this->assertSame(['tenant_id', 'unit', 'sender_user_id', 'client_nonce'], $indexes['team_chat_nonce']->fields);
         $reads = $this->db->query('PRAGMA table_info(isolated_team_chat_reads)')->getResultArray();

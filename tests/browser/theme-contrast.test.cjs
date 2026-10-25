@@ -178,6 +178,60 @@ async function pageFor(t, theme, mobile, real = false) {
   return page;
 }
 
+test('all dashboard donut centers remain readable across live and legacy theme changes', { timeout: 30000 }, async t => {
+  const page = await pageFor(t, 'light', false);
+  await page.addStyleTag({ content: '* { transition: none !important; }' });
+  await page.addScriptTag({ url: origin + '/assets/vendor/apexcharts/apexcharts.min.js' });
+  const chartIds = ['clinicTriageChart', 'adminPopulationChart', 'guidanceCategoryChart', 'bmgStatusChart', 'futureDashboardChart'];
+  await page.evaluate(async ids => {
+    await Promise.all(ids.map(async id => {
+      const card = document.createElement('section');
+      card.className = 'card';
+      card.style.color = 'var(--default-color)';
+      const target = document.createElement('div');
+      target.id = id;
+      card.append(target);
+      document.querySelector('main').prepend(card);
+      await new ApexCharts(target, {
+        chart: { type: 'donut', height: 230, animations: { enabled: false } },
+        series: [2, 1], labels: ['First', 'Second'],
+        dataLabels: { enabled: false }, legend: { show: false },
+        plotOptions: { pie: { donut: { size: '72%', labels: {
+          show: true, name: { show: true, fontSize: '12px' },
+          value: { show: true, fontSize: '18px', fontWeight: 700 },
+          total: { show: true, label: 'Total' }
+        } } } }
+      }).render();
+    }));
+  }, chartIds);
+
+  for (const theme of ['light', 'dark', 'light', 'legacy-dark']) {
+    await page.evaluate(theme => {
+      if (theme === 'legacy-dark') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', theme);
+      document.body.classList.toggle('dark-mode', theme === 'legacy-dark');
+    }, theme);
+    const centers = await page.evaluate(ids => {
+      const rgb = color => color.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const luminance = color => rgb(color).map(v => v / 255)
+        .map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+      return ids.flatMap(id => [...document.querySelectorAll(`#${id} .apexcharts-datalabel-label, #${id} .apexcharts-datalabel-value`)].map(el => {
+        const card = el.closest('.card');
+        const fill = getComputedStyle(el).fill;
+        const background = getComputedStyle(card).backgroundColor;
+        const a = luminance(fill), b = luminance(background);
+        return { id, fill, expected: getComputedStyle(card).color, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+      }));
+    }, chartIds);
+    assert.equal(centers.length, chartIds.length * 2, `Both center texts must render in ${theme}`);
+    for (const center of centers) {
+      assert.equal(center.fill, center.expected, `${center.id} center must follow ${theme} theme tokens`);
+      assert.ok(center.ratio >= 4.5, `${center.id} center contrast in ${theme}: ${center.ratio.toFixed(2)}:1`);
+    }
+  }
+});
+
 // Compute WCAG contrast from resolved styles, not tokens or snapshots. Composite alpha,
 // ancestor opacity, and Bootstrap's enormous inset table-cell shadow before measuring.
 async function installMetrics(page) {
@@ -345,6 +399,19 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark']) {
         assert.ok(row.disabled && row.opacity >= 0.25 && row.width >= 12 && row.height >= 12, `${row.element}: disabled control must remain recognizable`);
         if (row.checked || row.indeterminate) assert.notEqual(row.image, 'none', `${row.element}: disabled control must retain its selected indicator`);
       }
+    });
+    await t.test('welcome alert close icon stays dark without changing modal close icons', async () => {
+      await page.evaluate(() => {
+        const fixture = document.createElement('div');
+        fixture.id = 'welcome-alert-fixture';
+        fixture.innerHTML = '<div class="alert alert-success alert-dismissible" role="alert">Welcome back, Fixture User!<button type="button" class="btn-close" aria-label="Close"></button></div>' +
+          '<div class="modal"><button type="button" class="btn-close" aria-label="Close modal"></button></div>';
+        document.body.append(fixture);
+      });
+      const filters = await page.locator('#welcome-alert-fixture .btn-close').evaluateAll(elements => elements.map(el => getComputedStyle(el).filter));
+      assert.equal(filters[0], 'none', 'The welcome alert must use the dark close glyph');
+      if (theme === 'dark') assert.match(filters[1], /invert\(1\)/, 'Dark modal close icons must stay light');
+      await page.locator('#welcome-alert-fixture').evaluate(el => el.remove());
     });
     await t.test('breadcrumb separators, table tags, text utilities and links', async () => {
       const separators = await measurements(page, '.breadcrumb-item + .breadcrumb-item', '::before');
