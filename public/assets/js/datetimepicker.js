@@ -125,6 +125,7 @@
       this.buildShell();
       this.buildPopup();
       this.populateSelects();
+      if (!this.timeOnly) window.BalaySelect?.init(this.popup);
       this.populateWheels();
       this.refreshDisplay();
       this.attachEvents();
@@ -642,6 +643,8 @@
       if (this.timeOnly) return;
       this.monthSelect.value = String(this.view.getMonth());
       this.yearSelect.value = String(this.view.getFullYear());
+      this.monthSelect.dispatchEvent(new CustomEvent('bd-select:sync', { bubbles: true }));
+      this.yearSelect.dispatchEvent(new CustomEvent('bd-select:sync', { bubbles: true }));
 
       const year = this.view.getFullYear();
       const month = this.view.getMonth();
@@ -743,6 +746,7 @@
       this.closePopup(false);
       this.events.abort();
       if (this.observer) this.observer.disconnect();
+      window.BalaySelect?.destroy(this.popup);
       if (this.popup && this.popup.parentNode) this.popup.parentNode.removeChild(this.popup);
       if (this.wrap && this.wrap.parentNode) {
         this.wrap.parentNode.insertBefore(this.input, this.wrap);

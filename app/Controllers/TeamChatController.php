@@ -16,10 +16,12 @@ final class TeamChatController extends BaseController
             $service = new TeamChatService();
             $context = $service->context($unit);
             $before = $this->request->getGet('before');
-            $history = $service->history($unit, $before === null ? [] : ['before' => $before]);
+            $target = $this->request->getGet('message');
+            if ($before !== null && $target !== null) throw new RuntimeException('Use a message link or a history cursor, not both.', 422);
+            $history = $service->history($unit, $target !== null ? ['around' => $target] : ($before === null ? [] : ['before' => $before]));
             $afterMode = false;
             // Enter at the unread position instead of marking an unseen backlog read.
-            if ($before === null && $history['unread_count'] > 0 && $history['messages'] !== []
+            if ($target === null && $before === null && $history['unread_count'] > 0 && $history['messages'] !== []
                 && $history['last_read_id'] < $history['messages'][0]['id']) {
                 $history = $service->history($unit, ['after' => $history['last_read_id']]);
                 $afterMode = true;
@@ -27,7 +29,8 @@ final class TeamChatController extends BaseController
             return view('teams/chat', $context + [
                 'title' => ucfirst($unit) . ' Team Chat', 'unit' => $unit,
                 'teamsUrl' => site_url($unit . '/teams'), 'baseUrl' => site_url($unit . '/teams/chat'),
-                'history' => $history, 'afterMode' => $afterMode, 'browsingHistory' => $before !== null,
+                'history' => $history, 'afterMode' => $afterMode, 'browsingHistory' => $before !== null || $target !== null,
+                                'targetMessageId' => $target !== null ? (int) $target : null,
             ]);
         });
     }

@@ -21,6 +21,7 @@ $statusBadge = match ($status) {
     default => 'bg-secondary',
 };
 $reason = trim((string) ($appointment['reason'] ?? ''));
+$cancellationReason = trim((string) ($appointment['cancellation_reason'] ?? ''));
 $formatDateTime = static function (?string $value, \DateTimeZone $storedTimezone): string {
     if (empty($value)) {
         return '';
@@ -73,8 +74,13 @@ $confirmedAt = $formatDateTime($appointment['confirmed_at'] ?? null, \App\Servic
   <dt class="col-sm-4">Status</dt>
   <dd class="col-sm-8"><?= esc($statusLabel) ?></dd>
 
-  <dt class="col-sm-4">Reason provided</dt>
-  <dd class="col-sm-8"><?= esc($reason !== '' ? $reason : 'Not provided') ?></dd>
+  <dt class="col-sm-4">Appointment reason</dt>
+  <dd class="col-sm-8 text-break"><?= nl2br(esc($reason !== '' ? $reason : 'Not provided')) ?></dd>
+
+  <?php if ($status === 'cancelled'): ?>
+    <dt class="col-sm-4">Cancellation reason</dt>
+    <dd class="col-sm-8 text-break"><?= nl2br(esc($cancellationReason !== '' ? $cancellationReason : 'Not recorded')) ?></dd>
+  <?php endif; ?>
 
   <?php if ($createdAt !== ''): ?>
     <dt class="col-sm-4">Requested on</dt>

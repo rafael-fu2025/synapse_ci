@@ -125,6 +125,82 @@
       }, { signal: events.signal });
       instances.set(panel, { destroy() { clear(); controller?.abort(); events.abort(); instances.delete(panel); } });
     });
+
+    root.querySelectorAll('[data-emergency-contact-form]').forEach(form => {
+      if (form.dataset.emergencyBound === 'true') return;
+      form.dataset.emergencyBound = 'true';
+      const feedback = form.querySelector('[data-emergency-contact-feedback]');
+      const submitBtn = form.querySelector('button[type="submit"]');
+      let saving = false;
+
+      form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (saving || !form.reportValidity()) return;
+        const action = new URL(form.action, location.href);
+        if (action.origin !== location.origin || action.username || action.password || action.hash) return;
+        saving = true;
+        if (submitBtn) submitBtn.disabled = true;
+        form.setAttribute('aria-busy', 'true');
+        const finish = window.SynapseLoading?.begin(form, { label: 'Saving…', button: submitBtn }) || (() => {});
+        if (feedback) {
+          feedback.textContent = 'Saving emergency contact…';
+          feedback.className = 'small text-muted mb-0';
+        }
+        try {
+          const data = new FormData(form);
+          const response = await fetch(action.href, {
+            method: 'POST', body: data, credentials: 'same-origin', redirect: 'error',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers() }
+          });
+          window.SynapseCsrf?.fromResponse(response);
+          const payload = await response.json();
+          window.SynapseCsrf?.sync(payload.csrf);
+          if (!response.ok || payload.success !== true) {
+            throw new Error(typeof payload.message === 'string' ? payload.message : 'Unable to save emergency contact.');
+          }
+          if (feedback) {
+            feedback.textContent = payload.message || 'Emergency contact updated.';
+            feedback.className = 'small text-success mb-0';
+          }
+          const contact = payload.emergency_contact || {};
+          const card = document.querySelector('[data-portal-emergency-card]');
+          if (card) {
+            const hasInfo = Boolean(contact.emergency_contact_name || contact.emergency_contact_phone);
+            const content = card.querySelector('[data-portal-emergency-content]');
+            if (content) {
+              const esc = str => String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+              if (hasInfo) {
+                const name = esc(contact.emergency_contact_name || '—');
+                const rel = esc(contact.emergency_contact_relationship || '');
+                const phone = esc(contact.emergency_contact_phone || '');
+                const cleanPhone = esc(phone.replace(/[^\d+]/g, ''));
+                content.innerHTML = `<dl class="row mb-0 small">
+                  <dt class="col-5 text-muted fw-normal">Contact:</dt>
+                  <dd class="col-7 fw-semibold mb-1 text-break">${name}</dd>
+                  ${rel ? `<dt class="col-5 text-muted fw-normal">Relationship:</dt><dd class="col-7 mb-1 text-break">${rel}</dd>` : ''}
+                  ${phone ? `<dt class="col-5 text-muted fw-normal">Phone:</dt><dd class="col-7 mb-0 text-break"><a href="tel:${cleanPhone}" class="text-decoration-none">${phone}</a></dd>` : ''}
+                </dl>`;
+              } else {
+                content.innerHTML = `<p class="small text-muted mb-2">No emergency contact recorded yet. Add one so clinic staff know who to reach in an emergency.</p>
+                <a href="${location.origin}/portal/settings" class="btn btn-outline-secondary btn-sm" data-app-modal-open>
+                  <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Add emergency contact
+                </a>`;
+              }
+            }
+          }
+        } catch (err) {
+          if (feedback) {
+            feedback.textContent = err.message || 'Unable to save emergency contact.';
+            feedback.className = 'small text-danger mb-0';
+          }
+        } finally {
+          finish();
+          form.removeAttribute('aria-busy');
+          saving = false;
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      });
+    });
   }
   function destroy(root) {
     for (const [panel, state] of instances) if (root === panel || root.contains(panel)) state.destroy();

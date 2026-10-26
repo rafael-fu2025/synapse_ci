@@ -35,6 +35,26 @@ before(async () => {
         const file = data.get('photo');
         posts.push({ path: url.pathname, names: [...data.keys()], token: data.get('csrf_test_name'), size: file?.size, type: file?.type, filename: file?.name });
         if (holdPost) await holdPost;
+        if (url.pathname.endsWith('/emergency-contact')) {
+          const contact = {
+            emergency_contact_name: data.get('emergency_contact_name') || '',
+            emergency_contact_phone: data.get('emergency_contact_phone') || '',
+            emergency_contact_relationship: data.get('emergency_contact_relationship') || '',
+          };
+          res.writeHead(failSave ? 422 : 200, {
+            'Content-Type': 'application/json',
+            'X-CSRF-NAME': 'csrf_test_name',
+            'X-CSRF-TOKEN': 'contact-refreshed-token',
+            'X-CSRF-HEADER': 'X-CSRF-TOKEN'
+          });
+          res.end(JSON.stringify({
+            success: !failSave,
+            message: failSave ? 'Invalid contact details' : 'Emergency contact updated.',
+            emergency_contact: contact,
+            csrf: { name: 'csrf_test_name', hash: 'contact-refreshed-token' }
+          }));
+          return;
+        }
         if (req.headers['x-requested-with'] === 'XMLHttpRequest') {
           const hasPhoto = !url.pathname.endsWith('/remove');
           res.writeHead(failSave ? 422 : 200, { 'Content-Type': 'application/json',
@@ -197,6 +217,57 @@ test('10 MB AJAX upload updates avatars in place; 422 retains file/preview and r
   assert.equal(await page.locator('[data-profile-photo-remove]').isVisible(), true);
   assert.equal(await page.locator('#appFormModal').isVisible(), true);
 });
+test('emergency contact form renders in settings modal and saves via AJAX with CSRF', async t => {
+  const page = await pageFor(t, 'student', false, false);
+  const form = page.locator('#emergencyContactForm');
+  assert.equal(await form.count(), 1);
+  assert.equal(await form.getAttribute('method'), 'POST');
+  assert.equal(new URL(await form.getAttribute('action')).pathname, '/portal/settings/emergency-contact');
+
+  const nameInput = page.locator('#emergencyContactName');
+  const relInput = page.locator('#emergencyContactRelationship');
+  const phoneInput = page.locator('#emergencyContactPhone');
+  const feedback = page.locator('[data-emergency-contact-feedback]');
+
+  assert.equal(await nameInput.inputValue(), 'Maria Santos');
+  assert.equal(await relInput.inputValue(), 'Mother');
+  assert.equal(await phoneInput.inputValue(), '0917-123-4567');
+
+  await nameInput.fill('Dr. Roberto Santos');
+  await relInput.fill('Father');
+  await phoneInput.fill('+63 918 555 1234');
+
+  const before = posts.length;
+  await form.locator('button[type="submit"]').click();
+
+  await page.waitForFunction(() => document.querySelector('[data-emergency-contact-feedback]')?.textContent.includes('Emergency contact updated.'));
+  assert.equal(posts.length, before + 1);
+  assert.equal(posts.at(-1).path, '/portal/settings/emergency-contact');
+  assert.ok(posts.at(-1).names.includes('csrf_test_name'));
+  assert.ok(posts.at(-1).token && typeof posts.at(-1).token === 'string');
+
+  assert.equal(await nameInput.inputValue(), 'Dr. Roberto Santos');
+  assert.equal(await relInput.inputValue(), 'Father');
+  assert.equal(await phoneInput.inputValue(), '+63 918 555 1234');
+});
+
+test('emergency contact card appears on portal home and edit opens settings modal', async t => {
+  const page = await pageFor(t, 'student', false, false, true);
+  await page.goto(origin + '/portal');
+  await page.waitForFunction(() => !!document.querySelector('[data-portal-emergency-card]'));
+
+  const card = page.locator('[data-portal-emergency-card]');
+  assert.equal(await card.count(), 1);
+  assert.match(await card.innerText(), /Emergency Contact/);
+  assert.match(await card.innerText(), /Maria Santos/);
+  assert.match(await card.innerText(), /Mother/);
+  assert.match(await card.innerText(), /0917-123-4567/);
+
+  const editBtn = card.locator('a[data-app-modal-open]');
+  assert.equal(await editBtn.count(), 1);
+  assert.equal(new URL(await editBtn.getAttribute('href')).pathname, '/portal/settings');
+});
+
 test('closing a selected picture requires discard consent; cancel keeps preview and focus contained', async t => {
   const page = await pageFor(t, 'employee', true, false, true);
   await open(page);
@@ -226,6 +297,12 @@ test('closing a selected picture requires discard consent; cancel keeps preview 
 test('removal confirms and restores initials/header without navigating or stacking a second settings modal', async t => {
   const page = await pageFor(t, 'employee', false, true, true);
   await open(page);
+  const uploadBox = await page.getByRole('button', { name: 'Upload picture' }).boundingBox();
+  const removeBox = await page.getByRole('button', { name: 'Remove picture', exact: true }).boundingBox();
+  assert.ok(Math.abs(uploadBox.y - removeBox.y) < 1, 'Picture actions share one horizontal row');
+  assert.ok(Math.abs(uploadBox.height - removeBox.height) < 1, 'Picture actions have matching heights');
+  assert.equal(await page.getByRole('heading', { name: 'Appearance', exact: true }).count(), 0);
+  assert.equal(await page.getByText('Use the sun/moon button in the header', { exact: false }).count(), 0);
   const address = page.url(), before = posts.length;
   await page.getByRole('button', { name: 'Remove picture', exact: true }).click();
   await page.locator('#synapseConfirmModal.show').waitFor();

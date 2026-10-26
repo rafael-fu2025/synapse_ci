@@ -25,6 +25,14 @@
     parts.cancel.textContent = options.cancelLabel || 'Cancel';
     parts.accept.className = 'btn ' + tone[0];
     parts.accept.disabled = false;
+    if (parts.reasonGroup && parts.reason) {
+      const needsReason = Boolean(options.reasonField);
+      parts.reasonGroup.hidden = !needsReason;
+      parts.reason.disabled = !needsReason;
+      parts.reason.required = needsReason;
+      parts.reason.value = needsReason ? options.reasonField.value : '';
+      parts.reason.setCustomValidity('');
+    }
     parts.icons.forEach(icon => {
       icon.className = 'bi ' + tone[1] + (icon.hasAttribute('data-confirm-icon-body') ? ' fs-1 opacity-75' : ' me-2 fs-5');
     });
@@ -32,6 +40,15 @@
 
   function decide(approved) {
     if (!current || current.result !== null) return;
+    if (approved && current.options.reasonField) {
+      const reason = parts.reason.value.trim();
+      let error = '';
+      if (!reason || [...reason].length > 255) error = 'Enter a cancellation reason between 1 and 255 characters.';
+      else if (/[\p{Cc}\p{Cf}]/u.test(reason)) error = 'Enter a reason without control or invisible formatting characters.';
+      parts.reason.setCustomValidity(error);
+      if (!parts.reason.reportValidity()) return;
+      current.options.reasonField.value = reason;
+    }
     current.result = approved;
     parts.accept.disabled = true;
     // Bootstrap ignores hide() during opening. shown.bs.modal finishes it.
@@ -47,11 +64,17 @@
       message: element.querySelector('[data-confirm-message]'),
       icons: element.querySelectorAll('[data-confirm-icon]'),
       accept: element.querySelector('[data-confirm-accept]'),
-      cancel: element.querySelector('[data-confirm-cancel]')
+      cancel: element.querySelector('[data-confirm-cancel]'),
+      reasonGroup: element.querySelector('[data-confirm-reason-group]'),
+      reason: element.querySelector('[data-confirm-reason-input]')
     };
     if (!parts.title || !parts.message || !parts.accept || !parts.cancel) return false;
     modal = bootstrap.Modal.getOrCreateInstance(element, { backdrop: true, keyboard: true });
     element.setAttribute('data-synapse-confirm-ready', '');
+    parts.reason?.addEventListener('input', () => parts.reason.setCustomValidity(''));
+    parts.reason?.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); decide(true); }
+    });
     parts.accept.addEventListener('click', () => decide(true));
     parts.cancel.addEventListener('click', () => decide(false));
     element.querySelector('.btn-close')?.addEventListener('click', () => decide(false));
@@ -61,6 +84,7 @@
     element.addEventListener('shown.bs.modal', () => {
       phase = 'open';
       if (current?.result !== null) modal.hide();
+      else if (current?.options.reasonField) parts.reason.focus();
       else parts.cancel.focus();
     });
     element.addEventListener('hide.bs.modal', () => {
@@ -72,6 +96,7 @@
       current = null;
       phase = 'idle';
       parts.accept.disabled = false;
+      if (parts.reason) { parts.reason.value = ''; parts.reason.setCustomValidity(''); }
       suspended.forEach(({ root, inert }) => { if (root.isConnected) root.inert = inert; });
       suspended = [];
       if (document.querySelector('.modal.show')) {
@@ -113,7 +138,8 @@
   }
 
   function ask(options = {}) {
-    if (!build()) return Promise.resolve(window.confirm(options.message || 'Are you sure?'));
+    if (!build()) return Promise.resolve(options.reasonField ? false : window.confirm(options.message || 'Are you sure?'));
+    if (options.reasonField && (!parts.reason || !parts.reasonGroup)) return Promise.resolve(false);
     return new Promise(resolve => {
       const request = { options, resolve, result: null, opener: document.activeElement };
       if (phase === 'closing' || (current && current.result !== null)) {
@@ -125,7 +151,7 @@
         current.resolve(false);
         current = request;
         paint(request);
-        if (phase === 'open') parts.cancel.focus();
+        if (phase === 'open') (request.options.reasonField ? parts.reason : parts.cancel).focus();
       } else {
         present(request);
       }
@@ -162,11 +188,14 @@
     event.stopImmediatePropagation();
     if (pendingForms.has(form)) return;
     pendingForms.add(form);
+    const reasonField = form.hasAttribute('data-confirm-reason') ? form.querySelector('input[type="hidden"][name="reason"]') : null;
+    if (form.hasAttribute('data-confirm-reason') && !reasonField) { pendingForms.delete(form); return; }
     ask({
       message: form.getAttribute('data-confirm'),
       title: form.getAttribute('data-confirm-title'),
       confirmLabel: form.getAttribute('data-confirm-label'),
-      tone: form.getAttribute('data-confirm-tone')
+      tone: form.getAttribute('data-confirm-tone'),
+      reasonField
     }).then(approved => {
       if (approved) submitApproved(form, submitter);
       else pendingForms.delete(form);

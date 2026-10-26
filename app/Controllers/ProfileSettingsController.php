@@ -41,10 +41,12 @@ final class ProfileSettingsController extends BaseController
             [$actor, $person] = $this->owner();
             $photos = $this->photos;
             $hasPhoto = $photos->exists($actor['tenant_id'], $actor['person_id']);
+            $health = (new \App\Models\HealthProfileModel())->findByPersonId($actor['person_id']) ?? [];
             return view('portal/settings', [
                 'title' => 'Profile & Settings', 'person' => $person, 'actor' => $actor,
                 'cancelUrl' => site_url('portal'), 'formModalPage' => true, 'modalSize' => '',
                 'hasPhoto' => $hasPhoto,
+                'health' => $health,
                 'defaultAvatar' => ProfileAvatar::dataUri($person),
                 'photoUrl' => $hasPhoto ? site_url('portal/settings/photo') : ProfileAvatar::dataUri($person),
                 'breadcrumbs' => [['label' => 'My Health Portal', 'url' => site_url('portal')], ['label' => 'Profile & Settings', 'url' => '']],
@@ -97,6 +99,57 @@ final class ProfileSettingsController extends BaseController
             return $this->response->setStatusCode($error->getCode() === 401 ? 401 : 403)
                 ->setHeader('Cache-Control', 'private, no-store')->setBody('Photo unavailable.');
         }
+    }
+
+    public function updateEmergencyContact()
+    {
+        try {
+            [$actor, $person] = $this->owner();
+            $data = [
+                'emergency_contact_name'         => $this->validateContactField('emergency_contact_name', 150),
+                'emergency_contact_relationship' => $this->validateContactField('emergency_contact_relationship', 50),
+                'emergency_contact_phone'        => $this->validateContactField('emergency_contact_phone', 50),
+            ];
+
+            (new \App\Services\Clinic\PatientHistoryService())->updateEmergencyContact((int) $actor['person_id'], $data);
+            return $this->emergencyContactSaved('Emergency contact updated.', $data);
+        } catch (RuntimeException $error) {
+            return $this->failure($error);
+        } catch (Throwable $error) {
+            log_message('error', 'Emergency contact update failed: {exception}', ['exception' => $error]);
+            return $this->failure(new RuntimeException('Unable to update emergency contact. Please try again.', 503));
+        }
+    }
+
+    private function validateContactField(string $field, int $maxLength): ?string
+    {
+        $value = $this->request->getPost($field);
+        if ($value === null) return null;
+        if (!is_string($value)) {
+            throw new RuntimeException('Invalid ' . str_replace('_', ' ', $field) . '.', 422);
+        }
+        if (!mb_check_encoding($value, 'UTF-8') || preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $value)) {
+            throw new RuntimeException('Invalid text characters in ' . str_replace('_', ' ', $field) . '.', 422);
+        }
+        $trimmed = trim($value);
+        if ($trimmed === '') return null;
+        if (mb_strlen($trimmed, 'UTF-8') > $maxLength) {
+            throw new RuntimeException(ucfirst(str_replace('_', ' ', $field)) . ' must be ' . $maxLength . ' characters or less.', 422);
+        }
+        return $trimmed;
+    }
+
+    private function emergencyContactSaved(string $message, array $contact)
+    {
+        if (!$this->request->isAJAX()) {
+            return redirect()->to(site_url('portal/settings'))->with('success', $message);
+        }
+        return $this->response->setJSON([
+            'success' => true,
+            'message' => $message,
+            'emergency_contact' => $contact,
+            'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
+        ]);
     }
 
     private function saved(string $message, bool $hasPhoto, array $person)

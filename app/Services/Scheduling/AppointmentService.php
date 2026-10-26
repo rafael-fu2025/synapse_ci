@@ -494,8 +494,12 @@ final class AppointmentService
     /** Optional context is only omitted by trusted legacy callers, never HTTP handlers. */
     public function cancelAppointment(int $appointmentId, string $reason, ?string $unit = null, ?array $actor = null, bool $personal = false): bool
     {
-        if (mb_strlen(trim($reason)) > 255) {
-            throw new \InvalidArgumentException('Cancellation reason must be at most 255 characters.');
+        if (!mb_check_encoding($reason, 'UTF-8') || preg_match('/[\p{Cc}\p{Cf}]/u', $reason)) {
+            throw new \InvalidArgumentException('Cancellation reason must be valid UTF-8 without control characters.');
+        }
+        $reason = preg_replace('/^[\s\p{Z}]+|[\s\p{Z}]+$/u', '', $reason);
+        if ($reason === '' || mb_strlen($reason, 'UTF-8') > 255) {
+            throw new \InvalidArgumentException('Cancellation reason must be between 1 and 255 characters.');
         }
         $user = $personal ? $this->assertPersonalPermission($actor ?? [], 'portal.appointments.create')
             : ($actor !== null ? $this->actor($actor) : null);
@@ -525,7 +529,7 @@ final class AppointmentService
             }
             $this->person((int) $appt['person_id']);
             $version = (int) $appt['version'] + 1;
-            $this->save($unit, $appointmentId, ['status' => 'cancelled', 'cancellation_reason' => trim($reason), 'version' => $version]);
+            $this->save($unit, $appointmentId, ['status' => 'cancelled', 'cancellation_reason' => $reason, 'version' => $version]);
             $this->changedPeople[(int) $appt['person_id']] = true;
             WorkflowNotifications::record(\Config\Database::connect(),
                 $personal ? 'appointment_cancelled_staff' : 'appointment_cancelled_patient',

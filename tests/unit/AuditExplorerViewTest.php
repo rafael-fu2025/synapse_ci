@@ -49,6 +49,20 @@ final class AuditExplorerViewTest extends CIUnitTestCase
         $this->assertStringNotContainsString('No audit events recorded yet.', $html);
     }
 
+    public function testCompactFiltersUseCustomDatepickersWithIsoSubmissionValues(): void
+    {
+        $html = $this->render(['filters' => ['from' => '2026-10-01', 'to' => '2026-10-26']]);
+        $this->assertStringNotContainsString('type="date"', $html);
+        $this->assertSame(2, substr_count($html, 'data-datepicker data-target='));
+        foreach (['from' => '2026-10-01', 'to' => '2026-10-26'] as $key => $value) {
+            $this->assertStringContainsString('data-target="#audit-' . $key . '"', $html);
+            $this->assertStringContainsString('type="hidden" id="audit-' . $key . '" name="' . $key . '" value="' . $value . '"', $html);
+            $this->assertStringContainsString('for="audit-' . $key . '-display"', $html);
+        }
+        $this->assertStringContainsString('col-lg-3', $html);
+        $this->assertStringContainsString('Text and ID filters use exact matches.', $html);
+    }
+
     public function testEmptyLedgerFiltersAndOutOfRangePageHaveDistinctMessages(): void
     {
         $this->assertStringContainsString('No audit events recorded yet.', $this->render());

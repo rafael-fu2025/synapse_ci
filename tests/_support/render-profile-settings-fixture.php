@@ -22,7 +22,33 @@ $actor['avatar_initials'] = \App\Services\ProfileAvatar::initials($person);
 session()->set('user', $actor);
 $hasPhoto = isset($_GET['uploaded']) || isset($_GET['saved']);
 if (isset($_GET['uploaded'])) session()->setFlashdata('success', 'Profile picture updated. Only the compressed image was stored.');
-if (parse_url($fixture['path'], PHP_URL_PATH) !== '/portal/settings') {
+$health = [
+    'blood_type' => 'O+',
+    'allergies' => '',
+    'emergency_contact_name' => 'Maria Santos',
+    'emergency_contact_phone' => '0917-123-4567',
+    'emergency_contact_relationship' => 'Mother',
+];
+if (parse_url($fixture['path'], PHP_URL_PATH) === '/portal') {
+    echo view('portal/index', [
+        'title' => 'My Health Portal',
+        'pageTitle' => $kind === 'student' ? 'Student Health Portal' : 'Employee Health Portal',
+        'chart' => [
+            'person' => $person,
+            'student_profile' => $kind === 'student' ? ['program' => 'BSIT', 'year_level' => 3, 'section' => 'A', 'department' => 'CCS'] : null,
+            'employee_profile' => $kind === 'employee' ? ['department' => 'CCS', 'position' => 'Instructor', 'employment_status' => 'Full-time'] : null,
+            'health_profile' => $health,
+            'encounters' => [],
+            'vitals_history' => [],
+            'treatment_history' => [],
+            'dispensation_history' => [],
+        ],
+        'activeTickets' => [],
+        'appointments' => [],
+        'filters' => ['service' => 'all', 'status' => 'all', 'sort' => 'upcoming'],
+        'breadcrumbs' => [['label' => 'Campus Portal', 'url' => site_url('portal')], ['label' => 'Personal Workspace', 'url' => '']],
+    ]);
+} elseif (parse_url($fixture['path'], PHP_URL_PATH) !== '/portal/settings') {
     echo view('announcements/portal', ['title' => 'Announcements', 'baseUrl' => site_url('portal/announcements'),
         'announcements' => [], 'filters' => ['q' => '', 'unit' => 'all', 'status' => 'all'],
         'counts' => ['all' => 0, 'unread' => 0, 'read' => 0],
@@ -30,6 +56,7 @@ if (parse_url($fixture['path'], PHP_URL_PATH) !== '/portal/settings') {
 } else {
     echo view('portal/settings', ['title' => 'Profile & Settings', 'actor' => $actor, 'person' => $person,
         'cancelUrl' => site_url('portal'), 'formModalPage' => true, 'modalSize' => '',
+        'health' => $health,
         'defaultAvatar' => \App\Services\ProfileAvatar::dataUri($person),
         'photoUrl' => $hasPhoto ? site_url('portal/settings/photo') : \App\Services\ProfileAvatar::dataUri($person), 'hasPhoto' => $hasPhoto]);
 }

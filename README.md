@@ -328,6 +328,16 @@ See [Notification coverage — Clinic, Guidance and BMG](docs/NOTIFICATION_COVER
 
 The coverage audit repaired closed-referral notice routing to History, removed-patient notice eligibility and stalled read/read-all requests. Reads now have a ten-second fetch/body deadline and safe GET reconciliation without automatic POST replay. Existing publication tests now verify current authentication and Clinic/Guidance/BMG profile-based recipients on disposable schemas. No new notification type/migration or live alert backfill was introduced by this audit.
 
+### Personal visit history
+
+Students and employees, including staff acting as patients, can open **My Visit History** from the personal portal or sidebar at `/portal/visits`. This is separate from appointment history: it lists actual completed clinic encounters and guidance sessions, including walk-ins without appointments. Completed clinic referrals are included as completed clinic attendance without exposing referral/disposition details. In-progress, cancelled, deleted visits and deleted guidance cases are excluded.
+
+The read-only page shows Manila-local visit/completion dates, department, attending staff, appointment/walk-in attendance, and a generic completion summary. It never queries or returns chief complaints, assessment/diagnosis/treatment details, prescriptions, guidance case titles, risk classifications, or encrypted notes. Personal identity is refreshed and derived only from the session; `portal.records.read` and an active same-tenant linked person are required. Person/tenant/source IDs in a URL cannot select another patient's records. Staff access to this page remains self-only, not workstation access.
+
+Service filtering and stable newest-first pagination use the existing live-filter behavior, with GET forms and links as non-JavaScript fallbacks. Pages contain at most 25 visits. A completed appointment alone is not treated as an actual visit, and multiple completed sessions linked to one appointment remain separate attendance records. Responses are private/no-store. This uses existing tables; no migration, permission reseed, or historical-data rewrite is required.
+
+Validation: `php vendor/bin/phpunit -c phpunit.ci.xml tests/unit/PortalVisitHistoryServiceTest.php`; `php vendor/bin/phpunit -c phpunit.ci.xml tests/feature/PortalVisitHistoryRoutesTest.php`; `node --test tests/browser/visit-history.test.cjs`. These use private SQLite or synthetic view fixtures, not operational records.
+
 ### Student and employee profile settings
 
 `/portal/settings` is personal self-service for an active account linked to a same-tenant student or employee person, including staff acting as employees. The sidebar and account dropdown open it as a medium, centered, scrollable shared Bootstrap modal over the current screen. `?fragment=1` returns only modal markup; direct `/portal/settings` links open the same initialized dialog with a fixed return to `/portal`. University name, identifier, email, and profile type are read-only; uploading a photo never edits MIS identity, roles, grants, or clinical records. Person-less, guest, inactive, deleted, and unauthenticated identities cannot use the photo endpoints.

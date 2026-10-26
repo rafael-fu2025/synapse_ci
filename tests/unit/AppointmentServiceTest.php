@@ -15,6 +15,7 @@ use App\Services\Scheduling\AppointmentService;
 use App\Services\Scheduling\SchedulingClock;
 use Tests\Support\FreshDatabaseTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /** Migration-backed regressions; run only through the guarded fresh-database runner. */
 final class AppointmentServiceTest extends FreshDatabaseTestCase
@@ -135,15 +136,25 @@ final class AppointmentServiceTest extends FreshDatabaseTestCase
         $this->book('guidance', $this->guidanceAssignment, $date, '14:00:00', '14:30:00');
     }
 
-    public function testCancelAppointment(): void
+    public static function cancellationReasons(): iterable
+    {
+        yield 'normal reason' => ['Patient requested reschedule'];
+        yield 'zero is legitimate' => ['0'];
+        yield '255 ASCII characters' => [str_repeat('a', 255)];
+        yield '255 Unicode characters' => [str_repeat('界', 255)];
+    }
+
+    #[DataProvider('cancellationReasons')]
+    public function testCancelAppointment(string $reason): void
     {
         $assignment = $this->enroll('clinic');
         $date = SchedulingClock::now()->modify('+7 days')->format('Y-m-d');
         $this->window('clinic', $assignment, $date, '10:00:00', '11:00:00');
         $appointment = $this->book('clinic', $assignment, $date, '10:00:00', '10:30:00');
-        $this->appointmentService->cancelAppointment((int) $appointment['id'], 'Patient requested reschedule');
+        $this->assertTrue($this->appointmentService->cancelAppointment((int) $appointment['id'], " \u{00A0}" . $reason . "\u{3000} "));
         $updated = $this->appointmentModel->find($appointment['id']);
         $this->assertSame('cancelled', $updated['status']);
-        $this->assertSame('Patient requested reschedule', $updated['cancellation_reason']);
+        $this->assertSame($reason, $updated['cancellation_reason']);
+        $this->assertSame((int) $appointment['version'] + 1, (int) $updated['version']);
     }
 }

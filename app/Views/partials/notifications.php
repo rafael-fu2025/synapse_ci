@@ -23,6 +23,9 @@
      data-guidance-team-calendar-url="<?= esc($notificationDestinations['guidanceTeamCalendar'], 'attr') ?>"
      data-facilities-teams-url="<?= esc($notificationDestinations['facilitiesTeams'], 'attr') ?>"
      data-facilities-team-calendar-url="<?= esc($notificationDestinations['facilitiesTeamCalendar'], 'attr') ?>"
+     data-clinic-team-chat-url="<?= esc($notificationDestinations['clinicTeamChat'] ?? '', 'attr') ?>"
+     data-guidance-team-chat-url="<?= esc($notificationDestinations['guidanceTeamChat'] ?? '', 'attr') ?>"
+     data-facilities-team-chat-url="<?= esc($notificationDestinations['facilitiesTeamChat'] ?? '', 'attr') ?>"
      data-bs-title="Notifications" data-bs-toggle="tooltip" data-bs-placement="bottom">
   <button class="header-action dropdown-toggle" type="button" id="notificationBell"
           data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"

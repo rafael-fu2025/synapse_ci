@@ -167,6 +167,11 @@
             <i class="bi bi-question-circle-fill text-primary fs-1 opacity-75" data-confirm-icon data-confirm-icon-body aria-hidden="true"></i>
           </div>
           <p class="text-muted small mb-0" id="synapseConfirmMessage" data-confirm-message>Are you sure?</p>
+          <div class="mt-3 text-start" data-confirm-reason-group hidden>
+            <label class="form-label" for="synapseConfirmReason">Cancellation reason <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="text" id="synapseConfirmReason" class="form-control" maxlength="255" aria-describedby="synapseConfirmReasonHelp" data-confirm-reason-input disabled>
+            <p class="small text-muted mt-2 mb-0" id="synapseConfirmReasonHelp">Required, up to 255 characters. Keep it brief; do not include confidential medical or counseling details.</p>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-confirm-cancel>Cancel</button>

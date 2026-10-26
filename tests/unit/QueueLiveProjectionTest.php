@@ -18,7 +18,7 @@ final class QueueLiveProjectionTest extends CIUnitTestCase
     private function db(): \CodeIgniter\Database\BaseConnection
     {
         $db = Database::connect(['DBDriver' => 'SQLite3', 'database' => ':memory:', 'DBPrefix' => '', 'DBDebug' => true], false);
-        $db->query('CREATE TABLE queue_entries (id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER, unit TEXT, queue_date TEXT, ticket_code TEXT, status TEXT, priority TEXT)');
+        $db->query('CREATE TABLE queue_entries (id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER, unit TEXT, queue_date TEXT, ticket_code TEXT, status TEXT, priority TEXT, ticket_no INTEGER DEFAULT 1, started_at TEXT, completed_at TEXT)');
         return $db;
     }
 
@@ -38,7 +38,7 @@ final class QueueLiveProjectionTest extends CIUnitTestCase
         $snapshot = (new PortalQueueService($db, fn () => $this->actor(), static fn () => 7))->snapshot();
         self::assertSame(SchedulingClock::today(), $snapshot['date']);
         self::assertSame(['G-001', 'C-001'], array_column($snapshot['tickets'], 'ticket_code'));
-        foreach ($snapshot['tickets'] as $ticket) self::assertSame(['unit', 'ticket_code', 'status', 'priority'], array_keys($ticket));
+        foreach ($snapshot['tickets'] as $ticket) self::assertSame(['unit', 'ticket_code', 'status', 'priority', 'position', 'people_ahead', 'estimated_wait_minutes'], array_keys($ticket));
         $db->close();
     }
 
@@ -148,6 +148,30 @@ final class QueueLiveProjectionTest extends CIUnitTestCase
         self::assertStringNotContainsString('<script>bad()', $html);
         self::assertStringContainsString('&lt;script&gt;', $html);
         self::assertStringContainsString('Skipped', $html);
+    }
+
+    public function testInitialPersonalCardsShowProgressWithStatusSpecificMeaning(): void
+    {
+        $cases = [
+            ['waiting', 4, 3, 24, '#4', '3', '~24 min'],
+            ['waiting', 1, 0, 0, '#1', '0', 'You’re next'],
+            ['waiting', 2, 1, null, '#2', '1', 'Not enough recent data'],
+            ['called', null, 0, 0, 'Your turn', '0', 'Now'],
+            ['in_consultation', null, 0, 0, 'In progress', '0', 'In progress'],
+            ['skipped', null, null, null, 'On hold', '—', 'Ask reception'],
+        ];
+        foreach (['clinic', 'guidance'] as $unit) {
+            foreach ($cases as [$status, $position, $ahead, $minutes, $placeText, $aheadText, $waitText]) {
+                $html = view('portal/_queue_tickets', ['activeTickets' => [[
+                    'unit' => $unit, 'ticket_code' => 'C-087', 'priority' => 'routine', 'status' => $status,
+                    'position' => $position, 'people_ahead' => $ahead, 'estimated_wait_minutes' => $minutes,
+                ]]]);
+                foreach (['Your place in line', 'People ahead', 'Estimated wait', 'C-087'] as $label) self::assertStringContainsString($label, $html);
+                foreach (['position' => $placeText, 'ahead' => $aheadText, 'wait' => $waitText] as $key => $text) {
+                    self::assertMatchesRegularExpression('/data-queue-' . $key . '>' . preg_quote($text, '/') . '<\/dd>/', $html);
+                }
+            }
+        }
     }
 
     public function testRoutesAndViewsHaveReadOnlyScopedRefreshHooks(): void

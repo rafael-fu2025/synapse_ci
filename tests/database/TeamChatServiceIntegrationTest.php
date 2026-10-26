@@ -32,8 +32,7 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
             'DBDebug' => true, 'foreignKeys' => true, 'busyTimeout' => 1000,
         ];
         $this->db = Database::connect();
-        require_once ROOTPATH . 'tests/_support/TeamsNotificationFixture.php';
-        \Tests\Support\TeamsNotificationFixture::install($this->db);
+        config(\Config\Realtime::class)->enabled = false;
         $this->db->query('CREATE TABLE isolated_tenants (id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT)');
         $this->db->query('CREATE TABLE isolated_people (id INTEGER PRIMARY KEY, tenant_id INTEGER, first_name TEXT,
             last_name TEXT, mis_id TEXT, email TEXT, deleted_at TEXT)');
@@ -59,6 +58,8 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
         (new CreateTeamChat())->up();
         require_once APPPATH . 'Database/Migrations/2026-10-25-000001_AddTeamChatReferences.php';
         (new \App\Database\Migrations\AddTeamChatReferences())->up();
+        require_once ROOTPATH . 'tests/_support/TeamChatMentionFixture.php';
+        \Tests\Support\TeamChatMentionFixture::install($this->db);
         $this->tasks = new TeamTaskService();
         $this->chat = new TeamChatService($this->db, static fn () => null);
         $this->signIn(1);
@@ -475,11 +476,197 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
         $this->assertSame('Recovered', $this->chat->send('clinic', $this->input('Recovered'))['body']);
     }
 
+    public function testMentionDeliveryDeduplicatesExcludesSelfAndContainsNoFreeText(): void
+    {
+        $input = $this->input('@Person 2 @Person 1 @Person 2 @Person 9 SECRET') + ['mentions' => [
+            ['user_id' => 2, 'start' => 0, 'length' => 9], ['user_id' => 1, 'start' => 10, 'length' => 9],
+            ['user_id' => 2, 'start' => 20, 'length' => 9], ['user_id' => 9, 'start' => 30, 'length' => 9],
+        ]];
+        $hints = 0;
+        $chat = new TeamChatService($this->db, function () use (&$hints): void {
+            $this->assertSame(0, $this->db->transDepth);
+            $this->assertSame(2, $this->db->table('notifications')->countAllResults());
+            ++$hints;
+        });
+        $message = $chat->send('clinic', $input);
+        $rows = $this->db->table('notifications')->orderBy('recipient_user_id')->get()->getResultArray();
+        $this->assertSame([2, 9], array_map('intval', array_column($rows, 'recipient_user_id')));
+        foreach ($rows as $row) {
+            $this->assertSame('team_chat_mentioned', $row['type']);
+            $this->assertSame('clinic', $row['chat_unit']);
+            $this->assertSame($message['id'], (int) $row['chat_message_id']);
+            $this->assertSame(1, (int) $row['tenant_id']);
+            foreach (['recipient_person_id', 'appointment_id', 'appointment_version', 'referral_id', 'announcement_id',
+                'survey_id', 'workflow_event_id', 'team_unit', 'team_event_id', 'team_task_id', 'team_version', 'team_comment_id', 'read_at'] as $field) {
+                $this->assertNull($row[$field], $field);
+            }
+            $this->assertStringNotContainsString('SECRET', json_encode($row));
+            $this->assertStringNotContainsString('Person', json_encode($row));
+        }
+        $chat->send('clinic', $input);
+        $this->assertSame(1, $hints);
+        $this->assertSame(2, $this->db->table('notifications')->countAllResults());
+        // Deleting a delivered notice does not cause a nonce retry to backfill it.
+        $this->db->table('notifications')->where('tenant_id', 1)->delete();
+        $chat->send('clinic', $input);
+        $this->assertSame(0, $this->db->table('notifications')->countAllResults());
+    }
+
+    public function testMentionSchemaFailsClosedButPlainSelfAndOldRetriesStillWork(): void
+    {
+        $input = $this->input('@Person 2') + ['mentions' => [['user_id' => 2, 'start' => 0, 'length' => 9]]];
+        $old = $this->chat->send('clinic', $input);
+        $this->db->query('DROP TABLE isolated_notifications');
+        $this->db->resetDataCache();
+        $this->assertSame($old['id'], $this->chat->send('clinic', $input)['id']);
+        $this->chat->send('clinic', $this->input('Plain send'));
+        $this->chat->send('clinic', $this->input('@Person 1') + ['mentions' => [['user_id' => 1, 'start' => 0, 'length' => 9]]]);
+        try {
+            $this->chat->send('clinic', array_replace($input, ['client_nonce' => $this->input()['client_nonce']]));
+            $this->fail('Missing schema must fail closed.');
+        } catch (RuntimeException $e) {
+            $this->assertSame(503, $e->getCode());
+            $this->assertStringContainsString('migration', $e->getMessage());
+            $this->assertNull($e->getPrevious());
+        }
+        $this->assertSame(3, $this->db->table('team_chat_messages')->countAllResults());
+        $this->assertSame(0, $this->db->transDepth);
+    }
+
+    public function testRetryOfPreMigrationMentionNeverBackfills(): void
+    {
+        $input = $this->input('@Person 2') + ['mentions' => [['user_id' => 2, 'start' => 0, 'length' => 9]]];
+        $this->db->table('team_chat_messages')->insert(['tenant_id' => 1, 'unit' => 'clinic', 'sender_user_id' => 1,
+            'body' => $input['body'], 'client_nonce' => $input['client_nonce'], 'mentions' => json_encode($input['mentions']),
+            'created_at' => gmdate('Y-m-d H:i:s')]);
+        $id = (int) $this->db->insertID();
+        $this->assertSame($id, $this->chat->send('clinic', $input)['id']);
+        $this->assertSame(0, $this->db->table('notifications')->countAllResults());
+    }
+
+    public function testMentionHelperUsesItsDatabaseRatherThanTheDefaultAuthConnection(): void
+    {
+        $other = Database::connect(config('Database')->tests, false);
+        try {
+            $other->query('CREATE TABLE isolated_tenants (id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT)');
+            $other->query('CREATE TABLE isolated_users (id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER,
+                role TEXT, status TEXT, deleted_at TEXT)');
+            $other->query('CREATE TABLE isolated_people (id INTEGER PRIMARY KEY, tenant_id INTEGER, deleted_at TEXT)');
+            $other->query('CREATE TABLE isolated_team_chat_messages (id INTEGER PRIMARY KEY, tenant_id INTEGER, unit TEXT)');
+            \Tests\Support\TeamChatMentionFixture::install($other);
+            $other->table('tenants')->insert(['id' => 1, 'is_active' => 1]);
+            $other->table('users')->insert(['id' => 2, 'tenant_id' => 1, 'role' => 'superadmin', 'status' => 'active']);
+            $this->db->table('users')->where('id', 2)->update(['status' => 'suspended']);
+            $this->db->table('tenants')->where('id', 1)->update(['is_active' => 0]);
+            $writer = new \App\Services\TeamChatMentionNotifications($other);
+            $other->transBegin();
+            $message = ['id' => 1, 'tenant_id' => 1, 'unit' => 'facilities'];
+            $other->table('team_chat_messages')->insert($message);
+            $writer->enqueue($message, ['id' => 1, 'tenant_id' => 1], [['user_id' => 2]]);
+            $other->transCommit();
+            $writer->publishCommitted();
+            $this->assertSame(1, $other->table('notifications')->countAllResults());
+            $this->assertSame(0, $this->db->table('notifications')->countAllResults());
+        } finally {
+            if ($other->transDepth > 0) $other->transRollback();
+            $other->close();
+        }
+    }
+
+    public function testMentionInsertionFailureRollsBackMessageAndAllRecipients(): void
+    {
+        $this->db->query("CREATE TRIGGER reject_second_mention BEFORE INSERT ON isolated_notifications
+            WHEN NEW.recipient_user_id=3 BEGIN SELECT RAISE(ABORT, 'PRIVATE storage detail'); END");
+        $input = $this->input('@Person 3 @Person 2') + ['mentions' => [
+            ['user_id' => 3, 'start' => 0, 'length' => 9], ['user_id' => 2, 'start' => 10, 'length' => 9]]];
+        $hints = [];
+        $chat = new TeamChatService($this->db, function (...$hint) use (&$hints) { $hints[] = $hint; });
+        $this->fails(503, fn () => $chat->send('clinic', $input));
+        $this->assertSame(0, $this->db->table('team_chat_messages')->countAllResults());
+        $this->assertSame(0, $this->db->table('notifications')->countAllResults());
+        $this->assertSame([], $hints);
+        $this->assertSame(0, $this->db->transDepth);
+        $this->assertTrue($this->db->transStatus());
+        $this->db->query('DROP TRIGGER reject_second_mention');
+        $chat->send('clinic', $input);
+        $this->assertSame([2, 3], array_map('intval', array_column(
+            $this->db->table('notifications')->orderBy('id')->get()->getResultArray(), 'recipient_user_id')));
+    }
+
+    public function testRecipientsAreRefreshedAfterValidationOnTheOwningDatabase(): void
+    {
+        foreach (['role', 'status', 'deleted', 'tenant', 'person', 'inactive_tenant'] as $change) {
+            $input = $this->input('@Person 2') + ['mentions' => [['user_id' => 2, 'start' => 0, 'length' => 9]]];
+            // Execute after the prepared message INSERT, hence after name/roster validation.
+            $this->db->connID->createFunction('change_mention_identity', function () use ($change): int {
+                $sql = match ($change) {
+                    'role' => "UPDATE isolated_users SET role='counsellor' WHERE id=2",
+                    'status' => "UPDATE isolated_users SET status='suspended' WHERE id=2",
+                    'deleted' => "UPDATE isolated_users SET deleted_at='2026-10-26' WHERE id=2",
+                    'tenant' => 'UPDATE isolated_users SET tenant_id=2 WHERE id=2',
+                    'person' => "UPDATE isolated_people SET deleted_at='2026-10-26' WHERE id=2",
+                    'inactive_tenant' => 'UPDATE isolated_tenants SET is_active=0 WHERE id=1',
+                };
+                $this->db->connID->exec($sql);
+                return 1;
+            });
+            $this->db->query('CREATE TRIGGER change_mention AFTER INSERT ON isolated_team_chat_messages
+                BEGIN SELECT change_mention_identity(); END');
+            $this->chat->send('clinic', $input);
+            $this->assertSame(0, $this->db->table('notifications')->countAllResults(), $change);
+            $this->db->query('DROP TRIGGER change_mention');
+            $this->db->table('users')->where('id', 2)->update(['role' => 'clinic_staff', 'status' => 'active', 'tenant_id' => 1, 'deleted_at' => null]);
+            $this->db->table('people')->where('id', 2)->update(['deleted_at' => null]);
+            $this->db->table('tenants')->where('id', 1)->update(['is_active' => 1]);
+        }
+    }
+
+    public function testMentionRolesIncludeGuidanceFacilitiesAndSuperadminWithoutBroadcasts(): void
+    {
+        foreach (['clinic' => [1, 2], 'guidance' => [6, 5], 'facilities' => [8, 7]] as $unit => [$actor, $recipient]) {
+            $this->signIn($actor);
+            $body = '@Person ' . $recipient . ' @Person 9';
+            $message = $this->chat->send($unit, $this->input($body) + ['mentions' => [
+                ['user_id' => $recipient, 'start' => 0, 'length' => 9], ['user_id' => 9, 'start' => 10, 'length' => 9]]]);
+            $rows = $this->db->table('notifications')->where('chat_message_id', $message['id'])->orderBy('recipient_user_id')->get()->getResultArray();
+            $this->assertSame([$recipient, 9], array_map('intval', array_column($rows, 'recipient_user_id')));
+            $this->assertSame([$unit, $unit], array_column($rows, 'chat_unit'));
+        }
+    }
+
+    public function testAroundAnchorsTargetLastAndKeepsOlderPaginationSemantics(): void
+    {
+        $ids = [];
+        for ($i = 0; $i < 85; ++$i) $ids[] = $this->chat->send('clinic', $this->input())['id'];
+        foreach ([0, 39, 40, 60, 84] as $index) {
+            $page = $this->chat->history('clinic', ['around' => (string) $ids[$index]]);
+            $this->assertSame(array_slice($ids, max(0, $index - 39), min(40, $index + 1)), array_column($page['messages'], 'id'));
+            $this->assertSame($ids[$index], $page['messages'][count($page['messages']) - 1]['id']);
+            $this->assertSame($index >= 40, $page['has_more']);
+            $this->assertSame($index >= 40 ? $ids[$index - 39] : null, $page['next_before']);
+            $this->assertSame($ids[84], $page['latest_id']);
+            $this->assertSame(0, $page['last_read_id']);
+            if ($page['has_more']) {
+                $older = $this->chat->history('clinic', ['before' => $page['next_before']]);
+                $this->assertLessThan($page['messages'][0]['id'], $older['messages'][count($older['messages']) - 1]['id']);
+            }
+        }
+        $this->fails(422, fn () => $this->chat->history('clinic', ['around' => 99999]));
+        $this->signIn(11);
+        $this->fails(422, fn () => $this->chat->history('clinic', ['around' => $ids[0]]));
+        $this->signIn(9);
+        $this->fails(422, fn () => $this->chat->history('guidance', ['around' => $ids[0]]));
+        $this->assertSame(0, $this->db->table('team_chat_reads')->countAllResults());
+    }
+
     public function testStrictCursorsAndUnsupportedInput(): void
     {
         foreach ([['before' => 0], ['before' => null], ['after' => null], ['after' => -1], ['after' => false],
             ['before' => []], ['after' => '01'], ['before' => '1e2'], ['after' => 1.0], ['after' => ' 1'],
-            ['before' => 1, 'after' => 0], ['limit' => 100], ['page' => 2]] as $filters) {
+            ['before' => 1, 'after' => 0], ['around' => 0], ['around' => null], ['around' => false],
+                        ['around' => '01'], ['around' => 1.0], ['around' => '9223372036854775808'], ['around' => []],
+                        ['around' => 1, 'before' => 2], ['around' => 1, 'after' => 0],
+                        ['around' => 1, 'before' => 2, 'after' => 0], ['limit' => 100], ['page' => 2]] as $filters) {
             $this->fails(422, fn () => $this->chat->history('clinic', $filters));
         }
         foreach ([[], ['last_read_id' => null], ['last_read_id' => true], ['last_read_id' => '01'],

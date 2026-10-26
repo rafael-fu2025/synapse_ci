@@ -192,7 +192,8 @@
           divider = true;
         }
         const article = node('article', 'team-chat-message' + (message.sender_user_id === Number(root.dataset.actorId) ? ' is-own' : ''));
-        article.dataset.messageId = String(id);
+        article.dataset.messageId = String(id); article.id = `chat-message-${id}`; article.tabIndex = -1;
+        article.classList.toggle('is-targeted', id === initial.target_message_id);
         const bubble = node('div', 'team-chat-bubble'), header = node('div', 'team-chat-message-header');
         header.append(node('strong', '', message.sender_name));
         const time = node('time', '', timeFormat.format(stamp));
@@ -501,8 +502,12 @@
     });
     initial.messages.forEach(message => state.messages.set(message.id, message));
     summary(initial); render();
+    const target = Number.isSafeInteger(initial.target_message_id) ? log.querySelector(`[data-message-id="${initial.target_message_id}"]`) : null;
     const unread = log.querySelector('.team-chat-unread-divider');
-    if (unread) log.scrollTop = Math.max(0, unread.offsetTop - log.offsetTop - 8); else log.scrollTop = log.scrollHeight;
+    if (target) {
+      log.scrollTop = Math.max(0, target.offsetTop - log.offsetTop - (log.clientHeight - target.offsetHeight) / 2);
+      target.focus({ preventScroll: true });
+    } else if (unread) log.scrollTop = Math.max(0, unread.offsetTop - log.offsetTop - 8); else log.scrollTop = log.scrollHeight;
     connection.textContent = state.historyPaused ? 'Viewing history' : connectionText();
     resizeBody(); controls(); scheduleRead(); schedule(initial.after_mode && initial.has_more ? 150 : cadence());
   }

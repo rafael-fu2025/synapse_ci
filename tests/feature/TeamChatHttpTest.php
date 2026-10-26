@@ -32,8 +32,7 @@ final class TeamChatHttpTest extends CIUnitTestCase
             'DBDebug' => true, 'foreignKeys' => true, 'busyTimeout' => 1000,
         ];
         $this->db = Database::connect();
-        require_once ROOTPATH . 'tests/_support/TeamsNotificationFixture.php';
-        \Tests\Support\TeamsNotificationFixture::install($this->db);
+        config(\Config\Realtime::class)->enabled = false;
         $this->assertSame(':memory:', $this->db->database);
         $this->db->query('CREATE TABLE chat_http_tenants (id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT)');
         $this->db->query('CREATE TABLE chat_http_people (id INTEGER PRIMARY KEY, tenant_id INTEGER, first_name TEXT, last_name TEXT, mis_id TEXT, email TEXT, deleted_at TEXT)');
@@ -55,6 +54,8 @@ final class TeamChatHttpTest extends CIUnitTestCase
         (new CreateTeamChat())->up();
         require_once APPPATH . 'Database/Migrations/2026-10-25-000001_AddTeamChatReferences.php';
         (new AddTeamChatReferences())->up();
+        require_once ROOTPATH . 'tests/_support/TeamChatMentionFixture.php';
+        \Tests\Support\TeamChatMentionFixture::install($this->db);
         helper(['form', 'url']);
     }
 
@@ -198,6 +199,34 @@ final class TeamChatHttpTest extends CIUnitTestCase
             $this->json($this->requestAs(8, 'GET', 'clinic/teams/chat/tasks?q=Needle'), 200)['data']);
         $this->assertSame(0, $this->db->table('team_chat_messages')->countAllResults());
         $this->assertSame(0, $this->db->table('team_chat_reads')->countAllResults());
+    }
+
+    public function testMentionLinksOpenTheScopedMessageRatherThanLatestUnreadPage(): void
+    {
+        for ($i = 1; $i <= 90; $i++) $this->seed($i);
+        $page = $this->requestAs(1, 'GET', 'clinic/teams/chat?message=10', json: false);
+        $page->assertStatus(200);
+        $html = $page->getBody();
+        $this->assertStringContainsString('id="chat-message-10"', $html);
+        $this->assertStringNotContainsString('id="chat-message-90"', $html);
+        $this->assertStringContainsString('is-targeted', $html);
+        $document = new \DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        try { $document->loadHTML($html, LIBXML_NONET); }
+        finally { libxml_clear_errors(); libxml_use_internal_errors($previous); }
+        $root = (new \DOMXPath($document))->query('//*[@data-team-chat]')->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $root);
+        $initial = json_decode($root->getAttribute('data-initial'), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame(10, $initial['target_message_id']);
+        $this->assertTrue($initial['browsing_history']);
+        $this->assertStringContainsString('no-store', $page->response()->getHeaderLine('Cache-Control'));
+        $this->assertSame(0, $this->db->table('team_chat_reads')->countAllResults());
+        $guidance = $this->seed(91, 4, 'guidance');
+        $foreign = $this->seed(92, 8, tenant: 2);
+        foreach (['message=0', 'message=-1', 'message=01', 'message[]=10', 'message=999999',
+            'message=' . $guidance, 'message=' . $foreign, 'message=10&before=20'] as $query) {
+            $this->json($this->requestAs(1, 'GET', 'clinic/teams/chat?' . $query), 422);
+        }
     }
 
     public function testFormPostRoundTripsMultipleTasksMentionsAndReply(): void

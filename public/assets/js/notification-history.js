@@ -20,10 +20,18 @@
     let configured = {};
     try { configured = JSON.parse(root.dataset.destinations); } catch (_) { /* No untrusted fallback. */ }
     const destinations = new Set(Object.values(configured).map(value => httpDestination(value)?.href).filter(Boolean));
+    const chatDestinations = [configured.clinicTeamChat, configured.guidanceTeamChat, configured.facilitiesTeamChat]
+      .map(httpDestination).filter(url => url && !url.search && !url.hash);
     const portal = httpDestination(configured.portal)?.href;
     function destination(value) {
       const url = httpDestination(value);
-      return url && destinations.has(url.href) ? url.href : portal;
+      if (url && destinations.has(url.href)) return url.href;
+      if (url) {
+        const message = url.searchParams.get('message');
+        if (/^[1-9][0-9]*$/.test(message || '') && Number.isSafeInteger(Number(message))
+            && chatDestinations.some(base => url.href === `${base.href}?message=${message}#chat-message-${message}`)) return url.href;
+      }
+      return portal;
     }
     let filter = 'all', page = 1, pages = 1, unread = 0, loaded = false;
     let controller, timer, debounce, sequence = 0, busy = false, writing = false, dirty = false, stopped = false, auth = false;
@@ -78,7 +86,8 @@
           copy.href = target; copy.dataset.historyDestination = 'true';
           if (new URL(target).origin !== location.origin) copy.dataset.navigation = 'false';
         }
-        const message = document.createElement('p'); message.className = 'notification-history-message mb-1 mt-1'; message.textContent = item.message;
+        const message = document.createElement('p'); message.className = 'notification-history-message mb-1 mt-1';
+        message.textContent = item.title === 'Team chat mention' ? 'You were mentioned in your team chat. Open the conversation to view the message.' : item.message;
         const time = document.createElement('time'); time.className = 'small text-muted';
         time.textContent = typeof item.created_at === 'string' ? item.created_at.slice(0, 16).replace('T', ' ') : '';
         if (typeof item.created_at === 'string') time.dateTime = item.created_at;

@@ -1,7 +1,8 @@
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex gap-2">
+<div class="d-flex flex-wrap gap-2">
+  <a href="<?= esc(site_url('portal/visits')) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>My Visit History</a>
   <a href="<?= site_url('/portal/appointments/clinic/create') ?>" class="btn btn-outline-primary btn-sm" data-app-modal-open>
     <i class="bi bi-calendar-plus me-1"></i> Request Clinic Visit
   </a>
@@ -184,6 +185,39 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
         </dl>
       </div>
     </div>
+
+    <!-- Emergency Contact Card (Student / Employee self-service) -->
+    <div class="card border-0 shadow-sm p-3 mb-4" style="max-width: 360px;" data-portal-emergency-card aria-labelledby="portalEmergencyCardTitle">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0 text-dark" id="portalEmergencyCardTitle">
+          <i class="bi bi-telephone-plus text-primary me-1" aria-hidden="true"></i> Emergency Contact
+        </h6>
+        <a href="<?= esc(site_url('portal/settings')) ?>" class="btn btn-outline-primary btn-sm py-0" data-app-modal-open>
+          <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
+        </a>
+      </div>
+      <div data-portal-emergency-content>
+        <?php if (!empty($health['emergency_contact_name']) || !empty($health['emergency_contact_phone'])): ?>
+          <dl class="row mb-0 small">
+            <dt class="col-5 text-muted fw-normal">Contact:</dt>
+            <dd class="col-7 fw-semibold mb-1 text-break"><?= esc($health['emergency_contact_name'] ?? '—') ?></dd>
+            <?php if (!empty($health['emergency_contact_relationship'])): ?>
+              <dt class="col-5 text-muted fw-normal">Relationship:</dt>
+              <dd class="col-7 mb-1 text-break"><?= esc($health['emergency_contact_relationship']) ?></dd>
+            <?php endif; ?>
+            <?php if (!empty($health['emergency_contact_phone'])): ?>
+              <dt class="col-5 text-muted fw-normal">Phone:</dt>
+              <dd class="col-7 mb-0 text-break"><a href="tel:<?= esc(preg_replace('/[^\d+]/', '', $health['emergency_contact_phone'])) ?>" class="text-decoration-none"><?= esc($health['emergency_contact_phone']) ?></a></dd>
+            <?php endif; ?>
+          </dl>
+        <?php else: ?>
+          <p class="small text-muted mb-2">No emergency contact recorded yet. Add one so clinic staff know who to reach in an emergency.</p>
+          <a href="<?= esc(site_url('portal/settings')) ?>" class="btn btn-outline-secondary btn-sm" data-app-modal-open>
+            <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Add emergency contact
+          </a>
+        <?php endif; ?>
+      </div>
+    </div>
   </div>
 
   <!-- Right Column: My Appointments -->
@@ -202,7 +236,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
       </div>
       <div class="px-3 pb-3">
         <form method="get" action="<?= esc(site_url('/portal')) ?>" class="row g-2 align-items-end" role="search" aria-label="Filter my appointments" data-filter-form>
-          <div class="col-12 col-sm-4">
+          <div class="col-12 col-sm">
             <label for="portal-appointment-service" class="form-label small mb-1">Service</label>
             <select id="portal-appointment-service" name="service" class="form-select form-select-sm">
               <?php foreach (['all' => 'All services', 'clinic' => 'University Clinic', 'guidance' => 'Guidance & Counseling'] as $value => $label): ?>
@@ -210,7 +244,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="col-12 col-sm-4">
+          <div class="col-12 col-sm">
             <label for="portal-appointment-status" class="form-label small mb-1">Status</label>
             <select id="portal-appointment-status" name="status" class="form-select form-select-sm">
               <?php foreach ([
@@ -227,7 +261,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="col-12 col-sm-4">
+          <div class="col-12 col-sm">
             <label for="portal-appointment-sort" class="form-label small mb-1">Sort by date</label>
             <select id="portal-appointment-sort" name="sort" class="form-select form-select-sm">
               <?php foreach (['upcoming' => 'Upcoming first', 'date_desc' => 'Newest first', 'date_asc' => 'Oldest first'] as $value => $label): ?>
@@ -235,7 +269,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="col-12 d-flex gap-2">
+          <div class="col-12 col-sm-auto d-flex gap-2">
             <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm" data-filter-reset>Reset</a>
           </div>
         </form>
@@ -308,11 +342,13 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
                              aria-label="<?= esc('View details for ' . $serviceLabel((string) $a['unit']) . ' appointment on ' . date('M j, Y', strtotime($a['starts_at']))) ?>">Details</a>
                           <?php if (in_array($a['status'], ['requested', 'scheduled', 'confirmed'], true)): ?>
                             <form action="<?= site_url('/portal/appointments/' . $a['unit'] . '/cancel/' . $a['id']) ?>" method="POST" class="d-inline" data-background-submit
+                                  data-confirm-reason
                                   data-confirm="Cancel this appointment or pending request? Any reserved slot will be released."
                                   data-confirm-title="Cancel appointment"
                                   data-confirm-label="Cancel appointment"
                                   data-confirm-tone="danger">
                               <?= csrf_field() ?>
+                              <input type="hidden" name="reason" value="">
                               <button type="submit" class="btn btn-outline-danger btn-sm py-0">Cancel</button>
                             </form>
                           <?php endif; ?>

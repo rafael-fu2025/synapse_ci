@@ -37,21 +37,26 @@ final class TeamChatService
         return $context;
     }
 
-    /** before: positive id; after: nonnegative id; mutually exclusive, fixed 40/page. */
+    /** before/around: positive id; after: nonnegative id; exclusive, fixed 40/page. */
     public function history(string $unit, array $filters = []): array
     {
         $context = $this->context($unit);
-        $this->keys($filters, ['before', 'after']);
-        if (array_key_exists('before', $filters) && array_key_exists('after', $filters)) {
-            throw new RuntimeException('Use before or after, not both.', 422);
+        $this->keys($filters, ['before', 'after', 'around']);
+        if (count($filters) > 1) {
+            throw new RuntimeException('Use only one of before, after or around.', 422);
         }
         $after = array_key_exists('after', $filters);
+        $around = array_key_exists('around', $filters);
         $cursor = $after ? $this->integer($filters['after'], true)
-            : (array_key_exists('before', $filters) ? $this->integer($filters['before'], false) : null);
-        return $this->storage(function () use ($unit, $context, $after, $cursor): array {
+            : ($around ? $this->integer($filters['around'], false)
+                : (array_key_exists('before', $filters) ? $this->integer($filters['before'], false) : null));
+        return $this->storage(function () use ($unit, $context, $after, $around, $cursor): array {
             $actor = $context['actor'];
+            if ($around && $this->scope('team_chat_messages', $unit, $actor)->where('id', $cursor)->countAllResults() !== 1) {
+                throw new RuntimeException('Target message must exist in this department.', 422);
+            }
             $query = $this->scope('team_chat_messages', $unit, $actor);
-            if ($cursor !== null) { $query->where('id ' . ($after ? '>' : '<'), $cursor); }
+            if ($cursor !== null) { $query->where('id ' . ($after ? '>' : ($around ? '<=' : '<')), $cursor); }
             $rows = $query->orderBy('id', $after ? 'ASC' : 'DESC')->limit(self::PAGE_LIMIT + 1)->get()->getResultArray();
             $more = count($rows) > self::PAGE_LIMIT;
             $rows = array_slice($rows, 0, self::PAGE_LIMIT);
@@ -75,6 +80,7 @@ final class TeamChatService
             $this->db->resetTransStatus();
             if (!$this->db->transBegin()) { throw new RuntimeException('Team chat unavailable.', 503); }
             $duplicate = false;
+            $notifications = new TeamChatMentionNotifications($this->db);
             try {
                 foreach ($data['task_ids'] as $taskId) {
                     $query = $this->scope('team_tasks', $unit, $actor)->where('id', $taskId)
@@ -123,7 +129,9 @@ final class TeamChatService
                     $statement->close();
                 }
                 $row = $this->nonce($unit, $actor, $data['client_nonce']);
-                if ($row === null || !$this->db->transStatus() || !$this->db->transCommit()) {
+                if ($row === null) { throw new RuntimeException('Team chat unavailable.', 503); }
+                $notifications->enqueue($row, $actor, $data['mentions']);
+                if (!$this->db->transStatus() || !$this->db->transCommit()) {
                     throw new RuntimeException('Team chat unavailable.', 503);
                 }
             } catch (Throwable $e) {
@@ -137,6 +145,7 @@ final class TeamChatService
                 }
                 throw $e;
             }
+            $notifications->publishCommitted();
             $this->changed($actor, $unit);
             return $this->message($row, $context);
         });

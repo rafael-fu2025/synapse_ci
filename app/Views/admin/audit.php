@@ -27,7 +27,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
 }
 ?>
 <div class="card border-0 shadow-sm mb-3">
-  <div class="card-body">
+  <div class="card-body p-3">
     <?php if (! empty($filterErrors)): ?>
       <div class="alert alert-danger" role="alert">
         <p class="fw-bold mb-1">Please correct the audit filters:</p>
@@ -38,7 +38,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
         </ul>
       </div>
     <?php endif; ?>
-    <form action="<?= esc(site_url('/admin/audit'), 'attr') ?>" method="GET" class="row g-3">
+    <form action="<?= esc(site_url('/admin/audit'), 'attr') ?>" method="GET" class="row g-2" aria-label="Filter audit ledger">
       <?php foreach ([
           'event_type' => 'Event type',
           'action' => 'Action',
@@ -46,31 +46,35 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
           'entity_id' => 'Entity ID',
           'actor_user_id' => 'Actor user ID',
       ] as $key => $label): ?>
-        <div class="col-sm-6 col-lg-4">
-          <label for="audit-<?= esc($key, 'attr') ?>" class="form-label"><?= esc($label) ?> (exact match)</label>
-          <input type="text" class="form-control" id="audit-<?= esc($key, 'attr') ?>" name="<?= esc($key, 'attr') ?>" value="<?= esc($filters[$key] ?? '', 'attr') ?>">
+        <div class="col-12 col-sm-6 col-lg-3">
+          <label for="audit-<?= esc($key, 'attr') ?>" class="form-label small mb-1"><?= esc($label) ?></label>
+          <input type="text" class="form-control form-control-sm" aria-describedby="audit-filter-note" id="audit-<?= esc($key, 'attr') ?>" name="<?= esc($key, 'attr') ?>" value="<?= esc($filters[$key] ?? '', 'attr') ?>">
         </div>
       <?php endforeach; ?>
-      <div class="col-sm-6 col-lg-4">
-        <label for="audit-per-page" class="form-label">Page size</label>
-        <select class="form-select" id="audit-per-page" name="per_page">
+      <div class="col-12 col-sm-6 col-lg-3">
+        <label for="audit-per-page" class="form-label small mb-1">Page size</label>
+        <select class="form-select form-select-sm" id="audit-per-page" name="per_page">
           <?php foreach (['25', '50', '100'] as $size): ?>
             <option value="<?= esc($size, 'attr') ?>"<?= ($filters['per_page'] ?? '50') === $size ? ' selected' : '' ?>><?= esc($size) ?></option>
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="col-sm-6 col-lg-4">
-        <label for="audit-from" class="form-label">From</label>
-        <input type="date" class="form-control" id="audit-from" name="from" value="<?= esc($filters['from'] ?? '', 'attr') ?>" aria-describedby="audit-date-note">
-      </div>
-      <div class="col-sm-6 col-lg-4">
-        <label for="audit-to" class="form-label">To</label>
-        <input type="date" class="form-control" id="audit-to" name="to" value="<?= esc($filters['to'] ?? '', 'attr') ?>" aria-describedby="audit-date-note">
-      </div>
-      <div class="col-12">
-        <p class="text-muted small mb-2" id="audit-date-note">Dates use the server ledger timezone.</p>
-        <button type="submit" class="btn btn-primary">Apply filters</button>
-        <a href="<?= esc(site_url('/admin/audit'), 'attr') ?>" class="btn btn-outline-secondary ms-2">Clear filters</a>
+      <?php foreach (['from' => 'From', 'to' => 'To'] as $key => $label): ?>
+        <div class="col-12 col-sm-6 col-lg-3">
+          <label for="audit-<?= $key ?>-display" class="form-label small mb-1"><?= $label ?></label>
+          <input type="text" class="form-control form-control-sm" id="audit-<?= $key ?>-display" data-datepicker data-target="#audit-<?= $key ?>" placeholder="DD/MM/YYYY" autocomplete="off" aria-describedby="audit-date-note">
+          <input type="hidden" id="audit-<?= $key ?>" name="<?= $key ?>" value="<?= esc($filters[$key] ?? '', 'attr') ?>">
+        </div>
+      <?php endforeach; ?>
+      <div class="col-12 d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+        <div class="text-muted small">
+          <span id="audit-filter-note">Text and ID filters use exact matches.</span>
+          <span id="audit-date-note">Dates use the server ledger timezone.</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary btn-sm">Apply filters</button>
+          <a href="<?= esc(site_url('/admin/audit'), 'attr') ?>" class="btn btn-outline-secondary btn-sm">Clear filters</a>
+        </div>
       </div>
     </form>
   </div>

@@ -6,6 +6,28 @@
    --accent-color) resolve automatically in light and dark mode.
    ========================================================= */
 
+/* Text accents must not reuse the maroon action-fill color on dark surfaces. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(
+  .nd-inline-link, .activity-title a, .footer-copyright a, .footer-links a:hover,
+  .page-profile .profile-board-role, .page-profile .profile-chip-list span,
+  .settings-nav-item.active, .settings-nav-item.active:hover,
+  .page-roles .roles-item.active .roles-item-name, .page-activity .al-link, .fauth-link,
+  td.dp-cell:not(.is-disabled):not(.is-selected):hover .dp-day,
+  td.dp-cell.is-today:not(.is-selected) .dp-day,
+  td.dtp-cell:not(.is-disabled):not(.is-selected):hover .dtp-day,
+  td.dtp-cell.is-today:not(.is-selected) .dtp-day,
+  .dtp-wheel-item:not(.is-selected):hover
+) {
+  color: var(--primary-text-color);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(
+  td.dp-cell.is-today:not(.is-selected) .dp-day,
+  td.dtp-cell.is-today:not(.is-selected) .dtp-day
+) {
+  border-color: var(--focus-color);
+}
+
 /* Bootstrap dropdown link colours -> SYNAPSE maroon */
 .dropdown-menu {
   --bs-dropdown-link-hover-color: var(--fu-maroon, #800000);

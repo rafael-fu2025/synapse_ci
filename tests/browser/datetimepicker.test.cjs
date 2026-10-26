@@ -138,6 +138,32 @@ async function assertReachable(control, viewportHeight) {
 }
 
 for (const theme of ['light', 'dark']) {
+  test(`Month and year use themed custom dropdowns (${theme})`, async () => {
+    const page = await browser.newPage({ viewport: { width: 1024, height: 900 } });
+    try {
+      await page.goto(`${origin}/fixture`);
+      await page.locator('html').evaluate((el, value) => el.dataset.theme = value, theme);
+      await page.click('#surveyStartDisplay');
+      const popup = page.locator('.dtp-popup');
+      const month = popup.locator('.bd-select').filter({ has: page.locator('select.dtp-month') });
+      const year = popup.locator('.bd-select').filter({ has: page.locator('select.dtp-year') });
+      assert.equal(await popup.locator('.bd-select-toggle').count(), 2);
+      for (const control of [month, year]) {
+        assert.equal(await control.locator('.bd-select-toggle').evaluate(el => getComputedStyle(el).backgroundImage), 'none');
+      }
+      await month.locator('.bd-select-toggle').click();
+      await month.getByRole('option', { name: 'Feb', exact: true }).click();
+      assert.equal(await popup.locator('select.dtp-month').inputValue(), '1');
+      await year.locator('.bd-select-toggle').click();
+      await year.getByRole('option', { name: '2031', exact: true }).click();
+      assert.equal(await popup.locator('select.dtp-year').inputValue(), '2031');
+      await popup.locator('[data-dtp-next]').click();
+      assert.equal(await month.locator('.bd-select-label').textContent(), 'Mar');
+      assert.equal(await year.locator('.bd-select-label').textContent(), '2031');
+      await assertHorizontalBounds(popup, 1024);
+    } finally { await page.close(); }
+  });
+
   for (const width of [320, 390]) {
     test(`Time-only picker remains usable at ${width}x240 (${theme})`, { timeout: 15_000 }, async () => {
       const page = await browser.newPage({ viewport: { width, height: 240 }, reducedMotion: 'reduce' });

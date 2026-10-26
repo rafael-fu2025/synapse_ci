@@ -45,7 +45,7 @@ before(async () => {
         const reply = await scenario.api(call, scenario.calls.length);
         return json(res, reply.body, reply.status ?? 200, reply.headers);
       }
-      if (url.pathname === '/notification-fixture' || url.pathname === '/portal' || ['/portal/announcements', '/portal/surveys'].includes(url.pathname) || /^\/(clinic|guidance)\/(referrals|appointments)$/.test(url.pathname) || ['/guidance/cases', '/clinic/inventory', '/facilities'].includes(url.pathname) || /^\/(clinic|guidance|facilities)\/teams(?:\/calendar)?$/.test(url.pathname)) {
+      if (url.pathname === '/notification-fixture' || url.pathname === '/portal' || ['/portal/announcements', '/portal/surveys'].includes(url.pathname) || /^\/(clinic|guidance)\/(referrals|appointments)$/.test(url.pathname) || ['/guidance/cases', '/clinic/inventory', '/facilities'].includes(url.pathname) || /^\/(clinic|guidance|facilities)\/teams(?:\/(?:calendar|chat))?$/.test(url.pathname)) {
         res.writeHead(200, { 'Content-Type': 'text/html', 'Cache-Control': 'no-store' }).end(scenario?.html || html);
         return;
       }
@@ -475,6 +475,101 @@ for (const unit of ['clinic', 'guidance', 'facilities']) {
       });
     }
   }
+}
+
+for (const unit of ['clinic', 'guidance', 'facilities']) {
+  for (const mode of ['path', 'base', 'index', 'cross-host']) {
+    test(`${unit} chat mention: ${mode} canonical deep links, private preview and one CSRF read`, { timeout: 20000 }, async t => {
+      const prefix = mode === 'index' ? '/humus/index.php' : mode === 'base' ? '/humus' : '';
+      const host = mode === 'cross-host'
+        ? `http://${unit === 'facilities' ? 'bmg' : unit}.notification.invalid:${new URL(origin).port}` : origin;
+      const base = `${host}${prefix}/${unit}/teams/chat`;
+      const target = `${base}?message=55#chat-message-55`;
+      const valid = [target, `${base}?message=1#chat-message-1`, `${base}?message=9007199254740991#chat-message-9007199254740991`];
+      const malicious = [base, target + '&extra=1', target.replace('?message=55', '?message=55&extra=1'),
+        target.replace('#chat-message-55', '#chat-message-56'), target.replace(host, 'http://attacker.invalid'),
+        target.replace('://', '://spoof:password@'), target.replace('/teams/chat?', '/teams/chat/55?')];
+      let writing;
+      const s = await fixture(t, {
+        render: { basePath: prefix ? 'humus' : '', indexPage: mode === 'index' ? 'index.php' : '', dedicatedHosts: mode === 'cross-host' },
+        api: async call => {
+          if (call.method === 'GET') return { body: payload(10, [...valid, ...malicious].map((url, i) => item(i + 1, {
+            title: 'Team chat mention', message: '<img src=x onerror="window.notificationXss=1">PRIVATE-CHAT sender/body/mention', url
+          }))) };
+          await writing.promise;
+          return { body: payload(0, []) };
+        }
+      });
+      const { page } = s;
+      const fallback = `${origin}${prefix}/portal#my-appointments`;
+      await ready(page, '10'); await open(page); await ready(page, '10');
+      assert.equal(await page.locator('[data-notifications]').getAttribute(`data-${unit}-team-chat-url`), base);
+      assert.deepEqual(await page.locator(items).evaluateAll(nodes => nodes.map(node => node.href)),
+        [...valid, ...malicious.map(() => fallback)]);
+      assert.deepEqual(await page.locator('.notification-title').allTextContents(), Array(10).fill('Team chat mention'));
+      assert.deepEqual(await page.locator('.notification-text').allTextContents(), Array(10).fill('Open your team chat to view the message.'));
+      assert.equal(await page.locator(`${items} .bi-at`).count(), 10);
+      assert.doesNotMatch(await page.locator('[data-notification-list]').innerHTML(), /PRIVATE-CHAT|onerror|<img/);
+      // A DOM mutation must not bypass the destination allowlist at click time.
+      writing = s.hold();
+      await page.locator(items).nth(3).evaluate(node => { node.href = 'https://attacker.invalid/clinic/teams/chat?message=55#chat-message-55'; });
+      await page.locator(items).nth(3).click();
+      await assertEventually(() => posts(s).length === 1);
+      assert.equal(posts(s)[0].path, '/notifications/4/read');
+      assert.equal(page.url(), origin + '/notification-fixture');
+      writing.release(); await page.waitForURL(fallback);
+      await page.goto(origin + '/notification-fixture'); await ready(page, '10'); await open(page); await ready(page, '10');
+      const external = [];
+      await page.route('http://*.notification.invalid:*/**', async route => {
+        external.push({ type: route.request().resourceType(), headers: await route.request().allHeaders() });
+        await route.fulfill({ contentType: 'text/html', body: '<title>Team chat destination</title>' });
+      });
+      const selected = page.locator(items).first();
+      assert.equal(await selected.getAttribute('data-navigation'), mode === 'cross-host' ? 'false' : null);
+      const csrf = await page.evaluate(() => ({ header: document.querySelector('meta[name="csrf-header"]').content.toLowerCase(),
+        token: document.querySelector('meta[name="csrf-token"]').content }));
+      writing = s.hold();
+      await selected.evaluate(node => { node.click(); node.click(); });
+      await assertEventually(() => posts(s).length === 2);
+      await settled(page);
+      assert.equal(posts(s).length, 2, 'Double click adds only one mark-read POST');
+      assert.equal(posts(s)[1].path, '/notifications/1/read');
+      assert.equal(posts(s)[1].headers[csrf.header], csrf.token);
+      assert.equal(posts(s)[1].headers['x-requested-with'], 'XMLHttpRequest');
+      assert.equal(page.url(), origin + '/notification-fixture');
+      assert.equal(external.length, 0, 'Navigation waits for the read acknowledgement');
+      writing.release(); await page.waitForURL(target);
+      assert.equal(posts(s).length, 2);
+      if (mode === 'cross-host') {
+        assert.equal(external.length, 1);
+        assert.equal(external[0].type, 'document');
+        assert.equal(external[0].headers[csrf.header], undefined);
+        assert.equal(external[0].headers['x-requested-with'], undefined);
+      }
+      assert.equal(await page.evaluate(() => window.notificationXss), undefined);
+    });
+  }
+}
+
+const malformedChatLinks = [
+  '?message=0#chat-message-0', '?message=-1#chat-message--1', '?message=01#chat-message-01',
+  '?message=1.5#chat-message-1.5', '?message=1e2#chat-message-1e2', '?message=9007199254740992#chat-message-9007199254740992',
+  '?message=55', '#chat-message-55', '?message=55#chat-message-55-extra', '?message=55&message=55#chat-message-55',
+  '?message=%35%35#chat-message-55', '?message=55#chat-message-%35%35', '?message=+55#chat-message-55',
+  '?message=#chat-message-', '?message=NaN#chat-message-NaN', '?other=55#chat-message-55',
+  '?message=55&#chat-message-55', '?message=55#chat-message-55#extra'
+];
+for (let offset = 0; offset < malformedChatLinks.length; offset += 10) {
+  test(`Chat mentions reject malformed message links ${offset + 1}-${Math.min(offset + 10, malformedChatLinks.length)}`, { timeout: 20000 }, async t => {
+    const links = malformedChatLinks.slice(offset, offset + 10);
+    const s = await fixture(t, { api: () => ({ body: payload(links.length, links.map((suffix, i) => item(i + 1, {
+      title: 'Team chat mention', message: 'PRIVATE-CHAT', url: '/clinic/teams/chat' + suffix
+    }))) }) });
+    await ready(s.page, String(links.length)); await open(s.page);
+    assert.deepEqual(await s.page.locator(items).evaluateAll(nodes => nodes.map(node => node.href)),
+      links.map(() => origin + '/portal#my-appointments'));
+    assert.doesNotMatch(await s.page.locator('[data-notification-list]').innerHTML(), /PRIVATE-CHAT/);
+  });
 }
 
 test('Team destinations reject arbitrary IDs, query strings, fragments and injected URLs on render and click', { timeout: 20_000 }, async t => {

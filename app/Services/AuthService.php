@@ -39,11 +39,25 @@ final class AuthService
     }
 
     /**
-     * Authenticate user via local credentials or delegated MIS API.
+     * Authenticate user via local credentials or delegated MIS API and establish the web session.
      *
      * @return array<string, mixed>|null Returns session payload on success, null on failure.
      */
     public function login(string $identifier, string $password): ?array
+    {
+        $sessionData = $this->authenticate($identifier, $password);
+        if ($sessionData === null) {
+            return null;
+        }
+        return $this->establishUserSession($sessionData);
+    }
+
+    /**
+     * Validate credentials without binding any session state; the web session and mobile API share this path.
+     *
+     * @return array<string, mixed>|null Returns identity payload on success, null on failure.
+     */
+    public function authenticate(string $identifier, string $password): ?array
     {
         $id = trim($identifier);
         if ($id === '' || mb_strlen($id) > 100 || preg_match('/[\x00-\x1F\x7F]/', $id) || $password === '') {
@@ -58,7 +72,7 @@ final class AuthService
         }
         if ($localUser !== null && !empty($localUser['password_hash'])) {
             if (password_verify($password, $localUser['password_hash'])) {
-                return $this->establishUserSession($localUser);
+                return $this->identityFor($localUser);
             }
             return null; // Local account found but password incorrect
         }
@@ -69,17 +83,27 @@ final class AuthService
         if ($studentRes !== null) {
             $profile = $this->mapper->mapStudent($studentRes);
             $this->assertReturnedIdentifier($id, $profile['mis_id']);
-            return $this->provisionAndLogin($profile, 'student');
+            return $this->provision($profile, 'student');
         }
 
         $employeeRes = $this->misClient->employeeLogin($id, $password);
         if ($employeeRes !== null) {
             $profile = $this->mapper->mapEmployee($employeeRes);
             $this->assertReturnedIdentifier($id, $profile['mis_id']);
-            return $this->provisionAndLogin($profile, 'employee');
+            return $this->provision($profile, 'employee');
         }
 
         return null;
+    }
+
+    /** Identity payload with the same credential-version binding the session layer enforces. */
+    private function identityFor(array $user): ?array
+    {
+        $identity = (new AuthenticatedUser())->forIdentity((int) $user['id'], CurrentTenant::id());
+        if ($identity === null || (int) ($user['auth_version'] ?? 0) !== $identity['auth_version']) {
+            return null;
+        }
+        return $identity;
     }
 
     /**
@@ -258,7 +282,13 @@ final class AuthService
         return $person;
     }
 
-    private function provisionAndLogin(array $profile, string $kind): ?array
+    /**
+     * Provisions or refreshes the MIS identity transactionally and returns the validated identity payload.
+     *
+     * @param array<string, mixed> $profile
+     * @return array<string, mixed>|null
+     */
+    private function provision(array $profile, string $kind): ?array
     {
         $db = \Config\Database::connect();
         if (!$db->transBegin()) {
@@ -282,22 +312,18 @@ final class AuthService
             }
             throw $e;
         }
-        return $this->establishUserSession($user);
+        return $this->identityFor($user);
     }
 
     /**
-     * Initializes the user session only after fresh DB authorization.
+     * Initializes the user session from an already-validated identity.
      *
-     * @param array<string, mixed> $user
-     * @return array<string, mixed>|null
+     * @param array<string, mixed> $sessionData
+     * @return array<string, mixed>
      */
-    private function establishUserSession(array $user): ?array
+    private function establishUserSession(array $sessionData): array
     {
-        $sessionData = (new AuthenticatedUser())->forIdentity((int) $user['id'], CurrentTenant::id());
-        if ($sessionData === null || (int) ($user['auth_version'] ?? 0) !== $sessionData['auth_version']) {
-            return null;
-        }
-        $this->userModel->update($user['id'], ['last_login_at' => date('Y-m-d H:i:s')]);
+        $this->userModel->update($sessionData['id'], ['last_login_at' => date('Y-m-d H:i:s')]);
 
         AuthenticatedUser::clear();
         session()->remove(['_auth_notice', '_auth_expired']);

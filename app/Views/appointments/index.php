@@ -30,8 +30,8 @@
               <td><?= esc(ucwords(str_replace('_', ' ', $request['type']))) ?></td><td><?= esc($request['reason'] ?? 'Not provided') ?></td>
               <td class="text-end pe-3">
                 <a href="<?= site_url('/' . $unit . '/appointments/' . $request['id'] . '/confirm') ?>" class="btn btn-primary btn-sm" data-app-modal-open>Review &amp; Confirm</a>
-                <form action="<?= site_url('/' . $unit . '/appointments/cancel/' . $request['id']) ?>" method="POST" class="d-inline" data-background-submit data-confirm="Cancel this pending request? No time has been reserved." data-confirm-title="Cancel request" data-confirm-label="Cancel request" data-confirm-tone="danger">
-                  <?= csrf_field() ?><button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Cancel request"><i class="bi bi-x-circle"></i></button>
+                <form action="<?= site_url('/' . $unit . '/appointments/cancel/' . $request['id']) ?>" method="POST" class="d-inline" data-background-submit data-confirm-reason data-confirm="Cancel this pending request? No time has been reserved." data-confirm-title="Cancel request" data-confirm-label="Cancel request" data-confirm-tone="danger">
+                  <?= csrf_field() ?><input type="hidden" name="reason" value=""><button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Cancel request"><i class="bi bi-x-circle"></i></button>
                 </form>
               </td></tr>
           <?php endforeach; ?>
@@ -69,8 +69,8 @@
                   <?php if ($appt['local_date'] === $today && !empty($appt['staff_assignment_id'])): ?>
                     <form action="<?= site_url('/' . $unit . '/appointments/check-in/' . $appt['id']) ?>" method="POST" class="d-inline"><?= csrf_field() ?><button type="submit" class="btn btn-success btn-sm">Check-in to Queue</button></form>
                   <?php endif; ?>
-                  <form action="<?= site_url('/' . $unit . '/appointments/cancel/' . $appt['id']) ?>" method="POST" class="d-inline" data-background-submit data-confirm="Cancel this appointment? The scheduled slot will be released." data-confirm-title="Cancel appointment" data-confirm-label="Cancel appointment" data-confirm-tone="danger">
-                    <?= csrf_field() ?><button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Cancel appointment"><i class="bi bi-x-circle"></i></button>
+                  <form action="<?= site_url('/' . $unit . '/appointments/cancel/' . $appt['id']) ?>" method="POST" class="d-inline" data-background-submit data-confirm-reason data-confirm="Cancel this appointment? The scheduled slot will be released." data-confirm-title="Cancel appointment" data-confirm-label="Cancel appointment" data-confirm-tone="danger">
+                    <?= csrf_field() ?><input type="hidden" name="reason" value=""><button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Cancel appointment"><i class="bi bi-x-circle"></i></button>
                   </form>
                 <?php elseif ($appt['status'] === 'checked_in'): ?>
                   <a href="<?= site_url('/' . $unit . '/queue') ?>" class="btn btn-outline-primary btn-sm">View on Queue</a>

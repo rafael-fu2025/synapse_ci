@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/app') ?>
 <?= $this->section('content') ?>
 <?php
-$initial = $history + ['after_mode' => $afterMode, 'browsing_history' => $browsingHistory, 'members' => array_map(static fn(array $member): array => ['id' => (int) $member['id'], 'name' => $member['name']], $members)];
+$initial = $history + ['after_mode' => $afterMode, 'browsing_history' => $browsingHistory, 'target_message_id' => $targetMessageId ?? null, 'members' => array_map(static fn(array $member): array => ['id' => (int) $member['id'], 'name' => $member['name']], $members)];
 $initialJson = json_encode($initial, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
 $stamp = static fn(string $utc): string => (new DateTimeImmutable($utc, new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Asia/Manila'))->format('M j, Y · g:i A');
 
@@ -84,7 +84,7 @@ $hasMoreMembers = count($members) > $maxVisible;
       <div class="team-chat-tools"><button type="button" class="btn btn-outline-secondary btn-sm" data-chat-older hidden>Load older messages</button><span class="small text-muted" data-chat-history-status></span></div>
       <div class="team-chat-log" data-chat-log tabindex="0" role="region" aria-label="Channel messages, chronological order">
         <?php foreach ($history['messages'] as $message): ?>
-          <article class="team-chat-message <?= $message['sender_user_id'] === (int) $actor['id'] ? 'is-own' : '' ?>">
+          <article id="chat-message-<?= (int) $message['id'] ?>" tabindex="-1" class="team-chat-message <?= $message['sender_user_id'] === (int) $actor['id'] ? 'is-own' : '' ?><?= ($targetMessageId ?? null) === $message['id'] ? ' is-targeted' : '' ?>">
             <div class="team-chat-bubble">
               <div class="team-chat-message-header"><strong><?= esc($message['sender_name']) ?></strong><time><?= esc($stamp($message['created_at'])) ?></time></div>
               <?php if (!empty($message['reply_to'])): ?>

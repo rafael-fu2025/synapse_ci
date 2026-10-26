@@ -128,10 +128,11 @@ final class AppointmentRequestRoutesTest extends CIUnitTestCase
     {
         $this->ajaxPost($this->student, 'portal/appointments/clinic/store', $this->payload())->assertStatus(200);
         $appt = $this->latest($this->student);
-        $this->ajaxPost($this->staff, 'portal/appointments/clinic/cancel/' . $appt['id'], [])->assertStatus(403);
-        $this->ajaxPost($this->student, 'portal/appointments/guidance/cancel/' . $appt['id'], [])->assertStatus(404);
-        $this->ajaxPost($this->student, 'portal/appointments/clinic/cancel/' . $appt['id'], [])->assertStatus(200);
-        $this->ajaxPost($this->student, 'portal/appointments/clinic/cancel/' . $appt['id'], [])->assertStatus(409);
+        $reason = ['reason' => 'Patient requested cancellation'];
+        $this->ajaxPost($this->staff, 'portal/appointments/clinic/cancel/' . $appt['id'], $reason)->assertStatus(403);
+        $this->ajaxPost($this->student, 'portal/appointments/guidance/cancel/' . $appt['id'], $reason)->assertStatus(404);
+        $this->ajaxPost($this->student, 'portal/appointments/clinic/cancel/' . $appt['id'], $reason)->assertStatus(200);
+        $this->ajaxPost($this->student, 'portal/appointments/clinic/cancel/' . $appt['id'], $reason)->assertStatus(409);
     }
 
     public function testStaffRequestConfirmationAndStaleAjaxContract(): void

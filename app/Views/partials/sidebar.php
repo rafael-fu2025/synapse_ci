@@ -94,7 +94,10 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
         <?php if ($showPersonalHeading): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Personal Health</li>
         <?php endif; ?>
-        <li class="nav-item<?= $isSelfServiceRole ? ' personal-portal-entry' : '' ?>"><a class="nav-link <?= $isActive('portal') && !$isActive('portal/announcements') && !$isActive('portal/surveys') && !$isActive('portal/settings') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal')) ?>"><span class="nav-icon"><i class="ph-light ph-user-circle"></i></span><span class="nav-text">My Health Portal</span></a></li>
+        <li class="nav-item<?= $isSelfServiceRole ? ' personal-portal-entry' : '' ?>"><a class="nav-link <?= $isActive('portal') && !$isActive('portal/announcements') && !$isActive('portal/surveys') && !$isActive('portal/settings') && !$isActive('portal/visits') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal')) ?>"><span class="nav-icon"><i class="ph-light ph-user-circle"></i></span><span class="nav-text">My Health Portal</span></a></li>
+        <?php if (!empty($currentUser['person_id']) && in_array('portal.records.read', $currentUser['permissions'] ?? [], true)): ?>
+          <li class="nav-item"><a class="nav-link <?= $isActive('portal/visits') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/visits')) ?>"><span class="nav-icon"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="nav-text">My Visit History</span></a></li>
+        <?php endif; ?>
         <li class="nav-item"><a class="nav-link <?= $isActive('portal/announcements') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/announcements')) ?>"><span class="nav-icon"><i class="bi bi-megaphone"></i></span><span class="nav-text">Announcements</span></a></li>
         <?php if (!empty($currentUser['person_id'])): ?>
           <li class="nav-item"><a class="nav-link <?= $isActive('portal/surveys') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/surveys')) ?>"><span class="nav-icon"><i class="bi bi-clipboard-check"></i></span><span class="nav-text">My Surveys</span></a></li>

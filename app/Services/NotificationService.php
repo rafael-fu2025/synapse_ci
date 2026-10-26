@@ -37,10 +37,13 @@ final class NotificationService
             'surveys' => PortalContext::urlFor(PortalContext::PORTAL_MAIN, 'portal/surveys'),
             'clinicTeams' => PortalContext::urlFor(PortalContext::PORTAL_CLINIC, 'clinic/teams'),
             'clinicTeamCalendar' => PortalContext::urlFor(PortalContext::PORTAL_CLINIC, 'clinic/teams/calendar'),
+            'clinicTeamChat' => PortalContext::urlFor(PortalContext::PORTAL_CLINIC, 'clinic/teams/chat'),
             'guidanceTeams' => PortalContext::urlFor(PortalContext::PORTAL_GUIDANCE, 'guidance/teams'),
             'guidanceTeamCalendar' => PortalContext::urlFor(PortalContext::PORTAL_GUIDANCE, 'guidance/teams/calendar'),
+            'guidanceTeamChat' => PortalContext::urlFor(PortalContext::PORTAL_GUIDANCE, 'guidance/teams/chat'),
             'facilitiesTeams' => PortalContext::urlFor(PortalContext::PORTAL_BMG, 'facilities/teams'),
             'facilitiesTeamCalendar' => PortalContext::urlFor(PortalContext::PORTAL_BMG, 'facilities/teams/calendar'),
+            'facilitiesTeamChat' => PortalContext::urlFor(PortalContext::PORTAL_BMG, 'facilities/teams/chat'),
             'clinicAppointments' => PortalContext::urlFor(PortalContext::PORTAL_CLINIC, 'clinic/appointments'),
             'guidanceAppointments' => PortalContext::urlFor(PortalContext::PORTAL_GUIDANCE, 'guidance/appointments'),
             'clinicReferralSent' => PortalContext::urlFor(PortalContext::PORTAL_CLINIC, 'clinic/referrals?tab=sent'),
@@ -207,6 +210,7 @@ final class NotificationService
             ->select($workflowAvailable ? "(SELECT event_kind FROM {$workflow} WHERE tenant_id={$notifications}.tenant_id AND id={$notifications}.workflow_event_id) AS workflow_kind" : 'NULL AS workflow_kind', false)
             ->select($workflowAvailable ? "(SELECT unit FROM {$workflow} WHERE tenant_id={$notifications}.tenant_id AND id={$notifications}.workflow_event_id) AS workflow_unit" : 'NULL AS workflow_unit', false)
             ->select($this->teamsAvailable() ? 'team_unit' : 'NULL AS team_unit', false)
+            ->select($this->chatAvailable() ? 'chat_unit,chat_message_id' : 'NULL AS chat_unit,NULL AS chat_message_id', false)
             ->select($scope['recipient_person_id'] === null ? 'NULL AS target_module'
                 : "(SELECT target_module FROM {$referrals} WHERE tenant_id={$notifications}.tenant_id AND id={$notifications}.referral_id) AS target_module", false)
             ->select($scope['recipient_person_id'] === null ? 'NULL AS referral_status'
@@ -225,12 +229,14 @@ final class NotificationService
             return [
             'id' => (int) $row['id'],
             'title' => match ($row['type']) {
+                            'team_chat_mentioned' => 'Team chat mention',
                             'referral_received' => 'Incoming referral',
                             'announcement_published' => 'New announcement',
                             'survey_published' => 'New survey',
                             default => self::TEAM_EVENT_TITLES[$row['type']] ?? self::TEAM_TASK_TITLES[$row['type']] ?? 'Appointment confirmed',
                         },
             'message' => match ($row['type']) {
+                'team_chat_mentioned' => 'You were mentioned in your team chat. Open the conversation to view the message.',
                 'referral_received' => 'A new referral is available in your incoming referrals inbox.',
                 'announcement_published' => 'A campus announcement is available in your portal.',
                 'survey_published' => 'An identified Guidance survey is available in your portal.',
@@ -250,6 +256,8 @@ final class NotificationService
                 'referral_received' => $destinations[$row['referral_status'] === 'closed'
                                     ? ($row['target_module'] === 'clinic' ? 'clinicReferralHistory' : 'guidanceReferralHistory')
                                     : ($row['target_module'] === 'clinic' ? 'clinicReferrals' : 'guidanceReferrals')],
+                'team_chat_mentioned' => $destinations[$row['chat_unit'] . 'TeamChat']
+                    . '?message=' . (int) $row['chat_message_id'] . '#chat-message-' . (int) $row['chat_message_id'],
                 'announcement_published' => $destinations['announcements'],
                 'survey_published' => $destinations['surveys'],
                 'team_event_added', 'team_event_removed', 'team_event_updated', 'team_event_cancelled'
@@ -318,7 +326,12 @@ final class NotificationService
 
     private function ownScope(): ?array
     {
-        $actor = (new AuthenticatedUser())->current();
+        // The mobile API supplies an already-validated bearer identity instead of a session.
+        try {
+            $actor = Api\ApiContext::identity();
+        } catch (RuntimeException) {
+            $actor = (new AuthenticatedUser())->current();
+        }
         if ($actor === null) {
             throw new RuntimeException('Please sign in to continue.', 401);
         }
@@ -344,11 +357,34 @@ final class NotificationService
         return true;
     }
 
+    /** Chat reads remain available without event/task tables or the workflow migration. */
+    private function chatAvailable(): bool
+    {
+        $db = Database::connect();
+        return array_diff(['chat_unit', 'chat_message_id'], $db->getFieldNames('notifications')) === []
+            && $db->tableExists('team_chat_messages')
+            && array_diff(['id', 'tenant_id', 'unit'], $db->getFieldNames('team_chat_messages')) === [];
+    }
+
+    /** Only reference optional columns that this deployment actually has. */
+    private function nullReferences(BaseBuilder $query, array $fields): void
+    {
+        $present = Database::connect()->getFieldNames('notifications');
+        foreach (array_intersect($fields, $present) as $field) $query->where($field, null);
+    }
+
     private function inbox(array $scope): BaseBuilder
     {
         $db = Database::connect();
         $notifications = $db->protectIdentifiers($db->prefixTable('notifications'));
-        $query = $db->table('notifications')->where('tenant_id', $scope['tenant_id'])->groupStart()->where('1=0', null, false);
+        $query = $db->table('notifications')->where('tenant_id', $scope['tenant_id']);
+        // Chat references must never be smuggled into another notification type.
+        if (array_intersect(['chat_unit', 'chat_message_id'], $db->getFieldNames('notifications')) !== []) {
+            $query->groupStart()->where('type', 'team_chat_mentioned')->orGroupStart();
+            $this->nullReferences($query, ['chat_unit', 'chat_message_id']);
+            $query->groupEnd()->groupEnd();
+        }
+        $query->groupStart()->where('1=0', null, false);
         // A null person ID must never turn a personal-recipient comparison into IS NULL.
         // Break-glass identities may receive only explicitly addressed Teams notifications.
         if ($scope['recipient_person_id'] !== null) {
@@ -381,6 +417,9 @@ final class NotificationService
         if ($this->teamsAvailable()) {
             $this->teamsInbox($query, $scope, $notifications);
         }
+        if ($this->chatAvailable()) {
+            $this->chatInbox($query, $scope, $notifications);
+        }
         if (WorkflowNotifications::available($db)) {
             $events = (new WorkflowNotifications($db))->eligibleEvents($scope, $notifications)->getCompiledSelect();
             $query->orGroupStart()->where('type', 'workflow_alert')->where('appointment_id', null)->where('appointment_version', null)
@@ -392,8 +431,8 @@ final class NotificationService
         return $query->groupEnd();
     }
 
-    /** Same predicate for inbox, unread counts, read writes and realtime authorization. */
-    private function teamsInbox(BaseBuilder $query, array $scope, string $notifications): void
+    /** Current live department membership shared by Teams and chat readers. */
+    private function teamRecipient(array $scope, string $notifications, string $unitColumn): string
     {
         $db = Database::connect();
         $recipient = $db->table('users u')->select('1', false)
@@ -406,10 +445,35 @@ final class NotificationService
             ->groupStart();
         foreach (['clinic' => PortalContext::PORTAL_CLINIC, 'guidance' => PortalContext::PORTAL_GUIDANCE,
             'facilities' => PortalContext::PORTAL_BMG] as $unit => $portal) {
-            $recipient->orGroupStart()->where("{$notifications}.team_unit", $unit)
+            $recipient->orGroupStart()->where("{$notifications}.{$unitColumn}", $unit)
                 ->whereIn('u.role', PortalContext::allowedRoles($portal))->groupEnd();
         }
-        $recipient = $recipient->groupEnd()->getCompiledSelect();
+        return $recipient->groupEnd()->getCompiledSelect();
+    }
+
+    private function chatInbox(BaseBuilder $query, array $scope, string $notifications): void
+    {
+        $db = Database::connect();
+        $recipient = $this->teamRecipient($scope, $notifications, 'chat_unit');
+        // The writer binds the exact recipient to immutable mentions; the composite FK
+        // and this scoped existence check bind the notification to its source message.
+        $message = $db->table('team_chat_messages m')->select('1', false)
+            ->where("m.tenant_id={$notifications}.tenant_id AND m.unit={$notifications}.chat_unit
+                AND m.id={$notifications}.chat_message_id", null, false)->getCompiledSelect();
+        $query->orGroupStart()->where('type', 'team_chat_mentioned')
+            ->where('recipient_user_id', $scope['recipient_user_id'])->where('recipient_person_id', null)
+            ->where('chat_message_id >', 0)->where("EXISTS ({$recipient})", null, false)
+            ->where("EXISTS ({$message})", null, false);
+        $this->nullReferences($query, ['appointment_id', 'appointment_version', 'referral_id', 'announcement_id',
+            'survey_id', 'workflow_event_id', 'team_unit', 'team_event_id', 'team_task_id', 'team_version', 'team_comment_id']);
+        $query->groupEnd();
+    }
+
+    /** Same predicate for inbox, unread counts, read writes and realtime authorization. */
+    private function teamsInbox(BaseBuilder $query, array $scope, string $notifications): void
+    {
+        $db = Database::connect();
+        $recipient = $this->teamRecipient($scope, $notifications, 'team_unit');
         $event = $db->table('team_events e')->select('1', false)
             ->where("e.tenant_id={$notifications}.tenant_id AND e.unit={$notifications}.team_unit
                 AND e.id={$notifications}.team_event_id AND e.version>={$notifications}.team_version", null, false)->getCompiledSelect();
@@ -420,7 +484,9 @@ final class NotificationService
             ->where("c.id={$notifications}.team_comment_id", null, false)->getCompiledSelect();
         $task = $task->getCompiledSelect();
         // Participation/assignment is intentionally not required: removal notices remain readable.
-        $query->orGroupStart()->where('recipient_user_id', $scope['recipient_user_id'])
+        $query->orGroupStart();
+        $this->nullReferences($query, ['workflow_event_id']);
+        $query->where('recipient_user_id', $scope['recipient_user_id'])
             ->where('recipient_person_id', null)->where('appointment_id', null)->where('appointment_version', null)
             ->where('referral_id', null)->where('announcement_id', null)->where('survey_id', null)
             ->where('team_version >', 0)->where("EXISTS ({$recipient})", null, false)

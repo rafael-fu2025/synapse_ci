@@ -193,6 +193,70 @@ test('Destinations use exact allowlist, literal text, cross-host ordinary links 
   assert.equal(clicked, config.portal);
   assert.equal(posts(calls).length, 0);
 });
+for (const unit of ['clinic', 'guidance', 'facilities']) {
+  test(`${unit} history chat mentions: exact destinations, private preview and explicit reads only`, { timeout: 30000 }, async t => {
+    const host = `http://${unit === 'facilities' ? 'bmg' : unit}.notification.invalid:${new URL(origin).port}`;
+    const base = `${host}/${unit}/teams/chat`;
+    const target = `${base}?message=55#chat-message-55`;
+    const valid = [target, `${base}?message=1#chat-message-1`, `${base}?message=9007199254740991#chat-message-9007199254740991`];
+    const malicious = [
+      target.replace('?message=55', '?message=55&extra=1'), target + '&extra=1', target + '#extra',
+      target.replace('#chat-message-55', '#chat-message-56'), target.replace(host, 'https://attacker.invalid'),
+      target.replace(host, origin), target.replace('://', '://user:pass@'), `${base}?message=55`,
+      `${base}?message=0#chat-message-0`, `${base}?message=01#chat-message-01`,
+      `${base}?message=9007199254740992#chat-message-9007199254740992`,
+      `${base}?message=55&message=55#chat-message-55`, `${base}?message=%35%35#chat-message-55`
+    ];
+    let read = false;
+    const { page, calls } = await fixture(t, { api: (url, request) => {
+      if (request.method() === 'POST') { read = true; return { body: { items: [], unread_count: 0 } }; }
+      const entries = [...valid, ...malicious].map((destination, i) => item(i + 1, {
+        title: 'Team chat mention', message: '<img src=x onerror="window.historyMentionXss=1">PRIVATE-CHAT body/sender/mention',
+        url: destination, read_at: read && i === 0 ? '2026-10-24' : null
+      }));
+      return { body: history(url, entries, entries.length, entries.length - (read ? 1 : 0)) };
+    } });
+    await settled(page);
+    const config = await page.locator(panel).evaluate(el => JSON.parse(el.dataset.destinations));
+    assert.equal(config[`${unit}TeamChat`], base);
+    const links = page.locator('[data-history-destination]');
+    assert.deepEqual(await links.evaluateAll(nodes => nodes.map(node => node.href)),
+      [...valid, ...malicious.map(() => config.portal)]);
+    assert.deepEqual(await page.locator('.notification-history-title').allTextContents(), Array(valid.length + malicious.length).fill('Team chat mention'));
+    assert.deepEqual(await page.locator('.notification-history-message').allTextContents(),
+      Array(valid.length + malicious.length).fill('You were mentioned in your team chat. Open the conversation to view the message.'));
+    assert.doesNotMatch(await page.locator('[data-history-list]').innerHTML(), /PRIVATE-CHAT|onerror|<img/);
+    assert.equal(await page.evaluate(() => window.historyMentionXss), undefined);
+    assert.equal(posts(calls).length, 0, 'Opening history does not mark mentions read');
+    assert.equal(await links.first().getAttribute('data-navigation'), 'false');
+    await page.route(`${base}**`, route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Team chat destination</title>' }));
+
+    await links.first().locator('.notification-history-message').click();
+    await page.waitForURL(target);
+    assert.equal(posts(calls).length, 0, 'Opening the unread chat mention navigates without a read mutation');
+    await page.goto(origin + '/notifications/inbox'); await settled(page);
+    const csrf = await page.evaluate(() => ({ header: document.querySelector('meta[name="csrf-header"]').content.toLowerCase(),
+      token: document.querySelector('meta[name="csrf-token"]').content }));
+    const gets = calls.filter(call => call.method === 'GET').length;
+    await page.locator('[data-history-read="1"]').click();
+    await eventually(() => calls.filter(call => call.method === 'GET').length > gets); await settled(page);
+    assert.equal(posts(calls).length, 1);
+    assert.equal(posts(calls)[0].url.pathname, '/notifications/1/read');
+    assert.equal(posts(calls)[0].headers[csrf.header], csrf.token);
+    assert.equal(page.url(), origin + '/notifications/inbox', 'Explicit Mark read does not navigate');
+    assert.equal(await page.locator('[data-history-read="1"]').count(), 0);
+    // Revalidate an injected DOM destination before allowing the shell to navigate.
+    const clicked = await links.nth(valid.length).evaluate(node => {
+      node.href = 'https://attacker.invalid/teams/chat?message=55#chat-message-55';
+      document.addEventListener('click', event => event.preventDefault(), { once: true });
+      node.querySelector('.notification-history-message').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      return node.href;
+    });
+    assert.equal(clicked, config.portal);
+    assert.equal(posts(calls).length, 1, 'Opening a rejected destination also leaves read state unchanged');
+  });
+}
+
 test('Mark-all is single-flight, uses fresh CSRF, and reconciles with history rather than bell JSON', { timeout: 30000 }, async t => {
   let release, written = false;
   const gate = new Promise(resolve => { release = resolve; });

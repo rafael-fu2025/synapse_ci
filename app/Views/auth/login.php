@@ -2,7 +2,7 @@
 
 <?= $this->section('content') ?>
 <!-- Floating Theme Toggle in Upper Right of Login Screen -->
-<div class="position-fixed top-0 end-0 p-3" style="z-index: 1050;">
+<div class="position-fixed top-0 end-0 p-3 auth-theme-control" style="z-index: 1050;">
   <button class="btn btn-sm rounded-circle d-flex align-items-center justify-content-center shadow-sm auth-theme-toggle"
           type="button"
           id="authThemeToggle"
@@ -16,11 +16,11 @@
   </button>
 </div>
 
-<main class="container-fluid p-0 min-vh-100 auth-main-wrapper">
-  <div class="row g-0 min-vh-100">
+<main class="container-fluid p-0 auth-main-wrapper">
+  <div class="row g-0">
 
     <!-- Left 60% Pane: 3-Slide Photo Carousel (hidden on small viewports) -->
-    <aside class="col-lg-7 d-none d-lg-block p-2 min-vh-100 auth-photo-aside">
+    <aside class="col-lg-7 d-none d-lg-block p-2 auth-photo-aside">
       <div class="rounded-4 overflow-hidden auth-photo-container">
 
         <!-- Bootstrap 5 Carousel: auto-plays every 6 seconds, no arrows, pill indicators -->
@@ -101,39 +101,39 @@
     </aside>
 
     <!-- Right 40% Pane: Centered Sign-in Form with Pinned Socials Row at Bottom -->
-    <section class="col-12 col-lg-5 d-flex flex-column justify-content-between align-items-center p-4 p-sm-5 min-vh-100 auth-pane position-relative">
+    <section class="col-12 col-lg-5 d-flex flex-column justify-content-between align-items-center auth-pane position-relative">
 
       <!-- Top Spacer -->
-      <div class="w-100" style="height: 1rem;"></div>
+      <div class="w-100 auth-top-spacer" aria-hidden="true"></div>
 
       <!-- Center Form Container (max-width: 380px) -->
-      <div class="w-100 my-auto" style="max-width: 380px;">
+      <div class="w-100 my-auto auth-form-container">
 
         <!-- Brand Mark & Headline -->
-        <div class="text-center mb-4">
+        <div class="text-center auth-brand">
           <?php $pMeta = $portalMeta ?? \App\Services\PortalContext::metadata(); ?>
           <?php $currentP = $portal ?? \App\Services\PortalContext::current(); ?>
 
-          <div class="mb-3 d-flex justify-content-center align-items-center" style="min-height: 56px;">
+          <div class="d-flex justify-content-center align-items-center auth-brand-mark">
             <?php if ($currentP === 'main'): ?>
               <img src="<?= base_url('assets/img/brand/synapse-maroon.png') ?>"
                    alt="SYNAPSE Logo"
                    class="no-select synapse-logo-light"
-                   style="height: 56px; width: auto; object-fit: contain;"
+                   style="height: var(--auth-logo-height); width: auto; object-fit: contain;"
                    draggable="false"
                    oncontextmenu="return false;">
 
               <img src="<?= base_url('assets/img/brand/synapse-white.png') ?>"
                    alt="SYNAPSE Logo"
                    class="no-select synapse-logo-dark"
-                   style="height: 56px; width: auto; object-fit: contain;"
+                   style="height: var(--auth-logo-height); width: auto; object-fit: contain;"
                    draggable="false"
                    oncontextmenu="return false;">
             <?php else: ?>
               <img src="<?= base_url($pMeta['logo']) ?>"
                    alt="Portal Mark"
                    class="no-select"
-                   style="height: 56px; width: auto; object-fit: contain;"
+                   style="height: var(--auth-logo-height); width: auto; object-fit: contain;"
                    draggable="false"
                    oncontextmenu="return false;">
             <?php endif; ?>
@@ -159,7 +159,7 @@
         <?= $this->include('partials/alerts') ?>
 
         <!-- Sign-in Form -->
-        <form action="<?= site_url('/auth/login') ?>" method="POST" novalidate class="mt-4">
+        <form action="<?= site_url('/auth/login') ?>" method="POST" novalidate class="auth-signin-form">
           <?= csrf_field() ?>
 
           <!-- ID Number -->
@@ -177,7 +177,7 @@
           </div>
 
           <!-- Password with seamless internal show/hide toggle -->
-          <div class="mb-4">
+          <div class="auth-password-group">
             <label for="password" class="form-label small fw-semibold text-secondary mb-1">Password</label>
             <div class="password-field-wrapper">
               <input type="password"
@@ -216,14 +216,14 @@
           </div>
         </form>
 
-        <p class="mt-4 text-center text-muted" style="font-size: 0.8rem;">
+        <p class="auth-help text-center text-muted" style="font-size: 0.8rem;">
           Trouble signing in? Contact your system administrator.
         </p>
       </div>
 
       <!-- Bottom Pinned Socials Dock -->
-      <nav aria-label="Socials" class="w-100 d-flex flex-column align-items-center gap-2 pt-4 pb-2" style="max-width: 380px;">
-        <div class="d-flex w-100 align-items-center gap-2 mb-2">
+      <nav aria-label="Socials" class="w-100 d-flex flex-column align-items-center gap-2 auth-socials">
+        <div class="d-flex w-100 align-items-center gap-2 auth-socials-heading">
           <span class="flex-grow-1 bg-secondary opacity-25" style="height: 1px;"></span>
           <span class="text-muted text-uppercase fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.05rem;">
             Connect with us

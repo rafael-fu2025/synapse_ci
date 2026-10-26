@@ -29,5 +29,6 @@ echo view('teams/chat', [
     'actor' => ['id' => 1, 'tenant_id' => 1, 'role' => 'superadmin'], 'canManage' => true,
     'members' => [['id' => 1, 'name' => 'Chat Fixture'], ['id' => 2, 'name' => 'Other member']],
     'history' => $fixture['history'], 'afterMode' => $fixture['afterMode'] ?? false,
-    'browsingHistory' => false,
+    'browsingHistory' => $fixture['browsingHistory'] ?? false,
+    'targetMessageId' => $fixture['targetMessageId'] ?? null,
 ]);

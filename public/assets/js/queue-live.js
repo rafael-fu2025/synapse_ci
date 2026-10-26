@@ -43,7 +43,8 @@
     function schedule() {
       clearTimeout(poll);
       poll = null;
-      if (visible()) poll = setTimeout(invalidate, ready ? 60000 : 15000);
+      // Private hints only cover the caller's ticket, not other patients moving ahead.
+      if (visible()) poll = setTimeout(invalidate, personal || !ready ? 15000 : 60000);
     }
     function invalidate() {
       dirty = true;
@@ -60,6 +61,16 @@
               || !['waiting', 'called', 'in_consultation', 'skipped'].includes(ticket.status)
               || !['routine', 'urgent', 'emergency'].includes(ticket.priority)
               || typeof ticket.ticket_code !== 'string' || !ticket.ticket_code || ticket.ticket_code.length > 64) throw new Error('Invalid ticket');
+          const nonnegative = value => value === null || Number.isSafeInteger(value) && value >= 0;
+          if (!(ticket.position === null || Number.isSafeInteger(ticket.position) && ticket.position > 0)
+              || !nonnegative(ticket.people_ahead) || !nonnegative(ticket.estimated_wait_minutes)) throw new Error('Invalid queue progress');
+          if (ticket.status === 'waiting') {
+            if ((ticket.position === null) !== (ticket.people_ahead === null)
+                || ticket.position !== null && ticket.position !== ticket.people_ahead + 1
+                || ticket.people_ahead === null && ticket.estimated_wait_minutes !== null) throw new Error('Inconsistent queue progress');
+          } else if (ticket.status === 'skipped') {
+            if (ticket.position !== null || ticket.people_ahead !== null || ticket.estimated_wait_minutes !== null) throw new Error('Invalid held ticket progress');
+          } else if (ticket.position !== null || ticket.people_ahead !== 0 || ticket.estimated_wait_minutes !== 0) throw new Error('Invalid active ticket progress');
         }
       } else {
         const keys = unit === 'clinic' ? ['queueToday', 'queueWaiting', 'queueCalled', 'queueCompleted'] : ['queueToday'];
@@ -83,7 +94,22 @@
           line.append(node('strong', '', status));
           copy.append(line);
           row.append(copy, node('span', 'badge bg-light text-dark px-3 py-2 fw-semibold', 'Priority: ' + ticket.priority[0].toUpperCase() + ticket.priority.slice(1)));
-          card.append(row); fragment.append(card);
+          card.append(row);
+          const progress = node('dl', 'row g-3 mt-2 mb-0'); progress.setAttribute('data-personal-queue-progress', '');
+          const positionLabel = ticket.status === 'called' ? 'Your turn' : ticket.status === 'in_consultation' ? 'In progress'
+            : ticket.status === 'skipped' ? 'On hold' : ticket.position === null ? '—' : `#${ticket.position}`;
+          const aheadLabel = ticket.people_ahead === null ? '—' : String(ticket.people_ahead);
+          const waitLabel = ticket.status === 'called' ? 'Now' : ticket.status === 'in_consultation' ? 'In progress'
+            : ticket.status === 'skipped' ? 'Ask reception' : ticket.estimated_wait_minutes === null ? 'Not enough recent data'
+            : ticket.estimated_wait_minutes === 0 ? 'You’re next' : `~${ticket.estimated_wait_minutes} min`;
+          for (const [label, value, hook] of [['Your place in line', positionLabel, 'data-queue-position'], ['People ahead', aheadLabel, 'data-queue-ahead'], ['Estimated wait', waitLabel, 'data-queue-wait']]) {
+            const metric = node('div', 'col-12 col-sm-4'), result = node('dd', 'fs-5 fw-bold mb-0', value);
+            result.setAttribute(hook, ''); metric.append(node('dt', 'small fw-normal opacity-75', label), result); progress.append(metric);
+          }
+          card.append(progress);
+          if (ticket.status === 'waiting') card.append(node('p', 'small opacity-75 mt-3 mb-0', 'Position includes people already called or being seen ahead of you. Wait estimates use recent consultations; urgent cases and staff availability may change the order and waiting time.'));
+          else if (ticket.status === 'skipped') card.append(node('p', 'small opacity-75 mt-3 mb-0', 'Your ticket is on hold. Please speak to reception to rejoin the waiting line.'));
+          fragment.append(card);
         }
         if (!payload.tickets.length) fragment.append(node('div', 'alert alert-light border mb-0', 'No active waiting room tickets today.'));
         tickets?.replaceChildren(fragment);

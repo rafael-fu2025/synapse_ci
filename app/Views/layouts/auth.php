@@ -51,9 +51,63 @@
       margin: 0;
       padding: 0;
       min-height: 100vh;
+      min-height: 100dvh;
       background-color: #ffffff;
       color: #1a1a1a;
       transition: none !important;
+    }
+
+    .auth-main-wrapper,
+    .auth-main-wrapper > .row,
+    .auth-photo-aside,
+    .auth-pane {
+      min-height: 100vh;
+      min-height: 100dvh;
+    }
+
+    .auth-pane {
+      --auth-logo-height: 56px;
+      padding: 1.5rem;
+    }
+
+    .auth-top-spacer { height: 1rem; }
+    .auth-form-container, .auth-socials { max-width: 380px; min-width: 0; }
+    .auth-top-spacer, .auth-form-container, .auth-socials { flex-shrink: 0; }
+    .auth-brand { margin-bottom: 1.5rem; }
+    .auth-brand-mark { min-height: var(--auth-logo-height); margin-bottom: 1rem; }
+    .auth-brand-mark img { max-width: 100%; }
+    .auth-signin-form { margin-top: 1.5rem; }
+    .auth-password-group { margin-bottom: 1.5rem; }
+    .auth-help { margin-top: 1.5rem; }
+    .auth-socials { padding-top: 1.5rem; padding-bottom: .5rem; }
+    .auth-socials-heading { margin-bottom: .5rem; }
+
+    @media (min-width: 576px) {
+      .auth-pane { padding: 3rem; }
+    }
+
+    /* Compact decoration and whitespace on short screens, never the controls.
+       Content remains in normal flow so errors and enlarged text can scroll. */
+    @media (max-height: 760px) {
+      .auth-pane { --auth-logo-height: 44px; padding-top: 1rem; padding-bottom: 1rem; }
+      .auth-top-spacer { height: 0; }
+      .auth-brand { margin-bottom: 1rem; }
+      .auth-brand-mark { margin-bottom: .5rem; }
+      .auth-signin-form, .auth-help { margin-top: 1rem; }
+      .auth-password-group { margin-bottom: 1rem; }
+      .auth-socials { padding-top: .75rem; }
+      .auth-socials-heading { margin-bottom: .25rem; }
+      .auth-socials .social-seal { width: 36px; height: 36px; }
+      .auth-socials .social-item { padding-top: .375rem; padding-bottom: .375rem; }
+    }
+
+    @media (max-height: 640px) {
+      .auth-pane { --auth-logo-height: 40px; }
+      .auth-brand, .auth-password-group { margin-bottom: .75rem; }
+      .auth-signin-form, .auth-help { margin-top: .75rem; }
+      .auth-help { margin-bottom: .5rem; }
+      .auth-socials { padding-top: .5rem; }
+      .auth-socials .social-seal { width: 32px; height: 32px; }
     }
 
     .auth-pane .alert {
@@ -264,7 +318,11 @@
       background-color: #ffffff;
     }
 
+    /* The floating wrapper must not block nearby controls with its padding. */
+    .auth-theme-control { pointer-events: none; }
+
     .auth-theme-toggle {
+      pointer-events: auto;
       padding: 0;
       gap: 0;
       line-height: 1;

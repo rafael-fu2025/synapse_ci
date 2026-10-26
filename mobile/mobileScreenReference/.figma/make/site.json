@@ -1,0 +1,10 @@
+{
+  "description": "Connects to GitHub to help users explore their repositories and check which projects they can access.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

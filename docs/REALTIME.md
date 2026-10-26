@@ -45,9 +45,28 @@ from dropped events; Searches, filters, and live tables remain HTTP-driven.
   person and tenant from the fresh session identity (never request selectors), and
   returns only that person's active tickets today, including skipped tickets. A
   completed/no-show ticket disappears; an empty view can show a newly issued ticket.
-  Both projections use 15s disconnected / 60s connected reconciliation and refetch
-  on reconnect, visibility restoration, and initial load. Hints are captured inside
-  the queue transaction and delivered only after its owner commits.
+  Cards also show a separate place in line, people ahead, and estimated wait.
+  Waiting order follows emergency, urgent, then routine priority, with ticket sequence
+  and ID as tie-breakers. Ahead counts include waiting predecessors and people already
+  called or being seen in the same tenant, department, and Manila date; skipped and
+  terminal tickets do not count. Position is ahead + 1, not the printed ticket number.
+  Called/consulting tickets show Your turn/In progress, and skipped tickets show On hold
+  without an invented position or wait.
+
+  Wait estimates use the median duration of at least three valid completed consultations
+  among the latest 50 candidates in the same department/tenant over the previous seven
+  days. Valid samples last more than zero and at most four hours. Estimated minutes are
+  rounded up from people ahead × median duration / max(1, current consultations).
+  Current consultations are only an approximate lane count, not a staffing roster;
+  estimates are not promises and may change with priorities and staff availability.
+  With no people ahead the card says You're next; with insufficient history it says
+  Not enough recent data. Peer identities and ticket codes are never returned.
+
+  Personal cards reconcile every 15 seconds while visible even when realtime is ready,
+  because another person's movement does not emit a hint to the caller. Dashboard counts
+  retain 15s disconnected / 60s connected reconciliation. Both refetch on reconnect,
+  visibility restoration, and initial load. Hidden pages pause work. Hints are captured
+  inside the queue transaction and delivered only after its owner commits.
 - **Appointment list:** `portal.appointments.changed` is a payload-free hint sent
   to the affected person's own accounts (same authorization as the personal ticket
   hint) after an appointment is requested, booked, confirmed or cancelled. The

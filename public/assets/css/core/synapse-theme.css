@@ -481,6 +481,18 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
 /* -------------------------------------------------------------
  * 6. Tables & Data Grids
  * ------------------------------------------------------------- */
+:is(html[data-theme="light"], html:not([data-theme="dark"]) body:not(.dark-mode)) .table > thead > tr > :is(th, td) {
+  --bs-table-bg: var(--fu-maroon);
+  --bs-table-color: #ffffff;
+  background-color: var(--fu-maroon) !important;
+  color: #ffffff !important;
+  border-color: rgb(255 255 255 / 0.2);
+  box-shadow: none;
+}
+
+:is(html[data-theme="light"], html:not([data-theme="dark"]) body:not(.dark-mode)) .table > thead :is(a:not(.btn), .text-muted, .text-dark, .text-primary) {
+  color: #ffffff !important;
+}
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .table {
   --bs-table-bg: var(--surface-color) !important;
   --bs-table-color: #f0f0f0 !important;

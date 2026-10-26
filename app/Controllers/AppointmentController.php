@@ -183,7 +183,7 @@ final class AppointmentController extends BaseController
     {
         $redirect = $personal ? '/portal' : '/' . $unit . '/appointments';
         try {
-            $reason = $this->postString('reason') ?: ($personal ? 'Cancelled by patient' : 'Cancelled by staff');
+            $reason = $this->postString('reason');
             $this->appointmentService->cancelAppointment($id, $reason, $unit, $this->actor(), $personal);
             return $this->respondToForm('Appointment cancelled.', true, $redirect);
         } catch (\Exception $e) {

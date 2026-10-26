@@ -102,6 +102,8 @@ details[open] .team-chat-members-chevron { transform: rotate(180deg); }
 .team-chat-message.is-own { justify-content: flex-end; }
 .team-chat-bubble { max-width: min(85%, 650px, calc(100% - 36px)); min-width: 120px; padding: .8rem 1rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 4px; color: var(--default-color); font-size: .88rem; overflow-wrap: anywhere; }
 .team-chat-message.is-own .team-chat-bubble { background: var(--na-primary-soft); border-color: color-mix(in srgb, var(--fu-maroon-accent), transparent 75%); }
+.team-chat-message.is-targeted .team-chat-bubble, .team-chat-message:focus-visible .team-chat-bubble { outline: 2px solid var(--focus-color); outline-offset: 2px; }
+.team-chat-message:focus { outline: none; }
 .team-chat-message-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .7rem; margin-bottom: .5rem; font-size: .75rem; }
 .team-chat-message-header time { color: var(--muted-color); font-size: .7rem; }
 .team-chat-task { display: block; margin-top: .6rem; padding-top: .5rem; border-top: 1px solid var(--border-color); font-size: .78rem; }
@@ -202,6 +204,16 @@ details[open] .team-chat-members-chevron { transform: rotate(180deg); }
 .team-calendar-agenda .team-calendar-item { font-size: .85rem; padding: .7rem; }
 .team-calendar-participants { max-height: 220px; overflow-y: auto; padding: .25rem; }
 [data-theme="dark"] .team-calendar-grid th { background: #303030; }
+
+/* Brand fills stay maroon; text on dark cards needs a separate contrast token. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(
+  .teams-eyebrow, .teams-members, .teams-priority:not(.is-low):not(.is-high),
+  .teams-task-title a, .teams-task-title a:hover,
+  .team-chat-channel, .team-chat-unread-divider, .team-chat-mention,
+  .team-calendar-day-heading time[aria-current], .team-calendar-item, .team-calendar-item:hover
+) {
+  color: var(--primary-text-color);
+}
 @media (max-width: 1199.98px) {
   .team-calendar-layout { grid-template-columns: minmax(0, 1fr); }
   .team-calendar-layout > aside { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; }

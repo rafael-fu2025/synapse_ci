@@ -65,6 +65,22 @@ function matrix() {
             <div class="dp-wrap dp-open"><i class="dp-icon bi bi-calendar" data-accent-icon>Open date</i></div>
             <div class="dtp-wrap dtp-open"><i class="dtp-icon bi bi-clock" data-accent-icon>Open time</i></div>
     </div></section>
+    <section class="card"><div class="card-body p-3">
+      <span class="teams-eyebrow" data-dark-accent-text>Work together · Guidance</span>
+      <span class="teams-members" data-dark-accent-text>Members</span>
+      <span class="teams-priority" data-dark-accent-text>Normal</span>
+      <h3 class="teams-task-title"><a href="#task" data-dark-accent-text>Task title</a></h3>
+      <a class="team-chat-channel" href="#chat" data-dark-accent-text>Guidance operations</a>
+      <span class="team-chat-mention" data-dark-accent-text>@Member</span>
+      <span class="team-chat-unread-divider" data-dark-accent-text>Unread</span>
+      <div class="team-calendar-day-heading"><time aria-current="date" data-dark-accent-text>26</time></div>
+      <a class="team-calendar-item" href="#event" data-dark-accent-text>9:00 AM Guidance meeting</a>
+      <a class="team-calendar-item is-task is-complete" href="#due" data-dark-accent-text>Due · Done</a>
+      <a class="nd-inline-link" href="#dashboard" data-dark-accent-text>Dashboard link</a>
+      <table><tbody><tr><td class="dp-cell is-today"><span class="dp-day" data-dark-accent-text>26</span></td>
+      <td class="dtp-cell is-today"><span class="dtp-day" data-dark-accent-text>26</span></td></tr></tbody></table>
+      <button class="dtp-wheel-item" data-dark-accent-text>09</button>
+    </div></section>
     <section class="card"><div class="card-body p-3">${controls}
       <label for="autofill">Email address</label><input id="autofill" class="form-control" name="email" autocomplete="email" value="fixture@example.test">
       <label for="neutral-text">Text</label><input id="neutral-text" class="form-control" value="Neutral text">
@@ -336,6 +352,22 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark']) {
   const label = `${theme} ${mobile ? 'mobile' : 'desktop'}`;
   test(`theme contrast matrix: ${label}`, { timeout: 60000 }, async t => {
     const page = await pageFor(t, theme, mobile);
+    await t.test('table headers are maroon with white text only in light mode', async () => {
+      const headers = await page.locator('.table > thead > tr > th').evaluateAll(els => els.map(el => ({
+        color: getComputedStyle(el).color,
+        background: getComputedStyle(el).backgroundColor,
+      })));
+      assert.ok(headers.length > 0);
+      for (const header of headers) {
+        if (theme === 'light') {
+          assert.equal(header.background, 'rgb(128, 0, 0)');
+          assert.equal(header.color, 'rgb(255, 255, 255)');
+        } else {
+          assert.notEqual(header.background, 'rgb(128, 0, 0)');
+        }
+      }
+      contrast(await measurements(page, '.table > thead > tr > th'), 4.5, `${label} table headers`);
+    });
     await t.test('all Bootstrap buttons and table actions: rest/hover/focus/active', async () => {
       for (const state of ['rest', 'hover', 'focus', 'active']) {
         const clear = await forceState(page, '[data-enabled]', state);
@@ -364,6 +396,14 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark']) {
       }
       for (const row of await measurements(page, '[data-accent-icon]')) {
         assert.deepEqual(row.foreground, theme === 'dark' ? [255, 255, 255] : [128, 0, 0], `${label} ${row.element}: accent icon must be white on dark surfaces and maroon on light surfaces`);
+      }
+    });
+    if (theme === 'dark') await t.test('Teams, calendar and dashboard accent text stays readable at rest and hover', async () => {
+      for (const state of ['rest', 'hover']) {
+        const clear = await forceState(page, '[data-dark-accent-text]', state);
+        try {
+          contrast(await measurements(page, '[data-dark-accent-text]'), 4.5, `${label} accent text ${state}`);
+        } finally { await clear(); }
       }
     });
     await t.test('disabled actions remain recognizable and noninteractive (contrast exempt)', async () => {

@@ -146,7 +146,7 @@ final class AppointmentReferralProducerTest extends FreshDatabaseTestCase
         $this->assertEvent($this->events()[1], $personal ? 'appointment_cancelled_staff' : 'appointment_cancelled_patient',
             $unit, (int) $appt['id'], '2', $actor);
         $this->assertSame('cancelled', $service->appointment($unit, (int) $appt['id'])['status']);
-        $this->fails(fn () => $service->cancelAppointment((int) $appt['id'], '', $unit, $actor, $personal));
+        $this->fails(fn () => $service->cancelAppointment((int) $appt['id'], 'Already cancelled', $unit, $actor, $personal));
         $this->assertCount(2, $this->events());
         $this->assertSame([], $this->notices());
     }
@@ -169,12 +169,12 @@ final class AppointmentReferralProducerTest extends FreshDatabaseTestCase
         $appt = $this->request();
         $service = new AppointmentService();
         $this->failEventInsert();
-        $this->fails(fn () => $service->cancelAppointment((int) $appt['id'], '', 'clinic', $this->clinic));
+        $this->fails(fn () => $service->cancelAppointment((int) $appt['id'], 'Patient requested cancellation', 'clinic', $this->clinic));
         $this->assertSame('requested', $service->appointment('clinic', (int) $appt['id'])['status']);
         $this->assertSame(1, (int) $service->appointment('clinic', (int) $appt['id'])['version']);
         $this->assertCount(1, $this->events());
         $this->db->table('users')->where('id', $this->clinic['id'])->update(['role' => 'student']);
-        $this->fails(fn () => $service->cancelAppointment((int) $appt['id'], '', 'clinic', $this->clinic));
+        $this->fails(fn () => $service->cancelAppointment((int) $appt['id'], 'Patient requested cancellation', 'clinic', $this->clinic));
         $this->assertCount(1, $this->events());
     }
 

@@ -248,4 +248,31 @@ final class PatientHistoryService
 
         return $this->healthModel->findByPersonId($personId);
     }
+
+    /**
+     * Update only emergency contact fields, preserving existing clinical fields.
+     *
+     * @param array{emergency_contact_name?: ?string, emergency_contact_phone?: ?string, emergency_contact_relationship?: ?string} $data
+     * @return array<string, mixed>
+     */
+    public function updateEmergencyContact(int $personId, array $data): array
+    {
+        $existing = $this->healthModel->findByPersonId($personId);
+        $clean = static fn (?string $val): ?string => $val !== null && trim($val) !== '' ? trim($val) : null;
+        $payload = [
+            'tenant_id'                      => \App\Services\CurrentTenant::id(),
+            'person_id'                      => $personId,
+            'emergency_contact_name'         => $clean($data['emergency_contact_name'] ?? null),
+            'emergency_contact_phone'        => $clean($data['emergency_contact_phone'] ?? null),
+            'emergency_contact_relationship' => $clean($data['emergency_contact_relationship'] ?? null),
+        ];
+
+        if ($existing !== null) {
+            $this->healthModel->update($existing['id'], $payload);
+        } else {
+            $this->healthModel->insert($payload);
+        }
+
+        return $this->healthModel->findByPersonId($personId);
+    }
 }

@@ -27,6 +27,8 @@ function summary(f) {
 function history(f, url) {
   let rows = f.messages;
   const after = url.searchParams.get('after'), before = url.searchParams.get('before');
+  const around = url.searchParams.get('around') ?? url.searchParams.get('message');
+  if (around !== null) rows = rows.filter(m => m.id <= Number(around));
   if (after !== null) rows = rows.filter(m => m.id > Number(after));
   if (before !== null) rows = rows.filter(m => m.id < Number(before));
   const has_more = rows.length > 40;
@@ -39,7 +41,8 @@ function render(f, url) {
   const initial = f.initial || history(f, url);
   const result = spawnSync('php', ['tests/_support/render-team-chat-fixture.php'], {
     cwd: root, input: JSON.stringify({ origin, path: url.pathname + url.search, history: initial,
-      afterMode: f.afterMode }), encoding: 'utf8', timeout: 10000
+      afterMode: f.afterMode, targetMessageId: f.targetMessageId ?? (url.searchParams.has('message') ? Number(url.searchParams.get('message')) : null),
+      browsingHistory: url.searchParams.has('message') || url.searchParams.has('before') }), encoding: 'utf8', timeout: 10000
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /data-team-chat/);
@@ -138,6 +141,12 @@ async function pageFor(t, { messages = [], width = 1280, dark = false, hidden = 
       if (realtime !== null) window.SynapseRealtime = { status: realtime };
     localStorage.setItem('na-dark-mode', dark ? '1' : '0');
     window.fixtureHidden = hidden;
+    window.fixtureTargetFocus = [];
+    const focus = HTMLElement.prototype.focus;
+    HTMLElement.prototype.focus = function (options) {
+      if (this.matches('article[id^="chat-message-"]')) window.fixtureTargetFocus.push({ id: this.id, preventScroll: options?.preventScroll });
+      return focus.call(this, options);
+    };
     Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.fixtureHidden });
   }, { dark, hidden, realtime });
   const page = await context.newPage();
@@ -146,7 +155,8 @@ async function pageFor(t, { messages = [], width = 1280, dark = false, hidden = 
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); fixtures.delete(key); assert.deepEqual(errors, []); });
-  await page.goto(`${origin}/${unit}/teams/chat?fixture=${key}`);
+  const target = options.targetMessageId;
+  await page.goto(`${origin}/${unit}/teams/chat?fixture=${key}${target ? `&message=${target}#chat-message-${target}` : ''}`);
   await page.waitForFunction(() => window.SynapseTeamChat && !document.querySelector('[data-team-chat]').hasAttribute('data-initial'));
   return { page, f };
 }
@@ -674,6 +684,50 @@ test('40-message pages merge chronologically with overlapping response deduplica
   await page.clock.runFor(11000);
   assert.equal(f.gets.length, count, 'Browsing history pauses polling');
 });
+
+for (const unit of ['clinic', 'guidance', 'facilities']) {
+  test(`${unit}: an older deep-linked message is focused and stays unread until Show latest`, { timeout: 15000 }, async t => {
+    const { page, f } = await pageFor(t, { unit, targetMessageId: 55, realtime: 'ready',
+      messages: Array.from({ length: 150 }, (_, i) => message(i + 1)) });
+    const target = page.locator('#chat-message-55');
+    assert.equal(await page.locator('[data-message-id]').count(), 40);
+    assert.equal(await page.locator('[data-message-id]').first().getAttribute('data-message-id'), '16');
+    assert.equal(await page.locator('[data-message-id]').last().getAttribute('data-message-id'), '55');
+    assert.equal(await page.locator('#chat-message-150').count(), 0, 'Target is not replaced with the latest page');
+    assert.equal(await page.locator('.is-targeted').count(), 1);
+    assert.equal(await target.getAttribute('data-message-id'), '55');
+    assert.equal(await target.evaluate(el => el.classList.contains('is-targeted') && document.activeElement === el), true);
+    assert.deepEqual(await page.evaluate(() => window.fixtureTargetFocus), [{ id: 'chat-message-55', preventScroll: true }]);
+    assert.equal(await target.evaluate(el => {
+      const box = el.getBoundingClientRect(), log = el.closest('[data-chat-log]').getBoundingClientRect();
+      return box.top >= log.top && box.bottom <= log.bottom;
+    }), true, 'Target is scrolled into the chat log');
+    assert.match(await page.locator('[data-chat-history-status]').textContent(), /paused/i);
+    await page.clock.runFor(1000);
+    assert.deepEqual(reads(f), [], 'Focusing the target must not acknowledge unseen messages');
+    await page.locator('[data-chat-older]').click();
+    await page.waitForFunction(() => document.querySelectorAll('[data-message-id]').length === 55);
+    assert.deepEqual(f.gets, ['?before=16']);
+    assert.equal(await target.evaluate(el => el.classList.contains('is-targeted')), true);
+    await realtimeEvent(page, { event: 'team.chat.changed', data: { unit } });
+    await page.clock.runFor(61000);
+    assert.deepEqual(f.gets, ['?before=16'], 'History pauses polling and realtime refreshes');
+    assert.deepEqual(reads(f), [], 'Loading history must not acknowledge the unseen backlog');
+    assert.equal(f.lastRead, 0);
+    await page.locator('[data-chat-latest]').click();
+    await page.waitForFunction(() => !document.querySelector('[data-chat-history-status]').textContent.includes('paused'));
+    await page.clock.runFor(500);
+    await page.waitForFunction(() => document.querySelector('[data-message-id="150"]'));
+    assert.equal(await page.locator('#chat-message-55').count(), 0);
+    assert.ok(f.gets.includes(''), 'Show latest fetches the latest page without a target or stale cursor');
+    const count = f.gets.length;
+    const refreshed = page.waitForResponse(response => response.url().includes('/history'));
+    await realtimeEvent(page, { event: 'team.chat.changed', data: { unit } });
+    await page.clock.runFor(150);
+    await refreshed;
+    assert.equal(f.gets.length, count + 1, 'Show latest resumes live updates');
+  });
+}
 
 test('initial unread acknowledgement includes only fully visible messages, not unseen backlog', async t => {
   const messages = Array.from({ length: 85 }, (_, i) => message(i + 1, { body: 'A tall message\n'.repeat(8) }));

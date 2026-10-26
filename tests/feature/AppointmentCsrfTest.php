@@ -186,7 +186,8 @@ final class AppointmentCsrfTest extends CIUnitTestCase
         $response->assertStatus(409);
         $this->assertNotSame($token, json_decode($response->getJSON(), true)['csrf']['hash']);
         $token = $this->tokenForNextRequest();
-        $this->submit('clinic/appointments/cancel/' . $appt['id'], [config('Security')->tokenName => $token])->assertStatus(200);
+        $this->submit('clinic/appointments/cancel/' . $appt['id'], [config('Security')->tokenName => $token,
+            'reason' => 'Patient requested cancellation'])->assertStatus(200);
         $booking = $service->bookAppointment(['unit' => 'clinic', 'person_id' => $this->admin['person_id'],
             'provider_user_id' => $this->clinician['id'], 'starts_at' => date('Y-m-d') . ' 09:00:00', 'ends_at' => date('Y-m-d') . ' 09:30:00']);
         $token = $this->tokenForNextRequest();

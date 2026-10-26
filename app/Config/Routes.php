@@ -22,6 +22,40 @@ $routes->group('api/v1/devices/bmg', static function (RouteCollection $routes): 
     $routes->post('commands/ack', 'Api\BmgDeviceApiController::acknowledge');
 });
 
+// Mobile app API: opaque bearer tokens, per-request identity revalidation, no browser session state.
+$routes->group('api/v1', static function (RouteCollection $routes): void {
+    $routes->post('auth/login', 'Api\V1\MobileAuthController::login');
+    $routes->post('auth/refresh', 'Api\V1\MobileAuthController::refresh');
+    $routes->group('', ['filter' => 'api_auth'], static function (RouteCollection $routes): void {
+        $routes->post('auth/logout', 'Api\V1\MobileAuthController::logout');
+        $routes->get('me', 'Api\V1\MeController::show');
+        $routes->get('me/health-summary', 'Api\V1\MeController::healthSummary');
+        $routes->get('me/photo', 'Api\V1\MeController::photo');
+        $routes->post('me/photo', 'Api\V1\MeController::uploadPhoto');
+        $routes->delete('me/photo', 'Api\V1\MeController::deletePhoto');
+
+        // Personal portal resources.
+        $routes->get('appointments', 'Api\V1\AppointmentsApiController::index');
+        $routes->post('appointments', 'Api\V1\AppointmentsApiController::create');
+        $routes->get('appointments/(:num)', 'Api\V1\AppointmentsApiController::show/$1');
+        $routes->post('appointments/(:num)/cancel', 'Api\V1\AppointmentsApiController::cancel/$1');
+        $routes->get('queue', 'Api\V1\QueueApiController::index');
+        $routes->get('announcements', 'Api\V1\AnnouncementsApiController::index');
+        $routes->get('announcements/(:num)', 'Api\V1\AnnouncementsApiController::show/$1');
+        $routes->post('announcements/(:num)/read', 'Api\V1\AnnouncementsApiController::markRead/$1');
+        $routes->get('surveys', 'Api\V1\SurveysApiController::index');
+        $routes->get('surveys/(:num)', 'Api\V1\SurveysApiController::show/$1');
+        $routes->post('surveys/(:num)/submit', 'Api\V1\SurveysApiController::submit/$1');
+        $routes->get('notifications', 'Api\V1\NotificationsApiController::index');
+        $routes->get('notifications/history', 'Api\V1\NotificationsApiController::history');
+        $routes->post('notifications/read-all', 'Api\V1\NotificationsApiController::readAll');
+        $routes->post('notifications/(:num)/read', 'Api\V1\NotificationsApiController::read/$1');
+
+        // Staff monitoring only; no staff action endpoint exists on the mobile API.
+        $routes->get('staff/queue-summary', 'Api\V1\StaffQueueApiController::index');
+    });
+});
+
 // Protected application routes
 $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access']], static function (RouteCollection $routes): void {
     $routes->get('/', 'DashboardController::index');
@@ -58,10 +92,12 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->get('portal/appointments', 'PortalController::index');
     $routes->get('portal/appointments/(:num)', 'PortalController::appointmentDetail/$1');
     $routes->get('portal/records', 'PortalController::index');
+    $routes->get('portal/visits', 'PortalVisitHistoryController::index');
     $routes->get('portal/settings', 'ProfileSettingsController::index');
     $routes->get('portal/settings/photo', 'ProfileSettingsController::photo');
     $routes->post('portal/settings/photo', 'ProfileSettingsController::upload');
     $routes->post('portal/settings/photo/remove', 'ProfileSettingsController::remove');
+    $routes->post('portal/settings/emergency-contact', 'ProfileSettingsController::updateEmergencyContact');
 
     // Operational Teams tasks use department membership, not clinical record grants.
     foreach (['clinic', 'guidance', 'facilities'] as $unit) {

@@ -210,7 +210,7 @@ after(async () => {
   finally { if (browser) await bounded(browser.close(), 'browser cleanup', 20_000); }
 }, { timeout: 30_000 });
 
-async function open(t, { modal = true, withConfirm = true, holdResult = false, init } = {}) {
+async function open(t, { modal = true, withConfirm = true, holdResult = false, failedPost = false, init } = {}) {
   const posts = [];
   const errors = [];
   const held = new Set();
@@ -258,6 +258,11 @@ async function open(t, { modal = true, withConfirm = true, holdResult = false, i
       req.on('data', chunk => post.chunks.push(chunk));
       req.on('end', () => {
         post.body = Buffer.concat(post.chunks).toString('utf8');
+        if (failedPost) {
+          // Application-level failure for the background-submit retry test, not PHP validation.
+          res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ success: false }));
+          return;
+        }
         // Same shape as CodeIgniter's redirect() after a successful POST.
         res.writeHead(302, { Location: `/result?path=${encodeURIComponent(post.path)}` }).end();
       });
@@ -454,6 +459,207 @@ test('accepting posts exactly once with the right action and CSRF body, then clo
 
   assert.equal(await page.locator('#synapseConfirmModal').isVisible(), false, 'The dialog must be gone after the redirect');
   assert.equal(await page.locator('#pageTitle').textContent(), 'Result');
+});
+
+async function requireCancellationReason(page, value = '') {
+  await page.evaluate(value => {
+    const form = document.querySelector('#dangerForm');
+    form.setAttribute('data-confirm-reason', '');
+    const reason = document.createElement('input');
+    reason.type = 'hidden';
+    reason.name = 'reason';
+    reason.value = value;
+    form.append(reason);
+  }, value);
+}
+
+const reasonInput = '[data-confirm-reason-input]';
+const hiddenReason = '#dangerForm input[type="hidden"][name="reason"]';
+
+test('cancellation requires a labelled, focused reason and rejects blank, Unicode whitespace, controls and formatting', { timeout: 20_000 }, async t => {
+  const f = await open(t);
+  const { page } = f;
+  await requireCancellationReason(page);
+  await f.openModal('#dangerSubmit');
+
+  const input = page.locator(reasonInput);
+  assert.equal(await page.locator('[data-confirm-reason-group]').isVisible(), true);
+  assert.equal(await page.getByRole('textbox', { name: 'Cancellation reason' }).count(), 1);
+  assert.equal(await input.getAttribute('type'), 'text');
+  assert.equal(await input.evaluate(el => el.required && !el.disabled && document.activeElement === el), true);
+  assert.equal(await input.getAttribute('maxlength'), '255');
+
+  for (const value of ['', '   ', '\u00a0\u2003\u202f\u3000', 'before\u0001after', 'before\u007fafter', 'before\u0085after', 'before\u200bafter', 'before\u202eafter', 'x'.repeat(256)]) {
+    // Programmatic value assignment also exercises the length guard beyond maxlength.
+    await input.evaluate((el, value) => {
+      el.value = value;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }, value);
+    await page.locator('[data-confirm-accept]').click();
+    await wait(100);
+    assert.equal(await page.locator('#synapseConfirmModal').isVisible(), true, `Invalid reason ${JSON.stringify(value)} must leave the dialog open`);
+    assert.equal(await input.evaluate(el => el.validity.valid), false);
+    assert.equal(await page.locator(hiddenReason).inputValue(), '', 'Rejected input must not reach the hidden field');
+    assert.deepEqual(f.counts(), {}, 'Rejected reasons must not POST');
+    assert.deepEqual(f.navigations, [], 'Rejected reasons must not navigate');
+  }
+
+  // An input event must clear the previous custom error so correction can succeed.
+  await input.fill('Corrected reason');
+  await input.press('Enter');
+  await page.waitForURL('**/result**');
+  assert.deepEqual(f.counts(), { danger: 1 });
+  assert.equal(new URLSearchParams(f.posts[0].body).get('reason'), 'Corrected reason');
+});
+
+for (const [label, entered, expected] of [
+  ['trimmed text', ' \u00a0 Scheduling conflict & travel = unavailable \u3000 ', 'Scheduling conflict & travel = unavailable'],
+  ['zero', '0', '0'],
+  ['255 characters', 'x'.repeat(255), 'x'.repeat(255)]
+]) {
+  test(`an approved cancellation posts ${label} exactly once with the original form and CSRF`, { timeout: 15_000 }, async t => {
+    const f = await open(t);
+    const { page } = f;
+    await requireCancellationReason(page);
+    await f.openModal('#dangerSubmit');
+    await page.locator(reasonInput).fill(entered);
+    assert.equal(await page.locator(hiddenReason).inputValue(), '', 'Typing alone must not change the hidden field');
+    assert.deepEqual(f.counts(), {});
+    await page.locator('[data-confirm-accept]').click();
+    await page.waitForURL('**/result**');
+    assert.deepEqual(f.counts(), { danger: 1 });
+    const [post] = f.posts;
+    assert.equal(post.path, '/danger');
+    assert.equal(post.headers['x-csrf-token'], undefined, 'This remains a native form POST, not a replacement AJAX request');
+    assert.match(post.headers['content-type'], /^application\/x-www-form-urlencoded/);
+    const fields = new URLSearchParams(post.body);
+    assert.deepEqual(fields.getAll('reason'), [expected]);
+    assert.equal(fields.get(CSRF_FIELD), CSRF_TOKEN);
+    assert.equal(fields.get('intent'), 'delete-appointment');
+    assert.equal(await page.locator('#synapseConfirmModal').isVisible(), false);
+  });
+}
+
+for (const dismissal of ['cancel button', 'Escape', 'backdrop']) {
+  test(`dismissing a cancellation with ${dismissal} preserves the hidden reason and posts nothing`, { timeout: 15_000 }, async t => {
+    const f = await open(t);
+    const { page } = f;
+    await requireCancellationReason(page, 'Previously approved reason');
+    await f.openModal('#dangerSubmit');
+    assert.equal(await page.locator(reasonInput).inputValue(), 'Previously approved reason');
+    await page.locator(reasonInput).fill('Unapproved edit');
+    if (dismissal === 'cancel button') await page.locator('[data-confirm-cancel]').click();
+    else if (dismissal === 'Escape') await page.keyboard.press('Escape');
+    else await page.mouse.click(8, 500);
+    await f.hidden();
+    await wait(150);
+    assert.equal(await page.locator(hiddenReason).inputValue(), 'Previously approved reason');
+    assert.equal(await page.locator(reasonInput).inputValue(), '', 'Closing clears the transient editor');
+    assert.deepEqual(f.counts(), {});
+    assert.deepEqual(f.navigations, []);
+    await f.openModal('#dangerSubmit');
+    assert.equal(await page.locator(reasonInput).inputValue(), 'Previously approved reason', 'Reopening must use the hidden value, not the discarded edit');
+  });
+}
+
+test('switching from a cancellation to an unrelated question hides and resets the reason editor', { timeout: 15_000 }, async t => {
+  const f = await open(t);
+  const { page } = f;
+  await requireCancellationReason(page, 'Saved reason');
+  await f.openModal('#dangerSubmit');
+  await page.locator(reasonInput).fill('Discard this edit');
+  // Replace the open question through the public API, not by bypassing the backdrop.
+  await page.evaluate(() => {
+    window.__unrelatedAnswer = null;
+    window.SynapseConfirm.confirm({ message: 'Unrelated question?', tone: 'primary' })
+      .then(answer => { window.__unrelatedAnswer = answer; });
+  });
+  assert.equal(await page.locator('[data-confirm-message]').textContent(), 'Unrelated question?');
+  assert.equal(await page.locator('[data-confirm-reason-group]').isVisible(), false);
+  assert.equal(await page.locator(reasonInput).inputValue(), '');
+  assert.equal(await page.locator(reasonInput).evaluate(el => el.disabled && !el.required && el.validity.valid), true);
+  assert.equal(await page.locator('[data-confirm-cancel]').evaluate(el => document.activeElement === el), true);
+  assert.equal(await page.locator(hiddenReason).inputValue(), 'Saved reason');
+  await page.locator('[data-confirm-accept]').click();
+  await f.hidden();
+  await page.waitForFunction(() => window.__unrelatedAnswer === true);
+  assert.deepEqual(f.counts(), {}, 'Replacing the question must decline the original cancellation');
+  assert.deepEqual(f.navigations, []);
+
+  // The unchanged general form must still submit without any reason field.
+  await f.openModal('#nestedSubmit');
+  assert.equal(await page.locator('[data-confirm-reason-group]').isVisible(), false);
+  await page.locator('[data-confirm-accept]').click();
+  await page.waitForURL('**/result**');
+  assert.deepEqual(f.counts(), { nested: 1 });
+  assert.equal(new URLSearchParams(f.posts[0].body).has('reason'), false);
+});
+
+for (const missing of ['modal', 'reason group', 'reason input', 'hidden reason']) {
+  test(`a reason-required form fails closed without its ${missing}`, { timeout: 15_000 }, async t => {
+    const f = await open(t, { modal: missing !== 'modal', init: nativePrompt(true) });
+    const { page } = f;
+    await requireCancellationReason(page, 'Saved reason');
+    await page.evaluate(missing => {
+      const selectors = {
+        'reason group': '[data-confirm-reason-group]',
+        'reason input': '[data-confirm-reason-input]',
+        'hidden reason': '#dangerForm input[name="reason"]'
+      };
+      if (selectors[missing]) document.querySelector(selectors[missing]).remove();
+    }, missing);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await page.locator('#dangerSubmit').click();
+      await wait(200);
+      assert.deepEqual(f.counts(), {});
+      assert.deepEqual(f.navigations, []);
+      assert.deepEqual(await f.confirmCalls(), [], 'A native yes/no prompt cannot collect a mandatory reason');
+      assert.equal(await page.locator('#synapseConfirmModal').isVisible(), false);
+      if (missing !== 'hidden reason') assert.equal(await page.locator(hiddenReason).inputValue(), 'Saved reason');
+    }
+  });
+}
+
+test('a failed background response preserves the approved hidden reason when retrying', { timeout: 15_000 }, async t => {
+  const f = await open(t, { failedPost: true });
+  const { page } = f;
+  await requireCancellationReason(page);
+  // Model a background form consumer: it only receives the approved native submit.
+  // The fixture response is an application failure; no PHP/session behavior is asserted.
+  await page.evaluate(() => {
+    window.__backgroundResults = [];
+    document.querySelector('#dangerForm').addEventListener('submit', async event => {
+      event.preventDefault();
+      const response = await fetch(event.target.action, {
+        method: event.target.method,
+        body: new URLSearchParams(new FormData(event.target))
+      });
+      window.__backgroundResults.push(await response.json());
+    });
+  });
+  await f.openModal('#dangerSubmit');
+  await page.locator(reasonInput).fill('  Scheduling conflict  ');
+  await page.locator('[data-confirm-accept]').click();
+  await f.hidden();
+  await page.waitForFunction(() => window.__backgroundResults.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__backgroundResults), [{ success: false }]);
+  assert.deepEqual(f.counts(), { danger: 1 });
+  assert.equal(await page.locator(hiddenReason).inputValue(), 'Scheduling conflict');
+
+  await f.openModal('#dangerSubmit');
+  assert.equal(await page.locator(reasonInput).inputValue(), 'Scheduling conflict');
+  assert.deepEqual(f.counts(), { danger: 1 }, 'Retrying must ask again, not reuse approval');
+  await page.locator('[data-confirm-accept]').click();
+  await f.hidden();
+  await page.waitForFunction(() => window.__backgroundResults.length === 2);
+  assert.deepEqual(f.counts(), { danger: 2 });
+  for (const post of f.posts) {
+    const fields = new URLSearchParams(post.body);
+    assert.equal(fields.get('reason'), 'Scheduling conflict');
+    assert.equal(fields.get(CSRF_FIELD), CSRF_TOKEN);
+    assert.equal(fields.get('intent'), 'delete-appointment');
+  }
+  assert.deepEqual(f.navigations, []);
 });
 
 test('the cancel button posts nothing, closes the dialog and leaves the form usable', { timeout: 15_000 }, async t => {

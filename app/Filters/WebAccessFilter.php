@@ -48,6 +48,7 @@ final class WebAccessFilter implements FilterInterface
                 $this->permit('portal.appointments.read');
                 $this->permit('portal.records.read');
             }
+            if ($path === 'portal/visits') $this->permit('portal.records.read');
             if (preg_match('~^portal/appointments/\d+$~', $path)) {
                 $this->permit('portal.appointments.read');
             }

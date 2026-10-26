@@ -40,11 +40,18 @@
       root.dataset.guidanceTeamsUrl, root.dataset.guidanceTeamCalendarUrl,
       root.dataset.facilitiesTeamsUrl, root.dataset.facilitiesTeamCalendarUrl]
     .map(value => httpDestination(value)?.href).filter(Boolean));
+  const chatDestinations = [root.dataset.clinicTeamChatUrl, root.dataset.guidanceTeamChatUrl, root.dataset.facilitiesTeamChatUrl]
+    .map(httpDestination).filter(url => url && !url.search && !url.hash);
   const portalUrl = httpDestination(root.dataset.portalUrl)?.href;
   function destination(item) {
     try {
       const url = httpDestination(item.url);
       if (url && destinations.has(url.href)) return url.href;
+      if (url) {
+        const message = url.searchParams.get('message');
+        if (/^[1-9][0-9]*$/.test(message || '') && Number.isSafeInteger(Number(message))
+            && chatDestinations.some(base => url.href === `${base.href}?message=${message}#chat-message-${message}`)) return url.href;
+      }
     } catch (_) { /* Untrusted or missing destinations fall back to the personal portal. */ }
     return portalUrl;
   }
@@ -70,6 +77,7 @@
     'Team task updated': 'bi bi-list-task',
     'Team task status changed': 'bi bi-list-task',
     'Team task comment': 'bi bi-chat-left-text',
+    'Team chat mention': 'bi bi-at',
   };
   function workflowIcon(title) {
     if (title.startsWith('Appointment ') || title === 'Upcoming appointment') return 'bi bi-calendar-check';
@@ -120,7 +128,8 @@
       text.className = 'notification-text';
       // Team content stays in the authorized board/calendar, not the shared header.
       const message = teamNotice
-        ? (item.title.startsWith('Team event ') ? 'Open your team calendar for details.' : 'Open your team board for details.')
+        ? (item.title === 'Team chat mention' ? 'Open your team chat to view the message.'
+                  : item.title.startsWith('Team event ') ? 'Open your team calendar for details.' : 'Open your team board for details.')
         : item.message;
       text.textContent = message;
       const time = document.createElement('time');
@@ -137,7 +146,7 @@
     if (!fragment.childNodes.length) {
       const empty = document.createElement('li');
       empty.className = 'p-3 small text-muted';
-      empty.textContent = 'No notifications yet. Appointments, referrals, team events and tasks, announcements, and surveys will appear here.';
+      empty.textContent = 'No notifications yet. Appointments, referrals, team events, tasks and chat mentions, announcements, and surveys will appear here.';
       fragment.append(empty);
     }
     list.replaceChildren(fragment);
