@@ -141,6 +141,39 @@ final class PatientHistoryService
      */
     public function getPortalAppointments(int $personId, array $filters = []): array
     {
+        return $this->orderedPortalAppointments($personId, $filters)->findAll();
+    }
+
+    /**
+     * Returns a counted, bounded page without changing the mobile API's list contract.
+     *
+     * @param array{service?: string, status?: string, sort?: string, page?: int|string, per_page?: int|string} $filters
+     * @return array{appointments: array, pagination: array}
+     */
+    public function getPortalAppointmentsPage(int $personId, array $filters = []): array
+    {
+        $perPage = filter_var($filters['per_page'] ?? 25, FILTER_VALIDATE_INT);
+        $perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 25;
+        $page = max(1, (int) filter_var($filters['page'] ?? 1, FILTER_VALIDATE_INT));
+        $total = $this->portalAppointmentQuery($personId)->countAllResults();
+        $filtered = $this->portalAppointmentQuery($personId, $filters)->countAllResults();
+        $pages = max(1, (int) ceil($filtered / $perPage));
+        $page = min($page, $pages);
+        $offset = ($page - 1) * $perPage;
+
+        return [
+            'appointments' => $this->orderedPortalAppointments($personId, $filters)->findAll($perPage, $offset),
+            'pagination' => [
+                'page' => $page, 'pages' => $pages, 'per_page' => $perPage,
+                'total' => $total, 'filtered' => $filtered,
+                'from' => $filtered === 0 ? 0 : $offset + 1,
+                'to' => min($offset + $perPage, $filtered),
+            ],
+        ];
+    }
+
+    private function portalAppointmentQuery(int $personId, array $filters = []): AppointmentModel
+    {
         $service = (string) ($filters['service'] ?? 'all');
         if (!in_array($service, ['all', 'clinic', 'guidance'], true)) {
             $service = 'all';
@@ -158,18 +191,7 @@ final class PatientHistoryService
             default => [],
         };
 
-        $sort = (string) ($filters['sort'] ?? 'upcoming');
-        if (!in_array($sort, ['upcoming', 'date_asc', 'date_desc'], true)) {
-            $sort = 'upcoming';
-        }
-
-        $builder = $this->appointmentModel->scoped()
-            ->select('appointments.*')
-            ->select("COALESCE(NULLIF(TRIM(CONCAT_WS(' ', provider.first_name, provider.last_name)), ''), u.username) AS provider_name", false)
-            ->join('department_staff staff', 'staff.id = appointments.staff_assignment_id AND staff.tenant_id = appointments.tenant_id AND staff.unit = appointments.unit', 'left')
-            ->join('people provider', 'provider.id = staff.person_id AND provider.tenant_id = staff.tenant_id', 'left')
-            ->join('users u', 'u.id = appointments.provider_user_id AND u.tenant_id = appointments.tenant_id', 'left')
-            ->where('appointments.person_id', $personId);
+        $builder = $this->appointmentModel->scoped()->where('appointments.person_id', $personId);
 
         if ($service !== 'all') {
             $builder->where('appointments.unit', $service);
@@ -178,32 +200,34 @@ final class PatientHistoryService
             $builder->whereIn('appointments.status', $statuses);
         }
 
-        $appointments = $builder->findAll();
-        usort($appointments, static function (array $a, array $b) use ($sort): int {
-            if ($sort === 'date_asc') {
-                return strcmp((string) $a['starts_at'], (string) $b['starts_at'])
-                    ?: ((int) $a['id'] <=> (int) $b['id']);
-            }
-            if ($sort === 'date_desc') {
-                return strcmp((string) $b['starts_at'], (string) $a['starts_at'])
-                    ?: ((int) $b['id'] <=> (int) $a['id']);
-            }
+        return $builder;
+    }
 
-            $aActive = in_array($a['status'], self::PORTAL_ACTIVE_STATUSES, true);
-            $bActive = in_array($b['status'], self::PORTAL_ACTIVE_STATUSES, true);
-            if ($aActive !== $bActive) {
-                return $aActive ? -1 : 1;
-            }
+    private function orderedPortalAppointments(int $personId, array $filters): AppointmentModel
+    {
+        $builder = $this->portalAppointmentQuery($personId, $filters)
+            ->select('appointments.*')
+            ->select("COALESCE(NULLIF(TRIM(CONCAT_WS(' ', provider.first_name, provider.last_name)), ''), u.username) AS provider_name", false)
+            ->join('department_staff staff', 'staff.id = appointments.staff_assignment_id AND staff.tenant_id = appointments.tenant_id AND staff.unit = appointments.unit', 'left')
+            ->join('people provider', 'provider.id = staff.person_id AND provider.tenant_id = staff.tenant_id', 'left')
+            ->join('users u', 'u.id = appointments.provider_user_id AND u.tenant_id = appointments.tenant_id', 'left');
+        $sort = $filters['sort'] ?? 'upcoming';
+        if (in_array($sort, ['date_asc', 'date_desc'], true)) {
+            $direction = $sort === 'date_asc' ? 'ASC' : 'DESC';
+            return $builder->orderBy('appointments.starts_at', $direction)->orderBy('appointments.id', $direction);
+        }
 
-            $byDate = strcmp((string) $a['starts_at'], (string) $b['starts_at']);
-            if ($aActive) {
-                return $byDate ?: ((int) $a['id'] <=> (int) $b['id']);
-            }
-
-            return $byDate ? -$byDate : ((int) $b['id'] <=> (int) $a['id']);
-        });
-
-        return $appointments;
+        // Match the portal's active-first order, including deterministic ties across pages.
+        $db = $builder->builder()->db();
+        $status = $db->protectIdentifiers('appointments.status');
+        $startsAt = $db->protectIdentifiers('appointments.starts_at');
+        $id = $db->protectIdentifiers('appointments.id');
+        $active = "{$status} IN ('requested', 'scheduled', 'confirmed', 'checked_in')";
+        return $builder->orderBy("CASE WHEN {$active} THEN 0 ELSE 1 END", 'ASC', false)
+            ->orderBy("CASE WHEN {$active} THEN {$startsAt} END", 'ASC', false)
+            ->orderBy("CASE WHEN {$active} THEN {$id} END", 'ASC', false)
+            ->orderBy('appointments.starts_at', 'DESC')
+            ->orderBy('appointments.id', 'DESC');
     }
 
     /** Returns one appointment only when it belongs to the given person. */

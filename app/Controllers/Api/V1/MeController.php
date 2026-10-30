@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Controllers\Api\V1;
 
-use App\Services\Clinic\PatientHistoryService;
+use App\Models\EmployeeProfileModel;
+use App\Models\HealthProfileModel;
+use App\Models\StudentProfileModel;
+use App\Services\UniversityEmail;
 use App\Services\ProfileAvatar;
 use App\Services\ProfilePhotoService;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -50,21 +53,36 @@ final class MeController extends ApiV1Controller
             if ($personId <= 0 || !in_array('portal.records.read', $identity['permissions'] ?? [], true)) {
                 throw new RuntimeException('Permission required: portal.records.read', 403);
             }
-            $chart = (new PatientHistoryService())->getPatientChart($personId, includeAppointments: false);
-            $person = $chart['person'];
-            $health = $chart['health_profile'];
-            $student = $chart['student_profile'];
-            $employee = $chart['employee_profile'];
+            [, $person] = $this->photoOwner();
+            // Do not build a full patient chart: encounters, treatments and inventory
+            // are neither needed nor appropriate for this personal-profile projection.
+            $health = (new HealthProfileModel())->findByPersonId($personId);
+            $student = $person['kind'] === 'student'
+                ? (new StudentProfileModel())->select('program, year_level, section, department')->findByPersonId($personId)
+                : null;
+            $employee = $person['kind'] === 'employee'
+                ? (new EmployeeProfileModel())->select('department, position, employment_status')->findByPersonId($personId)
+                : null;
+            $email = !empty($person['email']) ? $person['email'] : UniversityEmail::derive(
+                (string) ($person['first_name'] ?? ''), (string) ($person['last_name'] ?? '')
+            );
 
             return $this->ok(['data' => [
                 'person' => [
-                    'name' => trim(($person['first_name'] ?? '') . ' ' . ($person['last_name'] ?? '')),
+                    'name' => implode(' ', array_filter([
+                        trim((string) ($person['first_name'] ?? '')),
+                        trim((string) ($person['middle_name'] ?? '')),
+                        trim((string) ($person['last_name'] ?? '')),
+                    ], static fn (string $part): bool => $part !== '')),
                     'kind' => $person['kind'] ?? null,
                     'identifier' => $person['mis_id'] ?? null,
+                    'email' => $email ?? ($identity['email'] ?? null),
                     'program' => $student['program'] ?? null,
                     'year_level' => $student['year_level'] ?? null,
+                    'section' => $student['section'] ?? null,
                     'department' => $student['department'] ?? $employee['department'] ?? null,
                     'position' => $employee['position'] ?? null,
+                    'employment_status' => $employee['employment_status'] ?? null,
                 ],
                 'health' => [
                     'blood_type' => $health['blood_type'] ?? null,

@@ -1,47 +1,58 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import { BellRing, ListChecks, Radio } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { BellRing, CircleHelp, ListChecks, RefreshCw, WifiOff } from 'lucide-react-native';
 import { Action } from '../../../components/Action';
 import { EmptyState } from '../../../components/EmptyState';
-import { StatusPill } from '../../../components/StatusPill';
 import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
-import { QueueTicket } from '../../../api/endpoints/queue';
-import { Theme, font, palette, type } from '../../../theme/tokens';
+import { IconAction } from '../../../components/IconAction';
+import { Theme, font, memoizeStyles, palette } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { useQueueSnapshot } from '../hooks';
-import { unitLabel } from '../../appointments/status';
+import { QueueTicketCard } from '../components/QueueTicketCard';
 import { formatTime } from '../../../lib/format';
+
+import type { QueueNavigation } from '../../../navigation/types';
 
 export function QueueBoardScreen() {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
+  const navigation = useNavigation<QueueNavigation>();
   const query = useQueueSnapshot();
+  // A held ("skipped") ticket is still the patient's ticket; the web card shows it as On hold.
   const tickets = query.data?.data.tickets ?? [];
-  const active = tickets.filter((ticket) => ticket.status !== 'skipped');
   const lastUpdated = query.dataUpdatedAt > 0 ? formatTime(new Date(query.dataUpdatedAt).toISOString()) : null;
+  const refresh = (
+    <IconAction
+      label="Refresh queue"
+      onPress={() => {
+        query.refetch().catch(() => undefined);
+      }}
+      icon={<RefreshCw size={19} color={theme.ink700} />}
+    />
+  );
 
   if (query.isLoading) {
     return (
       <Screen scroll={false}>
-        <PageHeader title="My Queue" subtitle="Live ticket status" />
-        <ActivityIndicator style={styles.loader} color={theme.brand} />
+        <PageHeader title="Queue status" subtitle="Live updates from your current visit" />
+        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
       </Screen>
     );
   }
 
-  if (active.length === 0) {
+  if (query.isError && !query.data) {
     return (
       <Screen scroll={false}>
-        <PageHeader title="My Queue" subtitle="Live ticket status" />
+        <PageHeader title="Queue status" subtitle="Live updates from your current visit" />
         <EmptyState
-          icon={<ListChecks size={30} color={theme.brand} />}
-          title="No active ticket"
-          body="You join the queue when the department checks you in for a confirmed appointment or registers a walk-in visit."
+          icon={<WifiOff size={30} color={theme.brandIcon} />}
+          title="Can’t load your queue"
+          body="Check your connection and try again. Your ticket is not affected."
           action={
             <Action full onPress={() => query.refetch().catch(() => undefined)}>
-              Refresh
+              Try again
             </Action>
           }
         />
@@ -49,81 +60,86 @@ export function QueueBoardScreen() {
     );
   }
 
+  if (tickets.length === 0) {
+    return (
+      <Screen>
+        <PageHeader title="Queue status" subtitle="Live updates from your current visit" action={refresh} />
+        <EmptyState
+          icon={<ListChecks size={30} color={theme.brandIcon} />}
+          title="You’re not in a queue"
+          body="When you check in for a clinic or guidance visit, your live position will appear here."
+          action={
+            <Action full variant="secondary" onPress={() => navigation.navigate('Visits', { screen: 'Appointments' })}>
+              View appointments
+            </Action>
+          }
+        />
+        <View style={styles.infoCard}>
+          <View style={styles.infoIcon}>
+            <CircleHelp size={20} color={palette.blue600} />
+          </View>
+          <View style={styles.infoCopy}>
+            <Text style={styles.infoTitle}>How check-in works</Text>
+            <Text style={styles.infoBody}>
+              Arrive at your service location and show your university ID. Staff will add you to the queue.
+            </Text>
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
-      <PageHeader title="My Queue" subtitle="Live ticket status" />
-      {lastUpdated ? <Text style={styles.lastUpdated}>Updated {lastUpdated} · refreshes every 15s</Text> : null}
-
-      {active.map((ticket) => (
-        <TicketCard key={`${ticket.unit}-${ticket.ticket_code}`} ticket={ticket} />
+      <PageHeader
+        title="My waiting room"
+        subtitle={`${tickets.length} active ticket${tickets.length === 1 ? '' : 's'} today`}
+        action={refresh}
+      />
+      {tickets.map((ticket) => (
+        <QueueTicketCard key={`${ticket.unit}-${ticket.ticket_code}`} ticket={ticket} />
       ))}
 
       <View style={styles.notice}>
-        <BellRing size={14} color={palette.blue600} />
+        <BellRing size={18} color={palette.blue600} />
         <Text style={styles.noticeText}>
-          Watch your ticket here — the department will call your number when it is your turn. Keep the app handy or stay
-          within calling distance.
+          Each department manages its own queue. Keep this app nearby; staff will call your number when it is your turn.
         </Text>
       </View>
+      {lastUpdated ? <Text style={styles.lastUpdated}>Updated {lastUpdated} · refreshes every 15s</Text> : null}
     </Screen>
   );
 }
 
-function TicketCard({ ticket }: { ticket: QueueTicket }) {
-  const { theme } = useTheme();
-  const styles = makeStyles(theme);
-  const isGuidance = ticket.unit === 'guidance';
-  const statusLabel =
-    ticket.status === 'waiting' ? 'Waiting' : ticket.status === 'called' ? 'Now calling' : 'In consultation';
-
-  return (
-    <LinearGradient
-      colors={isGuidance ? ['#4f3974', palette.violet600] : [palette.brand900, palette.brand700]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.ticket}>
-      <View style={styles.ticketCopy}>
-        <StatusPill tone="neutral">{statusLabel}</StatusPill>
-        <Text style={styles.ticketNumber}>{ticket.ticket_code}</Text>
-        <Text style={styles.ticketUnit}>{unitLabel(ticket.unit)} · today</Text>
-      </View>
-      <View style={styles.ticketMeta}>
-        <Radio size={16} color="#77e0b6" />
-        <Text style={styles.ticketMetaText}>Live</Text>
-      </View>
-    </LinearGradient>
-  );
-}
-
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     loader: { marginTop: 30 },
-    lastUpdated: { color: theme.ink400, fontSize: 8.5, textAlign: 'center', marginBottom: 12, fontFamily: font.body },
-    ticket: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-      marginBottom: 10,
-      padding: 15,
-      borderRadius: 16,
-    },
-    ticketCopy: { flexDirection: 'column', alignItems: 'flex-start' },
-    ticketNumber: { ...type.hero, fontSize: 26, color: '#ffffff', marginTop: 7 },
-    ticketUnit: { color: 'rgba(255,255,255,0.72)', fontSize: 9, marginTop: 2, fontFamily: font.body },
-    ticketMeta: { flexDirection: 'column', alignItems: 'center', gap: 3 },
-    ticketMetaText: { color: '#77e0b6', fontSize: 8, fontWeight: '800', fontFamily: font.body },
+    lastUpdated: { marginTop: 4, color: theme.ink400, fontSize: 8.5, textAlign: 'center', fontFamily: font.body },
     notice: {
       flexDirection: 'row',
       alignItems: 'flex-start',
+      gap: 9,
+      marginVertical: 13,
+      padding: 11,
+      borderRadius: 11,
+      backgroundColor: theme.mode === 'dark' ? theme.surfaceWarm : palette.blue100,
+    },
+    noticeText: { flex: 1, color: theme.mode === 'dark' ? theme.ink700 : '#315f74', fontSize: 10, lineHeight: 14.5, fontFamily: font.body },
+    infoCard: {
+      flexDirection: 'row',
       gap: 11,
-      marginTop: 8,
+      marginTop: 5,
       padding: 14,
       borderRadius: 14,
       backgroundColor: theme.surface,
       borderWidth: 1,
       borderColor: theme.line,
     },
-    noticeText: { flex: 1, color: theme.ink500, fontSize: 9.5, lineHeight: 14, fontFamily: font.body },
+    infoIcon: { width: 24, height: 28, alignItems: 'center', justifyContent: 'center' },
+    infoCopy: { flex: 1, gap: 4 },
+    infoTitle: { fontSize: 11, fontWeight: '700', fontFamily: font.body, color: theme.ink900 },
+    infoBody: { color: theme.ink500, fontSize: 9.5, lineHeight: 14, fontFamily: font.body },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

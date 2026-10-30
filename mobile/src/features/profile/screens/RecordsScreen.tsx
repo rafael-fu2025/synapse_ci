@@ -1,8 +1,9 @@
-import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { ActivityIndicator, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ChevronRight, FileText } from 'lucide-react-native';
+import { FileText, ShieldCheck } from 'lucide-react-native';
+import { Action } from '../../../components/Action';
 import { EmptyState } from '../../../components/EmptyState';
 import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
@@ -10,7 +11,7 @@ import { StatusPill } from '../../../components/StatusPill';
 import { useAppointments } from '../../appointments/hooks';
 import { statusPresentation, unitLabel } from '../../appointments/status';
 import { Appointment } from '../../../api/endpoints/appointments';
-import { Theme, font, palette } from '../../../theme/tokens';
+import { Theme, font, palette, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatDate } from '../../../lib/format';
 import { ProfileStackParamList } from '../../../navigation/types';
@@ -21,40 +22,55 @@ export function RecordsScreen() {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const navigation = useNavigation<Props['navigation']>();
-  const query = useAppointments({ service: 'all', status: 'all', sort: 'date_desc' });
-  const records = query.data?.data ?? [];
-
-  const byMonth = records.reduce<Record<string, Appointment[]>>((groups, appointment) => {
-    const month = appointment.date.slice(0, 7);
-    groups[month] = [...(groups[month] ?? []), appointment];
-    return groups;
-  }, {});
-
-  const sections = Object.entries(byMonth);
+  const query = useAppointments({ service: 'all', status: 'completed', sort: 'date_desc' });
+  const sections = useMemo(() => {
+    const byMonth = new Map<string, Appointment[]>();
+    for (const appointment of query.data?.data ?? []) {
+      if (appointment.status !== 'completed') {
+        continue;
+      }
+      const month = appointment.date.slice(0, 7);
+      const group = byMonth.get(month);
+      if (group) {
+        group.push(appointment);
+      } else {
+        byMonth.set(month, [appointment]);
+      }
+    }
+    return Array.from(byMonth, ([month, data]) => ({ month, data }));
+  }, [query.data]);
 
   return (
     <Screen scroll={false}>
-      <PageHeader title="My records" subtitle="Visit timeline" onBack={navigation.goBack} />
+      <PageHeader title="Personal records" subtitle="Completed appointment history" onBack={navigation.goBack} />
+      <View style={styles.notice}>
+        <ShieldCheck size={18} color={theme.brandIcon} />
+        <Text style={styles.noticeText}>This timeline shows completed appointments, not clinical records or shared care summaries. Internal clinical and counseling notes are not shown here.</Text>
+      </View>
       {query.isLoading ? (
-        <ActivityIndicator color={theme.brand} />
-      ) : records.length === 0 ? (
+        <ActivityIndicator color={theme.brandIcon} />
+      ) : query.isError ? (
         <EmptyState
-          icon={<FileText size={30} color={theme.brand} />}
-          title="No records yet"
-          body="Completed clinic and guidance visits will build your personal timeline here."
+          icon={<FileText size={30} color={theme.brandIcon} />}
+          title="Could not load appointment history"
+          body="Your history is unavailable right now. Check your connection and try again."
+          action={<Action full onPress={() => { query.refetch().catch(() => undefined); }} loading={query.isFetching}>Try again</Action>}
+        />
+      ) : sections.length === 0 ? (
+        <EmptyState
+          icon={<FileText size={30} color={theme.brandIcon} />}
+          title="No completed appointments yet"
+          body="Completed clinic and guidance appointments will appear here. Appointment requests and upcoming visits are in Appointment history."
         />
       ) : (
-        <FlatList
-          data={sections}
-          keyExtractor={(section) => section[0]}
-          renderItem={({ item: [month, appointments] }) => (
-            <View>
-              <Text style={styles.monthLabel}>{formatMonth(month)}</Text>
-              {appointments.map((appointment) => (
-                <RecordRow key={appointment.id} appointment={appointment} />
-              ))}
-            </View>
-          )}
+        <SectionList
+          sections={sections}
+          keyExtractor={appointment => String(appointment.id)}
+          renderSectionHeader={({ section }) => <Text style={styles.monthLabel}>{formatMonth(section.month)}</Text>}
+          renderItem={({ item }) => <RecordRow appointment={item} />}
+          stickySectionHeadersEnabled={false}
+          refreshing={query.isFetching}
+          onRefresh={() => { query.refetch().catch(() => undefined); }}
           contentContainerStyle={styles.list}
         />
       )}
@@ -74,14 +90,14 @@ function RecordRow({ appointment }: { appointment: Appointment }) {
       <View style={[styles.recordDot, isGuidance && styles.recordDotGuidance]} />
       <View style={styles.recordDate}>
         <Text style={styles.recordDay}>{day}</Text>
-        <Text style={styles.recordMonth}>{formatMonth(appointment.date.slice(0, 7))}</Text>
+        <Text style={styles.recordMonth}>{new Date(`${appointment.date}T12:00:00`).toLocaleDateString('en-PH', { month: 'short' }).toUpperCase()}</Text>
       </View>
       <View style={styles.recordCopy}>
         <StatusPill tone={status.tone}>{status.label}</StatusPill>
-        <Text style={styles.recordTitle}>{unitLabel(appointment.unit)} visit</Text>
+        <Text style={styles.recordTitle}>{unitLabel(appointment.unit)} appointment</Text>
         <Text style={styles.recordMeta}>{formatDate(appointment.starts_at)} · {appointment.type.replace(/_/g, ' ')}</Text>
       </View>
-      <ChevronRight size={15} color={theme.ink400} />
+
     </View>
   );
 }
@@ -92,9 +108,11 @@ function formatMonth(ym: string): string {
   return parsed.toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }).toUpperCase();
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
-    list: { paddingBottom: 20 },
+    list: { paddingBottom: 20, paddingLeft: 8, borderLeftWidth: 1, borderLeftColor: theme.line },
+    notice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, marginBottom: 12, borderRadius: 12, backgroundColor: theme.brand50 },
+    noticeText: { flex: 1, color: theme.ink500, fontSize: 10, lineHeight: 15, fontFamily: font.body },
     monthLabel: { marginVertical: 12, marginLeft: 2, color: theme.ink400, fontSize: 8, fontWeight: '800', letterSpacing: 1, fontFamily: font.body },
     recordCard: {
       flexDirection: 'row',
@@ -125,3 +143,5 @@ function makeStyles(theme: Theme) {
     recordMeta: { color: theme.ink400, fontSize: 8, fontFamily: font.body },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

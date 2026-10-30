@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Theme, font } from '../theme/tokens';
+import { Theme, font, memoizeStyles } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 export function DetailRow({
@@ -27,13 +27,15 @@ export function DetailRow({
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     row: { flexDirection: 'row', gap: 11, paddingVertical: 12 },
     rowDivider: { borderBottomWidth: 1, borderBottomColor: theme.line },
-    icon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: theme.brand50 },
+    icon: { width: 24, height: 32, alignItems: 'center', justifyContent: 'center' },
     copy: { flex: 1, justifyContent: 'center' },
     label: { fontSize: 9, fontFamily: font.body, color: theme.ink500 },
     value: { marginTop: 2, fontSize: 11, fontWeight: '600', fontFamily: font.body, color: theme.ink900 },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

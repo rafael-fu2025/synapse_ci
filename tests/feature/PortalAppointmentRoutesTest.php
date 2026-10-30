@@ -118,14 +118,15 @@ final class PortalAppointmentRoutesTest extends CIUnitTestCase
         $this->assertStringNotContainsString('>Personal Health</li>', $body);
         $this->assertStringNotContainsString('Apply filters', $body);
         $this->assertStringNotContainsString('Filters update automatically', $body);
-        $this->assertDoesNotMatchRegularExpression('/\d+\s+(?:total|matching)\b/', $body);
+        $this->assertStringContainsString('Showing 1–1 of 1', $body);
+        $this->assertStringContainsString('(2 total appointments)', $body);
 
         $unfiltered = $this->withSession($this->sessionFor($this->student))->withHeaders([])->get('portal');
         $unfiltered->assertStatus(200);
         $unfilteredBody = $unfiltered->response()->getBody();
         $this->assertStringNotContainsString('Apply filters', $unfilteredBody);
         $this->assertStringNotContainsString('Filters update automatically', $unfilteredBody);
-        $this->assertDoesNotMatchRegularExpression('/\d+\s+(?:total|matching)\b/', $unfilteredBody);
+        $this->assertStringContainsString('Showing 1–2 of 2', $unfilteredBody);
 
         $detail = $this->withSession($this->sessionFor($this->student))->withHeaders([])
             ->get('portal/appointments/' . $guidanceId);

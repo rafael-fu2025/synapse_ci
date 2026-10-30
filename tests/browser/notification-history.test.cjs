@@ -113,6 +113,25 @@ test('history displays Philippine time and explicit offset independently of brow
   assert.equal(await time.getAttribute('title'), 'Philippine time (Asia/Manila, UTC+08:00)');
 });
 
+test('History numbered window and First/Last navigate asynchronously without changing filters', { timeout: 30000 }, async t => {
+  const { page, calls } = await fixture(t, { api: url => ({ body: history(url, [item(1)], 181) }) });
+  await settled(page);
+  await page.locator('[data-history-filter="unread"]').click(); await settled(page);
+  await page.locator('[data-history-last]').click(); await settled(page);
+  assert.equal(await page.locator('[data-history-range]').textContent(), 'Showing 181–181 of 181');
+  assert.equal(await page.locator('[data-history-pagination] [aria-current="page"]').textContent(), '10');
+  await page.getByRole('button', { name: 'Page 8', exact: true }).click(); await settled(page);
+  assert.equal(await page.locator('[data-history-range]').textContent(), 'Showing 141–160 of 181');
+  assert.equal(await page.locator('[data-history-pagination] .active').count(), 1);
+  assert.equal(await page.locator('[data-history-pagination] button').count(), 9);
+  await page.locator('[data-history-first]').click(); await settled(page);
+  assert.equal(await page.locator('[data-history-range]').textContent(), 'Showing 1–20 of 181');
+  assert.equal(calls.at(-1).url.searchParams.get('filter'), 'unread');
+  assert.equal(calls.at(-1).url.searchParams.get('page'), '1');
+  assert.equal(page.url(), origin + '/notifications/inbox');
+  assert.equal(calls.filter(call => call.method === 'POST').length, 0);
+});
+
 const posts = calls => calls.filter(call => call.method === 'POST');
 for (const mobile of [false, true]) test(`History ${mobile ? 'dark mobile' : 'desktop'}: pagination, explicit reads, filters, total and empty state`, { timeout: 35000 }, async t => {
   let read = false;
@@ -127,9 +146,16 @@ for (const mobile of [false, true]) test(`History ${mobile ? 'dark mobile' : 'de
   assert.equal(posts(calls).length, 0, 'Opening history must not mark anything');
   assert.equal(await page.locator('[data-history-unread]').textContent(), '99+ unread');
   assert.equal(await page.locator('[data-history-status]').textContent(), '1–20 of 21 notifications');
+  assert.equal(await page.locator('[data-history-range]').textContent(), 'Showing 1–20 of 21');
+  assert.equal(await page.locator('[data-history-first]').isDisabled(), true);
+  assert.equal(await page.locator('[data-history-previous]').isDisabled(), true);
+  assert.equal(await page.locator('[data-history-pagination] [aria-current="page"]').textContent(), '1');
   await page.locator('[data-history-next]').click(); await settled(page);
   assert.equal(await page.locator('[data-history-page]').textContent(), 'Page 2 of 2');
   assert.equal(await page.locator('[data-history-status]').textContent(), '21–21 of 21 notifications');
+  assert.equal(await page.locator('[data-history-range]').textContent(), 'Showing 21–21 of 21');
+  assert.equal(await page.locator('[data-history-next]').isDisabled(), true);
+  assert.equal(await page.locator('[data-history-last]').isDisabled(), true);
   const csrf = await page.evaluate(() => ({ header: document.querySelector('meta[name="csrf-header"]').content.toLowerCase(), token: document.querySelector('meta[name="csrf-token"]').content }));
   await page.locator('[data-history-read]').click();
   await eventually(() => calls.filter(c => c.method === 'GET').length >= 3); await settled(page);
@@ -141,6 +167,8 @@ for (const mobile of [false, true]) test(`History ${mobile ? 'dark mobile' : 'de
   await page.locator('[data-history-filter="unread"]').click(); await settled(page);
   assert.match(await page.locator('[data-history-list]').textContent(), /caught up/);
   assert.equal(await page.locator('[data-history-status]').textContent(), '0–0 of 0 unread notifications');
+  assert.equal(await page.locator('[data-history-range]').textContent(), 'Showing 0–0 of 0');
+  assert.equal(await page.locator('[data-history-pagination] button:disabled').count(), 5);
   assert.equal(await page.locator('[data-history-filter="unread"]').getAttribute('aria-pressed'), 'true');
   assert.equal(await page.locator('[data-history-mark-all]').isDisabled(), true);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1));

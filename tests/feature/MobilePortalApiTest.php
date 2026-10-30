@@ -256,6 +256,20 @@ final class MobilePortalApiTest extends CIUnitTestCase
         $student = $this->account('student');
         $token = $this->accessToken($student);
         $db = Database::connect();
+        $db->table('people')->where('id', $student['person_id'])->update([
+            'middle_name' => 'University',
+            'email' => 'portal.fixture@university.invalid',
+        ]);
+        $db->table('student_profiles')->insert([
+            'tenant_id' => 1,
+            'person_id' => $student['person_id'],
+            'program' => 'BS Information Technology',
+            'year_level' => 3,
+            'section' => 'A',
+            'department' => 'CCS',
+            'created_at' => gmdate('Y-m-d H:i:s'),
+            'updated_at' => gmdate('Y-m-d H:i:s'),
+        ]);
         $db->table('health_profiles')->insert([
             'tenant_id' => 1,
             'person_id' => $student['person_id'],
@@ -271,12 +285,44 @@ final class MobilePortalApiTest extends CIUnitTestCase
         $result = $this->withHeaders($this->bearer($token))->get('api/v1/me/health-summary');
         $result->assertStatus(200);
         $data = $this->json($result)['data'] ?? [];
-        $this->assertSame('Portal Fixture', $data['person']['name'] ?? null);
+        $this->assertSame('Portal University Fixture', $data['person']['name'] ?? null);
+        $this->assertSame('portal.fixture@university.invalid', $data['person']['email'] ?? null);
+        $this->assertSame('BS Information Technology', $data['person']['program'] ?? null);
+        $this->assertSame(3, (int) ($data['person']['year_level'] ?? 0));
+        $this->assertSame('A', $data['person']['section'] ?? null);
+        $this->assertSame('CCS', $data['person']['department'] ?? null);
+        $this->assertNull($data['person']['employment_status']);
         $this->assertSame('O+', $data['health']['blood_type'] ?? null);
         $this->assertSame('Penicillin', $data['health']['allergies'] ?? null);
         // Clinical detail never crosses the mobile contract.
         $this->assertArrayNotHasKey('encounters', $data);
         $this->assertArrayNotHasKey('vitals_history', $data);
+    }
+
+    public function testEmployeeHealthSummaryIncludesProfileCardFields(): void
+    {
+        $employee = $this->account('employee');
+        $token = $this->accessToken($employee);
+        Database::connect()->table('employee_profiles')->insert([
+            'tenant_id' => 1,
+            'person_id' => $employee['person_id'],
+            'department' => 'University Clinic',
+            'position' => 'Nurse',
+            'employment_status' => 'regular',
+            'created_at' => gmdate('Y-m-d H:i:s'),
+            'updated_at' => gmdate('Y-m-d H:i:s'),
+        ]);
+
+        $result = $this->withHeaders($this->bearer($token))->get('api/v1/me/health-summary');
+        $result->assertStatus(200);
+        $data = $this->json($result)['data'] ?? [];
+        $this->assertSame('employee', $data['person']['kind'] ?? null);
+        $this->assertSame('University Clinic', $data['person']['department'] ?? null);
+        $this->assertSame('Nurse', $data['person']['position'] ?? null);
+        $this->assertSame('regular', $data['person']['employment_status'] ?? null);
+        $this->assertNull($data['person']['program']);
+        $this->assertNull($data['person']['section']);
+        $this->assertArrayNotHasKey('encounters', $data);
     }
 
     public function testEngagementListsAnswerAuthenticatedShape(): void

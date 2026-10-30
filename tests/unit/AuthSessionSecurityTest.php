@@ -78,6 +78,10 @@ final class AuthSessionSecurityTest extends CIUnitTestCase
                 'version' => 1, 'session_id' => $parentId];
             $saved['theme'] = 'dark';
             $_SESSION = $saved;
+            // A deliberate sign-in must recover even if this request opened an obsolete predecessor.
+            AuthenticatedUser::clear();
+            $session->set('_auth_rotated_at', time());
+            CurrentTenant::set(1);
             $beforeLogin = time();
             $auth = new AuthService(misClient: new FakeMisClient());
             $this->assertNotNull($auth->login('owner', 'initial-password'));
@@ -85,6 +89,7 @@ final class AuthSessionSecurityTest extends CIUnitTestCase
             $this->assertNotSame($parentId, $loginId);
             $this->assertGreaterThanOrEqual($beforeLogin, session('_auth')['started_at']);
             $this->assertSame($loginId, session('_auth')['session_id']);
+            $this->assertNull(session('_auth_rotated_at'));
             $this->assertSame($parentId, $saved['_auth']['session_id']);
             $this->assertSame(1, session('_auth')['version']);
             $this->assertNotNull((new AuthenticatedUser())->current());

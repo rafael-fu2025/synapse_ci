@@ -133,7 +133,12 @@ switch ($kind) {
     case 'show':
         $view = 'inventory/show';
         $data += compact('medicine', 'batches', 'operations', 'movements');
-        $data += ['movementPage' => max(1, (int) ($_GET['page'] ?? 1)), 'hasMoreMovements' => empty($_GET['page'])];
+        $size = (int) ($_GET['per_page'] ?? 100);
+        $total = ($_GET['variant'] ?? '') === 'empty' ? 0 : 101;
+        $pages = max(1, (int) ceil($total / $size));
+        $page = min($pages, max(1, (int) ($_GET['page'] ?? 1)));
+        if ($total === 0) $data['movements'] = [];
+        $data['movementPagination'] = ['page' => $page, 'per_page' => $size, 'total' => $total, 'pages' => $pages];
         break;
     case 'catalog-create':
     case 'catalog-edit':

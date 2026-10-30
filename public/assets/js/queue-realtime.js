@@ -19,6 +19,41 @@
     let poll = null;
     let debounce = null;
 
+    function syncCallNext() {
+      const button = document.getElementById('queue-call-next');
+      const count = board.querySelector('[data-queue-waiting-count]')?.dataset.queueWaitingCount;
+      if (button) button.disabled = !/^\d+$/.test(count || '') || Number(count) === 0;
+    }
+    const historyDrawer = document.getElementById('queueNoShowHistory');
+    let historyMarkup = null;
+    function syncHistory() {
+      if (!historyDrawer) return;
+      const template = board.querySelector('template[data-queue-no-show-history]');
+      const list = historyDrawer.querySelector('[data-queue-no-show-list]');
+      if (!template || !list) return;
+      document.querySelectorAll('[data-queue-no-show-count]').forEach(el => { el.textContent = template.dataset.count; });
+      historyDrawer.querySelector('[data-queue-no-show-date]').textContent = template.dataset.date;
+      if (historyMarkup === template.innerHTML) return;
+      historyMarkup = template.innerHTML;
+      const scroll = list.scrollTop;
+      list.replaceChildren(template.content.cloneNode(true));
+      list.scrollTop = scroll;
+    }
+    syncCallNext();
+    syncHistory();
+    document.addEventListener('htmx:afterSwap', event => {
+      if (event.detail?.target !== board) return;
+      syncCallNext();
+      syncHistory();
+    }, options);
+    historyDrawer?.addEventListener('show.bs.offcanvas', event => {
+      if (document.body.classList.contains('is-navigating')) event.preventDefault();
+    }, options);
+    document.addEventListener('synapse:before-navigate', event => {
+      // Close the drawer first so navigation cannot leave a backdrop or scroll lock behind.
+      if (historyDrawer?.matches('.show, .showing, .hiding')) event.preventDefault();
+    }, options);
+
     function attached() {
       return document.getElementById('queue-board-container') === board;
     }

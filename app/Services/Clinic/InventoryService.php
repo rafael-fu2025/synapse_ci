@@ -172,16 +172,28 @@ final class InventoryService
         ];
     }
 
-    public function details(int $medicineId, int $movementPage = 1): array
+    public function details(int $medicineId, int $movementPage = 1, int $movementPageSize = 100): array
     {
         if ($movementPage < 1 || $movementPage > 1000000) {
             throw new InvalidArgumentException('Invalid movement page.', 422);
         }
+        if (!in_array($movementPageSize, [20, 25, 50, 100], true)) {
+            throw new InvalidArgumentException('Invalid movement page size.', 422);
+        }
         $medicine = $this->stockSummary($this->medicine($medicineId));
         $batches = $this->db->table('clinic_medicine_batches')->where('tenant_id', CurrentTenant::id())->where('medicine_id', $medicineId)->orderBy('expiration_date')->orderBy('id')->get()->getResultArray();
-        $movements = $this->db->table('stock_movements')->where('tenant_id', CurrentTenant::id())->where('medicine_id', $medicineId)->orderBy('id', 'DESC')->limit(100, ($movementPage - 1) * 100)->get()->getResultArray();
+        $movementQuery = $this->db->table('stock_movements')->where('tenant_id', CurrentTenant::id())->where('medicine_id', $medicineId);
+        $total = (clone $movementQuery)->countAllResults();
+        $pages = max(1, (int) ceil($total / $movementPageSize));
+        $movementPage = min($movementPage, $pages);
+        $movements = $movementQuery->orderBy('id', 'DESC')->limit($movementPageSize, ($movementPage - 1) * $movementPageSize)->get()->getResultArray();
+        $pagination = [
+            'page' => $movementPage, 'per_page' => $movementPageSize, 'total' => $total, 'pages' => $pages,
+            'from' => $total === 0 ? 0 : ($movementPage - 1) * $movementPageSize + 1,
+            'to' => min($movementPage * $movementPageSize, $total),
+        ];
         $operations = $this->db->query('SELECT o.*, r.id AS reversed_by_operation_id, r.reversal_mode AS correction_mode FROM ' . $this->t('inventory_operations') . ' o LEFT JOIN ' . $this->t('inventory_operations') . ' r ON r.reversal_of=o.id AND r.tenant_id=o.tenant_id WHERE o.tenant_id=? AND o.medicine_id=? ORDER BY o.id DESC LIMIT 100', [CurrentTenant::id(), $medicineId])->getResultArray();
-        return ['medicine' => $medicine, 'batches' => $batches, 'movements' => $movements, 'operations' => $operations, 'movement_page' => $movementPage, 'movement_page_size' => 100];
+        return ['medicine' => $medicine, 'batches' => $batches, 'movements' => $movements, 'operations' => $operations, 'movement_page' => $movementPage, 'movement_page_size' => $movementPageSize, 'movementPagination' => $pagination];
     }
 
     /** HTTP creates must supply a key; null is reserved for trusted internal catalog setup. Updates use version checks. */

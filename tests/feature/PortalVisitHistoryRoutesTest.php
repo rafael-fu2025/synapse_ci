@@ -209,7 +209,7 @@ final class PortalVisitHistoryRoutesTest extends CIUnitTestCase
             self::assertStringContainsString('Care Provider', $html);
             self::assertStringContainsString($id === 1 ? 'Oct 20, 2026 · 9:00 AM' : 'Oct 21, 2026 · 9:00 AM', $this->visitText($html));
             self::assertStringNotContainsString($id === 1 ? 'Oct 21, 2026' : 'Oct 20, 2026', $this->visitText($html));
-            self::assertStringContainsString('Showing 1–2 of 2 visits', $html);
+            self::assertStringContainsString('Showing 1–2 of 2', $html);
             self::assertSame($role, session()->get('user')['role']);
             self::assertNotContains('portal.appointments.read', session()->get('user')['permissions']);
             self::assertStringNotContainsString('SECRET-', $html);
@@ -228,7 +228,7 @@ final class PortalVisitHistoryRoutesTest extends CIUnitTestCase
         for ($i = 0; $i < 4; $i++) $this->visit('clinic', 88);
         $html = $this->html($this->requestAs(3, ['person_id' => 88, 'tenant_id' => 7]));
         $this->assertRows($html, 2);
-        self::assertStringContainsString('Showing 1–2 of 2 visits', $html);
+        self::assertStringContainsString('Showing 1–2 of 2', $html);
         self::assertSame('clinic_staff', session()->get('user')['role']);
         self::assertSame(91, session()->get('user')['person_id']);
         self::assertStringNotContainsString('SECRET-', $html);
@@ -261,19 +261,20 @@ final class PortalVisitHistoryRoutesTest extends CIUnitTestCase
         for ($i = 0; $i < 3; $i++) $this->visit('guidance');
         $first = $this->html($this->requestAs(1, ['service' => 'all', 'person_id' => 90]));
         $this->assertRows($first, 25);
-        self::assertStringContainsString('Showing 1–25 of 31 visits', $first);
+        self::assertStringContainsString('Showing 1–25 of 31', $first);
         self::assertSame(1, $this->xpath($first)->query('//section[@data-live-filters and @data-filter-key="personal-visit-history"]')->length);
         self::assertSame(1, $this->xpath($first)->query('//form[@data-filter-form]//select[@name="service"]')->length);
         foreach ($this->xpath($first)->query('//a[@data-filter-link]') as $link) {
             parse_str((string) parse_url($link->getAttribute('href'), PHP_URL_QUERY), $query);
-            self::assertSame(['service' => 'all', 'page' => '2'], $query);
+            self::assertSame(['service' => 'all', 'page' => '2', 'per_page' => '25'], $query);
+                        self::assertTrue($link->hasAttribute('data-table-page'));
         }
         $second = $this->html($this->requestAs(1, ['service' => 'all', 'page' => 2]));
         $this->assertRows($second, 6);
-        self::assertStringContainsString('Showing 26–31 of 31 visits', $second);
+        self::assertStringContainsString('Showing 26–31 of 31', $second);
         $clinic = $this->html($this->requestAs(1, ['service' => 'clinic', 'page' => 999]));
         $this->assertRows($clinic, 3);
-        self::assertStringContainsString('Showing 26–28 of 28 visits', $clinic);
+        self::assertStringContainsString('Showing 26–28 of 28', $clinic);
         self::assertStringNotContainsString('Completed guidance session', $this->visitText($clinic));
         $guidance = $this->html($this->requestAs(1, ['service' => 'guidance'], ['X-Requested-With' => 'XMLHttpRequest']));
         $this->assertRows($guidance, 3);
@@ -282,7 +283,7 @@ final class PortalVisitHistoryRoutesTest extends CIUnitTestCase
         $empty = $this->html($this->requestAs(5));
         $this->assertRows($empty, 0);
         self::assertStringContainsString('No completed visits', $empty);
-        self::assertStringContainsString('Showing 0–0 of 0 visits', $empty);
+        self::assertStringContainsString('Showing 0–0 of 0', $empty);
     }
 
     public function testMissingOrRevokedPermissionIsForbiddenDespiteCachedClaims(): void

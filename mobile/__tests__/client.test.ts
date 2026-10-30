@@ -58,7 +58,59 @@ describe('api client', () => {
     });
   });
 
+  it.each([
+    ['287', 287],
+    ['0', 0],
+    ['invalid', null],
+    ['-1', null],
+    ['1.5', null],
+    ['', null],
+    [null, null],
+    ['999999999999999999999999', null],
+  ])('preserves 429 Retry-After %s without retrying login', async (header, expected) => {
+    const response = new Response(JSON.stringify({ error: { code: 'rate_limited', message: 'Please wait.' } }), {
+      status: 429,
+      headers: header === null ? {} : { 'Retry-After': header },
+    });
+    globalThis.fetch = jest.fn().mockResolvedValue(response) as unknown as typeof fetch;
+
+    await expect(request('api/v1/auth/login', { method: 'POST', body: {}, authenticated: false })).rejects.toMatchObject({
+      status: 429,
+      code: 'rate_limited',
+      retryAfterSeconds: expected,
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports HTTP-date Retry-After values', async () => {
+    const now = Date.parse('2026-01-01T00:00:00Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    globalThis.fetch = jest.fn().mockResolvedValue(new Response('{}', {
+      status: 429,
+      headers: { 'Retry-After': new Date(now + 45000).toUTCString() },
+    })) as unknown as typeof fetch;
+
+    await expect(request('api/v1/auth/login', { authenticated: false })).rejects.toMatchObject({
+      status: 429,
+      retryAfterSeconds: 45,
+    });
+  });
+
+  it('keeps invalid credentials distinct from rate limiting and connection failures', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue(jsonResponse(401, {
+      error: { code: 'invalid_credentials', message: 'Check your credentials.' },
+    })) as unknown as typeof fetch;
+
+    await expect(request('api/v1/auth/login', { authenticated: false })).rejects.toMatchObject({
+      status: 401,
+      code: 'invalid_credentials',
+      retryAfterSeconds: null,
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('converts network failures into NetworkError without status semantics', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     globalThis.fetch = jest.fn().mockRejectedValue(new Error('connection refused')) as unknown as typeof fetch;
     await expect(request('api/v1/me')).rejects.toThrow('Cannot reach the server');
   });

@@ -374,6 +374,21 @@ for (const theme of ['light', 'dark']) {
       await link.hover(); await link.focus(); await noTips(page);
       await page.locator('.sidebar-toggle').click();
       await desktopState(page, true); await brand(page, true);
+      const separators = await page.locator('.sidebar-nav .nav-heading:not(:first-child)').evaluateAll(els => els.map(el => ({
+        height: el.getBoundingClientRect().height,
+        fontSize: getComputedStyle(el).fontSize,
+        lineWidth: getComputedStyle(el, '::after').width,
+        lineHeight: getComputedStyle(el, '::after').height,
+        lineColor: getComputedStyle(el, '::after').backgroundColor,
+      })));
+      assert.ok(separators.length > 0, 'Collapsed sidebar has group separators');
+      for (const separator of separators) {
+        assert.equal(separator.height, 1);
+        assert.equal(separator.fontSize, '0px');
+        assert.equal(separator.lineWidth, '28px');
+        assert.equal(separator.lineHeight, '1px');
+        assert.notEqual(separator.lineColor, 'rgba(0, 0, 0, 0)');
+      }
       const links = page.locator('.sidebar-nav a.nav-link');
       assert.ok(await links.count() > 3);
       for (const nav of await links.all()) {

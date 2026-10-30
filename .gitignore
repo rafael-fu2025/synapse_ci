@@ -61,6 +61,9 @@ Vagrantfile
 
 # Private backups, runtime data and generated local validation artifacts.
 /writable/backups/
+# UI AI provider credentials, storage-key envelope, and runtime dispatch control are private.
+/writable/ai-settings/
+/writable/ai-dispatch-control.json
 /writable/report-temp/
 /writable/widget-test-tools/
 /writable/*.log

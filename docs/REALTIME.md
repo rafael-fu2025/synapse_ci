@@ -17,8 +17,10 @@ from dropped events; Searches, filters, and live tables remain HTTP-driven.
   and portal-host filters. No client-supplied identity/channel grants are accepted.
 - Short-lived, HMAC-signed grants bound to an exact browser origin. Tickets travel
   in the first WebSocket message, never a query string or browser storage.
-- Each browser receives only `private.tenant.{tenantId}.user.{userId}`. Even
-  superadmin receives no wildcard. No BMG device or department subscriptions yet.
+- Authenticated browsers receive only `private.tenant.{tenantId}.user.{userId}`. Even
+  superadmin receives no wildcard. A separate public mobile-login grant permits only
+  `public.tenant.{tenantId}.login-carousel`; it never contains private grants. No BMG device or
+  department subscriptions yet.
 - Browser reconnect with capped jitter backoff, timeout/abort handling, CSRF
   rotation, and visibility/BFCache lifecycle handling. No hidden-tab sockets.
 - Connection, message, authentication-timeout, and slow-reader limits. Tickets
@@ -26,6 +28,26 @@ from dropped events; Searches, filters, and live tables remain HTTP-driven.
   the browser obtains a fresh grant through CodeIgniter.
 - The configured socket origin is added to the framework's CSP `connect-src`
   only when realtime configuration validates successfully.
+
+## Public mobile-login carousel
+
+`GET /api/v1/auth/carousel/realtime` issues a short-lived grant for exactly the server-selected
+`public.tenant.{tenantId}.login-carousel` channel. It is public because carousel content is already
+public on login, but the subscription is still signed and bound to an exact allowed origin. Neither
+this endpoint nor the socket accepts caller-selected tenants/channels. The existing authenticated
+`POST /realtime/ticket` contract remains private-only, with its CSRF and identity checks intact.
+
+Successful carousel create/update/delete/toggle/reorder operations emit `login.carousel.changed`
+with an empty array. The mobile listener fetches the authoritative HTTP snapshot. Hints contain
+no slide IDs, paths, captions, administrator identity, or private information. Open caller-owned
+transactions suppress publication rather than announce uncommitted data; periodic reconciliation
+repairs these omissions. A failed publisher never makes a saved admin action fail.
+
+For Android USB, allow `http://127.0.0.1:8080` explicitly and reverse the WebSocket listener port
+(default 8081). **Do not reverse or expose 8082.** Native HTTP/socket requests use the API origin;
+tickets remain in the first frame, never query strings. The listener pauses while the carousel is
+keyboard-hidden/backgrounded/offline, renews grants, retries with backoff, and reconciles every
+120 seconds plus foreground/reconnect. Restart the realtime worker after deploying this code.
 
 ## Application events
 

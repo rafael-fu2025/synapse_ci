@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ArrowLeft } from 'lucide-react-native';
-import { Theme, font, type } from '../theme/tokens';
+import { Theme, font, type, memoizeStyles } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 export function PageHeader({
@@ -40,7 +40,7 @@ export function PageHeader({
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     header: {
       marginHorizontal: -18,
@@ -68,3 +68,5 @@ function makeStyles(theme: Theme) {
     subtitle: { marginTop: 3, fontSize: 11.5, fontFamily: font.body, color: theme.ink500 },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

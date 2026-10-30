@@ -4,7 +4,7 @@ import { Clock3 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Action } from '../../../components/Action';
 import { useAuth } from '../../../store/auth';
-import { Theme, palette, type } from '../../../theme/tokens';
+import { Theme, palette, type, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 
 export function SessionExpiredScreen() {
@@ -13,15 +13,14 @@ export function SessionExpiredScreen() {
   const { acknowledgeExpired } = useAuth();
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.body}>
         <View style={styles.iconWrap}>
           <Clock3 size={30} color={palette.red700} />
         </View>
         <Text style={styles.title}>Your session has expired</Text>
         <Text style={styles.message}>
-          For your security, sessions end automatically after a period of inactivity. Sign in again to continue where
-          you left off.
+          Your session could not be renewed. Sign in again to continue securely.
         </Text>
         <View style={styles.actionWrap}>
           <Action full onPress={acknowledgeExpired}>
@@ -33,17 +32,16 @@ export function SessionExpiredScreen() {
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.canvas },
     body: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 26 },
     iconWrap: {
-      width: 70,
-      height: 70,
+      width: 40,
+      height: 40,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 20,
-      backgroundColor: '#fae8e6',
+
       marginBottom: 16,
     },
     title: { ...type.hero, color: theme.ink900 },
@@ -51,3 +49,5 @@ function makeStyles(theme: Theme) {
     actionWrap: { alignSelf: 'stretch', marginTop: 22 },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

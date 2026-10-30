@@ -129,6 +129,36 @@ test('keyed updates reuse handle/DOM, reset duration and action; oldest evicted 
   assert.equal(await count(page), 3);
 });
 
+test('timed toasts show a countdown bar, none for sticky, and it pauses with the timer', async t => {
+  const page = await fixture(t);
+  await page.evaluate(() => SynapseToast.show('Saved', { type: 'success', duration: 4000 }));
+  const bar = page.locator('.synapse-toast-countdown');
+  await page.waitForFunction(() => !document.querySelector('.synapse-toast-countdown').hidden);
+  assert.equal(await bar.getAttribute('aria-hidden'), 'true');
+  const widthNow = () => page.locator('.synapse-toast').evaluate(element => {
+    const toast = element.getBoundingClientRect().width;
+    const progress = element.querySelector('.synapse-toast-countdown').getBoundingClientRect().width;
+    return toast ? progress / toast : 0;
+  });
+  await page.waitForTimeout(300);
+  const shrinking = await widthNow();
+  assert.ok(shrinking < 0.99 && shrinking > 0, 'bar width tracks remaining time');
+  await page.locator('.synapse-toast').hover();
+  assert.equal(await bar.evaluate(element => element.classList.contains('is-paused')), true);
+  const frozen = await widthNow();
+  await page.waitForTimeout(700);
+  assert.ok(Math.abs(await widthNow() - frozen) < 0.02, 'paused bar does not move');
+  assert.notEqual(await page.evaluate(() => getComputedStyle(document.querySelector('.synapse-toast')).borderInlineStartWidth), '4px', 'tone strip removed');
+  await page.mouse.move(0, 0);
+  await page.locator('.synapse-toast-close').focus();
+  await page.waitForTimeout(100);
+  await page.locator('#trigger').focus();
+  await gone(page);
+  await page.evaluate(() => SynapseToast.show('Sticky', { type: 'error' }));
+  await page.waitForFunction(() => document.querySelector('.synapse-toast-message')?.textContent === 'Sticky');
+  assert.equal(await page.locator('.synapse-toast-countdown').isVisible(), false);
+});
+
 test('explicit timers pause on hover and focus, resume, and dispose on hidden', async t => {
   const page = await fixture(t);
   await page.evaluate(() => {

@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { AccessibilityInfo, Easing, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CalendarDays, Home, ListChecks, UserRound } from 'lucide-react-native';
-import { Theme } from '../theme/tokens';
+import { Theme, memoizeStyles } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppTabsParamList } from './types';
 import { HomeStack } from './stacks/HomeStack';
@@ -30,16 +33,63 @@ function TabIcon({
   return <Icon size={21} color={color} strokeWidth={focused ? 2.5 : 2} />;
 }
 
+// Avoid the default borderless Android ripple spilling over neighboring tabs.
+function TabButton({ android_ripple: _androidRipple, ...props }: BottomTabBarButtonProps) {
+  return <TouchableOpacity {...props} activeOpacity={0.7} />;
+}
+
 export function AppTabs() {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const styles = makeStyles(theme);
+  const [reduceMotion, setReduceMotion] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    let preferenceChanged = false;
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', enabled => {
+      preferenceChanged = true;
+      setReduceMotion(enabled);
+    });
+    AccessibilityInfo.isReduceMotionEnabled().then(enabled => {
+      if (mounted && !preferenceChanged) { setReduceMotion(enabled); }
+    }).catch(() => { /* Keep transitions off if the preference cannot be read. */ });
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: theme.brand,
+        // Preserve each tab's state; the navigator keeps both scenes alive during transitions.
+        lazy: false,
+        freezeOnBlur: true,
+        animation: reduceMotion ? 'none' : 'shift',
+        sceneStyle: styles.scene,
+        // Keep scenes opaque: cross-fading native stacks exposes overlapping cards and shadows.
+        sceneStyleInterpolator: reduceMotion ? undefined : ({ current }) => ({
+          sceneStyle: {
+            transform: [{
+              translateX: current.progress.interpolate({
+                inputRange: [-1, 0, 1],
+                outputRange: [-width, 0, width],
+                extrapolate: 'clamp',
+              }),
+            }],
+          },
+        }),
+        transitionSpec: {
+          animation: 'timing',
+          config: { duration: reduceMotion ? 0 : 240, easing: Easing.out(Easing.cubic) },
+        },
+        tabBarButton: TabButton,
+        tabBarActiveTintColor: theme.brandIcon,
         tabBarInactiveTintColor: theme.ink400,
-        tabBarStyle: styles.bar,
+        tabBarStyle: [styles.bar, { height: 56 + insets.bottom, paddingBottom: Math.max(insets.bottom, 6) }],
         tabBarLabelStyle: styles.label,
         tabBarIcon: ({ color, focused }) => (
           <TabIcon icon={TAB_ICONS[route.name]} color={color} focused={focused} />
@@ -53,10 +103,11 @@ export function AppTabs() {
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return {
+    scene: { flex: 1, backgroundColor: theme.canvas, overflow: 'hidden' as const },
     bar: {
-      height: 68,
+
       paddingTop: 5,
       paddingHorizontal: 8,
       backgroundColor: theme.surface,
@@ -66,3 +117,5 @@ function makeStyles(theme: Theme) {
     label: { fontSize: 9.5, fontWeight: '600' as const },
   };
 }
+
+const makeStyles = memoizeStyles(createStyles);

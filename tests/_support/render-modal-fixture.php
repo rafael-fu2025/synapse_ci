@@ -136,7 +136,9 @@ switch ($kind) {
         $view = 'appointments/index';
         $unit = explode('-', $kind)[0];
         $data = ['title' => 'Appointments', 'unit' => $unit, 'date' => date('Y-m-d'),
-                    'requests' => [$appointmentFor($unit)], 'appointments' => [], 'formModalPage' => false];
+                    'requests' => [$appointmentFor($unit)], 'appointments' => [], 'formModalPage' => false,
+                                        'pendingPagination' => \App\Libraries\TablePage::forList([])->metadata(1, 1),
+                                        'scheduledPagination' => \App\Libraries\TablePage::forList([])->metadata(0, 0)];
         break;
     case 'referral-list':
         $view = 'referrals/index';

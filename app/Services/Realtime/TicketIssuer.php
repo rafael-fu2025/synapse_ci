@@ -34,7 +34,7 @@ final class TicketIssuer
         }
         $now = time();
         // No role wildcard or client-selected channels, including for superadmin.
-        $channels = [Channel::user($actor['tenant_id'], $actor['id'])];
+        $channels = [Channel::user($actor['tenant_id'], $actor['id']), ...AiInsightTopics::grants($actor)];
         return [
             'enabled' => true,
             'url' => $url,

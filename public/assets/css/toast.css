@@ -20,7 +20,8 @@
   width: 100%;
   flex-shrink: 0;
   margin: 0;
-  border-inline-start: 4px solid var(--toast-tone);
+  position: relative;
+  overflow: hidden;
   pointer-events: auto;
 }
 
@@ -40,6 +41,8 @@
   font-size: 1.125rem;
   flex-shrink: 0;
 }
+
+.synapse-toast[data-type="success"] .synapse-toast-icon { color: var(--success-color, var(--toast-tone)); }
 
 .synapse-toast-content {
   flex: 1;
@@ -85,4 +88,23 @@
 .synapse-toast-close:focus-visible {
   outline: 2px solid var(--default-color);
   outline-offset: 2px;
+}
+
+/* Auto-dismiss countdown: width mirrors the remaining timer, pausing with it. */
+.synapse-toast-countdown {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--toast-tone);
+  transform-origin: left center;
+  pointer-events: none;
+}
+
+.synapse-toast-countdown[hidden] { display: none; }
+
+.synapse-toast-countdown.is-paused { animation-play-state: paused; }
+
+@media (prefers-reduced-motion: reduce) {
+  .synapse-toast-countdown { transition: none; }
 }

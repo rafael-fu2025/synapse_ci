@@ -129,6 +129,41 @@ final class TeamsHttpTest extends CIUnitTestCase
         }
     }
 
+    public function testSharedPaginationPreservesBoardListAndMyTasksFilters(): void
+    {
+        $task = $this->task('clinic', 1, ['title' => 'Pagination task', 'priority' => 'high', 'assignee_user_id' => 1]);
+        $template = $this->db->table('team_tasks')->where('id', $task['id'])->get()->getRowArray();
+        unset($template['id']);
+        // Populate through SQL to keep the pagination fixture bounded and avoid unrelated delivery work.
+        for ($i = 0; $i < 101; $i++) {
+            $this->db->table('team_tasks')->insert($template);
+        }
+        foreach ([['board', ''], ['list', ''], ['list', '1']] as [$mode, $mine]) {
+            $query = ['q' => 'Pagination task', 'status' => 'todo', 'priority' => 'high', 'mine' => $mine, 'view' => $mode];
+            $result = $this->requestAs(1, 'GET', 'clinic/teams?' . http_build_query($query + ['page' => 999]), [], false);
+            $result->assertStatus(200);
+            $html = $result->getBody();
+            $this->assertStringContainsString('Showing 101–102 of 102', html_entity_decode($html));
+            $this->assertStringContainsString('data-page="2" data-per-page="100"', $html);
+            $document = new \DOMDocument();
+            $previous = libxml_use_internal_errors(true);
+            try { $document->loadHTML($html); }
+            finally { libxml_clear_errors(); libxml_use_internal_errors($previous); }
+            $anchors = (new \DOMXPath($document))->query('//*[@data-table-pagination]//a');
+            $this->assertGreaterThan(0, $anchors->length);
+            foreach ($anchors as $anchor) {
+                $this->assertTrue($anchor->hasAttribute('data-filter-link'));
+                parse_str((string) parse_url($anchor->getAttribute('href'), PHP_URL_QUERY), $actual);
+                foreach ($query as $key => $value) $this->assertSame($value, $actual[$key]);
+                $this->assertSame('100', $actual['per_page']);
+                $this->assertSame('1', $actual['page']);
+            }
+        }
+        $empty = $this->requestAs(1, 'GET', 'clinic/teams?q=nonexistent&page=999', [], false);
+        $empty->assertStatus(200);
+        $this->assertStringContainsString('Showing 0–0 of 0', html_entity_decode($empty->getBody()));
+    }
+
     public function testMembershipAndTenantBoundariesForEveryIdOperation(): void
     {
         $task = $this->task();

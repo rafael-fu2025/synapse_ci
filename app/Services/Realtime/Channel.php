@@ -26,11 +26,21 @@ final class Channel
         return "private.user.{$userId}";
     }
 
+    public static function loginCarousel(int $tenantId): string
+    {
+        if ($tenantId < 1) {
+            throw new InvalidArgumentException('Tenant ID must be positive.');
+        }
+
+        return "public.tenant.{$tenantId}.login-carousel";
+    }
+
     // Syntax validation is not authorization; only trusted callers issue grants.
     public static function isValid(mixed $channel): bool
     {
         return is_string($channel) && strlen($channel) <= 160
-            && preg_match('/\Aprivate\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*\z/D', $channel) === 1;
+            && (preg_match('/\Aprivate\.[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*\z/D', $channel) === 1
+                || preg_match('/\Apublic\.tenant\.[1-9][0-9]*\.login-carousel\z/D', $channel) === 1);
     }
 
     public static function validateList(mixed $channels): array

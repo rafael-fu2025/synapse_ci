@@ -51,6 +51,20 @@ final class TablePage
         return new self($q, $page, $perPage, $kind, $status, $fragment === '1');
     }
 
+    /** Pagination-only lists may have their own filters and independent page names. */
+    public static function forList(array $query, string $pageParam = 'page'): self
+    {
+        $page = self::integer($query, $pageParam, 1);
+        $perPage = self::integer($query, 'per_page', 25);
+        if ($page < 1 || $page > 1000000) {
+            throw new InvalidArgumentException('Page must be between 1 and 1000000.', 422);
+        }
+        if (!in_array($perPage, [20, 25, 50, 100], true)) {
+            throw new InvalidArgumentException('Per page must be 20, 25, 50 or 100.', 422);
+        }
+        return new self('', $page, $perPage, 'all', 'all', false);
+    }
+
     /** Counts are measured before clamping; even an empty result has page 1. */
     public function metadata(int $total, int $filtered): array
     {

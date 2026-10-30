@@ -5,6 +5,10 @@ export interface QueueTicket {
   ticket_code: string;
   status: 'waiting' | 'called' | 'in_consultation' | 'skipped';
   priority: string;
+  /** 1-based place in line; null when not waiting or unknown. */
+  position: number | null;
+  people_ahead: number | null;
+  estimated_wait_minutes: number | null;
 }
 
 export interface QueueSnapshot {

@@ -1,16 +1,20 @@
 <?php
+// Optional: paginationPageParam, paginationExtraQuery, paginationLiveFilters.
+// Defaults retain the directory tables' page URLs and data-table-page hooks.
 $tableMeta = $pagination ?? [];
 $tablePerPage = (int) ($tableMeta['per_page'] ?? $filters['per_page'] ?? 25);
-$tablePerPage = in_array($tablePerPage, [25, 50, 100], true) ? $tablePerPage : 25;
-$tableFiltered = max(0, (int) ($tableMeta['filtered'] ?? $rowCount ?? 0));
+$tablePerPage = in_array($tablePerPage, [20, 25, 50, 100], true) ? $tablePerPage : 25;
+$tableFiltered = max(0, (int) ($tableMeta['filtered'] ?? $rowCount ?? $tableMeta['total'] ?? 0));
 $tableTotal = max(0, (int) ($tableMeta['total'] ?? $tableFiltered));
 $tablePages = max(1, (int) ($tableMeta['pages'] ?? ceil($tableFiltered / $tablePerPage)));
 $tablePage = max(1, min($tablePages, (int) ($tableMeta['page'] ?? 1)));
 $tableFrom = (int) ($tableMeta['from'] ?? ($tableFiltered === 0 ? 0 : ($tablePage - 1) * $tablePerPage + 1));
 $tableTo = (int) ($tableMeta['to'] ?? min($tablePage * $tablePerPage, $tableFiltered));
 $tableFilters = array_intersect_key($filters ?? [], array_flip(['q', 'kind', 'status']));
+$tablePageParam = $paginationPageParam ?? 'page';
+$tableLiveFilters = ($paginationLiveFilters ?? false) === true;
 $tablePageUrl = static fn (int $target): string => $baseUrl . '?' . http_build_query(
-    array_merge($paginationExtraQuery ?? [], $tableFilters, ['page' => $target, 'per_page' => $tablePerPage]),
+    array_merge($paginationExtraQuery ?? [], $tableFilters, [$tablePageParam => $target, 'per_page' => $tablePerPage]),
     '', '&', PHP_QUERY_RFC3986,
 );
 $tableWindowStart = max(1, $tablePage - 2);
@@ -29,21 +33,21 @@ $tableWindowEnd = min($tablePages, $tablePage + 2);
         <?php if ($tablePage === 1): ?>
           <li class="page-item disabled"><span class="page-link" aria-disabled="true"><?= esc($tableLinkLabel) ?></span></li>
         <?php else: ?>
-          <li class="page-item"><a class="page-link" href="<?= esc($tablePageUrl($tableTarget)) ?>" data-table-page="<?= $tableTarget ?>"><?= esc($tableLinkLabel) ?></a></li>
+          <li class="page-item"><a class="page-link" href="<?= esc($tablePageUrl($tableTarget)) ?>" data-table-page="<?= $tableTarget ?>"<?= $tableLiveFilters ? ' data-filter-link' : '' ?>><?= esc($tableLinkLabel) ?></a></li>
         <?php endif; ?>
       <?php endforeach; ?>
       <?php for ($tableTarget = $tableWindowStart; $tableTarget <= $tableWindowEnd; $tableTarget++): ?>
         <?php if ($tableTarget === $tablePage): ?>
           <li class="page-item active"><span class="page-link" aria-current="page"><?= number_format($tableTarget) ?></span></li>
         <?php else: ?>
-          <li class="page-item"><a class="page-link" href="<?= esc($tablePageUrl($tableTarget)) ?>" data-table-page="<?= $tableTarget ?>" aria-label="Page <?= $tableTarget ?>"><?= number_format($tableTarget) ?></a></li>
+          <li class="page-item"><a class="page-link" href="<?= esc($tablePageUrl($tableTarget)) ?>" data-table-page="<?= $tableTarget ?>"<?= $tableLiveFilters ? ' data-filter-link' : '' ?> aria-label="Page <?= $tableTarget ?>"><?= number_format($tableTarget) ?></a></li>
         <?php endif; ?>
       <?php endfor; ?>
       <?php foreach (['Next' => min($tablePages, $tablePage + 1), 'Last' => $tablePages] as $tableLinkLabel => $tableTarget): ?>
         <?php if ($tablePage === $tablePages): ?>
           <li class="page-item disabled"><span class="page-link" aria-disabled="true"><?= esc($tableLinkLabel) ?></span></li>
         <?php else: ?>
-          <li class="page-item"><a class="page-link" href="<?= esc($tablePageUrl($tableTarget)) ?>" data-table-page="<?= $tableTarget ?>"><?= esc($tableLinkLabel) ?></a></li>
+          <li class="page-item"><a class="page-link" href="<?= esc($tablePageUrl($tableTarget)) ?>" data-table-page="<?= $tableTarget ?>"<?= $tableLiveFilters ? ' data-filter-link' : '' ?>><?= esc($tableLinkLabel) ?></a></li>
         <?php endif; ?>
       <?php endforeach; ?>
     </ul>

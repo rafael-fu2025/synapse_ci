@@ -2526,7 +2526,27 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
 .app-shell .page-actions > .d-flex {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
+}
+
+/* Header actions share one size regardless of a view's legacy btn-sm/btn-lg class. */
+.app-shell .page-actions .btn {
+  --bs-btn-font-size: 0.9375rem;
+  --bs-btn-padding-x: 0.95rem;
+  --bs-btn-padding-y: 0.45rem;
+  box-sizing: border-box;
+  height: 38px;
+  min-height: 38px;
+  max-width: 100%;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.app-shell .page-actions form {
+  min-width: 0;
+  max-width: 100%;
+  margin-bottom: 0;
 }
 
 .app-shell .page-actions:empty {
@@ -2549,6 +2569,21 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
   .app-shell.sidebar-collapsed .sidebar-nav .nav-meta,
   .app-shell.sidebar-collapsed .sidebar-nav .nav-arrow { display: none !important; }
   .app-shell.sidebar-collapsed .sidebar-nav { padding-inline: 10px; }
+  .app-shell.sidebar-collapsed .sidebar-nav .nav-heading:not(:first-child) {
+    display: block !important;
+    height: 1px;
+    margin: 10px 0 !important;
+    padding: 0 !important;
+    overflow: hidden;
+    font-size: 0;
+    line-height: 0;
+  }
+  .app-shell.sidebar-collapsed .sidebar-nav .nav-heading::after {
+    display: block;
+    width: 28px;
+    margin-inline: auto;
+    background: color-mix(in srgb, var(--sidebar-muted-color), transparent 45%);
+  }
   .app-shell.sidebar-collapsed .sidebar-nav .nav-link {
     justify-content: center;
     min-height: 44px;
@@ -2624,6 +2659,7 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
   .app-shell .page-actions > .d-flex { width: 100%; }
   .app-shell .page-actions .btn {
     flex: 1 1 auto;
+    height: auto;
     min-height: 44px;
     white-space: normal;
     overflow-wrap: anywhere;

@@ -220,6 +220,33 @@ final class QuestionBankHttpTest extends CIUnitTestCase
         $this->assertSame(0, $this->db->table('survey_question_bank_revisions')->countAllResults());
     }
 
+    public function testSharedPaginationPreservesCategoryAudienceStatusAndSearch(): void
+    {
+        for ($i = 0; $i < 21; $i++) $this->entry(['category' => 'Health & wellbeing', 'audience' => 'students']);
+        $query = ['q' => 'Preferred', 'category' => 'Health & wellbeing', 'audience' => 'students', 'status' => 'active'];
+        $result = $this->requestAs(2, 'GET', 'guidance/question-bank?' . http_build_query($query + ['page' => 999]));
+        $result->assertStatus(200);
+        $html = $result->getBody();
+        $this->assertStringContainsString('Showing 21–21 of 21', html_entity_decode($html));
+        $this->assertStringContainsString('data-page="2" data-per-page="20"', $html);
+        $document = new \DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        try { $document->loadHTML($html); }
+        finally { libxml_clear_errors(); libxml_use_internal_errors($previous); }
+        $anchors = (new \DOMXPath($document))->query('//*[@data-table-pagination]//a');
+        $this->assertGreaterThan(0, $anchors->length);
+        foreach ($anchors as $anchor) {
+            $this->assertTrue($anchor->hasAttribute('data-filter-link'));
+            parse_str((string) parse_url($anchor->getAttribute('href'), PHP_URL_QUERY), $actual);
+            foreach ($query as $key => $value) $this->assertSame($value, $actual[$key]);
+            $this->assertSame('20', $actual['per_page']);
+            $this->assertSame('1', $actual['page']);
+        }
+        $empty = $this->requestAs(2, 'GET', 'guidance/question-bank?category=nonexistent&page=999');
+        $empty->assertStatus(200);
+        $this->assertStringContainsString('Showing 0–0 of 0', html_entity_decode($empty->getBody()));
+    }
+
     public function testSearchFiltersPaginationAndOutputEscaping(): void
     {
         $id = $this->entry(['category' => 'Wellbeing', 'audience' => 'students', 'question' => ['type' => 'text', 'label' => '<script>literal 100%_!</script>', 'required' => true, 'options' => []]]);

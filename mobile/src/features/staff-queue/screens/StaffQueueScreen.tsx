@@ -8,7 +8,7 @@ import { PageHeader } from '../../../components/PageHeader';
 import { StatusPill } from '../../../components/StatusPill';
 import { StaffQueueSummary, StaffQueueTicket } from '../../../api/endpoints/staffQueue';
 import { useStaffQueueSummary } from '../hooks';
-import { Theme, font, palette } from '../../../theme/tokens';
+import { Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatTime } from '../../../lib/format';
 import { unitLabel } from '../../appointments/status';
@@ -39,7 +39,7 @@ export function StaffQueueScreen() {
       </View>
 
       {query.isLoading ? (
-        <ActivityIndicator style={styles.loader} color={theme.brand} />
+        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
       ) : (
         <FlatList
           data={summaries}
@@ -119,7 +119,7 @@ function TicketColumn({ title, tickets, emptyText }: { title: string; tickets: S
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     chips: { flexDirection: 'row', gap: 7, marginBottom: 12 },
     chip: {
@@ -161,9 +161,11 @@ function makeStyles(theme: Theme) {
       borderRadius: 11,
       backgroundColor: theme.surfaceWarm,
     },
-    ticketCode: { fontSize: 11, fontWeight: '800', color: palette.brand700, fontFamily: font.display },
+    ticketCode: { fontSize: 11, fontWeight: '800', color: theme.brandText, fontFamily: font.display },
     ticketName: { flex: 1, fontSize: 10, fontWeight: '600', color: theme.ink900, fontFamily: font.body },
     ticketTime: { fontSize: 8.5, color: theme.ink400, fontFamily: font.body },
     footer: { paddingTop: 8, textAlign: 'center', color: theme.ink400, fontSize: 8.5, fontFamily: font.body },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

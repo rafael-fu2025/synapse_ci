@@ -120,11 +120,11 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
         $this->assertTrue($this->viewData['canWrite']);
         $this->withSession($this->actorSession())->get('clinic/inventory/' . $this->medicineId)->assertStatus(200);
         $this->assertSame('inventory/show', $this->viewName);
-        foreach (['medicine', 'batches', 'movements', 'operations', 'movementPage', 'hasMoreMovements', 'canManage', 'canWrite'] as $key) {
+        foreach (['medicine', 'batches', 'movements', 'operations', 'movementPagination', 'canManage', 'canWrite'] as $key) {
             $this->assertArrayHasKey($key, $this->viewData);
         }
-        $this->assertSame(1, $this->viewData['movementPage']);
-        $this->assertFalse($this->viewData['hasMoreMovements']);
+        $this->assertSame(1, $this->viewData['movementPagination']['page']);
+        $this->assertSame(1, $this->viewData['movementPagination']['pages']);
         $this->assertTrue($this->viewData['canManage']);
         $this->assertTrue($this->viewData['canWrite']);
         $admin = $this->user('clinic_admin');

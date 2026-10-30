@@ -9,7 +9,6 @@ $localTime = static function (?string $value): string {
     $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, \App\Services\Scheduling\SchedulingClock::timezone());
     return $date !== false && $date->format('Y-m-d H:i:s') === $value ? $date->format('M j, Y · g:i A') : 'Not recorded';
 };
-$pageUrl = static fn(int $page): string => $baseUrl . '?' . http_build_query(['service' => $filters['service'], 'page' => $page], '', '&', PHP_QUERY_RFC3986);
 ?>
 <section data-live-filters data-filter-url="<?= esc($baseUrl, 'attr') ?>" data-filter-key="personal-visit-history" data-live-events="portal.queue.changed" aria-labelledby="visitHistoryTitle">
   <div class="card border-0 shadow-sm">
@@ -51,16 +50,15 @@ $pageUrl = static fn(int $page): string => $baseUrl . '?' . http_build_query(['s
             </table>
           </div>
         <?php endif; ?>
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
-          <p class="small text-muted mb-0">Showing <?= (int) $pagination['from'] ?>–<?= (int) $pagination['to'] ?> of <?= (int) $pagination['total'] ?> visits · Newest first</p>
-          <?php if ($pagination['pages'] > 1): ?>
-            <nav aria-label="Visit history pages"><ul class="pagination pagination-sm flex-wrap mb-0">
-              <li class="page-item <?= $pagination['page'] === 1 ? 'disabled' : '' ?>"><?php if ($pagination['page'] === 1): ?><span class="page-link" aria-disabled="true">Previous</span><?php else: ?><a class="page-link" href="<?= esc($pageUrl($pagination['page'] - 1)) ?>" data-filter-link>Previous</a><?php endif; ?></li>
-              <li class="page-item active"><span class="page-link" aria-current="page">Page <?= (int) $pagination['page'] ?> of <?= (int) $pagination['pages'] ?></span></li>
-              <li class="page-item <?= $pagination['page'] === $pagination['pages'] ? 'disabled' : '' ?>"><?php if ($pagination['page'] === $pagination['pages']): ?><span class="page-link" aria-disabled="true">Next</span><?php else: ?><a class="page-link" href="<?= esc($pageUrl($pagination['page'] + 1)) ?>" data-filter-link>Next</a><?php endif; ?></li>
-            </ul></nav>
-          <?php endif; ?>
-        </div>
+        <?= view('partials/table_pagination', [
+            'pagination' => $pagination,
+            'filters' => $filters,
+            'baseUrl' => $baseUrl,
+            'paginationPageParam' => 'page',
+            'paginationExtraQuery' => ['service' => $filters['service']],
+            'paginationLiveFilters' => true,
+            'paginationLabel' => 'Visit history pages',
+        ]) ?>
       </div>
     </div>
   </div>

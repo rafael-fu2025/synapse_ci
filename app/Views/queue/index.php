@@ -7,7 +7,9 @@
 <?= $this->section('page_actions') ?>
 <div class="d-flex align-items-center gap-2">
   <button type="button"
+          id="queue-call-next"
           class="btn btn-primary"
+          <?= empty($summary['waiting']) ? 'disabled' : '' ?>
           hx-post="<?= site_url($unit . '/queue/call-next') ?>"
           hx-include="#queueDateFilter_iso"
           hx-target="#queue-board-container"
@@ -32,7 +34,9 @@
     </span>
   </div>
 
-  <div class="d-flex align-items-center gap-2">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <?= view('queue/no_show_history', ['noShows' => $summary['no_show'] ?? [], 'queueDate' => $queueDate]) ?>
+    <div class="d-flex align-items-center gap-2">
     <label for="queueDateFilter" class="form-label small text-muted mb-0">Date:</label>
     <!-- Custom date picker: visible trigger + ISO hidden value.
          The HTMX trigger lives on the hidden input so the request always
@@ -50,6 +54,7 @@
            hx-get="<?= site_url($unit . '/queue/board') ?>"
            hx-target="#queue-board-container"
            hx-trigger="change">
+    </div>
   </div>
 </div>
 

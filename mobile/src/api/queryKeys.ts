@@ -1,5 +1,7 @@
 export const queryKeys = {
   me: ['me'] as const,
+  profilePhoto: (tenantId: number, userId: number) => ['me', 'photo', tenantId, userId] as const,
+  healthSummary: ['health-summary'] as const,
   appointments: (filters: { service: string; status: string; sort: string }) => ['appointments', filters] as const,
   appointment: (id: number) => ['appointments', 'detail', id] as const,
   queue: ['queue'] as const,

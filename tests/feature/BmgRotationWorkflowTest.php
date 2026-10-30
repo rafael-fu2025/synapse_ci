@@ -85,6 +85,89 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
         parent::tearDown();
     }
 
+    public function testDirectoryCountsAndPagesBeyondOperationalOverviewCap(): void
+    {
+        $rows = [];
+        for ($i = 2; $i <= 231; $i++) {
+            $rows[] = ['tenant_id' => 1, 'unit_code' => 'page-' . $i, 'name' => 'Drum ' . $i,
+                'status' => $i <= 211 ? 'maintenance' : 'offline', 'drum_capacity_kg' => '80.00',
+                'deleted_at' => $i <= 211 ? null : $this->yesterday()];
+        }
+        $rows[] = ['tenant_id' => 2, 'unit_code' => 'foreign', 'name' => 'Foreign',
+            'status' => 'active', 'drum_capacity_kg' => '80.00', 'deleted_at' => null];
+        $this->rotationDb->table('bmg_units')->insertBatch($rows);
+        $first = $this->rotation->listing(['per_page' => '100']);
+        $second = $this->rotation->listing(['page' => '2', 'per_page' => '100']);
+        $last = $this->rotation->listing(['page' => '999', 'per_page' => '100']);
+        $this->assertCount(100, $first['units']);
+        $this->assertCount(100, $second['units']);
+        $this->assertCount(11, $last['units']);
+        $ids = array_map(static fn (array $item): int => (int) $item['unit']['id'],
+            array_merge($first['units'], $second['units'], $last['units']));
+        $this->assertSame(range(1, 211), $ids);
+        $this->assertSame(['total' => 211, 'active' => 1, 'maintenance' => 210, 'bound' => 1], $first['stats']);
+        $this->assertSame($first['stats'], $last['stats']);
+        $this->assertSame($first['stats'], $this->rotation->statistics());
+        $this->assertSame(['page' => 3, 'per_page' => 100, 'total' => 211, 'filtered' => 211,
+            'pages' => 3, 'from' => 201, 'to' => 211], $last['pagination']);
+        $archived = $this->rotation->listing(['per_page' => '20'], true);
+        $this->assertCount(20, $archived['units']);
+        $this->assertSame(20, $archived['stats']['total']);
+        $this->assertSame(0, $archived['stats']['active']);
+        $this->assertCount(200, $this->rotation->overview());
+        $this->assertStringNotContainsString($this->token, json_encode($first));
+    }
+
+    public function testDirectoryEmptyClampingSizesAndInvalidInput(): void
+    {
+        foreach ([20, 25, 50, 100] as $size) {
+            $listing = $this->rotation->listing(['per_page' => (string) $size, 'page' => '99'], true);
+            $this->assertSame(['page' => 1, 'per_page' => $size, 'total' => 0, 'filtered' => 0,
+                'pages' => 1, 'from' => 0, 'to' => 0], $listing['pagination']);
+            $this->assertSame([], $listing['units']);
+        }
+        foreach ([['page' => '0'], ['page' => '-1'], ['page' => []], ['page' => '1000001'],
+            ['per_page' => '200'], ['per_page' => []], ['per_page' => '25.0']] as $query) {
+            $this->invalid(fn () => $this->rotation->listing($query));
+        }
+    }
+
+    public function testDirectoryAndStatisticsRetainArchivedConfigurationAuthorization(): void
+    {
+        $this->rotationDb->table('users')->where('id', 1)->update(['role' => 'facilities_op', 'person_id' => 1]);
+        $this->assertCount(1, $this->rotation->listing()['units']);
+        $this->assertSame(1, $this->rotation->statistics()['total']);
+        $this->reject(fn () => $this->rotation->listing([], true), 403);
+        $this->reject(fn () => $this->rotation->statistics(true), 403);
+        $this->rotationDb->table('users')->where('id', 1)->update(['role' => 'superadmin']);
+        foreach ([2, 4] as $permission) {
+            $this->rotationDb->table('role_permissions')->where('role', 'superadmin')->where('permission_id', $permission)->delete();
+            $this->reject(fn () => $this->rotation->listing([], true), 403);
+            $this->reject(fn () => $this->rotation->statistics(true), 403);
+            $this->rotationDb->table('role_permissions')->insert(['role' => 'superadmin', 'permission_id' => $permission]);
+        }
+        $this->rotationDb->table('role_permissions')->where('permission_id', 1)->delete();
+        $this->reject(fn () => $this->rotation->listing(), 403);
+        $this->reject(fn () => $this->rotation->statistics(), 403);
+    }
+
+    public function testAggregateBindingsMatchDetailEligibility(): void
+    {
+        foreach ([['status' => 'revoked'], ['revoked_at' => $this->yesterday()],
+            ['rotation_bound_at' => null], ['tenant_id' => 2]] as $change) {
+            $this->rotationDb->table('bmg_devices')->where('id', $this->deviceId)->update($change);
+            $this->assertSame(0, $this->rotation->statistics()['bound']);
+            $this->assertNull($this->rotation->listing()['units'][0]['device']);
+            $this->rotationDb->table('bmg_devices')->where('id', $this->deviceId)
+                ->update(['tenant_id' => 1, 'status' => 'active', 'revoked_at' => null, 'rotation_bound_at' => $this->yesterday()]);
+        }
+        $this->rotationDb->table('bmg_devices')->insert(['tenant_id' => 1, 'unit_id' => $this->unitId,
+            'chip_mac' => 'aa:bb:cc:dd:ee:02', 'device_token_hash' => hash('sha256', 'duplicate'),
+            'status' => 'active', 'rotation_bound_at' => $this->yesterday()]);
+        $this->assertSame(0, $this->rotation->statistics()['bound']);
+        $this->assertNull($this->rotation->listing()['units'][0]['device']);
+    }
+
     public function testDisabledDefaultsAndHashOnlyCredentials(): void
     {
         $schedule = $this->rotation->deviceSchedule($this->token);

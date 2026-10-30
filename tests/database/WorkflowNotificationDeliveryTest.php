@@ -8,6 +8,7 @@ use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\NotificationService;
 use App\Services\PortalContext;
+use App\Services\Scheduling\AppointmentService;
 use App\Services\WorkflowNotifications;
 use App\Services\WorkflowNotificationScanner;
 use CodeIgniter\Test\DatabaseTestTrait;
@@ -293,7 +294,7 @@ final class WorkflowNotificationDeliveryTest extends FreshDatabaseTestCase
         return [
             'appointment request' => ['appointment_requested_staff', 'clinic', 'Appointment request', 'clinic', 'clinic/appointments'],
             'staff cancellation' => ['appointment_cancelled_patient', 'guidance', 'Appointment cancelled', 'main', 'portal#my-appointments'],
-            'patient cancellation' => ['appointment_cancelled_staff', 'guidance', 'Appointment cancelled by patient', 'guidance', 'guidance/appointments'],
+            'self-service cancellation' => ['appointment_cancelled_staff', 'guidance', 'Appointment cancelled', 'guidance', 'guidance/appointments'],
             'reminder' => ['appointment_reminder', 'clinic', 'Upcoming appointment', 'main', 'portal#my-appointments'],
             'referral acknowledged' => ['referral_acknowledged', 'clinic', 'Referral acknowledged', 'clinic', 'clinic/referrals?tab=sent'],
             'referral reviewed' => ['referral_reviewed', 'guidance', 'Referral under review', 'guidance', 'guidance/referrals?tab=sent'],
@@ -400,6 +401,60 @@ final class WorkflowNotificationDeliveryTest extends FreshDatabaseTestCase
         $this->record('appointment_requested_staff', $unit, $source, '2', $actor['id']);
         $this->worker()->dispatch(1);
         $this->assertCount(1, $this->notices(), 'Revoked staff must not receive a new delivery either.');
+    }
+
+    #[DataProvider('departments')]
+    public function testStaffSelfServiceCancellationReachesSuperadminWithoutInventingAPatientActor(string $unit): void
+    {
+        $actor = $unit === 'clinic' ? $this->clinic : $this->guidance;
+        $admin = $this->account('superadmin');
+        $this->grant($actor['role'], ['portal.appointments.create', 'portal.appointments.read']);
+        $id = $this->appointment($unit, 'confirmed', ['person_id' => $actor['person_id']]);
+        $this->login($actor);
+        $this->assertTrue((new AppointmentService())->cancelAppointment($id, 'SECRET cancellation', $unit, $actor, true));
+        $this->assertSame(0, $this->worker()->dispatch(20)['failed']);
+        $events = $this->events();
+        $this->assertCount(1, $events);
+        $this->assertSame('appointment_cancelled_staff', $events[0]['event_kind']);
+        $this->assertSame($actor['id'], (int) $events[0]['actor_user_id']);
+
+        $this->login($admin);
+        $inbox = $this->bell->ownInbox();
+        $this->assertCount(1, $inbox['items']);
+        $item = $inbox['items'][0];
+        $this->assertSame('Appointment cancelled', $item['title']);
+        $this->assertSame('An appointment was cancelled. Review the department schedule.', $item['message']);
+        $this->assertSame(PortalContext::urlFor($unit, $unit . '/appointments'), $item['url']);
+        $this->assertStringNotContainsString('SECRET', json_encode($item, JSON_THROW_ON_ERROR));
+        $this->bell->markRead($item['id']);
+        $page = $this->bell->ownPage();
+        $this->assertSame('Appointment cancelled', $page['items'][0]['title']);
+        $this->assertNotNull($page['items'][0]['read_at']);
+        $this->assertSame(0, $page['unread_count']);
+        $this->login($actor);
+        $this->assertSame(['items' => [], 'unread_count' => 0], $this->bell->ownInbox());
+    }
+
+    #[DataProvider('departments')]
+    public function testStaffConsoleCancellationNotifiesPatientWithoutManufacturingASchedulerEvent(string $unit): void
+    {
+        $actor = $unit === 'clinic' ? $this->clinic : $this->guidance;
+        $admin = $this->account('superadmin');
+        $id = $this->appointment($unit, 'confirmed');
+        $this->login($actor);
+        $this->assertTrue((new AppointmentService())->cancelAppointment($id, 'SECRET department cancellation', $unit, $actor, false));
+        $this->assertSame(0, $this->worker()->dispatch(20)['failed']);
+        $events = $this->events();
+        $this->assertCount(1, $events);
+        $this->assertSame('appointment_cancelled_patient', $events[0]['event_kind']);
+        $this->assertSame($actor['id'], (int) $events[0]['actor_user_id']);
+        $this->login($this->patient);
+        $inbox = $this->bell->ownInbox();
+        $this->assertCount(1, $inbox['items']);
+        $this->assertSame('Appointment cancelled', $inbox['items'][0]['title']);
+        $this->assertSame('An appointment was cancelled. Open your appointments for details.', $inbox['items'][0]['message']);
+        $this->login($admin);
+        $this->assertSame(['items' => [], 'unread_count' => 0], $this->bell->ownInbox());
     }
 
     public function testCancellationAudienceAndSelfNotificationExclusion(): void

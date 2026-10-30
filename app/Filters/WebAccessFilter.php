@@ -85,7 +85,10 @@ final class WebAccessFilter implements FilterInterface
             }
             if (str_starts_with($path, 'facilities')) {
                 if (!PortalContext::isRolePermitted($actor['role'], 'bmg')) throw new RuntimeException('Facilities access forbidden.', 403);
-                if (!preg_match('~^facilities/teams(?:/|$)~', $path)) {
+                // AI POST actions own their scoped capabilities; generation also checks source read.
+                $aiAction = strtoupper($request->getMethod()) === 'POST'
+                    && preg_match('~^facilities/insights/(?:prepare|generate|[0-9]+/review|jobs/[0-9]+/cancel)$~D', $path);
+                if (!preg_match('~^facilities/teams(?:/|$)~', $path) && !$aiAction) {
                     $this->permit($write ? 'facilities.manage' : 'facilities.read');
                 }
             }

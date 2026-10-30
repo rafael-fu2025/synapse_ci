@@ -91,7 +91,7 @@ for (const reason of reasons) {
 }
 
 const rejected = [
-  ...[200, 204, 302, 400, 403, 419, 500, 502, 503, 599].map(status => [`status ${status}`, { status }]),
+  ...[200, 204, 302, 400, 403, 409, 419, 500, 502, 503, 599].map(status => [`status ${status}`, { status }]),
   ['string status', { status: '401' }],
   ['missing reason', { reason: null }], ['unknown reason', { reason: 'expired' }],
   ['case-changed reason', { reason: 'SESSION_EXPIRED' }], ['padded reason', { reason: ' session_expired ' }],

@@ -19,8 +19,65 @@ in `api_tokens`; a token value is shown to the client exactly once.
   the same *family*. Replaying or expiring a refresh token **revokes the entire family** (compromise signal).
 - Login reuses `AuthService::authenticate()` (local break-glass accounts, then the MIS directory) and
   the same IP + identity throttle budgets as the web form. MIS unavailability returns a fixed 503 message.
+- Throttled login/refresh responses return `429 rate_limited` with `Retry-After` set to the
+  limiter's actual remaining wait in seconds. Clients must wait before a new user-initiated attempt;
+  do not automatically retry credentials. This is an HTTP response, not a connection failure.
 - `auth_version` is pinned at issue; a credential/role change revokes every token for that user.
 - Session cookies are **rejected** on API routes (mixed-auth guard in `ApiAuthFilter`).
+
+### Public sign-in carousel
+
+`GET api/v1/auth/carousel` is unauthenticated; no credentials or tenant selector are required or
+accepted. It uses the same `CarouselService::getSlidesForLogin()` source and default
+`CurrentTenant` context as web login (`SYNAPSE_TENANT_ID`, otherwise tenant 1), retaining active-only
+`sort_order ASC, id ASC` ordering and the service's Foundation University fallback when no active
+slides exist.
+
+```json
+{
+  "data": {
+    "slides": [
+      {
+        "id": 1,
+        "title": "Foundation University",
+        "subtitle": "Health & Guidance Services Portal",
+        "light_image": "assets/img/brand/fuel-bg.jpg",
+        "dark_image": "assets/img/brand/FoundationU-Dark.png",
+        "fit_mode": "cover"
+      }
+    ]
+  }
+}
+```
+
+Each slide has only `id` (number), nullable `title`/`subtitle`, required `light_image`, nullable
+`dark_image`, and `fit_mode` (`cover` or `contain_blur`). Image values remain relative local raster
+paths under `assets/img/brand/` or `uploads/carousel/`, never absolute paths or remote URLs.
+Unsafe paths (including traversal, query strings and fragments) omit the slide if used for its
+light image, or become `null` for its dark image. Filtering may produce an empty `slides` list.
+No tenant, administrative flags, sorting metadata, or timestamps are exposed. Responses use
+`Cache-Control: private, no-store`; database failure returns the ordinary `503 service_unavailable`
+error, not a successful fallback response. The mobile client may use its local fallback on failure
+or an empty list.
+
+### Public carousel realtime grant
+
+`GET api/v1/auth/carousel/realtime` is unauthenticated and no-store. Send an exact allowlisted
+`Origin` header (native clients derive it from the API base URL). Request tenant/channel/user/origin
+selectors are ignored. A hashed-IP budget allows 120 requests per minute; throttling returns 429
+with `Retry-After: 60`.
+
+- Disabled: `{data: {enabled: false}}`.
+- Enabled: `{data: {enabled: true, url, origin, channel, ticket, expires_at}}`; expiry is Unix seconds.
+- The signed grant contains only `public.tenant.{serverTenantId}.login-carousel`. It cannot grant
+  private user channels. Origin/configuration errors produce ordinary fixed 403/503 API errors.
+- Connect to `url` using the same `Origin`, then send `{type: "authenticate", ticket}` as the first
+  message. Await `{type: "ready"}`. Tickets never belong in URLs or logs; clients cannot publish
+  or choose subscriptions.
+- `login.carousel.changed` carries `data: []`. Refetch the public carousel snapshot over HTTP;
+  the socket does not carry images, credentials, slide titles, or administrative data.
+- Reconnect and expiry renewal require fresh grants. Poll/reconcile slowly when unavailable and
+  resync after reconnect so a missed hint never requires restarting the app.
 
 ## Response contract
 
@@ -54,6 +111,18 @@ in `api_tokens`; a token value is shown to the client exactly once.
 | `GET notifications` | Bell inbox (10 items, unread count ≤100) |
 | `GET notifications/history?page&filter` | Paginated inbox |
 | `POST notifications/{id}/read`, `POST notifications/read-all` | Mark read → 204 |
+
+### Profile-card projection
+
+`GET me/health-summary` returns `{data: {person, health}}`. `person` includes `name` (including
+middle name when recorded), `kind`, `identifier`, `email`, `program`, `year_level`, `section`,
+`department`, `position`, and `employment_status`. Unavailable values are nullable; clients must
+also accept numeric year levels. The projection follows the signed-in person and retains the
+`portal.records.read` permission check. It contains no encounter notes or internal clinical records.
+
+Personal queue ticket objects include `unit`, `ticket_code`, `status`, `priority`, and nullable
+`position`, `people_ahead`, `estimated_wait_minutes`. Zero wait means next; null means unknown,
+not zero. A `skipped` ticket remains visible as **On hold**, with instructions to ask reception.
 
 ## Security posture
 

@@ -7,10 +7,11 @@ import { EmptyState } from '../../../components/EmptyState';
 import { Action } from '../../../components/Action';
 import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
-import { Theme, font } from '../../../theme/tokens';
+import { Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { useAppointments } from '../hooks';
 import { AppointmentCard } from '../components/AppointmentCard';
+import { AppointmentLoadError } from '../components/AppointmentLoadError';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { VisitsStackParamList } from '../../../navigation/types';
 
@@ -72,11 +73,12 @@ export function AppointmentsScreen() {
         ))}
       </ScrollView>
 
+      {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
       {query.isLoading ? (
-        <ActivityIndicator style={styles.loader} color={theme.brand} />
-      ) : appointments.length === 0 ? (
+        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
+      ) : appointments.length === 0 && query.isError ? null : appointments.length === 0 ? (
         <EmptyState
-          icon={<CalendarX2 size={30} color={theme.brand} />}
+          icon={<CalendarX2 size={30} color={theme.brandIcon} />}
           title={status === 'active' ? 'No upcoming visits' : 'Nothing here'}
           body={
             status === 'active'
@@ -103,7 +105,7 @@ export function AppointmentsScreen() {
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     chipsRow: { flexDirection: 'row', gap: 7, marginBottom: 8 },
     statusScroll: { flexGrow: 0, marginBottom: 12 },
@@ -123,3 +125,5 @@ function makeStyles(theme: Theme) {
     list: { paddingBottom: 20 },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

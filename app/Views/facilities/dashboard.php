@@ -116,6 +116,7 @@
           <a href="<?= site_url('/facilities') ?>" class="nd-inline-link">Manage drum rotation <i class="bi bi-arrow-right"></i></a>
         </div>
         <div class="card-body p-0">
+          <p class="small text-muted px-3 pt-3 mb-2">Showing <?= number_format(count($units)) ?> of <?= number_format($totalUnits) ?> current drums, ordered by unit ID (limit 200). Summary counts cover all current drums. <a href="<?= esc(site_url('/facilities'), 'attr') ?>">Browse all drums</a></p>
           <div class="table-responsive">
             <table class="table align-middle mb-0 nd-matrix-table">
               <thead class="table-light">

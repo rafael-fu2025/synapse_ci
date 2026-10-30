@@ -17,7 +17,9 @@ class BmgPrivateToolbar extends DebugToolbar
         // Cover rejected and alternate-ID spellings too: their request bodies can still contain secrets.
         // Skip collection itself; hiding the toolbar UI still persists debugbar data.
         if (preg_match('~(?:^|/)facilities/unit/[^/]+/(?:usb/build(?:/|$)|usb/releases/[^/]+/parts(?:/|$)|device(?:/|$))~', $path)
-            || preg_match('~(?:^|/)api/v1/devices/bmg(?:/|$)~', $path)) {
+            || preg_match('~(?:^|/)api/v1/devices/bmg(?:/|$)~', $path)
+            || preg_match('~(?:^|/)admin/ai(?:/|$)~i', rawurldecode($path))
+            || preg_match('~(?:^|/)(?:clinic|guidance|facilities)/insights(?:/|$)~i', rawurldecode($path))) {
             return null;
         }
 

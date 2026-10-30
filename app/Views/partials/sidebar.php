@@ -1,5 +1,6 @@
 <?php
 use App\Services\PortalContext;
+use App\Services\Ai\AiAccess;
 
 // Authentication filters refresh this identity before protected views render.
 $currentUser = session()->get('user') ?? null;
@@ -20,14 +21,20 @@ $isActive = static function (string $prefix) use ($uri): bool {
     return $uri === $prefix || str_starts_with($uri, $prefix . '/');
 };
 $sidebarLink = static function (string $portal, string $path, string $label, string $icon,
-    array $permissions = [], bool $exact = false, bool $queueBadge = false) use ($role, $uri, $isActive, $canAll): string {
+    array $permissions = [], bool $exact = false) use ($role, $uri, $isActive, $canAll): string {
     if (!PortalContext::isRolePermitted($role, $portal) || !$canAll($permissions)) { return ''; }
     $active = $exact ? ($uri === $path || $uri === $path . '/dashboard') : $isActive($path);
     return '<li class="nav-item"><a class="nav-link ' . ($active ? 'active' : '') . '" href="'
         . esc(PortalContext::urlFor($portal, $path)) . '"><span class="nav-icon"><i class="' . esc($icon)
         . '"></i></span><span class="nav-text">' . esc($label) . '</span>'
-        . ($queueBadge ? '<span class="badge bg-danger-subtle text-danger rounded-pill ms-auto">Queue</span>' : '')
+
         . '</a></li>';
+};
+$canAiInsights = static function (string $unit) use ($currentUser): bool {
+    try {
+        AiAccess::assertActor($currentUser, (int) ($currentUser['tenant_id'] ?? 0), 'ai.insights.read', $unit);
+        return true;
+    } catch (\Throwable) { return false; }
 };
 $canMain = PortalContext::isRolePermitted($role, 'main') && PortalContext::compatibleHost($role);
 $canAuditNavigation = $canMain && in_array($role, ['superadmin', 'audit_reader'], true) && $canContent('audit.read');
@@ -54,13 +61,16 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
         <?php if (PortalContext::showsWorkstation('clinic', $role)): ?>
           <li class="nav-heading mt-2 mb-1 px-3 text-uppercase small text-muted">Clinic Workstation</li>
           <?= $sidebarLink('clinic', 'clinic', 'Clinic Dashboard', 'ph-light ph-squares-four', ['clinic.queue.read', 'clinic.encounters.read', 'clinic.appointments.read', 'clinic.inventory.read'], true) ?>
-          <?= $sidebarLink('clinic', 'clinic/queue', 'Live Queue Board', 'ph-light ph-kanban', ['clinic.queue.read'], false, true) ?>
+          <?= $sidebarLink('clinic', 'clinic/queue', 'Clinic Queue', 'ph-light ph-kanban', ['clinic.queue.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/encounters', 'Encounters & Stepper', 'ph-light ph-heartbeat', ['clinic.encounters.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/patients', 'Patients & Charts', 'ph-light ph-users', ['clinic.patients.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/appointments', 'Appointments', 'ph-light ph-calendar', ['clinic.appointments.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/inventory', 'Medicine Inventory', 'bi bi-capsule', ['clinic.inventory.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/referrals', 'Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/teams', 'Clinic Teams', 'bi bi-people') ?>
+          <?php if ($canAiInsights('clinic')): ?>
+            <?= $sidebarLink('clinic', 'clinic/insights', 'Insights & Program Planning', 'bi bi-lightbulb') ?>
+          <?php endif; ?>
           <?php if (in_array($role, ['clinic_admin', 'superadmin'], true)): ?>
             <?= $sidebarLink('clinic', 'clinic/announcements', 'Clinic Announcements', 'bi bi-megaphone', ['clinic.announcements.manage']) ?>
           <?php endif; ?>
@@ -74,6 +84,9 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <?= $sidebarLink('guidance', 'guidance/appointments', 'Appointments', 'ph-light ph-calendar-check', ['guidance.schedule.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/referrals', 'Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/teams', 'Guidance Teams', 'bi bi-people') ?>
+          <?php if ($canAiInsights('guidance')): ?>
+            <?= $sidebarLink('guidance', 'guidance/insights', 'Insights & Program Planning', 'bi bi-lightbulb') ?>
+          <?php endif; ?>
           <?php if (in_array($role, ['guidance_admin', 'guidance_supervisor', 'superadmin'], true)): ?>
             <?= $sidebarLink('guidance', 'guidance/announcements', 'Guidance Announcements', 'bi bi-megaphone', ['guidance.announcements.manage']) ?>
             <?= $sidebarLink('guidance', 'guidance/surveys', 'Surveys & Responses', 'bi bi-clipboard-check', ['guidance.surveys.manage']) ?>
@@ -88,6 +101,9 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <li class="nav-item"><a class="nav-link <?= $isActive('facilities') && !$isActive('facilities/dashboard') && !$isActive('facilities/teams') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('bmg', 'facilities')) ?>"><span class="nav-icon"><i class="ph-light ph-recycle"></i></span><span class="nav-text">Drum Rotation</span></a></li>
           <?php endif; ?>
           <?= $sidebarLink('bmg', 'facilities/teams', 'Facilities Teams', 'bi bi-people') ?>
+          <?php if ($canAiInsights('bmg')): ?>
+            <?= $sidebarLink('bmg', 'facilities/insights', 'Insights & Program Planning', 'bi bi-lightbulb') ?>
+          <?php endif; ?>
         <?php endif; ?>
 
         <!-- Personal self-service remains available to staff acting as employees. -->
@@ -119,13 +135,18 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <?php endif; ?>
         <?php endif; ?>
 
-        <?php if ($canAccessNavigation || $canMisNavigation): ?>
+        <?php $canAiSettings = $canMain && $role === 'superadmin'
+            && (in_array('rbac.manage', $currentUser['permissions'] ?? [], true) || in_array('ai.configuration.read', $currentUser['permissions'] ?? [], true)); ?>
+        <?php if ($canAccessNavigation || $canMisNavigation || $canAiSettings): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Administration</li>
           <?php if ($canAccessNavigation): ?>
             <?= $sidebarLink('main', 'admin/access', 'Employees & Access', 'bi bi-person-lock', ['rbac.manage']) ?>
           <?php endif; ?>
           <?php if ($canMisNavigation): ?>
             <?= $sidebarLink('main', 'admin/mis-sync', 'MIS reference synchronization', 'bi bi-arrow-repeat', ['mis.sync']) ?>
+          <?php endif; ?>
+          <?php if ($canAiSettings): ?>
+            <?= $sidebarLink('main', 'admin/ai', 'AI Settings', 'bi bi-sliders') ?>
           <?php endif; ?>
         <?php endif; ?>
 

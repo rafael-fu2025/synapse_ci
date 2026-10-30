@@ -33,6 +33,18 @@ final class ClinicEncounterModel extends TenantModel
     protected $updatedField = 'updated_at';
     protected $deletedField = 'deleted_at';
 
+    public function getListPage(\App\Libraries\TablePage $page, ?string $status = null, ?string $date = null): array
+    {
+        $total = $this->listQuery()->countAllResults();
+        $filtered = $this->listQuery($status, $date)->countAllResults();
+        $pagination = $page->metadata($total, $filtered);
+        $encounters = $this->listQuery($status, $date)
+            ->orderBy('clinic_encounters.started_at', 'DESC')
+            ->orderBy('clinic_encounters.id', 'DESC')
+            ->findAll($page->perPage, ($pagination['page'] - 1) * $page->perPage);
+        return compact('encounters', 'pagination');
+    }
+
     /**
      * Get encounters list with joined patient information.
      *
@@ -40,11 +52,17 @@ final class ClinicEncounterModel extends TenantModel
      */
     public function getListWithPatients(?string $status = null, ?string $date = null, int $limit = 50): array
     {
+        return $this->listQuery($status, $date)
+            ->orderBy('clinic_encounters.started_at', 'DESC')
+            ->orderBy('clinic_encounters.id', 'DESC')->findAll($limit);
+    }
+
+    private function listQuery(?string $status = null, ?string $date = null): self
+    {
         $builder = $this->scoped()
             ->select('clinic_encounters.*, p.first_name, p.last_name, p.mis_id, p.kind, u.username as attending_name')
             ->join('people p', 'p.id = clinic_encounters.person_id AND p.tenant_id = clinic_encounters.tenant_id AND p.deleted_at IS NULL')
-            ->join('users u', 'u.id = clinic_encounters.attending_user_id AND u.tenant_id = clinic_encounters.tenant_id', 'left')
-            ->orderBy('clinic_encounters.started_at', 'DESC');
+            ->join('users u', 'u.id = clinic_encounters.attending_user_id AND u.tenant_id = clinic_encounters.tenant_id', 'left');
 
         if ($status !== null && $status !== '') {
             $builder->where('clinic_encounters.status', $status);
@@ -53,6 +71,6 @@ final class ClinicEncounterModel extends TenantModel
             $builder->where('DATE(clinic_encounters.started_at)', $date);
         }
 
-        return $builder->findAll($limit);
+        return $builder;
     }
 }

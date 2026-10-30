@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Theme, font, type } from '../theme/tokens';
+import { Theme, font, type, memoizeStyles } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 export function SectionHeading({
@@ -25,7 +25,7 @@ export function SectionHeading({
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     heading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 1, marginBottom: 10, marginTop: 19 },
     flex: { flex: 1, minWidth: 0 },
@@ -33,3 +33,5 @@ function makeStyles(theme: Theme) {
     caption: { marginTop: 2, fontSize: 10.5, fontFamily: font.body, color: theme.ink500 },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

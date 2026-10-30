@@ -52,6 +52,9 @@ final class PortalController extends BaseController
         }
 
         $filters = $this->appointmentFilters();
+        $appointmentPage = $this->historyService->getPortalAppointmentsPage($personId, $filters);
+        $filters['page'] = $appointmentPage['pagination']['page'];
+        $filters['per_page'] = $appointmentPage['pagination']['per_page'];
 
         return view('portal/index', [
             'title'        => 'My Health Portal',
@@ -61,7 +64,8 @@ final class PortalController extends BaseController
                 default => 'My Health Portal',
             },
             'chart'        => $chart,
-            'appointments' => $this->historyService->getPortalAppointments($personId, $filters),
+            'appointments' => $appointmentPage['appointments'],
+            'pagination'   => $appointmentPage['pagination'],
             'filters'      => $filters,
             'activeTickets' => $activeTickets,
             'breadcrumbs'  => [
@@ -104,7 +108,7 @@ final class PortalController extends BaseController
         ]);
     }
 
-    /** @return array{service: string, status: string, sort: string} */
+    /** @return array{service: string, status: string, sort: string, page: int, per_page: int} */
     private function appointmentFilters(): array
     {
         $service = $this->getString('service');
@@ -122,7 +126,11 @@ final class PortalController extends BaseController
             $sort = 'upcoming';
         }
 
-        return ['service' => $service, 'status' => $status, 'sort' => $sort];
+        $perPage = filter_var($this->getString('per_page'), FILTER_VALIDATE_INT);
+        $perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 25;
+        $page = max(1, (int) filter_var($this->getString('page'), FILTER_VALIDATE_INT));
+
+        return ['service' => $service, 'status' => $status, 'sort' => $sort, 'page' => $page, 'per_page' => $perPage];
     }
 
     private function getString(string $key): string

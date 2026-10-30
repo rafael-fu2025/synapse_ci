@@ -1,5 +1,9 @@
+import type { CompositeNavigationProp, NavigatorScreenParams } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 export type RootStackParamList = {
-  AppTabs: undefined;
+  AppTabs: NavigatorScreenParams<AppTabsParamList> | undefined;
   Announcements: undefined;
   AnnouncementDetail: { id: number };
   Surveys: undefined;
@@ -8,10 +12,10 @@ export type RootStackParamList = {
 };
 
 export type AppTabsParamList = {
-  Home: undefined;
-  Visits: undefined;
-  Queue: undefined;
-  Profile: undefined;
+  Home: NavigatorScreenParams<HomeStackParamList> | undefined;
+  Visits: NavigatorScreenParams<VisitsStackParamList> | undefined;
+  Queue: NavigatorScreenParams<QueueStackParamList> | undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };
 
 export type HomeStackParamList = {
@@ -39,3 +43,18 @@ export type ProfileStackParamList = {
   Appearance: undefined;
   StaffQueue: undefined;
 };
+
+export type HomeNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<HomeStackParamList, 'Dashboard'>,
+  CompositeNavigationProp<BottomTabNavigationProp<AppTabsParamList, 'Home'>, NativeStackNavigationProp<RootStackParamList>>
+>;
+
+export type ProfileNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<ProfileStackParamList, 'ProfileHome'>,
+  BottomTabNavigationProp<AppTabsParamList, 'Profile'>
+>;
+
+export type QueueNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<QueueStackParamList, 'QueueBoard'>,
+  BottomTabNavigationProp<AppTabsParamList, 'Queue'>
+>;

@@ -8,6 +8,7 @@ The `core/` directory contains tokens, base rules, layout rules, and reusable co
 
 - `body.app-shell` opts the shared PHP layout into the application geometry in `core/layout.css`; keep layout rules out of inline view styles.
 - The application sidebar is a drawer below 992px and a collapsible rail at 992px and above. `core/main.js` uses the same breakpoint and synchronizes visibility, keyboard focus, and `aria-expanded`.
+- Page-header actions use one shared size in `core/layout.css`: an exact 38px desktop height, 0.9375rem text, and consistent padding, including legacy `btn-sm`/`btn-lg` markup. Desktop labels stay on one line; mobile actions use auto height with a 44px minimum so wrapped labels are never clipped. This is scoped to `.page-actions`; table, modal, and in-page toolbar button sizing stays independent.
 - Mobile page actions wrap below the title with 44px touch targets. Header menus stay inside the viewport and scroll independently on short screens.
 - Run `node --test tests/browser/mobile-layout.test.cjs` for the light/dark 320–1440px shell matrix, drawer dismissal, and long-title/action overflow checks.
 

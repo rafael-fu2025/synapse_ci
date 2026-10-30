@@ -33,6 +33,7 @@ final class RealtimeHubTest extends CIUnitTestCase
         $this->settings->signingKey = str_repeat('s', 32);
         $this->settings->publishKey = str_repeat('p', 32);
         $this->settings->allowedOrigins = self::ORIGIN;
+        $this->settings->publicUrl = 'wss://portal.example.test/realtime';
         $this->hub = new Hub($this->settings);
     }
 

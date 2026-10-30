@@ -3,10 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "android": "react-native run-android --port 8083 --no-packager",
+    "android:usb": "node scripts/android-usb.js && react-native run-android --port 8083 --no-packager",
+    "doctor": "node scripts/doctor.js",
+    "ios": "react-native run-ios --port 8083 --no-packager",
     "lint": "eslint .",
-    "start": "react-native start",
+    "start": "react-native start --port 8083",
     "test": "jest"
   },
   "dependencies": {

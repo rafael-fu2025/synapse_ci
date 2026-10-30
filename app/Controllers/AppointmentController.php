@@ -30,16 +30,46 @@ final class AppointmentController extends BaseController
             $this->appointmentService->assertStaff($unit, $this->actor());
             $date = (string) ($this->request->getGet('date') ?: SchedulingClock::today());
             $this->appointmentService->validateDate($date);
+            $query = $this->request->getGet();
+            $pendingPage = \App\Libraries\TablePage::forList($query, 'pending_page');
+            $scheduledPage = \App\Libraries\TablePage::forList($query, 'scheduled_page');
+            $pending = $this->appointmentModel->getPendingRequestsPage($unit, $pendingPage);
+            $scheduled = $this->appointmentModel->getScheduledPage($unit, $date, $scheduledPage);
             return view('appointments/index', [
                 'title' => ucfirst($unit) . ' Appointments', 'pageTitle' => ucfirst($unit) . ' Appointments',
                 'unit' => $unit, 'formModalPage' => false, 'date' => $date,
-                'appointments' => $this->appointmentModel->getForDay($unit, $date),
-                'requests' => $this->appointmentModel->getPendingRequests($unit),
+                'appointments' => $scheduled['appointments'], 'scheduledPagination' => $scheduled['pagination'],
+                'requests' => $pending['requests'], 'pendingPagination' => $pending['pagination'],
                 'breadcrumbs' => [['label' => ucfirst($unit), 'url' => site_url('/' . $unit . '/appointments')],
                     ['label' => 'Appointments Calendar', 'url' => '']],
             ]);
         } catch (\Exception $e) {
             return $this->errorResponse($e);
+        }
+    }
+
+    public function calendarCounts(string $unit)
+    {
+        $this->response->setHeader('Cache-Control', 'private, no-store');
+        try {
+            $this->appointmentService->assertStaff($unit, $this->actor());
+            $from = $this->request->getGet('from');
+            $to = $this->request->getGet('to');
+            if (!is_string($from) || !is_string($to)) {
+                throw new \InvalidArgumentException('Provide from and to dates (YYYY-MM-DD).');
+            }
+            $this->appointmentService->validateDate($from);
+            $this->appointmentService->validateDate($to);
+            $start = new \DateTimeImmutable($from, SchedulingClock::timezone());
+            $end = new \DateTimeImmutable($to, SchedulingClock::timezone());
+            if ($end < $start || $start->diff($end)->days > 41) {
+                throw new \InvalidArgumentException('The date range must contain 1 to 42 days inclusive.');
+            }
+            $counts = $this->appointmentModel->getConfirmedCalendarCounts($unit, $from, $to);
+            return $this->response->setJSON(['success' => true, 'data' => ['counts' => (object) $counts]]);
+        } catch (\Exception $e) {
+            return $this->response->setStatusCode($this->status($e))
+                ->setJSON(['success' => false, 'message' => $e->getMessage()]);
         }
     }
 

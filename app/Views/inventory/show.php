@@ -3,7 +3,7 @@
 $id = (int) $medicine['id'];
 $canManage = !empty($canManage);
 $canWrite = !empty($canWrite);
-$page = (int) $movementPage;
+$page = (int) $movementPagination['page'];
 $operationIds = array_fill_keys(array_map('intval', array_column($operations, 'id')), true);
 $movementIds = array_fill_keys(array_map('intval', array_column($movements, 'id')), true);
 $batchNumbers = [];
@@ -111,7 +111,7 @@ foreach ($batches as $batch) {
   </div>
 </div>
 <div class="card" id="inventory-movements">
-  <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Stock movements</h2><p class="small text-muted mb-0">Page <?= $page ?> · Up to 100 movements per page, newest first. Signed quantities use <?= esc($medicine['unit_of_measure']) ?>; zero indicates no physical stock change.</p></div>
+  <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Stock movements</h2><p class="small text-muted mb-0">Page <?= $page ?> · <?= (int) $movementPagination['per_page'] ?> movements per page, newest first. Signed quantities use <?= esc($medicine['unit_of_measure']) ?>; zero indicates no physical stock change.</p></div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <caption class="visually-hidden">Paginated stock movement ledger in <?= esc($medicine['unit_of_measure']) ?></caption>
@@ -144,17 +144,19 @@ foreach ($batches as $batch) {
       </tbody>
     </table>
   </div>
-  <div class="card-footer bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
-    <span class="small text-muted"><?= number_format(count($movements)) ?> movements on page <?= $page ?></span>
-    <nav aria-label="Stock movement pages"><ul class="pagination pagination-sm mb-0">
-      <li class="page-item <?= $page <= 1 ? 'disabled' : '' ?>">
-        <?php if ($page > 1): ?><a class="page-link" href="<?= esc(site_url('/clinic/inventory/' . $id) . '?page=' . ($page - 1) . '#inventory-movements') ?>" rel="prev">Previous</a><?php else: ?><span class="page-link" aria-disabled="true">Previous</span><?php endif; ?>
-      </li>
-      <li class="page-item active"><span class="page-link" aria-current="page"><?= $page ?></span></li>
-      <li class="page-item <?= empty($hasMoreMovements) ? 'disabled' : '' ?>">
-        <?php if (!empty($hasMoreMovements)): ?><a class="page-link" href="<?= esc(site_url('/clinic/inventory/' . $id) . '?page=' . ($page + 1) . '#inventory-movements') ?>" rel="next">Next</a><?php else: ?><span class="page-link" aria-disabled="true">Next</span><?php endif; ?>
-      </li>
-    </ul></nav>
+  <div class="card-footer bg-transparent py-3">
+    <form method="get" action="<?= esc(site_url('/clinic/inventory/' . $id)) ?>#inventory-movements" class="d-flex align-items-center gap-2">
+      <label for="movementPerPage" class="small text-muted">Movements per page</label>
+      <select id="movementPerPage" name="per_page" class="form-select form-select-sm w-auto">
+        <?php foreach ([20, 25, 50, 100] as $size): ?><option value="<?= $size ?>"<?= $size === (int) $movementPagination['per_page'] ? ' selected' : '' ?>><?= $size ?></option><?php endforeach; ?>
+      </select>
+      <button type="submit" class="btn btn-outline-secondary btn-sm">Apply</button>
+    </form>
+    <?= view('partials/table_pagination', [
+        'pagination' => $movementPagination, 'filters' => [],
+        'baseUrl' => site_url('/clinic/inventory/' . $id),
+        'paginationLabel' => 'Stock movement pages',
+    ], ['saveData' => false]) ?>
   </div>
 </div>
 <?= $this->endSection() ?>

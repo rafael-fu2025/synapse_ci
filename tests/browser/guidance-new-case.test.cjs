@@ -146,6 +146,11 @@ async function freshRegistry(t, deployment) {
     'care-forms.js must register newCaseForm on a cold registry load');
   assert.deepEqual(fragments, [], 'No direct create visit or earlier form may register the factory');
   assert.equal(await page.locator('#appFormModal').count(), 0);
+  const pagination = page.locator('[data-table-pagination]');
+  assert.match(await pagination.innerText(), /Showing 0–0 of 0/);
+  assert.equal(await pagination.locator('.pagination.pagination-sm').count(), 1);
+  assert.equal(await pagination.locator('[aria-current="page"]').innerText(), '1');
+  assert.equal(await pagination.getByRole('navigation', { name: 'Counseling case pages' }).count(), 1);
   assert.equal(await page.locator('script[src$="/assets/js/care-forms.js"]').count(), 1);
   return page;
 }

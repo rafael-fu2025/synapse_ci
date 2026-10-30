@@ -16,7 +16,6 @@
 </form>
 <?= view('partials/live_filter_feedback') ?>
 <div data-filter-region="results">
-<p class="small text-muted"><?= (int) $total ?> matching question(s)</p>
 <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Question</th><th>Category / audience</th><th>Revision</th><th>Actions</th></tr></thead><tbody>
 <?php foreach ($items as $item): $url = $baseUrl . '/' . (int) $item['id']; ?>
 <tr><td><strong><?= esc($item['question']['label']) ?></strong><small class="d-block text-muted"><?= esc(ucfirst($item['question']['type'])) ?> · <?= $item['question']['required'] ? 'Required by default' : 'Optional by default' ?></small>
@@ -28,10 +27,10 @@
 </div></td></tr><?php endforeach; ?>
 <?php if ($items === []): ?><tr><td colspan="4" class="text-muted">No matching questions. Add a bank question or adjust the filters.</td></tr><?php endif; ?>
 </tbody></table></div>
-<nav class="d-flex gap-2 align-items-center" aria-label="Question bank pages">
-<?php $filters = ['q' => $search, 'category' => $category, 'audience' => $audience, 'status' => $status]; ?>
-<?php if ($page > 1): ?><a class="btn btn-outline-secondary btn-sm" data-filter-link href="<?= esc($baseUrl . '?' . http_build_query($filters + ['page' => $page - 1])) ?>">Previous</a><?php endif; ?>
-<span class="small">Page <?= (int) $page ?> of <?= (int) $pages ?></span>
-<?php if ($page < $pages): ?><a class="btn btn-outline-secondary btn-sm" data-filter-link href="<?= esc($baseUrl . '?' . http_build_query($filters + ['page' => $page + 1])) ?>">Next</a><?php endif; ?>
-</nav></div></div></div>
+<?= view('partials/table_pagination', [
+    'pagination' => ['page' => $page, 'pages' => $pages, 'total' => $total, 'per_page' => 20],
+    'filters' => ['q' => $search, 'status' => $status], 'baseUrl' => $baseUrl,
+    'paginationExtraQuery' => ['category' => $category, 'audience' => $audience],
+    'paginationLiveFilters' => true, 'paginationLabel' => 'Question bank pages',
+], ['saveData' => false]) ?></div></div></div>
 <?= $this->endSection() ?>

@@ -31,7 +31,9 @@ final class MobileAuthController extends ApiV1Controller
             }
 
             // Same IP + identity budgets as the web form; limiter state must survive transport changes.
-            $this->throttle($identifier);
+            if (($response = $this->throttle($identifier)) !== null) {
+                return $response;
+            }
 
             $identity = (new AuthService())->authenticate($identifier, $password);
             if ($identity === null) {
@@ -54,7 +56,9 @@ final class MobileAuthController extends ApiV1Controller
                 ]);
             }
 
-            $this->throttle($refreshToken);
+            if (($response = $this->throttle($refreshToken)) !== null) {
+                return $response;
+            }
 
             $rotated = (new TokenService())->rotate($refreshToken);
             if ($rotated === null) {
@@ -73,7 +77,7 @@ final class MobileAuthController extends ApiV1Controller
         });
     }
 
-    private function throttle(string $pseudonym): void
+    private function throttle(string $pseudonym): ?ResponseInterface
     {
         try {
             $wait = service('loginRateLimiter')->consume($this->request->getIPAddress(), $pseudonym);
@@ -83,8 +87,10 @@ final class MobileAuthController extends ApiV1Controller
             throw new RuntimeException('Sign-in is temporarily unavailable. Please try again shortly.', 503);
         }
         if ($wait > 0) {
-            throw new RuntimeException('Too many sign-in attempts. Please wait before trying again.', 429);
+            return $this->fail(429, 'rate_limited', 'Too many sign-in attempts. Please wait before trying again.')
+                ->setHeader('Retry-After', (string) $wait);
         }
+        return null;
     }
 
     private function deviceLabel(): string

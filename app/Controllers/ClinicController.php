@@ -121,12 +121,18 @@ final class ClinicController extends BaseController
         $status = (string) $this->request->getGet('status');
         $date = (string) $this->request->getGet('date');
 
-        $encounters = $this->encounterModel->getListWithPatients($status, $date);
+        try {
+            $page = \App\Libraries\TablePage::forList($this->request->getGet());
+        } catch (\InvalidArgumentException $e) {
+            return $this->response->setStatusCode(422)->setBody(esc($e->getMessage()));
+        }
+        $result = $this->encounterModel->getListPage($page, $status, $date);
 
         return view('clinic/encounters/index', [
             'title'       => 'Clinic Encounters',
             'pageTitle'   => 'Clinical Encounters',
-            'encounters'  => $encounters,
+            'encounters'  => $result['encounters'],
+            'pagination'  => $result['pagination'],
             'status'      => $status,
             'date'        => $date,
             'breadcrumbs' => [

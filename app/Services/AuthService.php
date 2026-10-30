@@ -319,14 +319,20 @@ final class AuthService
      * Initializes the user session from an already-validated identity.
      *
      * @param array<string, mixed> $sessionData
-     * @return array<string, mixed>
+     * @return array<string, mixed>|null
      */
-    private function establishUserSession(array $sessionData): array
+    private function establishUserSession(array $sessionData): ?array
     {
+        // Do not upgrade credentials verified before a concurrent password/access change.
+        $fresh = (new AuthenticatedUser())->forIdentity((int) $sessionData['id'], (int) $sessionData['tenant_id']);
+        if ($fresh === null || !isset($sessionData['auth_version']) || (int) $sessionData['auth_version'] !== $fresh['auth_version']) {
+            return null;
+        }
+        $sessionData = $fresh;
         $this->userModel->update($sessionData['id'], ['last_login_at' => date('Y-m-d H:i:s')]);
 
         AuthenticatedUser::clear();
-        session()->remove(['_auth_notice', '_auth_expired']);
+        session()->remove(['_auth_notice', '_auth_expired', '_auth_rotated_at']);
         session()->regenerate(true);
         session()->set('_auth', [
             'started_at' => time(), 'last_seen_at' => time(),
@@ -346,7 +352,7 @@ final class AuthService
     public function logout(): void
     {
         AuthenticatedUser::clear();
-        session()->remove(['_auth_notice', '_auth_expired']);
+        session()->remove(['_auth_notice', '_auth_expired', '_auth_rotated_at']);
         session()->regenerate(true);
     }
 }

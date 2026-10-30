@@ -1,6 +1,6 @@
 /**
  * Design tokens translated 1:1 from mobile/mobileScreenReference (index.css).
- * Light values mirror :root; dark values mirror the .dark-demo override block.
+ * Reading surfaces follow the reference, with white brand foregrounds in dark mode.
  */
 
 export type ThemeMode = 'light' | 'dark';
@@ -25,9 +25,13 @@ export const palette = {
 
 export interface Theme {
   mode: ThemeMode;
+  /** Maroon fills stay fixed; foregrounds adapt for contrast on themed surfaces. */
   brand: string;
   brand50: string;
   brand100: string;
+  brandText: string;
+  brandIcon: string;
+
   surface: string;
   surfaceWarm: string;
   canvas: string;
@@ -45,6 +49,9 @@ export const lightTheme: Theme = {
   brand: palette.brand700,
   brand50: palette.brand50,
   brand100: palette.brand100,
+  brandText: palette.brand700,
+  brandIcon: palette.brand700,
+
   surface: '#ffffff',
   surfaceWarm: '#fafbfc',
   canvas: '#f6f7fb',
@@ -62,6 +69,9 @@ export const darkTheme: Theme = {
   brand: palette.brand700,
   brand50: '#2e1c1c',
   brand100: '#3f2424',
+  brandText: '#ffffff',
+  brandIcon: '#ffffff',
+
   surface: '#1c1c1c',
   surfaceWarm: '#222222',
   canvas: '#121212',
@@ -123,3 +133,19 @@ export const statusTone = {
 } as const;
 
 export type StatusTone = keyof typeof statusTone;
+
+/**
+ * Screens build their StyleSheet from the active theme. Caching per theme object
+ * keeps re-renders from allocating a fresh StyleSheet on every pass.
+ */
+export function memoizeStyles<S>(factory: (theme: Theme) => S): (theme: Theme) => S {
+  const cache = new WeakMap<Theme, S>();
+  return (theme: Theme): S => {
+    let styles = cache.get(theme);
+    if (styles === undefined) {
+      styles = factory(theme);
+      cache.set(theme, styles);
+    }
+    return styles;
+  };
+}

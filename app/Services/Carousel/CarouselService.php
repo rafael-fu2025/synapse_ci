@@ -6,17 +6,41 @@ namespace App\Services\Carousel;
 
 use App\Models\CarouselSlideModel;
 use App\Services\CurrentTenant;
+use App\Services\Realtime\Channel;
+use App\Services\Realtime\Publisher;
+use Closure;
 use CodeIgniter\HTTP\Files\UploadedFile;
 
 final class CarouselService
 {
     private CarouselSlideModel $slideModel;
     private string $uploadPath;
+    private ?Closure $publisher;
 
-    public function __construct(?CarouselSlideModel $slideModel = null)
+    public function __construct(?CarouselSlideModel $slideModel = null, ?callable $publisher = null)
     {
         $this->slideModel = $slideModel ?? new CarouselSlideModel();
         $this->uploadPath = FCPATH . 'uploads/carousel/';
+        $this->publisher = $publisher === null ? null : Closure::fromCallable($publisher);
+    }
+
+    private function publishChanged(int $tenantId): void
+    {
+        try {
+            $db = $this->slideModel->db;
+            // Caller-owned transactions have no after-commit hook here; never hint early.
+            if ($tenantId < 1 || $db->transDepth !== 0 || !$db->transStatus()) {
+                return;
+            }
+            $channel = Channel::loginCarousel($tenantId);
+            if ($this->publisher !== null) {
+                ($this->publisher)($channel, 'login.carousel.changed', []);
+            } else {
+                (new Publisher())->publish($channel, 'login.carousel.changed', []);
+            }
+        } catch (\Throwable) {
+            // Invalidation is best-effort and must never turn a saved write into a failure.
+        }
     }
 
     /**
@@ -157,6 +181,7 @@ final class CarouselService
         if ($saved === null) {
             throw new \RuntimeException('Saved carousel slide could not be loaded.');
         }
+        $this->publishChanged((int) $saved['tenant_id']);
         return $saved;
     }
 
@@ -293,6 +318,7 @@ final class CarouselService
             $this->cleanupUpload($slide[$field] ?? null);
         }
 
+        $this->publishChanged((int) $slide['tenant_id']);
         return true;
     }
 
@@ -307,9 +333,16 @@ final class CarouselService
         }
 
         $nextStatus = ((int) $slide['is_active'] === 1) ? 0 : 1;
-        $this->slideModel->scoped()->update($id, ['is_active' => $nextStatus]);
+        if (!$this->slideModel->scoped()->update($id, ['is_active' => $nextStatus])) {
+            throw new \RuntimeException('Unable to toggle carousel slide.');
+        }
 
-        return $this->slideModel->scoped()->find($id);
+        $saved = $this->slideModel->scoped()->find($id);
+        if ($saved === null) {
+            throw new \RuntimeException('Saved carousel slide could not be loaded.');
+        }
+        $this->publishChanged((int) $saved['tenant_id']);
+        return $saved;
     }
 
     /**
@@ -320,8 +353,20 @@ final class CarouselService
     public function reorderSlides(array $orderedIds): void
     {
         $seq = 1;
+        $tenantId = null;
         foreach ($orderedIds as $id) {
-            $this->slideModel->scoped()->update((int) $id, ['sort_order' => $seq++]);
+            $slide = $this->slideModel->scoped()->find((int) $id);
+            if ($slide === null) {
+                ++$seq;
+                continue;
+            }
+            if (!$this->slideModel->scoped()->update((int) $id, ['sort_order' => $seq++])) {
+                throw new \RuntimeException('Unable to reorder carousel slides.');
+            }
+            $tenantId = (int) $slide['tenant_id'];
+        }
+        if ($tenantId !== null) {
+            $this->publishChanged($tenantId);
         }
     }
 }

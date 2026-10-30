@@ -32,13 +32,13 @@
       <p class="small text-muted" role="status" aria-live="polite" aria-atomic="true" data-history-status>Loading notifications…</p>
       <ul class="list-unstyled mb-3" data-history-list aria-label="Personal notifications"></ul>
       <noscript><p class="alert alert-info">Enable JavaScript to load and manage your notifications.</p></noscript>
-      <nav class="d-flex flex-wrap align-items-center justify-content-between gap-2 border-top pt-3" aria-label="Notification pages">
-        <span class="small text-muted" data-history-page>Page 1</span>
-        <div class="btn-group">
-          <button type="button" class="btn btn-outline-secondary btn-sm" data-history-previous disabled>Previous</button>
-          <button type="button" class="btn btn-outline-secondary btn-sm" data-history-next disabled>Next</button>
-        </div>
-      </nav>
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mt-3 border-top pt-3">
+        <p class="small text-muted mb-0" data-history-range>Loading notification count…</p>
+        <span class="visually-hidden" data-history-page>Page 1</span>
+        <nav aria-label="Notification pages">
+          <ul class="pagination pagination-sm flex-wrap mb-0" data-history-pagination></ul>
+        </nav>
+      </div>
     </div>
   </div>
 </div>

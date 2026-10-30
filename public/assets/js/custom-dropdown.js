@@ -70,6 +70,17 @@
     let validationShown = false;
     let disposed = false;
     let dropdown = null;
+    // Page/main-content scrolling moves the trigger but not an open menu. Scrolls
+    // inside the menu or any scrollable content within the same picker/modal must
+    // not dismiss it, or wheel-list auto-scrolling would close the menu on open.
+    window.addEventListener('scroll', (event) => {
+      if (disposed || !dropdown || !menu.classList.contains('show')) return;
+      const target = event.target;
+      if (target instanceof Element && (menu.contains(target) || wrap.contains(target))) return;
+      const boundary = wrap.closest('.dtp-popup, .modal, [role="dialog"], form');
+      if (target instanceof Node && boundary?.contains(target)) return;
+      dropdown.hide();
+    }, { capture: true, passive: true });
 
     function optionDisabled(option) {
       return option.disabled || (option.parentElement &&

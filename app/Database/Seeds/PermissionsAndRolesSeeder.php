@@ -60,6 +60,9 @@ final class PermissionsAndRolesSeeder extends Seeder
             ['code' => 'reports.read', 'name' => 'View operational reports and analytics', 'module' => 'reports'],
             ['code' => 'reports.export', 'name' => 'Export CSV and data summaries', 'module' => 'reports'],
 
+            // AI catalog entries are never automatically granted to any role.
+            ...\App\Services\Ai\AiPermissions::catalog(),
+
             // Self-service
             ['code' => 'portal.appointments.read', 'name' => 'View own appointments', 'module' => 'portal'],
             ['code' => 'portal.appointments.create', 'name' => 'Book self-service appointments', 'module' => 'portal'],
@@ -81,7 +84,10 @@ final class PermissionsAndRolesSeeder extends Seeder
         // Role permissions catalog
         $rolePermissions = [
             // Hardware access requires deliberate commissioning, even for the platform owner.
-                        'superadmin' => array_values(array_diff(array_keys($permMap), ['facilities.hardware.manage'])),
+                        'superadmin' => array_values(array_filter(
+                                        array_diff(array_keys($permMap), ['facilities.hardware.manage']),
+                                        static fn (string $code): bool => !str_starts_with($code, 'ai.')
+                                    )),
 
             'clinic_admin' => [
                 'clinic.announcements.manage',

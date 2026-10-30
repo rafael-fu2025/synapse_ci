@@ -199,6 +199,44 @@ td.dp-cell.is-disabled .dp-day {
   text-decoration: line-through;
 }
 
+/* Opt-in appointment counts overlay the day's upper-right corner like the
+   notification counter, without moving the day number or the row height. */
+.dp-has-counts .dp-grid td.dp-cell {
+  position: relative;
+}
+
+.dp-count-badge {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  z-index: 1;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--danger-color, #b02a37);
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.dp-counts-status {
+  margin: 6px 0 0;
+  color: var(--muted-color, #667085);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+/* Reserve room for the complete formatted date plus the trigger icon. */
+.dp-wrap:has(> #appointmentDateFilter) {
+  flex: 0 1 10.5rem;
+  width: 10.5rem;
+  min-width: 0;
+}
+
 /* Footer */
 .dp-foot {
   display: flex;
@@ -235,4 +273,17 @@ td.dp-cell.is-disabled .dp-day {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+
+/* Staff appointment filter: keep date and page-size fields readable together. */
+.appointment-filter { margin-left: auto; }
+.appointment-date-field { flex: 0 0 10.5rem; min-width: 0; }
+.appointment-page-size { flex: 0 0 9.5rem; min-width: 0; }
+.appointment-date-field .dp-wrap,
+.appointment-date-field .dp-wrap:has(> #appointmentDateFilter) { width: 100%; flex: 1 1 auto; }
+.appointment-page-size .bd-select { width: 100%; }
+@media (max-width: 575.98px) {
+  .appointment-filter { width: 100%; margin-left: 0; }
+  .appointment-date-field, .appointment-page-size { flex: 1 1 9rem; }
 }

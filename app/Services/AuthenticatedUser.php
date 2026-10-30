@@ -13,8 +13,9 @@ use Config\Database;
 final class AuthenticatedUser
 {
     public const EXPIRED_MESSAGE = 'Your session has expired. Please sign in again to continue.';
-    public const REAUTHENTICATION_MESSAGE = 'Please sign in again to continue.';
+    public const REAUTHENTICATION_MESSAGE = 'Your session could not be validated. Please sign in again to continue.';
     public const AUTHENTICATION_MESSAGE = 'Please sign in to continue.';
+    private const ROTATION_HANDOFF_SECONDS = 15;
 
     /** Return a refreshed, credential-free session identity, or clear invalid authentication. */
     public function current(): ?array
@@ -26,7 +27,7 @@ final class AuthenticatedUser
             || self::positiveId($source['id'] ?? null) === null
             || $tenantId === null || self::positiveId($source['tenant_id'] ?? null) !== $tenantId) {
             if ($source !== null || session()->get('_auth') !== null || session()->get('tenant_id') !== null) {
-                self::invalidate('reauthentication_required');
+                self::invalidate('reauthentication_required', 'identity_metadata_invalid');
             } else {
                 self::clear();
             }
@@ -38,17 +39,26 @@ final class AuthenticatedUser
         $config = config('Session');
         if (!is_array($auth)
             || !is_int($auth['started_at'] ?? null) || !is_int($auth['last_seen_at'] ?? null)
-            || !is_int($auth['version'] ?? null) || $auth['version'] < 1
-            || !is_string($auth['session_id'] ?? null) || $auth['session_id'] !== session_id()
-            || $auth['started_at'] > $auth['last_seen_at'] || $auth['last_seen_at'] > $now
-            || $config->authIdleTimeout <= 0 || $config->authAbsoluteTimeout <= 0) {
-            self::invalidate('reauthentication_required');
+            || !is_int($auth['version'] ?? null) || $auth['version'] < 1) {
+            self::invalidate('reauthentication_required', 'auth_metadata_invalid');
+            return null;
+        }
+        if (!is_string($auth['session_id'] ?? null) || $auth['session_id'] !== session_id()) {
+            self::invalidate('reauthentication_required', 'session_binding_mismatch');
+            return null;
+        }
+        if ($auth['started_at'] > $auth['last_seen_at'] || $auth['last_seen_at'] > $now) {
+            self::invalidate('reauthentication_required', 'auth_clock_invalid');
+            return null;
+        }
+        if ($config->authIdleTimeout <= 0 || $config->authAbsoluteTimeout <= 0) {
+            self::invalidate('reauthentication_required', 'auth_limits_invalid');
             return null;
         }
 
         if ($now - $auth['last_seen_at'] >= $config->authIdleTimeout
             || $now - $auth['started_at'] >= $config->authAbsoluteTimeout) {
-            self::invalidate('session_expired');
+            self::invalidate('session_expired', $now - $auth['last_seen_at'] >= $config->authIdleTimeout ? 'idle_timeout' : 'absolute_timeout');
             // Legacy readers may still inspect this; _auth_notice owns durability.
             session()->setFlashdata('_auth_expired', true);
             return null;
@@ -56,7 +66,7 @@ final class AuthenticatedUser
 
         $user = $this->forIdentity((int) $source['id'], $tenantId);
         if ($user === null || $auth['version'] !== $user['auth_version']) {
-            self::invalidate('reauthentication_required');
+            self::invalidate('reauthentication_required', $user === null ? 'identity_no_longer_authorized' : 'auth_version_changed');
             return null;
         }
 
@@ -129,6 +139,16 @@ final class AuthenticatedUser
 
     public static function denied(RequestInterface $request, bool $authenticated, string $message, string $target): ResponseInterface
     {
+        $rotatedAt = session()->get('_auth_rotated_at');
+        $age = is_int($rotatedAt) ? time() - $rotatedAt : null;
+        if (!$authenticated && $age !== null && $age >= 0 && $age <= self::ROTATION_HANDOFF_SECONDS) {
+            // This ID stays anonymous. Only safe reads may be retried with the browser's current cookie.
+            $response = service('response')->setStatusCode(409)->setHeader('Cache-Control', 'no-store')
+                ->setHeader('X-Synapse-Session', 'rotated')->setHeader('Retry-After', '1')
+                ->setJSON(['message' => 'Your session is being renewed. Please retry this request.']);
+            foreach (['X-Synapse-Auth', 'X-Synapse-Login', 'Location'] as $header) $response->removeHeader($header);
+            return $response;
+        }
         $reason = $authenticated ? null : self::noticeReason();
         if (!$authenticated) {
             $reason ??= 'authentication_required';
@@ -160,8 +180,10 @@ final class AuthenticatedUser
         return redirect()->to($target)->setHeader('Cache-Control', 'no-store');
     }
 
-    private static function invalidate(string $reason): void
+    private static function invalidate(string $reason, string $diagnostic): void
     {
+        // Fixed reason codes only: never log IDs, cookies, tokens, or serialized authentication.
+        log_message('warning', 'Browser authentication rejected: {reason}.', ['reason' => $diagnostic]);
         self::clear();
         session()->remove('_auth_expired');
         session()->set('_auth_notice', $reason);

@@ -12,9 +12,7 @@ const config = {
   resolver: {
     blockList: [/mobileScreenReference[\\/].*/],
   },
-  watcher: {
-    additionalExts: null,
-  },
+
 };
 
 module.exports = mergeConfig(getDefaultConfig(__dirname), config);

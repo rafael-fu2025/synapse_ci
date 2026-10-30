@@ -11,6 +11,7 @@ export function Action({
   variant = 'primary',
   full = false,
   loading = false,
+  disabled = false,
   style,
 }: {
   children: React.ReactNode;
@@ -18,24 +19,28 @@ export function Action({
   variant?: Variant;
   full?: boolean;
   loading?: boolean;
+  disabled?: boolean;
   style?: ViewStyle;
 }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
+  const isDisabled = disabled || loading || onPress === undefined;
 
   return (
     <Pressable
       onPress={onPress}
-      disabled={loading || onPress === undefined}
+      disabled={isDisabled}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.base,
         styles[variant],
         full && styles.full,
         (pressed || loading) && styles.pressed,
+        disabled && styles.disabled,
         style,
       ]}>
       {loading ? (
-        <ActivityIndicator size="small" color={variant === 'primary' || variant === 'danger' ? '#ffffff' : theme.brand} />
+        <ActivityIndicator size="small" color={variant === 'primary' || variant === 'danger' ? '#ffffff' : theme.brandIcon} />
       ) : null}
       <Text style={[styles.label, styles[`${variant}Label` as const] as object]}>{children}</Text>
     </Pressable>
@@ -57,13 +62,14 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     },
     full: { width: '100%' as const },
     pressed: { opacity: 0.75, transform: [{ translateY: -0.5 }] },
+    disabled: { opacity: 0.5 },
     primary: { backgroundColor: theme.brand, ...elevation.sm },
-    secondary: { backgroundColor: theme.surface, borderWidth: 1, borderColor: '#f0d5d5' },
+    secondary: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.mode === 'dark' ? theme.line : '#f0d5d5' },
     ghost: { backgroundColor: 'transparent' },
     danger: { backgroundColor: '#a33b3b' },
     label: { ...type.action },
     primaryLabel: { color: '#ffffff' },
-    secondaryLabel: { color: theme.brand },
+    secondaryLabel: { color: theme.brandText },
     ghostLabel: { color: theme.ink700 },
     dangerLabel: { color: '#ffffff' },
   });

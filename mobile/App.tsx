@@ -1,31 +1,26 @@
 import React from 'react';
 import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { queryClient } from './src/lib/queryClient';
+import { QueryLifecycle } from './src/lib/QueryLifecycle';
 import { AuthProvider } from './src/store/auth';
-import { ThemeProvider } from './src/theme/ThemeProvider';
+import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Server state is authoritative; keep caches short-lived and never retry mutations.
-      staleTime: 15_000,
-      gcTime: 5 * 60_000,
-      retry: 1,
-      refetchOnWindowFocus: true,
-    },
-    mutations: { retry: false },
-  },
-});
+function ThemedStatusBar() {
+  const { theme } = useTheme();
+  return <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />;
+}
 
 export default function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
+          <QueryLifecycle />
           <AuthProvider>
-            <StatusBar barStyle="dark-content" />
+            <ThemedStatusBar />
             <RootNavigator />
           </AuthProvider>
         </QueryClientProvider>

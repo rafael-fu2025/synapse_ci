@@ -31,6 +31,12 @@
              value=""
              onchange="this.form.submit()">
       <input type="hidden" name="date" id="encounterDateFilter_iso" value="<?= esc($date) ?>">
+      <label for="encounterPerPage" class="visually-hidden">Encounters per page</label>
+      <select name="per_page" id="encounterPerPage" class="form-select form-select-sm" onchange="this.form.submit()">
+        <?php foreach ([20, 25, 50, 100] as $size): ?>
+          <option value="<?= $size ?>" <?= $pagination['per_page'] === $size ? 'selected' : '' ?>><?= $size ?> per page</option>
+        <?php endforeach; ?>
+      </select>
     </form>
   </div>
 
@@ -108,6 +114,13 @@
           <?php endif; ?>
         </tbody>
       </table>
+    </div>
+    <div class="p-3 pt-0">
+      <?= view('partials/table_pagination', [
+          'pagination' => $pagination, 'baseUrl' => site_url('/clinic/encounters'),
+          'filters' => ['status' => $status], 'paginationExtraQuery' => ['date' => $date],
+          'paginationLabel' => 'Clinic encounter pages',
+      ], ['saveData' => false]) ?>
     </div>
   </div>
 </div>

@@ -23,20 +23,58 @@
     return container;
   }
 
-  function stop(entry) {
+  function stop(entry, freeze = true) {
     if (entry.timer !== null) {
       clearTimeout(entry.timer);
       entry.timer = null;
       entry.remaining = Math.max(0, entry.remaining - (performance.now() - entry.started));
     }
+    if (freeze) freezeCountdown(entry);
+  }
+
+  /** Freeze the bar at the currently displayed fraction so pause/resume stays continuous. */
+  function freezeCountdown(entry) {
+    const bar = entry.countdown;
+    if (!bar) return;
+    // The bar spans the card (inset-inline:0), so its rendered width tracks the remaining fraction.
+    const width = bar.getBoundingClientRect().width;
+    const parent = bar.parentElement?.getBoundingClientRect().width || 0;
+    bar.style.transition = 'none';
+    bar.style.width = parent > 0 ? `${Math.min(100, (width / parent) * 100)}%` : '0%';
+  }
+
+  function startCountdown(entry) {
+    const bar = entry.countdown;
+    if (!bar) return;
+    if (!entry.ready || entry.closing || !entry.duration || entry.remaining <= 0) {
+      bar.hidden = true;
+      bar.classList.remove('is-paused');
+      return;
+    }
+    bar.classList.remove('is-paused');
+    bar.hidden = false;
+    bar.style.width = `${Math.min(100, (entry.remaining / entry.duration) * 100)}%`;
+    // Commit the starting width before starting the linear transition to zero.
+    void bar.offsetWidth;
+    bar.style.transition = `width ${entry.remaining}ms linear`;
+    bar.style.width = '0%';
   }
 
   function schedule(entry) {
-    stop(entry);
-    if (entry.removed || entry.closing || !entry.ready || !entry.duration ||
-        entry.hovered || entry.element.contains(document.activeElement) || entry.running) return;
+    stop(entry, false);
+    if (entry.removed || entry.closing || !entry.ready || !entry.duration) {
+      if (entry.countdown) entry.countdown.hidden = true;
+      return;
+    }
+    const paused = entry.hovered || entry.element.contains(document.activeElement) || entry.running;
+    if (paused) {
+      stop(entry);
+      if (entry.countdown && entry.remaining > 0) entry.countdown.classList.add('is-paused');
+      return;
+    }
     entry.started = performance.now();
     entry.timer = setTimeout(() => dismiss(entry), entry.remaining);
+    startCountdown(entry);
   }
 
   function cleanup(entry) {
@@ -70,6 +108,7 @@
     entry.duration = typeof options.duration === 'number' && Number.isFinite(options.duration) && options.duration >= 0
       ? Math.min(options.duration, 2147483647) : (type === 'success' ? 5000 : 0);
     entry.remaining = entry.duration;
+    entry.countdown.hidden = !entry.duration;
     entry.element.dataset.type = type;
     entry.icon.className = `synapse-toast-icon bi ${tones[type].icon}`;
     entry.label.textContent = `${tones[type].label}: `;
@@ -131,10 +170,14 @@
     close.textContent = '×';
     content.append(live, actionButton);
     body.append(icon, content, close);
-    element.append(body);
+    const countdown = document.createElement('div');
+    countdown.className = 'synapse-toast-countdown';
+    countdown.setAttribute('aria-hidden', 'true');
+    countdown.hidden = true;
+    element.append(body, countdown);
     host().append(element);
     entry = {
-      element, icon, label, text, message: live, actionButton, key,
+      element, icon, label, text, message: live, actionButton, countdown, key,
       timer: null, remaining: 0, ready: false, hovered: false,
       closing: false, removed: false, running: false, version: 0,
       instance: new bootstrap.Toast(element, { autohide: false })
@@ -147,9 +190,9 @@
       schedule(entry);
     });
     element.addEventListener('hidden.bs.toast', () => cleanup(entry), { once: true });
-    element.addEventListener('mouseenter', () => { entry.hovered = true; stop(entry); });
+    element.addEventListener('mouseenter', () => { entry.hovered = true; schedule(entry); });
     element.addEventListener('mouseleave', () => { entry.hovered = false; schedule(entry); });
-    element.addEventListener('focusin', () => stop(entry));
+    element.addEventListener('focusin', () => schedule(entry));
     element.addEventListener('focusout', () => schedule(entry));
     close.addEventListener('click', () => dismiss(entry));
     actionButton.addEventListener('click', async () => {

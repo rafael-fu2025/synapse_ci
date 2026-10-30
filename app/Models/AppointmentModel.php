@@ -70,6 +70,55 @@ final class AppointmentModel extends TenantModel
             ->findAll();
     }
 
+    /** Staff calendar pagination excludes requests before both counting and limiting. */
+    public function getScheduledPage(string $unit, string $localDate, \App\Libraries\TablePage $page): array
+    {
+        $query = fn () => $this->withProviderName()
+            ->where('appointments.unit', $unit)
+            ->where('appointments.local_date', $localDate)
+            ->where('appointments.status !=', 'requested');
+        $count = $query()->countAllResults();
+        $pagination = $page->metadata($count, $count);
+        $appointments = $query()->orderBy('appointments.starts_at', 'ASC')
+            ->orderBy('appointments.id', 'ASC')
+            ->findAll($page->perPage, ($pagination['page'] - 1) * $page->perPage);
+        return compact('appointments', 'pagination');
+    }
+
+    /** @return array<string, int> Positive counts with the same patient/deletion scope as staff lists. */
+    public function getConfirmedCalendarCounts(string $unit, string $from, string $to): array
+    {
+        $rows = $this->scoped()
+            ->select('appointments.local_date')
+            ->selectCount('appointments.id', 'appointment_count')
+            ->join('people p', 'p.id = appointments.person_id AND p.tenant_id = appointments.tenant_id')
+            ->where('appointments.unit', $unit)
+            ->where('appointments.local_date >=', $from)
+            ->where('appointments.local_date <=', $to)
+            ->whereIn('appointments.status', ['confirmed', 'scheduled'])
+            ->groupBy('appointments.local_date')
+            ->orderBy('appointments.local_date', 'ASC')
+            ->findAll();
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$row['local_date']] = (int) $row['appointment_count'];
+        }
+        return $counts;
+    }
+
+    /** Pending requests remain independent of the selected calendar date. */
+    public function getPendingRequestsPage(string $unit, \App\Libraries\TablePage $page): array
+    {
+        $query = fn () => $this->withProviderName()
+            ->where('appointments.unit', $unit)->where('appointments.status', 'requested');
+        $count = $query()->countAllResults();
+        $pagination = $page->metadata($count, $count);
+        $requests = $query()->orderBy('appointments.created_at', 'ASC')
+            ->orderBy('appointments.id', 'ASC')
+            ->findAll($page->perPage, ($pagination['page'] - 1) * $page->perPage);
+        return compact('requests', 'pagination');
+    }
+
     /** Check an assignment's person across all units, including unmigrated legacy bookings. */
     public function hasConflict(int $assignmentId, string $startsAt, string $endsAt, ?int $ignoreAppointmentId = null): bool
     {

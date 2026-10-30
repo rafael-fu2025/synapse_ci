@@ -36,8 +36,22 @@ banner. Proven timeout says the session expired; invalid/revoked authentication
 asks for sign-in again; missing session/cookie with no provable cause says only
 that sign-in is required. Initial login and deliberate logout remain distinct.
 
+Session-ID rotation keeps the predecessor anonymous and marks it obsolete. For a
+15-second handoff, a request already using that predecessor receives a nonterminal
+409 (`X-Synapse-Session: rotated`), not an authentication-failure redirect. It never
+executes the protected action or receives the successor ID. The obsolete request
+also cannot set the session cookie, so its late response cannot roll the browser
+back to an anonymous predecessor. Existing safe-read retry/polling can recover;
+mutations are never automatically replayed. Old IDs remain unauthorized after the
+handoff. Explicit sign-in and logout always rotate to a fresh ID.
+
+Actual validation failures log a fixed `Browser authentication rejected` reason
+code (metadata, binding, clock, limits, authority, version, or timeout), without
+cookies, session IDs, tokens, identity payloads, or request bodies. Timeout and
+revocation checks are not relaxed by the handoff.
+
 Run `node --test tests/browser/auth-session.test.cjs` and
-`php vendor/bin/phpunit tests/unit/AuthFailureContractTest.php --no-coverage`.
+`php vendor/bin/phpunit tests/unit/AuthFailureContractTest.php tests/unit/SessionRotationHandoffTest.php tests/unit/SessionRotationSecurityTest.php --no-coverage`.
 
 ## Request-scoped loading
 

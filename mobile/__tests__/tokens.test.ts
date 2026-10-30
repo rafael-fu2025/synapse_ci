@@ -21,4 +21,15 @@ describe('design tokens', () => {
     expect(darkTheme.mode).toBe('dark');
     expect(lightTheme.mode).toBe('light');
   });
+
+  it('swaps maroon icons and text to white in dark mode while preserving brand fills', () => {
+    expect(lightTheme.brand).toBe(palette.brand700);
+    expect(lightTheme.brandText).toBe(palette.brand700);
+    expect(lightTheme.brandIcon).toBe(palette.brand700);
+
+    expect(darkTheme.brand).toBe(palette.brand700);
+    expect(darkTheme.brandText).toBe('#ffffff');
+    expect(darkTheme.brandIcon).toBe('#ffffff');
+
+  });
 });

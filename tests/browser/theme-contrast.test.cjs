@@ -35,6 +35,9 @@ function matrix() {
     <td><span class="badge bg-${v}-subtle text-${v}" data-table-text>Subtle ${v}</span></td>
     <td><a href="#table" class="text-${v}" data-table-text>${v} link</a></td>
     <td><button type="button" class="btn btn-sm btn-outline-${v}" data-enabled>Table ${v}</button></td></tr>`).join('');
+  const portal = fs.readFileSync(path.join(root, 'app/Views/portal/index.php'), 'utf8');
+  const staffBanner = portal.match(/<div class="alert alert-info[^]*?(?=    <div class="d-flex flex-wrap gap-2 mt-2 mt-md-0">)/);
+  assert.ok(staffBanner, 'Use the production staff-session banner markup');
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Theme contrast matrix</title>
     <link rel="stylesheet" href="/assets/vendor/bootstrap/css/bootstrap.min.css">
@@ -42,6 +45,7 @@ function matrix() {
     <link rel="stylesheet" href="/assets/css/bmg.css">
     </head><body><main class="container-fluid p-3">
     <h1 class="h4">Production theme contrast matrix</h1>
+    <section id="staff-session-fixture">${staffBanner[0]}</div></section>
     <nav aria-label="Breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="#home">Home</a></li>
       <li class="breadcrumb-item active" aria-current="page">Contrast matrix</li></ol></nav>
     <section class="card"><div class="card-body p-3">${buttons}
@@ -193,6 +197,30 @@ async function pageFor(t, theme, mobile, real = false) {
   await installMetrics(page);
   return page;
 }
+
+test('staff personal-session banner stays readable across theme changes', { timeout: 30000 }, async t => {
+  const page = await pageFor(t, 'light', false);
+  await page.addStyleTag({ content: '* { transition: none !important; }' });
+  for (const theme of ['light', 'dark', 'light', 'legacy-dark']) {
+    await page.evaluate(theme => {
+      if (theme === 'legacy-dark') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', theme);
+      document.body.classList.toggle('dark-mode', theme === 'legacy-dark');
+    }, theme);
+    const contrasts = await page.locator('#staff-session-fixture .alert').evaluate(banner => {
+      const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number)
+        .map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+        .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const background = luminance(getComputedStyle(banner).backgroundColor);
+      return [...banner.querySelectorAll('strong, span, i')].map(el => {
+        const foreground = luminance(getComputedStyle(el).color);
+        return (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+      });
+    });
+    assert.equal(contrasts.length, 3, 'Check heading, description, and icon');
+    for (const ratio of contrasts) assert.ok(ratio >= 4.5, `${theme}: banner contrast ${ratio.toFixed(2)} must meet 4.5:1`);
+  }
+});
 
 test('all dashboard donut centers remain readable across live and legacy theme changes', { timeout: 30000 }, async t => {
   const page = await pageFor(t, 'light', false);

@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { WifiOff } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Theme } from '../theme/tokens';
+import { Theme, memoizeStyles } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 /** Shown when the device loses connectivity; queries refetch automatically on reconnect. */
@@ -19,7 +19,7 @@ export function OfflineBanner() {
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     wrap: { backgroundColor: '#f9efd9' },
     row: {
@@ -35,3 +35,5 @@ function makeStyles(theme: Theme) {
     text: { color: '#79591f', fontSize: 9.5, fontWeight: '600' },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

@@ -1,9 +1,9 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { CalendarDays, Clock3, Stethoscope } from 'lucide-react-native';
+import { CalendarDays, ChevronRight, Clock3, MessageSquareText, Stethoscope } from 'lucide-react-native';
 import { Appointment } from '../../../api/endpoints/appointments';
 import { StatusPill } from '../../../components/StatusPill';
-import { Theme, font, palette } from '../../../theme/tokens';
+import { Theme, font, palette, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatDate, formatTime } from '../../../lib/format';
 import { statusPresentation, unitLabel } from '../status';
@@ -15,13 +15,13 @@ export function AppointmentCard({ appointment, onOpen }: { appointment: Appointm
   const isGuidance = appointment.unit === 'guidance';
 
   return (
-    <Pressable onPress={() => onOpen(appointment.id)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" onPress={() => onOpen(appointment.id)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.top}>
-        <View style={[styles.serviceIcon, isGuidance && styles.serviceIconGuidance]}>
+        <View style={styles.serviceIcon}>
           {isGuidance ? (
-            <Text style={styles.guidanceGlyph}>GC</Text>
+            <MessageSquareText size={19} color={palette.violet600} />
           ) : (
-            <Stethoscope size={19} color={palette.brand700} />
+            <Stethoscope size={19} color={theme.brandIcon} />
           )}
         </View>
         <View style={styles.copy}>
@@ -32,28 +32,29 @@ export function AppointmentCard({ appointment, onOpen }: { appointment: Appointm
       </View>
       <View style={styles.schedule}>
         <View style={styles.scheduleItem}>
-          <CalendarDays size={13} color={palette.brand600} />
+          <CalendarDays size={13} color={theme.brandIcon} />
           <Text style={styles.scheduleText}>{formatDate(appointment.starts_at)}</Text>
         </View>
         <View style={styles.scheduleItem}>
-          <Clock3 size={13} color={palette.brand600} />
+          <Clock3 size={13} color={theme.brandIcon} />
           <Text style={styles.scheduleText}>{formatTime(appointment.starts_at)}</Text>
         </View>
       </View>
       <View style={styles.footer}>
         <Text style={styles.footerText} numberOfLines={1}>
-          {appointment.reason ?? 'No reason provided'}
+          {appointment.provider_name ?? 'Not yet assigned'}
         </Text>
-        <Text style={styles.footerLink}>Details</Text>
+        <ChevronRight size={18} color={theme.ink400} />
       </View>
     </Pressable>
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     card: {
       padding: 14,
+      paddingBottom: 0,
       borderRadius: 15,
       marginBottom: 10,
       backgroundColor: theme.surface,
@@ -68,15 +69,12 @@ function makeStyles(theme: Theme) {
     pressed: { opacity: 0.8 },
     top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     serviceIcon: {
-      width: 39,
-      height: 39,
+      width: 26,
+      height: 26,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 11,
-      backgroundColor: theme.brand100,
     },
-    serviceIconGuidance: { backgroundColor: palette.violet100 },
-    guidanceGlyph: { fontWeight: '800', fontSize: 13, color: palette.violet600, fontFamily: font.display },
+
     copy: { flex: 1, minWidth: 0 },
     title: { fontSize: 11, fontWeight: '700', fontFamily: font.body, color: theme.ink900 },
     type: { marginTop: 2, fontSize: 9.5, fontFamily: font.body, color: theme.ink500, textTransform: 'capitalize' },
@@ -95,6 +93,8 @@ function makeStyles(theme: Theme) {
       borderTopColor: theme.line,
     },
     footerText: { flex: 1, fontSize: 10, fontFamily: font.body, color: theme.ink500 },
-    footerLink: { marginLeft: 8, fontSize: 10, fontWeight: '700', fontFamily: font.body, color: theme.brand },
+
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

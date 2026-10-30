@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Facilities;
 
+use App\Libraries\TablePage;
 use App\Models\AuditEventModel;
 use App\Services\Audit\AuditService;
 use App\Services\AuthenticatedUser;
@@ -47,6 +48,44 @@ final class BmgRotationService
         $units = $this->db->table('bmg_units')->where('tenant_id', $actor['tenant_id'])
             ->where($archived ? 'deleted_at !=' : 'deleted_at', null)->orderBy('id')->limit(200)->get()->getResultArray();
         return array_map(fn (array $unit): array => $this->detail($unit), $units);
+    }
+
+    /** Count before clamping and hydrate only the requested directory page. */
+    public function listing(array $query = [], bool $archived = false): array
+    {
+        $actor = $archived ? $this->configurationActor() : $this->actor('facilities.read');
+        $page = TablePage::forList($query);
+        $stats = $this->directoryStats((int) $actor['tenant_id'], $archived);
+        $pagination = $page->metadata($stats['total'], $stats['total']);
+        $units = $this->db->table('bmg_units')->where('tenant_id', $actor['tenant_id'])
+            ->where($archived ? 'deleted_at !=' : 'deleted_at', null)->orderBy('id')
+            ->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage)->get()->getResultArray();
+        return ['units' => array_map(fn (array $unit): array => $this->detail($unit), $units),
+            'pagination' => $pagination, 'stats' => $stats];
+    }
+
+    public function statistics(bool $archived = false): array
+    {
+        $actor = $archived ? $this->configurationActor() : $this->actor('facilities.read');
+        return $this->directoryStats((int) $actor['tenant_id'], $archived);
+    }
+
+    private function directoryStats(int $tenant, bool $archived): array
+    {
+        $scope = fn () => $this->db->table('bmg_units')->where('tenant_id', $tenant)
+            ->where($archived ? 'deleted_at !=' : 'deleted_at', null);
+        $stats = ['total' => 0, 'active' => 0, 'maintenance' => 0, 'bound' => 0];
+        foreach ($scope()->select('status')->selectCount('id', 'unit_count')->groupBy('status')->get()->getResultArray() as $row) {
+            $count = (int) $row['unit_count'];
+            $stats['total'] += $count;
+            if (in_array($row['status'], ['active', 'maintenance'], true)) { $stats[$row['status']] = $count; }
+        }
+        // Match boundDevice(): ambiguous multiple bindings are not a bound controller.
+        $bindings = $this->db->table('bmg_devices')->select('unit_id')->where('tenant_id', $tenant)
+            ->where('status', 'active')->where('revoked_at', null)->where('rotation_bound_at !=', null)
+            ->groupBy('unit_id')->having('COUNT(*) = 1', null, false);
+        $stats['bound'] = $scope()->whereIn('id', $bindings)->countAllResults();
+        return $stats;
     }
 
     public function unit(int $id): array

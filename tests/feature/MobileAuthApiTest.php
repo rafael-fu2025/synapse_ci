@@ -9,10 +9,15 @@ use App\Models\UserModel;
 use App\Services\Api\ApiContext;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
+use App\Services\LoginAttemptStore;
+use App\Services\LoginRateLimiter;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
 use Config\Database;
+use Config\LoginSecurity;
+use Config\Services;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /** Mobile bearer-token authentication contract: login, refresh rotation, logout, and gates. */
 final class MobileAuthApiTest extends CIUnitTestCase
@@ -140,6 +145,43 @@ final class MobileAuthApiTest extends CIUnitTestCase
         $this->assertSame('validation_failed', $error['code'] ?? null);
         $this->assertArrayHasKey('identifier', $error['fields'] ?? []);
         $this->assertArrayHasKey('password', $error['fields'] ?? []);
+    }
+
+    public static function throttledAuthRequests(): iterable
+    {
+        foreach (['login', 'refresh'] as $endpoint) {
+            foreach ([1, 45, 287, 300] as $wait) {
+                yield $endpoint . ' waits ' . $wait . ' seconds' => [$endpoint, $wait];
+            }
+        }
+    }
+
+    #[DataProvider('throttledAuthRequests')]
+    public function testThrottledAuthReturnsActualRetryAfter(string $endpoint, int $wait): void
+    {
+        $store = $this->createMock(LoginAttemptStore::class);
+        $store->expects($this->once())->method('consume')->willReturn($wait);
+        Services::injectMock('loginRateLimiter', new LoginRateLimiter($store, new LoginSecurity()));
+
+        try {
+            $payload = $endpoint === 'login'
+                ? ['identifier' => 'synthetic-mobile-throttle', 'password' => $this->password]
+                : ['refresh_token' => str_repeat('a', 64)];
+            $result = $this->withHeaders(['Content-Type' => 'application/json'])
+                ->withBody((string) json_encode($payload))->post('api/v1/auth/' . $endpoint);
+
+            $result->assertStatus(429);
+            $result->assertHeader('Retry-After', (string) $wait);
+            $cacheControl = $result->response()->getHeaderLine('Cache-Control');
+            $this->assertStringContainsString('private', $cacheControl);
+            $this->assertStringContainsString('no-store', $cacheControl);
+            $this->assertSame(['error' => [
+                'code' => 'rate_limited',
+                'message' => 'Too many sign-in attempts. Please wait before trying again.',
+            ]], $this->json($result));
+        } finally {
+            Services::resetSingle('loginRateLimiter');
+        }
     }
 
     public function testProtectedEndpointsRequireBearerToken(): void

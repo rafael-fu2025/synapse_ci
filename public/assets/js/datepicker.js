@@ -102,6 +102,11 @@
       this.order = (input.dataset.order || 'dmy').toLowerCase() === 'mdy' ? 'mdy' : 'dmy';
       this.yearSpan = Math.max(1, Math.min(500, Number(input.dataset.yearSpan) || 100));
       this.events = new AbortController();
+      this.countsUrl = input.dataset.datepickerCountsUrl || '';
+      this.countsRequest = null;
+      this.countsRange = '';
+      this.counts = null;
+      this.countsTimer = null;
       this.notifying = false;
       this.id = 'synapse-date-' + (++nextId);
       this.min = resolveBound(input.dataset.min || input.getAttribute('min'));
@@ -189,6 +194,15 @@
       this.weekdaysRow = popup.querySelector('.dp-weekdays');
       this.gridBody = popup.querySelector('tbody');
       this.help = popup.querySelector('.dp-help');
+      if (this.countsUrl) {
+        popup.classList.add('dp-has-counts');
+        this.countsStatus = document.createElement('p');
+        this.countsStatus.className = 'dp-counts-status';
+        this.countsStatus.setAttribute('role', 'status');
+        this.countsStatus.setAttribute('aria-live', 'polite');
+        this.countsStatus.setAttribute('aria-atomic', 'true');
+        this.gridBody.parentNode.after(this.countsStatus);
+      }
 
       // Weekday headers, respecting the configured first day of week.
       for (let i = 0; i < 7; i++) {
@@ -298,8 +312,27 @@
       on(document, 'pointerdown', (e) => {
         if (this.isOpen && !this.popup.contains(e.target) && !this.wrap.contains(e.target)) this.closePopup(false);
       });
-      on(window, 'scroll', () => this.isOpen && this.position(), { capture: true });
+      on(window, 'scroll', (e) => {
+        if (!this.isOpen) return;
+        // Scrolling the page (or the main content) invalidates the fixed popup's anchor.
+        if (e.target === document || e.target.contains?.(this.wrap)) this.closePopup(false);
+      }, { capture: true, passive: true });
       on(window, 'resize', () => this.isOpen && this.position());
+      if (this.countsUrl) {
+        on(document, 'synapse:filter-updated', (event) => {
+          if (!event.detail?.root?.contains(this.input) || !this.isOpen) return;
+          clearTimeout(this.countsTimer);
+          this.countsTimer = setTimeout(() => {
+            this.countsTimer = null;
+            if (this.isOpen && this.input.isConnected) this.loadCounts(true);
+          }, 200);
+        });
+        on(document, 'synapse:before-navigate', () => this.closePopup(false));
+        on(document, 'synapse:before-swap', (event) => {
+          if (event.detail?.root?.contains(this.input)) this.closePopup(false);
+        });
+        on(window, 'pagehide', () => this.closePopup(false));
+      }
       if (this.target) {
         on(this.target, 'change', () => { if (!this.notifying) this.syncFromTarget(); });
         on(this.target, 'dp:sync', () => this.syncFromTarget());
@@ -587,7 +620,71 @@
         focusable = this.gridBody.querySelector('td[data-date]:not(.is-disabled):not(.is-outmonth)');
         if (focusable) focusable.tabIndex = 0;
       }
+      if (this.countsUrl && this.isOpen) this.loadCounts();
       return focusable;
+    }
+
+    /* Counts are advisory: never change date validity or the selection model. */
+    paintCounts() {
+      this.gridBody.querySelectorAll('[data-date]').forEach(cell => {
+        cell.querySelector('.dp-count-badge')?.remove();
+        const dateLabel = new Intl.DateTimeFormat(this.locale, { dateStyle: 'full' }).format(parseISO(cell.dataset.date));
+        const count = this.counts ? (this.counts[cell.dataset.date] || 0) : null;
+        cell.setAttribute('aria-label', dateLabel + (count === null ? ', appointment counts unavailable' : ', ' + count + ' scheduled appointment' + (count === 1 ? '' : 's')));
+        if (count > 0) {
+          const badge = document.createElement('span');
+          badge.className = 'dp-count-badge';
+          badge.setAttribute('aria-hidden', 'true');
+          badge.textContent = count > 99 ? '99+' : String(count);
+          cell.appendChild(badge);
+        }
+      });
+    }
+
+    cancelCounts() {
+      clearTimeout(this.countsTimer);
+      this.countsTimer = null;
+      this.countsRequest?.abort();
+      this.countsRequest = null;
+      this.countsRange = '';
+      this.counts = null;
+    }
+
+    async loadCounts(force = false) {
+      if (!this.isOpen || !this.input.isConnected) return;
+      const cells = this.gridBody.querySelectorAll('[data-date]');
+      const from = cells[0].dataset.date;
+      const to = cells[cells.length - 1].dataset.date;
+      const range = from + '/' + to;
+      if (!force && this.countsRange === range) { this.paintCounts(); return; }
+      this.cancelCounts();
+      this.countsRange = range;
+      const request = new AbortController();
+      this.countsRequest = request;
+      this.countsStatus.textContent = 'Loading appointment counts…';
+      this.paintCounts();
+      try {
+        const url = new URL(this.countsUrl, location.href);
+        if (url.origin !== location.origin) throw new Error('Counts must be same-origin');
+        url.searchParams.set('from', from);
+        url.searchParams.set('to', to);
+        const response = await fetch(url.href, { credentials: 'same-origin', cache: 'no-store', signal: request.signal, headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('Counts request failed');
+        const payload = await response.json();
+        const counts = payload?.data?.counts;
+        if (payload?.success !== true || !counts || typeof counts !== 'object' || Array.isArray(counts) ||
+            Object.entries(counts).some(([date, count]) => !parseISO(date) || !Number.isSafeInteger(count) || count <= 0)) throw new Error('Invalid counts');
+        if (this.countsRequest !== request || !this.isOpen || !this.input.isConnected) return;
+        this.counts = counts;
+        this.countsStatus.textContent = 'Scheduled appointment counts shown.';
+        this.paintCounts();
+      } catch (error) {
+        if (this.countsRequest !== request || !this.isOpen || !this.input.isConnected) return;
+        this.countsStatus.textContent = 'Appointment counts unavailable. You can still choose a date.';
+        this.paintCounts();
+      } finally {
+        if (this.countsRequest === request) this.countsRequest = null;
+      }
     }
 
     /* ---------- open / close / position ---------- */
@@ -622,6 +719,7 @@
     closePopup(refocus) {
       if (!this.isOpen) return;
       this.isOpen = false;
+      if (this.countsUrl) this.cancelCounts();
       this.wrap.classList.remove('dp-open');
       this.popup.hidden = true;
       this.input.setAttribute('aria-expanded', 'false');

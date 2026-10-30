@@ -68,7 +68,12 @@ $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(a
       <?php if ($tasks === []): ?><tr><td colspan="6" class="text-center text-muted py-4">No matching tasks. Create a task or adjust your filters.</td></tr><?php endif; ?>
     </tbody></table></div></div>
   <?php endif; ?>
-  <nav class="d-flex flex-wrap align-items-center justify-content-between gap-2 my-3" aria-label="Task pages"><span class="small text-muted"><?= $total ?> matching tasks · Page <?= $page ?> of <?= $pages ?> · Up to <?= $limit ?> tasks per page</span><div class="d-flex gap-2"><?php if ($page > 1): ?><a class="btn btn-sm btn-outline-secondary" data-filter-link href="<?= esc($link(['page' => $page - 1])) ?>" rel="prev">Previous</a><?php endif; ?><?php if ($page < $pages): ?><a class="btn btn-sm btn-outline-secondary" data-filter-link href="<?= esc($link(['page' => $page + 1])) ?>" rel="next">Next</a><?php endif; ?></div></nav>
+  <?= view('partials/table_pagination', [
+      'pagination' => ['page' => $page, 'pages' => $pages, 'total' => $total, 'per_page' => $limit],
+      'filters' => $filters, 'baseUrl' => $baseUrl,
+      'paginationExtraQuery' => ['mine' => $filters['mine'], 'priority' => $filters['priority'], 'view' => $mode],
+      'paginationLiveFilters' => true, 'paginationLabel' => 'Task pages',
+  ], ['saveData' => false]) ?>
   </div>
   <details class="card"><summary class="p-3 fw-semibold">Workstation members (<?= count($members) ?>)</summary><div class="card-body"><p class="small text-muted">Membership follows active workstation roles. Contact an administrator to change access.</p><ul class="list-unstyled teams-member-list"><?php foreach ($members as $member): ?><li><i class="bi bi-person-circle me-2" aria-hidden="true"></i><span><?= esc($member['name']) ?></span><small class="text-muted ms-auto"><?= esc(ucwords(str_replace('_', ' ', $member['role']))) ?></small></li><?php endforeach; ?></ul></div></details>
 </div>

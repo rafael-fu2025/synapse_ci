@@ -22,7 +22,7 @@ final class BmgPrivateToolbarTest extends CIUnitTestCase
         $request = new IncomingRequest(config('App'), new URI('http://example.com/' . $path), null, new UserAgent());
         $request->setMethod($method);
         $request->setHeader('X-Device-Token', 'test-raw-device-token');
-        $request->setGlobal('post', ['wifi_password' => 'test-wifi-password', 'token' => 'test-raw-token']);
+        $request->setGlobal('post', ['wifi_password' => 'test-wifi-password', 'token' => 'test-raw-token', 'api_key' => 'test-provider-key']);
         if ($ajax) {
             $request->setHeader('X-Requested-With', 'XMLHttpRequest');
         } else {
@@ -62,6 +62,27 @@ final class BmgPrivateToolbarTest extends CIUnitTestCase
             foreach (['usb/releases/alpha--beta/parts/0', 'usb/releases/alpha/parts/0/extra'] as $endpoint) {
                 yield $prefix . $endpoint => [$prefix . 'facilities/unit/12/' . $endpoint, 'GET', false, 'application/octet-stream'];
             }
+            foreach (['admin/ai', 'admin/ai/save', 'admin/ai/test', 'admin/ai/enable', 'admin/ai/disable', 'admin/ai/status', 'admin/ai/access', 'ADMIN/AI/save', 'admin/%61i/save'] as $path) {
+                foreach (['GET', 'POST'] as $method) {
+                    yield $prefix . 'AI ' . $method . $path => [$prefix . $path, $method, true, 'application/json'];
+                }
+            }
+            foreach (['clinic', 'guidance', 'facilities'] as $department) {
+                foreach (['', '/panel', '/prepare', '/generate', '/47/review', '/jobs/31/cancel'] as $suffix) {
+                    foreach (['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as $method) {
+                        foreach (['', '/'] as $slash) {
+                            $path = $department . '/insights' . $suffix . $slash;
+                            yield $prefix . 'AI ' . $method . $path => [$prefix . $path, $method, false, 'text/html'];
+                        }
+                    }
+                }
+            }
+            foreach (['GUIDANCE/INSIGHTS/generate', 'FACILITIES/INSIGHTS/generate',
+                'guidance/%69nsights/generate', 'facilities/%69nsights/generate',
+                '%67uidance/insights/prepare', '%66acilities/insights/prepare',
+                'guidance/insights/01/review', 'facilities/insights/jobs/invalid/cancel'] as $path) {
+                yield $prefix . 'rejected AI ' . $path => [$prefix . $path, 'POST', true, 'application/json'];
+            }
             foreach (['GET', 'POST'] as $method) {
                 foreach (['', '/', '/heartbeat', '/nested/resource'] as $suffix) {
                     yield $prefix . 'API ' . $method . $suffix => [$prefix . 'api/v1/devices/bmg' . $suffix, $method, false, 'application/json'];
@@ -94,6 +115,9 @@ final class BmgPrivateToolbarTest extends CIUnitTestCase
             'api/v1/devices/bmg-other',
             'notapi/v1/devices/bmg',
             'notfacilities/unit/12/usb/build',
+            'guidance/insights-extra',
+            'notguidance/insights',
+            'clinic/insights-export',
         ] as $path) {
             yield $path => [$path];
         }

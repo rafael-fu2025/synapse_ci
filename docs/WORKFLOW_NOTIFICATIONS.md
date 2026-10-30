@@ -24,8 +24,8 @@ The existing personal notification bell now supports 24 additional workflow even
 | Event | Audience | Destination |
 | --- | --- | --- |
 | Appointment requested | Current same-department schedulers with read and scheduling-management grants, excluding actor | Clinic/Guidance appointments |
-| Staff cancels appointment | Affected patient's person-owned inbox; suppress actor's own patient notice | Personal appointments |
-| Patient cancels appointment | Current department schedulers, excluding actor | Department appointments |
+| Staff-console cancellation | Affected patient's person-owned inbox; suppress actor's own patient notice | Personal appointments |
+| Self-service cancellation (including staff's own appointments) | Current department schedulers, excluding actor | Department appointments |
 | Appointment approaching | Patient, within the configured lead window while scheduled/confirmed | Personal appointments |
 | Referral acknowledged / review started / receiving care linked | Original source issuer, still authorized in the source workstation, excluding actor | Source Sent referrals |
 | Referral closed | Original source issuer, still authorized, excluding actor | Source History |
@@ -38,6 +38,8 @@ The existing personal notification bell now supports 24 additional workflow even
 | Fresh explicit RTC-invalid / recovered report | Same BMG operational audience | Facilities operations index |
 
 Clinic scheduling recipients require `clinic.appointments.read` and `clinic.appointments.write`; Guidance uses `guidance.schedule.read` and `guidance.schedule.manage`. Workstation role membership is required alongside grants; superadmin's existing authority exception is retained. A provider enrollment is not assumed to be a login user. Inventory requires both `clinic.inventory.read` and `clinic.inventory.write`; BMG requires read/manage, not merely Teams membership. No hardware-control permission is granted by an alert.
+
+Cancellation event suffixes identify the recipient: `appointment_cancelled_patient` targets the affected person, while `appointment_cancelled_staff` targets department schedulers. They are not actor-role labels. Both display **Appointment cancelled** without claiming who cancelled; staff accounts may also use self-service for their own appointments. The validated actor ID remains in the outbox. Presentation is resolved when reading an inbox, so this wording correction also applies to existing workflow notices without changing events, recipients, or read states.
 
 Internal follow-ups are **not patient appointments**. Patients do not receive internal case titles, notes or action plans. Generic header messages contain no patient, medicine, case, event, device-location or comment text, cancellation reason, token or ACK payload. BMG wording says device-reported outcome/contact, never verified safe physical movement or emergency stop.
 

@@ -179,6 +179,58 @@ for (const theme of ['light', 'dark']) {
   });
 }
 
+for (const theme of ['light', 'dark']) {
+  for (const width of [320, 768, 992, 1366, 1440]) {
+    test(`page-header actions share one size across modules: ${width}px ${theme}`, { timeout: 30000 }, async t => {
+      const page = await pageFor(t, width, theme);
+      const rem = await page.locator('html').evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+      const views = fs.readdirSync(path.join(root, 'app/Views'), { recursive: true })
+        .filter(name => name.endsWith('.php'))
+        .filter(name => fs.readFileSync(path.join(root, 'app/Views', name), 'utf8').includes("section('page_actions')"));
+      for (const view of views) {
+        const source = fs.readFileSync(path.join(root, 'app/Views', view), 'utf8');
+        const section = source.match(/section\('page_actions'\)[^]*?\?>([^]*?)<\?= \$this->endSection\(\)/);
+        assert.ok(section, `${view} must provide the production page-action markup`);
+        const markup = section[1].replace(/<\?[^]*?\?>/g, '');
+        await page.locator('.page-actions').evaluate((el, html) => { el.innerHTML = html; }, markup);
+        const buttons = await page.locator('.page-actions .btn').evaluateAll(els => els.map(el => {
+          const css = getComputedStyle(el), rect = el.getBoundingClientRect();
+          return { label: el.textContent.trim(), font: css.fontSize, paddingX: css.paddingLeft, paddingY: css.paddingTop,
+            minHeight: css.minHeight, height: rect.height, disabled: el.disabled };
+        }));
+        assert.ok(buttons.length > 0, `${view} must exercise at least one action`);
+        for (const button of buttons) {
+          assert.ok(Math.abs(parseFloat(button.font) - rem * 0.9375) < 0.01, `${view}: ${button.label} font size`);
+          assert.ok(Math.abs(parseFloat(button.paddingX) - rem * 0.95) < 0.01, `${view}: horizontal padding`);
+          assert.ok(Math.abs(parseFloat(button.paddingY) - rem * 0.45) < 0.01, `${view}: vertical padding`);
+          assert.equal(button.minHeight, width < 768 ? '44px' : '38px', `${view}: minimum action height`);
+          if (width >= 768) assert.equal(button.height, 38, `${view}: ${button.label} must have the exact header height`);
+          else assert.ok(button.height >= 44);
+        }
+        if (view === 'announcements/index.php') {
+          const draft = page.locator('.page-actions a[data-app-modal-open]');
+          assert.equal(await draft.locator('i.bi-plus-lg[aria-hidden="true"]').count(), 1);
+          assert.equal(await draft.textContent(), 'New draft');
+        }
+
+        await assertFits(page, '.page-actions .btn');
+        await assertNoOverflow(page);
+      }
+      await page.locator('.page-actions').evaluate(el => {
+        el.innerHTML = '<button class="btn btn-primary btn-sm" disabled>Small</button><button class="btn btn-primary">Normal</button><button class="btn btn-primary btn-lg"><i class="bi bi-plus-lg fs-3" aria-hidden="true"></i>Large</button>';
+      });
+      const heights = await page.locator('.page-actions .btn').evaluateAll(els => els.map(el => el.getBoundingClientRect().height));
+      assert.deepEqual(heights, Array(3).fill(width < 768 ? 44 : 38), 'Legacy size classes must not change header action height');
+      assert.equal(await page.locator('.page-actions .btn').first().isDisabled(), true);
+      const outside = await page.locator('#main .section').evaluate(el => {
+        el.innerHTML = '<button class="btn btn-primary btn-sm">Row action</button><button class="btn btn-primary">Normal action</button>';
+        return [...el.querySelectorAll('.btn')].map(button => getComputedStyle(button).minHeight);
+      });
+      assert.deepEqual(outside, ['32px', '38px'], 'Non-header sizes stay independent');
+    });
+  }
+}
+
 test('Tooltips are suppressed on mobile, including new content and viewport changes', async t => {
   const page = await pageFor(t, 390, 'light');
   await page.locator('#main .section').evaluate(section => {

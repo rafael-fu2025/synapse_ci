@@ -59,6 +59,12 @@ if ($kind === 'index') {
         $detail['device'] = null;
     }
     $data['units'] = $variant === 'empty' ? [] : [$detail];
+    $count = count($data['units']);
+    $data['stats'] = ['total' => $count, 'active' => $count && $detail['unit']['status'] === 'active' ? 1 : 0,
+        'maintenance' => $count && $detail['unit']['status'] === 'maintenance' ? 1 : 0,
+        'bound' => $count && $detail['device'] !== null ? 1 : 0];
+    $data['pagination'] = ['page' => 1, 'per_page' => 25, 'total' => $count, 'filtered' => $count,
+        'pages' => 1, 'from' => $count, 'to' => $count];
 } elseif ($kind === 'unit_detail') {
     $data += $detail + ['activeBatch' => in_array($variant, ['idle', 'operator-idle'], true) ? null : $batch, 'pastBatches' => $variant === 'empty' ? [] : [array_replace($batch, ['status' => 'released', 'completed_at' => '2026-10-17 09:00:00'])]];
     if ($variant === 'empty') { $data['runs'] = []; $data['commands'] = []; }

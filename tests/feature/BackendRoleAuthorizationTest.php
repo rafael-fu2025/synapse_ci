@@ -157,7 +157,9 @@ final class BackendRoleAuthorizationTest extends CIUnitTestCase
                 'starts_at' => $today . ' 09:00:00', 'first_name' => 'Fixture', 'last_name' => 'Patient', 'mis_id' => 'TEST', 'type' => 'routine', 'version' => 1];
             foreach (['clinic', 'guidance'] as $unit) {
                 Services::resetSingle('renderer');
-                $data = ['title' => 'Appointments', 'unit' => $unit, 'date' => $today, 'requests' => [], 'appointments' => [$appointment]];
+                $data = ['title' => 'Appointments', 'unit' => $unit, 'date' => $today, 'requests' => [], 'appointments' => [$appointment],
+                                    'pendingPagination' => \App\Libraries\TablePage::forList([])->metadata(0, 0),
+                                    'scheduledPagination' => \App\Libraries\TablePage::forList([])->metadata(1, 1)];
                 $this->assertStringContainsString('Check-in to Queue', view('appointments/index', $data));
                 Services::resetSingle('renderer');
                 $data['appointments'][0]['local_date'] = date('Y-m-d');

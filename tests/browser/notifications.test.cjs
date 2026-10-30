@@ -336,7 +336,7 @@ for (let offset = 0; offset < 24; offset += 8) {
 
 const workflowDestinations = [
   ['clinicAppointments', 'clinic-appointments', 'clinic', '/clinic/appointments', 'Appointment request'],
-  ['guidanceAppointments', 'guidance-appointments', 'guidance', '/guidance/appointments', 'Appointment cancelled by patient'],
+  ['guidanceAppointments', 'guidance-appointments', 'guidance', '/guidance/appointments', 'Appointment cancelled'],
   ['clinicReferralSent', 'clinic-referral-sent', 'clinic', '/clinic/referrals?tab=sent', 'Referral acknowledged'],
   ['guidanceReferralSent', 'guidance-referral-sent', 'guidance', '/guidance/referrals?tab=sent', 'Referral closed'],
   ['guidanceCases', 'guidance-cases', 'guidance', '/guidance/cases', 'Follow-up overdue'],

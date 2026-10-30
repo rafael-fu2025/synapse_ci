@@ -29,10 +29,11 @@ final class FacilitiesController extends BaseController
             $db = \Config\Database::connect();
 
             $overview = $this->rotation->overview();
-            $totalUnits = count($overview);
-            $activeUnits = count(array_filter($overview, static fn (array $i): bool => $i['unit']['status'] === 'active'));
-            $maintenanceUnits = count(array_filter($overview, static fn (array $i): bool => $i['unit']['status'] === 'maintenance'));
-            $boundDevices = count(array_filter($overview, static fn (array $i): bool => $i['device'] !== null));
+            $stats = $this->rotation->statistics();
+            $totalUnits = $stats['total'];
+            $activeUnits = $stats['active'];
+            $maintenanceUnits = $stats['maintenance'];
+            $boundDevices = $stats['bound'];
 
             $totalBatches = $db->table('bmg_batches')
                 ->where('tenant_id', $tenantId)->countAllResults();
@@ -81,8 +82,9 @@ final class FacilitiesController extends BaseController
     {
         return $this->respond(function () {
             $archived = $this->request->getGet('view') === 'archived';
-            return view('facilities/index', $this->access() + [
-                'units' => $this->rotation->overview($archived), 'title' => 'Drum Rotation',
+            $listing = $this->rotation->listing($this->request->getGet(), $archived);
+            return view('facilities/index', $this->access() + $listing + [
+                'title' => 'Drum Rotation',
                 'pageTitle' => 'Drum Rotation', 'archivedView' => $archived,
                 'openCreate' => !$archived && $this->request->getGet('create') === '1',
             ]);

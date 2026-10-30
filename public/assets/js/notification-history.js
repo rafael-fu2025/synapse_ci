@@ -15,7 +15,7 @@
     const on = (target, type, callback) => target.addEventListener(type, callback, { signal: events.signal });
     const find = name => root.querySelector(`[data-history-${name}]`);
     const list = find('list'), status = find('status'), feedback = find('error');
-    const markAll = find('mark-all'), previous = find('previous'), next = find('next');
+    const markAll = find('mark-all'), pagination = find('pagination');
     const filters = [...root.querySelectorAll('[data-history-filter]')];
     let configured = {};
     try { configured = JSON.parse(root.dataset.destinations); } catch (_) { /* No untrusted fallback. */ }
@@ -39,8 +39,12 @@
     let unconfirmed = false;
     function controls() {
       markAll.disabled = writing || auth || !loaded || unread === 0;
-      previous.disabled = busy || auth || !loaded || page <= 1;
-      next.disabled = busy || auth || !loaded || page >= pages;
+      pagination.querySelectorAll('button').forEach(button => {
+        const target = Number(button.dataset.historyPageTarget);
+        button.disabled = busy || writing || auth || !loaded || target === page;
+        button.setAttribute('aria-disabled', String(button.disabled));
+        button.parentElement.classList.toggle('disabled', button.disabled && target !== page);
+      });
       filters.forEach(button => {
         button.disabled = writing;
         const active = button.dataset.historyFilter === filter;
@@ -52,6 +56,26 @@
       find('retry').disabled = writing;
       root.setAttribute('aria-busy', String(busy));
     }
+    function renderPagination() {
+      const fragment = document.createDocumentFragment();
+      const add = (label, target, hook, current = false) => {
+        const item = document.createElement('li'); item.className = 'page-item';
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'page-link';
+        button.textContent = label; button.dataset.historyPageTarget = String(target);
+        if (hook) button.setAttribute(`data-history-${hook}`, '');
+        if (current) { item.classList.add('active'); button.setAttribute('aria-current', 'page'); }
+        else if (!hook) button.setAttribute('aria-label', `Page ${target}`);
+        item.append(button); fragment.append(item);
+      };
+      add('First', 1, 'first');
+      add('Previous', Math.max(1, page - 1), 'previous');
+      for (let target = Math.max(1, page - 2); target <= Math.min(pages, page + 2); target++) {
+        add(target.toLocaleString('en-US'), target, null, target === page);
+      }
+      add('Next', Math.min(pages, page + 1), 'next');
+      add('Last', pages, 'last');
+      pagination.replaceChildren(fragment);
+    }
     function error(message) {
       find('error-text').textContent = message;
       feedback.classList.remove('d-none');
@@ -60,6 +84,8 @@
       list.replaceChildren(); loaded = false; unread = 0;
       find('unread').textContent = 'Sign in again to check notifications.';
       find('page').textContent = 'Page unavailable';
+      find('range').textContent = 'Notification count unavailable';
+      pagination.replaceChildren();
       status.textContent = 'Your session or permissions changed. Refresh the page or sign in again.';
     }
     function validate(payload) {
@@ -113,7 +139,9 @@
       find('page').textContent = `Page ${page} of ${pages}`;
       const start = payload.total ? (page - 1) * 20 + 1 : 0;
       const end = Math.min(page * 20, payload.total);
+      find('range').textContent = `Showing ${start.toLocaleString('en-US')}–${end.toLocaleString('en-US')} of ${payload.total.toLocaleString('en-US')}`;
       status.textContent = `${start}–${end} of ${payload.total} ${filter === 'unread' ? 'unread ' : ''}notifications`;
+      renderPagination();
       feedback.classList.add('d-none');
     }
     async function request(url, write, owner) {
@@ -200,6 +228,7 @@
       controller?.abort(); ++sequence; busy = false;
       filter = nextFilter; page = nextPage; loaded = false;
       list.replaceChildren(); find('page').textContent = `Page ${page}`;
+      find('range').textContent = 'Loading notification count…';
       void refresh();
     }
     on(root, 'click', event => {
@@ -215,8 +244,10 @@
       }
       if (target.disabled) return;
       if (target.matches('[data-history-filter]')) select(target.dataset.historyFilter, 1);
-      else if (target === previous) select(filter, page - 1);
-      else if (target === next) select(filter, page + 1);
+      else if (target.matches('[data-history-page-target]')) {
+        const targetPage = Number(target.dataset.historyPageTarget);
+        if (!busy && loaded && !auth && Number.isSafeInteger(targetPage) && targetPage >= 1 && targetPage <= pages) select(filter, targetPage);
+      }
       else if (target.matches('[data-history-read]')) {
         const id = Number(target.dataset.historyRead);
         if (Number.isSafeInteger(id) && id > 0) void read(id);

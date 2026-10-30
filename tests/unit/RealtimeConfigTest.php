@@ -25,7 +25,8 @@ final class RealtimeConfigTest extends CIUnitTestCase
 
     public function testOptInDefaultsAndExactCommaSeparatedOrigins(): void
     {
-        $config = new Realtime();
+        // Declared defaults must not depend on a developer's local environment overrides.
+        $config = (new \ReflectionClass(Realtime::class))->newInstanceWithoutConstructor();
         $this->assertFalse($config->enabled);
         $this->assertSame('', $config->signingKey);
         $this->assertSame('', $config->publishKey);

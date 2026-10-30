@@ -14,6 +14,8 @@ use Workerman\Worker;
 /** Real Spark/Workerman process, real masked WebSocket frames, no browser or curl. */
 final class RealtimeTransportTest extends CIUnitTestCase
 {
+    use \Tests\Support\AiRealtimeTransportScenario;
+
     private const ORIGIN = 'https://portal.example.test';
     private array $sockets = [];
     private Realtime $settings;
@@ -42,23 +44,23 @@ final class RealtimeTransportTest extends CIUnitTestCase
         $this->settings->publishListen = 'http://' . $this->httpAddress;
         $this->settings->publicUrl = 'wss://portal.example.test/realtime';
         $environment = getenv();
-        foreach (get_object_vars($this->settings) as $key => $value) {
-            if (is_scalar($value)) {
-                $environment['realtime.' . $key] = is_bool($value) ? ($value ? 'true' : 'false') : (string) $value;
-            }
-        }
+        $environment['HUMUS_REALTIME_TEST_CONFIG'] = json_encode(get_object_vars($this->settings), JSON_THROW_ON_ERROR);
         // Spark's testing environment expects SUPPORTPATH from the PHPUnit bootstrap.
         $environment['CI_ENVIRONMENT'] = 'development';
         // Array argv + bypass_shell means proc_terminate targets PHP, not a shell.
-        $process = proc_open([PHP_BINARY, ROOTPATH . 'spark', 'realtime:serve', 'start'],
+        $process = proc_open([PHP_BINARY, '-d', 'auto_prepend_file=' . SUPPORTPATH . 'realtime-transport-prepend.php',
+            ROOTPATH . 'spark', 'realtime:serve', 'start'],
             [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']], $pipes, ROOTPATH, $environment, ['bypass_shell' => true]);
         $this->assertIsResource($process);
         fclose($pipes[0]);
+        $started = false;
         try {
             $this->waitForServer($process);
+            $started = true;
             $this->assertHandshakeRejected('https://attacker.test', '/');
             $this->assertHandshakeRejected('', '/');
             $this->assertHandshakeRejected(self::ORIGIN, '/?ticket=must-not-authenticate');
+            $this->assertAiPostCommitTransport();
 
             $first = $this->authenticated(1);
             $second = $this->authenticated(2);
@@ -125,6 +127,7 @@ final class RealtimeTransportTest extends CIUnitTestCase
             fclose($pipes[1]);
             fclose($pipes[2]);
             proc_close($process);
+            $this->assertTrue($started, 'Realtime subprocess startup output: ' . $output);
             $this->assertStringNotContainsString('TypeError', $output);
             $this->assertStringNotContainsString('multi workers', $output);
             $this->assertStringNotContainsString('Fatal error', $output);

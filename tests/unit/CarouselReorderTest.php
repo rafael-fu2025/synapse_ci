@@ -49,7 +49,7 @@ final class CarouselReorderTest extends CIUnitTestCase
         $reflection = new ReflectionClass(AdminCarouselController::class);
         $this->controller = $reflection->newInstanceWithoutConstructor();
         $reflection->getProperty('slideModel')->setValue($this->controller, $model);
-        $reflection->getProperty('carousel')->setValue($this->controller, new CarouselService($model));
+        $reflection->getProperty('carousel')->setValue($this->controller, new CarouselService($model, static fn () => true));
 
         $this->request = Services::incomingrequest(null, false);
         $this->request->setMethod('POST');

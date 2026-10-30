@@ -170,6 +170,10 @@ describe('Inventory presentation fixtures (no application or MySQL)', { timeout:
     server = http.createServer(async (req, res) => {
       try {
         const url = new URL(req.url, 'http://localhost');
+        if (url.pathname === '/realtime/ticket') {
+          res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ enabled: false }));
+          return;
+        }
         if (req.method === 'POST') {
           const chunks = [];
           for await (const chunk of req) chunks.push(chunk);
@@ -498,7 +502,7 @@ describe('Inventory presentation fixtures (no application or MySQL)', { timeout:
     }
   });
 
-  test('Actual history renders correction links, original movements and legacy limitations', { timeout: 8000 }, async t => {
+  test('Actual history renders correction links, original movements and legacy limitations', { timeout: 30000 }, async t => {
     const page = await pageFor(t, base + '/11?variant=corrected');
     const original = page.locator('#inventory-operation-41');
     assert.match(await original.innerText(), /Corrected.*Unissued stock restored/);
@@ -508,11 +512,26 @@ describe('Inventory presentation fixtures (no application or MySQL)', { timeout:
     assert.match(await page.locator('#inventory-movement-52').innerText(), /\+2/);
     assert.equal(await page.locator('#inventory-movement-52 a[href="#inventory-movement-51"]').count(), 1);
     assert.match(await page.locator('#inventory-movement-50').innerText(), /Legacy opening balance.*correction unavailable/);
-    assert.match(await page.locator('a[rel="next"]').getAttribute('href'), /\?page=2#inventory-movements$/);
-    await page.locator('a[rel="next"]').click();
-    await page.waitForURL(origin + base + '/11?page=2#inventory-movements');
-    await page.locator('a[rel="prev"]').waitFor();
-    assert.equal(await page.locator('a[rel="prev"]').count(), 1);
-    assert.equal(await page.locator('a[rel="next"]').count(), 0);
+    const pager = page.locator('#inventory-movements [data-table-pagination]');
+    assert.match(await pager.innerText(), /Showing 1–100 of 101/);
+    assert.equal(await pager.locator('.disabled').count(), 2);
+    await pager.getByRole('link', { name: 'Next', exact: true }).click();
+    await page.waitForURL(origin + base + '/11?page=2&per_page=100');
+    assert.match(await pager.innerText(), /Showing 101–101 of 101/);
+    assert.equal(await pager.locator('.disabled').count(), 2);
+    assert.equal(await pager.locator('[aria-current="page"]').textContent(), '2');
+    await pager.getByRole('link', { name: 'First', exact: true }).click();
+    await page.waitForURL(origin + base + '/11?page=1&per_page=100');
+    await page.goto(origin + base + '/11?page=3&per_page=20');
+    assert.match(await pager.innerText(), /Showing 41–60 of 101/);
+    assert.equal(await page.locator('#movementPerPage option').count(), 4);
+    assert.equal(await page.locator('#movementPerPage').inputValue(), '20');
+    for (const href of await pager.locator('a').evaluateAll(links => links.map(link => link.href))) {
+      assert.equal(new URL(href).searchParams.get('per_page'), '20');
+    }
+    await page.goto(origin + base + '/11?variant=empty');
+    assert.match(await pager.innerText(), /Showing 0–0 of 0/);
+    assert.equal(await pager.locator('a').count(), 0);
+    assert.equal(await pager.locator('[aria-disabled="true"]').count(), 4);
   });
 });

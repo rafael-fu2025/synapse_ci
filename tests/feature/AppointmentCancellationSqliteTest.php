@@ -8,6 +8,7 @@ use App\Models\AppointmentModel;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\Scheduling\AppointmentService;
+use App\Services\WorkflowNotifications;
 use CodeIgniter\Database\SQLite3\Connection;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
@@ -114,6 +115,7 @@ final class AppointmentCancellationSqliteTest extends CIUnitTestCase
             $this->db->table('permissions')->insert(['id' => $id, 'code' => $code]);
             $this->db->table('role_permissions')->insert(['role' => $role, 'permission_id' => $id]);
         }
+        $this->db->table('role_permissions')->insert(['role' => 'employee', 'permission_id' => 1]);
         $this->db->table('notifications')->insert(['tenant_id' => 1, 'recipient_person_id' => 1,
             'type' => 'fixture_existing', 'created_at' => '2026-10-01 00:00:00']);
     }
@@ -162,6 +164,20 @@ final class AppointmentCancellationSqliteTest extends CIUnitTestCase
         yield 'guidance staff' => ['guidance', false, 3];
     }
 
+    public static function staffContexts(): iterable
+    {
+        yield 'clinic staff' => ['clinic', 2];
+        yield 'guidance counsellor' => ['guidance', 3];
+    }
+
+    public static function staffPersonalContexts(): iterable
+    {
+        foreach (['clinic', 'guidance'] as $unit) {
+            yield 'clinic staff in ' . $unit => [$unit, 2];
+            yield 'counsellor in ' . $unit => [$unit, 3];
+        }
+    }
+
     private function invalidPayloads(): array
     {
         return ['missing' => [], 'null' => ['reason' => null], 'empty' => ['reason' => ''],
@@ -191,6 +207,76 @@ final class AppointmentCancellationSqliteTest extends CIUnitTestCase
         $this->assertSame($actor, (int) $event['actor_user_id']);
         $this->assertSame('2', $event['occurrence_key']);
         $this->assertNull($event['processed_at']);
+        $this->assertSame(0, $this->db->transDepth);
+        $this->assertTrue($this->db->transStatus());
+    }
+
+    #[DataProvider('staffPersonalContexts')]
+    public function testStaffCancelOwnAppointmentsThroughPersonalServiceAndRoute(string $unit, int $actor): void
+    {
+        $reason = 'Cannot attend my appointment';
+        foreach (['service', 'route'] as $caller) {
+            $id = $this->appointment($unit, 'confirmed', $actor);
+            if ($caller === 'service') {
+                $this->assertTrue((new AppointmentService())->cancelAppointment($id, $reason, $unit, $this->actor($actor), true));
+            } else {
+                $response = $this->submitCancellation($actor, $unit, true, $id, [
+                    'reason' => $reason, 'personal' => '0', 'role' => 'superadmin',
+                    'actor' => $this->actor(1), 'actor_user_id' => 1,
+                ]);
+                $this->assertSame(200, $response->response()->getStatusCode(), $response->getBody());
+                $this->assertTrue(json_decode($response->getJSON(), true, 512, JSON_THROW_ON_ERROR)['success']);
+            }
+            $this->assertCancelled($id, $unit, true, $actor, $reason);
+        }
+        foreach ($this->db->table('workflow_events')->orderBy('id')->get()->getResultArray() as $event) {
+            $presentation = WorkflowNotifications::presentation($event['event_kind'], $event['unit'], [
+                'clinicAppointments' => '/clinic/appointments', 'guidanceAppointments' => '/guidance/appointments',
+                'portal' => '/portal',
+            ]);
+            $this->assertSame('Appointment cancelled', $presentation['title']);
+            $this->assertSame('An appointment was cancelled. Review the department schedule.', $presentation['message']);
+            $this->assertSame('/' . $unit . '/appointments', $presentation['url']);
+        }
+    }
+
+    #[DataProvider('staffContexts')]
+    public function testStaffConsoleCancellationIgnoresSpoofedPersonalAndActorFields(string $unit, int $actor): void
+    {
+        $id = $this->appointment($unit, 'confirmed');
+        $reason = 'Department cancellation';
+        $response = $this->submitCancellation($actor, $unit, false, $id, [
+            'reason' => $reason, 'personal' => '1', 'role' => 'student',
+            'actor' => $this->actor(1), 'actor_user_id' => 1, 'person_id' => $actor,
+        ]);
+        $this->assertSame(200, $response->response()->getStatusCode(), $response->getBody());
+        $this->assertTrue(json_decode($response->getJSON(), true, 512, JSON_THROW_ON_ERROR)['success']);
+        $this->assertCancelled($id, $unit, false, $actor, $reason);
+        $this->assertSame(1, (int) (new AppointmentModel())->find($id)['person_id']);
+    }
+
+    #[DataProvider('staffPersonalContexts')]
+    public function testStaffSelfServiceCannotCancelAnotherPersonsAppointment(string $unit, int $actor): void
+    {
+        $id = $this->appointment($unit, 'confirmed');
+        $before = $this->state();
+        try {
+            (new AppointmentService())->cancelAppointment($id, 'Not my appointment', $unit, $this->actor($actor), true);
+            $this->fail('Staff self-service must enforce appointment ownership.');
+        } catch (\DomainException $e) {
+            $this->assertSame(403, $e->getCode());
+            $this->assertSame('You may only cancel your own appointments.', $e->getMessage());
+        }
+        $this->assertSame($before, $this->state());
+        $response = $this->submitCancellation($actor, $unit, true, $id, [
+            'reason' => 'Not my appointment', 'personal' => '0', 'role' => 'superadmin',
+            'actor' => $this->actor(1), 'actor_user_id' => 1, 'person_id' => 1,
+        ]);
+        $this->assertSame(403, $response->response()->getStatusCode(), $response->getBody());
+        $json = json_decode($response->getJSON(), true, 512, JSON_THROW_ON_ERROR);
+        $this->assertFalse($json['success']);
+        $this->assertSame('You may only cancel your own appointments.', $json['message']);
+        $this->assertSame($before, $this->state());
         $this->assertSame(0, $this->db->transDepth);
         $this->assertTrue($this->db->transStatus());
     }

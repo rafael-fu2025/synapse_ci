@@ -8,12 +8,13 @@ import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
 import { StatusPill } from '../../../components/StatusPill';
 import { Action } from '../../../components/Action';
-import { Theme, font, type } from '../../../theme/tokens';
+import { Theme, font, type, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatDate, formatTime } from '../../../lib/format';
 import { useAppointment } from '../hooks';
 import { progressStep, statusPresentation, unitLabel } from '../status';
 import { VisitsStackParamList } from '../../../navigation/types';
+import { AppointmentLoadError } from '../components/AppointmentLoadError';
 
 type Props = NativeStackScreenProps<VisitsStackParamList, 'AppointmentDetail'>;
 
@@ -31,7 +32,7 @@ export function AppointmentDetailScreen() {
     return (
       <Screen scroll={false}>
         <PageHeader title="Appointment" onBack={navigation.goBack} />
-        <ActivityIndicator style={styles.loader} color={theme.brand} />
+        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
       </Screen>
     );
   }
@@ -39,7 +40,11 @@ export function AppointmentDetailScreen() {
     return (
       <Screen scroll={false}>
         <PageHeader title="Appointment" onBack={navigation.goBack} />
-        <Text style={styles.missing}>This appointment is no longer available.</Text>
+        {query.isError ? (
+          <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} />
+        ) : (
+          <Text style={styles.missing}>This appointment is no longer available.</Text>
+        )}
       </Screen>
     );
   }
@@ -51,6 +56,7 @@ export function AppointmentDetailScreen() {
   return (
     <Screen>
       <PageHeader title="Appointment details" onBack={navigation.goBack} />
+      {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
       <View style={styles.progress}>
         {STEPS.map((label, index) => (
           <View key={label} style={styles.stepColumn}>
@@ -62,36 +68,41 @@ export function AppointmentDetailScreen() {
 
       <View style={styles.hero}>
         <Text style={styles.heroTitle}>{unitLabel(appointment.unit)} visit</Text>
-        <Text style={styles.heroSubtitle}>{appointment.type.replace(/_/g, ' ')}</Text>
+        <Text style={styles.heroSubtitle}>{appointment.type.replace(/_/g, ' ')} · Reference #{appointment.id}</Text>
         <StatusPill tone={status.tone}>{status.label}</StatusPill>
       </View>
 
+      {appointment.status === 'requested' ? (
+        <View style={styles.cancelNote}>
+          <Text style={styles.cancelNoteText}>This is a preferred time, not yet confirmed. The department will review your request and notify you when a time is confirmed.</Text>
+        </View>
+      ) : null}
       <View style={styles.card}>
         <DetailRow
-          icon={<CalendarDays size={16} color={theme.brand} />}
+          icon={<CalendarDays size={16} color={theme.brandIcon} />}
           label="DATE"
           value={formatDate(appointment.starts_at)}
         />
         <DetailRow
-          icon={<Clock3 size={16} color={theme.brand} />}
-          label="PREFERRED TIME"
+          icon={<Clock3 size={16} color={theme.brandIcon} />}
+          label={appointment.status === 'requested' ? 'PREFERRED TIME' : 'TIME'}
           value={`${formatTime(appointment.starts_at)} – ${formatTime(appointment.ends_at)}`}
         />
         {appointment.provider_name ? (
           <DetailRow
-            icon={<UserRound size={16} color={theme.brand} />}
+            icon={<UserRound size={16} color={theme.brandIcon} />}
             label="ASSIGNED PROVIDER"
             value={appointment.provider_name}
           />
         ) : (
           <DetailRow
-            icon={<Stethoscope size={16} color={theme.brand} />}
+            icon={<Stethoscope size={16} color={theme.brandIcon} />}
             label="ASSIGNED PROVIDER"
-            value="To be assigned on confirmation"
+            value="Not yet assigned"
           />
         )}
         <DetailRow
-          icon={<ChevronRight size={16} color={theme.brand} />}
+          icon={<ChevronRight size={16} color={theme.brandIcon} />}
           label="REASON"
           value={appointment.reason ?? 'No reason provided'}
           last
@@ -114,7 +125,7 @@ export function AppointmentDetailScreen() {
   );
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     loader: { marginTop: 30 },
     missing: { color: theme.ink500, fontFamily: font.body, fontSize: 11.5 },
@@ -123,7 +134,7 @@ function makeStyles(theme: Theme) {
     stepBar: { height: 4, borderRadius: 4, backgroundColor: theme.line },
     stepBarDone: { backgroundColor: theme.brand },
     stepLabel: { marginTop: 5, fontSize: 8, fontWeight: '700', fontFamily: font.body, color: theme.ink400 },
-    stepLabelDone: { color: theme.brand },
+    stepLabelDone: { color: theme.brandText },
     hero: { alignItems: 'center', paddingBottom: 19 },
     heroTitle: { ...type.hero, fontSize: 19, color: theme.ink900, marginTop: 6 },
     heroSubtitle: {
@@ -146,3 +157,5 @@ function makeStyles(theme: Theme) {
     actions: { marginTop: 'auto', paddingTop: 24 },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

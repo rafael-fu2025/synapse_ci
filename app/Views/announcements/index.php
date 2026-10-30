@@ -1,7 +1,7 @@
 <?php require __DIR__ . '/_dates.php'; ?>
 <?= $this->extend('layouts/app') ?>
 <?= $this->section('page_actions') ?>
-<a class="btn btn-primary btn-sm" href="<?= esc($baseUrl . '/create') ?>" data-app-modal-open>New draft</a>
+<a class="btn btn-primary btn-sm" href="<?= esc($baseUrl . '/create') ?>" data-app-modal-open><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New draft</a>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <p class="text-muted"><?= esc(ucfirst($unit)) ?> announcements only. Published content is immutable; archive and create a new announcement for corrections.</p>
@@ -23,11 +23,19 @@
 <?php endforeach; ?>
 <?php if ($announcements === []): ?><tr><td colspan="4" class="text-muted">No announcements yet.</td></tr><?php endif; ?>
 </tbody></table></div></div></div>
-<?= view('announcements/_pagination', ['pagination' => $pagination, 'baseUrl' => $baseUrl], ['saveData' => false]) ?>
+<?= view('partials/table_pagination', [
+    'pagination' => $pagination, 'baseUrl' => $baseUrl, 'filters' => [],
+    'paginationExtraQuery' => isset($readHistory) ? ['reads' => $readHistory['announcement']['id'], 'read_page' => $readHistory['pagination']['page']] : [],
+    'paginationLabel' => 'Announcement pages',
+], ['saveData' => false]) ?>
 <?php if (isset($readHistory)): ?>
 <section class="card"><div class="card-body pt-3"><h2 class="h5">Read history: <?= esc($readHistory['announcement']['title']) ?></h2><p class="text-muted small">A read marker is not acknowledgement or proof of comprehension.</p>
 <table class="table"><thead><tr><th>Person</th><th>Marked read at (Asia/Manila)</th></tr></thead><tbody><?php foreach ($readHistory['reads'] as $read): ?><tr><td><?= esc($read['first_name'] . ' ' . $read['last_name']) ?></td><td><?= esc($announcementDate($read['read_at'])) ?></td></tr><?php endforeach; ?><?php if ($readHistory['reads'] === []): ?><tr><td colspan="2">No read markers yet.</td></tr><?php endif; ?></tbody></table>
-<?= view('announcements/_pagination', ['pagination' => $readHistory['pagination'], 'baseUrl' => $baseUrl, 'pageKey' => 'read_page', 'paginationLabel' => 'Read history pages', 'query' => ['reads' => $readHistory['announcement']['id'], 'page' => $pagination['page']]], ['saveData' => false]) ?>
+<?= view('partials/table_pagination', [
+    'pagination' => $readHistory['pagination'], 'baseUrl' => $baseUrl, 'filters' => [],
+    'paginationPageParam' => 'read_page', 'paginationLabel' => 'Read history pages',
+    'paginationExtraQuery' => ['reads' => $readHistory['announcement']['id'], 'page' => $pagination['page']],
+], ['saveData' => false]) ?>
 </div></section>
 <?php endif; ?>
 <?= $this->endSection() ?>

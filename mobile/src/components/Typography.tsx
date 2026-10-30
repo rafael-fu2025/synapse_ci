@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TextProps } from 'react-native';
-import { Theme, font, type } from '../theme/tokens';
+import { Theme, font, type, memoizeStyles } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
 /** Themed text primitives so screens never need inline style objects. */
@@ -34,12 +34,14 @@ export function HeroTitle({ style, ...props }: TextProps) {
   return <Text {...props} style={[styles.hero, style]} />;
 }
 
-function makeStyles(theme: Theme) {
+function createStyles(theme: Theme) {
   return StyleSheet.create({
     body: { ...type.body, color: theme.ink700 },
     muted: { ...type.body, color: theme.ink500 },
-    eyebrow: { fontSize: 9.5, fontWeight: '800', letterSpacing: 1.1, fontFamily: font.body, color: theme.brand },
+    eyebrow: { fontSize: 9.5, fontWeight: '800', letterSpacing: 1.1, fontFamily: font.body, color: theme.brandText },
     cardTitle: { ...type.cardTitle, color: theme.ink900 },
     hero: { ...type.hero, color: theme.ink900 },
   });
 }
+
+const makeStyles = memoizeStyles(createStyles);

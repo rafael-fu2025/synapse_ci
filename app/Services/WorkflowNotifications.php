@@ -17,11 +17,11 @@ use Throwable;
 /** Identifier-only transactional outbox. Dispatch separately; never fan out during care/device writes. */
 final class WorkflowNotifications
 {
-    /** kind => [subject table, audience, title, generic message] */
+    /** kind => [subject table, audience, title, generic message]; cancellation suffixes name recipients, not actors. */
     private const EVENTS = [
         'appointment_requested_staff' => ['appointments', 'schedulers', 'Appointment request', 'An appointment request needs scheduling review.'],
         'appointment_cancelled_patient' => ['appointments', 'patient', 'Appointment cancelled', 'An appointment was cancelled. Open your appointments for details.'],
-        'appointment_cancelled_staff' => ['appointments', 'schedulers', 'Appointment cancelled by patient', 'A patient cancelled an appointment. Review the department schedule.'],
+        'appointment_cancelled_staff' => ['appointments', 'schedulers', 'Appointment cancelled', 'An appointment was cancelled. Review the department schedule.'],
         'appointment_reminder' => ['appointments', 'patient', 'Upcoming appointment', 'An appointment is approaching. Open your appointments for details.'],
         'referral_acknowledged' => ['referrals', 'issuer', 'Referral acknowledged', 'The receiving department acknowledged a referral you sent.'],
         'referral_reviewed' => ['referrals', 'issuer', 'Referral under review', 'The receiving department started reviewing a referral you sent.'],

@@ -125,9 +125,22 @@
         </tbody>
       </table>
     </div>
-    <div class="p-3">
-      <?= $pager->only(['status', 'category'])->links() ?>
-    </div>
   </div>
 </div>
+<?php $casePage = $pager->getDetails(); ?>
+<?= view('partials/table_pagination', [
+    'pagination' => [
+        'per_page' => $casePage['perPage'],
+        'filtered' => $casePage['total'],
+        'total' => $casePage['total'],
+        'pages' => $casePage['pageCount'],
+        'page' => $casePage['currentPage'],
+    ],
+    'rowCount' => count($cases),
+    'filters' => ['status' => $status],
+    'paginationExtraQuery' => ['category' => $category],
+    'baseUrl' => site_url('/guidance/cases'),
+    'totalLabel' => 'counseling cases',
+    'paginationLabel' => 'Counseling case pages',
+], ['saveData' => false]) ?>
 <?= $this->endSection() ?>

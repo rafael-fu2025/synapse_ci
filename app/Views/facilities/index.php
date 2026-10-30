@@ -8,9 +8,7 @@
 <?= $this->section('content') ?>
 <?php
 $archivedView = !empty($archivedView);
-$active = count(array_filter($units, static fn (array $item): bool => $item['unit']['status'] === 'active'));
-$maintenance = count(array_filter($units, static fn (array $item): bool => $item['unit']['status'] === 'maintenance'));
-$boundCount = count(array_filter($units, static fn (array $item): bool => $item['device'] !== null));
+$perPage = (int) $pagination['per_page'];
 ?>
 <div class="bmg-workspace" data-bmg-base-url="<?= esc(site_url('/facilities'), 'attr') ?>" <?= !empty($openCreate) && !empty($canConfigure) ? 'data-bmg-open-create' : '' ?>>
   <header class="card mb-3">
@@ -24,7 +22,7 @@ $boundCount = count(array_filter($units, static fn (array $item): bool => $item[
     </div>
   </header>
   <div class="row g-3 mb-3" aria-label="Drums at a glance">
-    <?php foreach ([['Drums shown', count($units), 'Registered unit records', 'bi-box-seam'], ['Active units', $active, 'Configured operational status', 'bi-check-circle'], ['Maintenance', $maintenance, 'Marked for maintenance', 'bi-tools'], ['Bound controllers', $boundCount, 'Not a connection-health count', 'bi-cpu']] as [$label, $value, $description, $icon]): ?>
+    <?php foreach ([['Total drums', $stats['total'], $archivedView ? 'All archived drum records' : 'All current drum records', 'bi-box-seam'], ['Active units', $stats['active'], 'Configured operational status', 'bi-check-circle'], ['Maintenance', $stats['maintenance'], 'Marked for maintenance', 'bi-tools'], ['Bound controllers', $stats['bound'], 'Not a connection-health count', 'bi-cpu']] as [$label, $value, $description, $icon]): ?>
     <div class="col-sm-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3">
       <div class="d-flex align-items-center gap-2 mb-2"><i class="bi <?= esc($icon, 'attr') ?> text-primary" aria-hidden="true"></i><span class="small text-muted"><?= esc($label) ?></span></div>
       <strong class="fs-4 d-block"><?= (int) $value ?></strong><span class="small text-muted"><?= esc($description) ?></span>
@@ -55,6 +53,14 @@ $boundCount = count(array_filter($units, static fn (array $item): bool => $item[
     </nav>
     <?php endif; ?>
   </div>
+  <form method="get" action="<?= esc(site_url('/facilities'), 'attr') ?>" class="d-flex align-items-center gap-2 mb-3">
+    <?php if ($archivedView): ?><input type="hidden" name="view" value="archived"><?php endif; ?>
+    <label for="drums-per-page" class="small text-muted">Drums per page</label>
+    <select id="drums-per-page" name="per_page" class="form-select form-select-sm w-auto">
+      <?php foreach ([20, 25, 50, 100] as $size): ?><option value="<?= $size ?>" <?= $perPage === $size ? 'selected' : '' ?>><?= $size ?></option><?php endforeach; ?>
+    </select>
+    <button type="submit" class="btn btn-outline-secondary btn-sm">Apply</button>
+  </form>
   <?php if ($units === []): ?>
   <div class="card"><div class="card-body pt-4 pb-4 text-center"><i class="bi bi-box-seam fs-2 text-muted" aria-hidden="true"></i><h2 class="card-title"><?= $archivedView ? 'No archived drums' : 'No drums registered' ?></h2><p class="small text-muted mb-0"><?= $archivedView ? 'Archived records will appear here. No operational history is permanently deleted.' : (!empty($canConfigure) ? 'Use Add drum to set up your first unit. Rotation stays disabled until deliberately configured.' : 'A user with configuration access can register the first drum.') ?></p></div></div>
   <?php else: ?>
@@ -64,6 +70,11 @@ $boundCount = count(array_filter($units, static fn (array $item): bool => $item[
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
+  <?= view('partials/table_pagination', [
+      'pagination' => $pagination, 'baseUrl' => site_url('/facilities'), 'filters' => [],
+      'paginationExtraQuery' => $archivedView ? ['view' => 'archived'] : [],
+      'paginationLabel' => $archivedView ? 'Archived drum pages' : 'Current drum pages',
+  ]) ?>
 </div>
 <?php if (!empty($canConfigure)): $editUnit = null; require __DIR__ . '/_unit_modal.php'; endif; ?>
 <?= $this->endSection() ?>

@@ -96,6 +96,65 @@
 # session.savePath = null
 
 #--------------------------------------------------------------------
+# AI INSIGHTS — configure easily in Administration > AI Settings
+# UI saves an encrypted profile: Save settings > Test connection > Enable aggregate AI.
+# Select approved departments and grant tenant/department/role AI access separately.
+# Source permissions still apply; no manual key/revision setup is needed.
+# UI queueing/enabling does not start a worker; schedule ai:dispatch separately.
+# The commented settings below are optional deployment defaults (UI overrides them).
+# Custom OpenAI-compatible API bases preserve their complete path prefix.
+# No patient-level records or notes may be sent. See docs/AI_OPERATIONS.md.
+#--------------------------------------------------------------------
+# ai.enabled = false
+# ai.profileId = 'clinic-reviewed'
+# ai.adapter = 'openai_chat_completions'
+# ai.baseUrl = 'https://ai-gateway.example.org/team-a/v1'
+# ai.allowedOrigins = 'https://ai-gateway.example.org'
+# ai.model = 'approved-model-id'
+# ai.reasoningEffort = ''
+# Empty leaves provider default; 'disabled' or 'enabled' sends an explicit thinking type.
+# MiniMax-M3 endpoints requiring thinking off need 'disabled', not reasoningEffort 'none'.
+# ai.thinkingMode = ''
+# ai.maxInputTokens = 8192
+# ai.authMode = 'bearer'
+# ai.apiKey = ''
+# ai.apiKeyHeader = 'X-API-Key'
+# ai.apiKeyHeaderAllowlist = 'X-API-Key,API-Key'
+# ai.credentialVersion = '1'
+# ai.maxOutputTokensField = 'max_tokens'
+# ai.structuredOutputMode = 'none'
+# Trusted absolute PHP CLI path for bounded DNS; empty uses PHP_BINDIR/php(.exe).
+# ai.resolverPhpBinary = ''
+# ai.connectTimeoutSeconds = 5
+# ai.requestTimeoutSeconds = 45
+# ai.maxRequestBytes = 65536
+# ai.maxResponseBytes = 262144
+# ai.maxOutputTokens = 2000
+# Current worker supports one request at a time and one attempt; never blind retry.
+# ai.maxConcurrentRequests = 1
+# ai.maxAttempts = 1
+# ai.maxJobsPerRun = 5
+# ai.dailyRequestLimit = 50
+# ai.minimumContributors = 10
+# ai.retentionDays = 30
+# ai.encryptionKey = ''
+# ai.governanceApproved = false
+# ai.programLibraryApproved = false
+# ai.capabilityRevision = 'department-programs-v2:prompt-v2'
+# ai.approvedTenants = ''
+# Reviewed subset of clinic,guidance,bmg; this alone grants no access or activation.
+# ai.approvedUnits = 'clinic'
+# ai.approvedRevision = ''
+# ai.compatibilityApprovedRevision = ''
+# Exact private-network exception origins must ALSO be in allowedOrigins.
+# HTTPS is preferred for self-hosted endpoints; never disable certificate validation.
+# ai.privateOrigins = ''
+# ai.caBundle = ''
+# Plain HTTP is disabled; allowLocalHttp alone permits synthetic testing only.
+# ai.allowLocalHttp = false
+# ai.allowPrivateHttpDispatch = false
+
+#--------------------------------------------------------------------
 # LOGGER
 #--------------------------------------------------------------------
 

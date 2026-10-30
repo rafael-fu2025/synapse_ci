@@ -12,11 +12,13 @@ function fixture(status, unit = 'clinic', visibility = 'visible') {
   const calls = [];
   let sequence = 0;
   let now = 0;
-  const board = { id: 'queue-board-container', dataset: { queueUnit: unit } };
+  const count = { dataset: { queueWaitingCount: '0' } };
+  const button = { disabled: false };
+  const board = { id: 'queue-board-container', dataset: { queueUnit: unit }, querySelector: () => count };
   const date = { value: '2026-10-22' };
   const document = {
     visibilityState: visibility,
-    getElementById: id => id === board.id ? board : id === 'queueDateFilter_iso' ? date : null,
+    getElementById: id => id === board.id ? board : id === 'queueDateFilter_iso' ? date : id === 'queue-call-next' ? button : null,
     addEventListener: (name, callback, options) => {
       handlers.set(name, callback);
       options?.signal.addEventListener('abort', () => {
@@ -49,8 +51,25 @@ function fixture(status, unit = 'clinic', visibility = 'visible') {
   const hint = (eventUnit = unit, eventDate = date.value, event = 'queue.invalidated') => fire('synapse:realtime-event', {
     event, data: { unit: eventUnit, date: eventDate },
   });
-  return { calls, board, date, document, window, timers, tick, fire, hint, context };
+  return { calls, board, count, button, date, document, window, timers, tick, fire, hint, context };
 }
+
+test('call-next follows waiting tickets on initial load and every board swap in both departments', () => {
+  for (const unit of ['clinic', 'guidance']) {
+    const f = fixture(undefined, unit);
+    assert.equal(f.button.disabled, true);
+    for (const [count, disabled] of [['3', false], ['1', false], ['0', true], [undefined, true], ['invalid', true]]) {
+      f.count.dataset.queueWaitingCount = count;
+      f.fire('htmx:afterSwap', { target: f.board });
+      assert.equal(f.button.disabled, disabled, `${unit}: waiting count ${count}`);
+    }
+    f.count.dataset.queueWaitingCount = '2';
+    f.fire('htmx:afterSwap', { target: { id: 'unrelated' } });
+    assert.equal(f.button.disabled, true, 'Unrelated swaps do not enable the action');
+    f.fire('htmx:afterSwap', { target: f.board });
+    assert.equal(f.button.disabled, false);
+  }
+});
 
 test('no WS, disabled and retrying retain 15s fallback; ready reconciles at 60s', () => {
   for (const status of [undefined, 'disabled', 'retrying', 'unauthorized', 'stopped']) {

@@ -18,7 +18,7 @@
   <div data-filter-region="requests">
     <div class="card mb-4">
       <div class="card-header bg-transparent py-3">
-        <h5 class="mb-1">Pending <?= $unit === 'clinic' ? 'Clinic' : 'Guidance' ?> Requests <span class="badge bg-warning text-dark"><?= count($requests ?? []) ?></span></h5>
+        <h5 class="mb-1">Pending <?= $unit === 'clinic' ? 'Clinic' : 'Guidance' ?> Requests <span class="badge bg-light text-muted border"><?= number_format($pendingPagination['filtered']) ?></span></h5>
         <p class="small text-muted mb-0">All requested dates. Review the request, assign eligible <?= $unit === 'clinic' ? 'clinic staff' : 'counselors' ?>, and confirm a time before check-in.</p>
       </div>
       <div class="table-responsive">
@@ -37,22 +37,42 @@
           <?php endforeach; ?>
         </tbody></table>
       </div>
+      <div class="p-3 pt-0">
+        <?= view('partials/table_pagination', [
+            'pagination' => $pendingPagination, 'baseUrl' => site_url('/' . $unit . '/appointments'), 'filters' => [],
+            'paginationPageParam' => 'pending_page', 'paginationLabel' => 'Pending request pages',
+            'paginationExtraQuery' => ['date' => $date, 'scheduled_page' => $scheduledPagination['page']],
+            'paginationLiveFilters' => true,
+        ], ['saveData' => false]) ?>
+      </div>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header bg-transparent d-flex flex-wrap gap-3 justify-content-between align-items-center py-3">
       <div><h5 class="mb-1"><?= $unit === 'clinic' ? 'Clinic Scheduled Appointments' : 'Guidance Counseling Appointments' ?></h5><span class="text-muted small">Confirmed visits and existing bookings for the selected date</span></div>
-      <form method="GET" action="<?= esc(site_url('/' . $unit . '/appointments')) ?>" class="d-flex align-items-center gap-2" data-filter-form>
+      <form method="GET" action="<?= esc(site_url('/' . $unit . '/appointments')) ?>" class="d-flex flex-wrap align-items-center justify-content-end gap-2 appointment-filter" data-filter-form>
         <label for="appointmentDateFilter" class="visually-hidden">Appointment date</label>
-        <input type="text" class="form-control form-control-sm" id="appointmentDateFilter" data-datepicker data-target="#appointmentDateFilter_iso">
-        <input type="hidden" name="date" id="appointmentDateFilter_iso" value="<?= esc($date) ?>">
+        <div class="appointment-date-field">
+          <input type="text" class="form-control form-control-sm" id="appointmentDateFilter" data-datepicker data-target="#appointmentDateFilter_iso" data-datepicker-counts-url="<?= esc(site_url('/' . $unit . '/appointments/calendar-counts')) ?>">
+          <input type="hidden" name="date" id="appointmentDateFilter_iso" value="<?= esc($date) ?>" onchange="this.form.elements.scheduled_page.value = 1; this.form.elements.pending_page.value = 1">
+        </div>
+        <input type="hidden" name="pending_page" value="<?= $pendingPagination['page'] ?>">
+        <input type="hidden" name="scheduled_page" value="<?= $scheduledPagination['page'] ?>">
+        <label for="appointmentPerPage" class="visually-hidden">Rows per page</label>
+        <div class="appointment-page-size">
+          <select name="per_page" id="appointmentPerPage" class="form-select form-select-sm" onchange="this.form.elements.pending_page.value = 1; this.form.elements.scheduled_page.value = 1">
+            <?php foreach ([20, 25, 50, 100] as $size): ?>
+              <option value="<?= $size ?>" <?= $scheduledPagination['per_page'] === $size ? 'selected' : '' ?>><?= $size ?> per page</option>
+            <?php endforeach; ?>
+          </select>
+        </div>
       </form>
     </div>
     <div data-filter-region="schedule">
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0"><thead><tr><th class="ps-3">Time</th><th>Patient</th><th><?= $unit === 'clinic' ? 'Assigned clinician' : 'Assigned counselor' ?></th><th>Type</th><th>Status</th><th class="text-end pe-3">Actions</th></tr></thead><tbody>
-          <?php $calendar = array_filter($appointments, static fn(array $row): bool => $row['status'] !== 'requested'); ?>
+          <?php $calendar = $appointments; ?>
           <?php if (empty($calendar)): ?><tr><td colspan="6" class="text-center py-4 text-muted">No appointments scheduled for <?= esc(date('F j, Y', strtotime($date))) ?>.</td></tr><?php endif; ?>
           <?php foreach ($calendar as $appt): ?>
             <tr><td class="ps-3 fw-semibold"><?= esc(date('h:i A', strtotime($appt['starts_at']))) ?></td>
@@ -78,6 +98,14 @@
               </td></tr>
           <?php endforeach; ?>
         </tbody></table>
+      </div>
+      <div class="p-3 pt-0">
+        <?= view('partials/table_pagination', [
+            'pagination' => $scheduledPagination, 'baseUrl' => site_url('/' . $unit . '/appointments'), 'filters' => [],
+            'paginationPageParam' => 'scheduled_page', 'paginationLabel' => 'Scheduled appointment pages',
+            'paginationExtraQuery' => ['date' => $date, 'pending_page' => $pendingPagination['page']],
+            'paginationLiveFilters' => true,
+        ], ['saveData' => false]) ?>
       </div>
     </div>
   </div>

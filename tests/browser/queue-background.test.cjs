@@ -160,9 +160,14 @@ for (const action of ['https://other.test/write', 'https://user:secret@queue.tes
   });
 }
 
-test('only no-show opts into generic background submit; walk-in has a dedicated owner', () => {
+test('no-show uses the queue-only HTMX owner; walk-in keeps its dedicated owner', () => {
   const noShow = fs.readFileSync(path.join(__dirname, '../../app/Views/queue/no_show_action.php'), 'utf8');
-  assert.match(noShow, /data-background-submit/);
+  assert.doesNotMatch(noShow, /data-background-submit/);
+  assert.match(noShow, /hx-post="<\?= site_url\('/);
+  assert.match(noShow, /hx-target="#queue-board-container"/);
+  assert.match(noShow, /hx-swap="innerHTML"/);
+  assert.match(noShow, /hx-include="#queueDateFilter_iso"/);
+  assert.match(noShow, /hx-disabled-elt="find button"/);
   assert.match(noShow, /data-confirm=/);
   assert.match(noShow, /csrf_field\(\)/);
   assert.doesNotMatch(source.match(/<form[^]*?<\/form>/)[0], /data-background-submit/);

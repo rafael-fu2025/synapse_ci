@@ -21,7 +21,7 @@ $student = $chart['student_profile'] ?? null;
 $employee = $chart['employee_profile'] ?? null;
 $health = $chart['health_profile'] ?? [];
 $appointments = $appointments ?? ($chart['appointments'] ?? []);
-$filters = $filters ?? ['service' => 'all', 'status' => 'all', 'sort' => 'upcoming'];
+$filters = array_replace(['service' => 'all', 'status' => 'all', 'sort' => 'upcoming', 'per_page' => 25], $filters ?? []);
 $hasFilters = $filters['service'] !== 'all' || $filters['status'] !== 'all';
 $serviceLabel = static fn (string $unit): string => $unit === 'clinic' ? 'University Clinic' : 'Guidance & Counseling';
 $typeLabel = static fn (string $type): string => ucwords(str_replace('_', ' ', $type));
@@ -58,10 +58,10 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
 <?php if (in_array($role, ['superadmin', 'clinic_admin', 'clinic_staff', 'guidance_admin', 'guidance_supervisor', 'counsellor', 'bmg_admin', 'facilities_op'], true)): ?>
   <div class="alert alert-info border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center mb-4 p-3">
     <div class="d-flex align-items-center gap-2">
-      <i class="bi bi-person-badge-fill fs-3 text-primary"></i>
+      <i class="bi bi-person-badge-fill fs-3" aria-hidden="true"></i>
       <div>
-        <strong class="d-block text-dark">Staff Member Personal Health Session</strong>
-        <span class="small text-muted">You are logged into your individual employee patient account. Switch to your departmental console below.</span>
+        <strong class="d-block">Staff Member Personal Health Session</strong>
+        <span class="small">You are logged into your individual employee patient account. Switch to your departmental console below.</span>
       </div>
     </div>
     <div class="d-flex flex-wrap gap-2 mt-2 mt-md-0">
@@ -269,6 +269,14 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
               <?php endforeach; ?>
             </select>
           </div>
+          <div class="col-12 col-sm-auto">
+            <label for="portal-appointment-per-page" class="form-label small mb-1">Rows per page</label>
+            <select id="portal-appointment-per-page" name="per_page" class="form-select form-select-sm">
+              <?php foreach ([20, 25, 50, 100] as $size): ?>
+                <option value="<?= $size ?>" <?= (int) $filters['per_page'] === $size ? 'selected' : '' ?>><?= $size ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
           <div class="col-12 col-sm-auto d-flex gap-2">
             <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm" data-filter-reset>Reset</a>
           </div>
@@ -359,6 +367,19 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
                 <?php endif; ?>
               </tbody>
             </table>
+          </div>
+          <div class="px-3 pb-3">
+            <?= view('partials/table_pagination', [
+                'pagination' => $pagination ?? [],
+                'filters' => $filters,
+                'rowCount' => count($appointments),
+                'baseUrl' => site_url('/portal'),
+                'paginationPageParam' => 'page',
+                'paginationExtraQuery' => ['service' => $filters['service'], 'sort' => $filters['sort']],
+                'paginationLiveFilters' => true,
+                'paginationLabel' => 'My appointment pages',
+                'totalLabel' => 'total appointments',
+            ]) ?>
           </div>
         </div>
       </div>

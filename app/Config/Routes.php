@@ -26,6 +26,8 @@ $routes->group('api/v1/devices/bmg', static function (RouteCollection $routes): 
 $routes->group('api/v1', static function (RouteCollection $routes): void {
     $routes->post('auth/login', 'Api\V1\MobileAuthController::login');
     $routes->post('auth/refresh', 'Api\V1\MobileAuthController::refresh');
+    $routes->get('auth/carousel', 'Api\V1\LoginCarouselController::index');
+    $routes->get('auth/carousel/realtime', 'Api\V1\LoginCarouselController::realtime');
     $routes->group('', ['filter' => 'api_auth'], static function (RouteCollection $routes): void {
         $routes->post('auth/logout', 'Api\V1\MobileAuthController::logout');
         $routes->get('me', 'Api\V1\MeController::show');
@@ -63,6 +65,27 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
 
     $routes->get('reports/export', 'ReportExportController::index');
     $routes->post('reports/export/operational', 'ReportExportController::operational');
+
+    // Provider setup uses platform administration authority; clinical AI grants stay separate.
+    $routes->get('admin/ai', 'AiConfigurationController::index');
+    $routes->get('admin/ai/status', 'AiConfigurationController::status');
+    $routes->post('admin/ai/save', 'AiConfigurationController::save');
+    $routes->post('admin/ai/test', 'AiConfigurationController::test');
+    $routes->post('admin/ai/enable', 'AiConfigurationController::enable');
+    $routes->post('admin/ai/disable', 'AiConfigurationController::disable');
+    $routes->post('admin/ai/access', 'AiConfigurationController::access');
+    $routes->post('admin/ai/models/preview', 'AiConfigurationController::previewModels');
+    $routes->post('admin/ai/models/import', 'AiConfigurationController::importModels');
+    foreach (['clinic', 'guidance', 'facilities'] as $workstation) {
+        $routes->group($workstation . '/insights', ['filter' => 'portal_access:' . ($workstation === 'facilities' ? 'bmg' : $workstation)], static function (RouteCollection $routes): void {
+            $routes->get('', 'AiInsightsController::index');
+            $routes->get('panel', 'AiInsightsController::panel');
+            $routes->post('prepare', 'AiInsightsController::prepare');
+            $routes->post('generate', 'AiInsightsController::generate');
+            $routes->post('(:num)/review', 'AiInsightsController::review/$1');
+            $routes->post('jobs/(:num)/cancel', 'AiInsightsController::cancel/$1');
+        });
+    }
     $routes->group('admin/mis-sync', ['filter' => 'auth:mis.sync'], static function (RouteCollection $routes): void {
         $routes->get('', 'MisSyncController::index');
         $routes->post('run', 'MisSyncController::sync');
@@ -339,6 +362,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
 
         $routes->group($unit . '/appointments', ['filter' => 'portal_access:' . $unit], static function (RouteCollection $routes) use ($unit): void {
             $routes->get('', 'AppointmentController::index/' . $unit);
+            $routes->get('calendar-counts', 'AppointmentController::calendarCounts/' . $unit);
             $routes->get('create', 'AppointmentController::create/' . $unit);
             $routes->post('store', 'AppointmentController::store/' . $unit, ['filter' => 'appointment_csrf']);
             $routes->get('availability', 'AppointmentController::availability/' . $unit);
