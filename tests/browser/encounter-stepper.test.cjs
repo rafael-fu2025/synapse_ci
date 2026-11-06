@@ -120,7 +120,7 @@ async function pageFor(t) {
   page.setDefaultTimeout(4000);
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.text().includes('Alpine Expression Error')) errors.push(message.text()); });
-  const state = { page, posts, replies, dialogs, serverClinical: {}, acceptDialog: false };
+  const state = { page, posts, replies, dialogs, serverClinical: {}, serverStock: 3, acceptDialog: false };
   page.on('dialog', async dialog => {
     dialogs.push({ type: dialog.type(), message: dialog.message() });
     if (state.acceptDialog) await dialog.accept(); else await dialog.dismiss();
@@ -137,9 +137,12 @@ async function pageFor(t) {
     if (reply.wait) await reply.wait;
     if (reply.abort) return route.abort('failed');
     const result = reply.body || { success: true, redirect: url.pathname === '/dispense' ? '/dispensed' : '/completed' };
-    if (reply.raw === undefined && (reply.status || 200) < 400 && result.success && url.pathname !== '/dispense') {
-      const { csrf_test_name, csrf_rotated, ...values } = Object.fromEntries(body);
-      Object.assign(state.serverClinical, values);
+    if (reply.raw === undefined && (reply.status || 200) < 400 && result.success) {
+      if (url.pathname === '/dispense') state.serverStock -= Number(body.get('quantity'));
+      else {
+        const { csrf_test_name, csrf_rotated, ...values } = Object.fromEntries(body);
+        Object.assign(state.serverClinical, values);
+      }
     }
     await route.fulfill({ status: reply.status || 200, contentType: 'application/json', headers: reply.headers || {},
       body: reply.raw === undefined ? JSON.stringify(result) : reply.raw });
@@ -522,20 +525,62 @@ test('leave guard ignores hash, modal, new-window, download and modified links',
   assert.equal(await unloadBlocked(page), true);
 });
 
-test('failed dispensing retains the medicine entry and never retries inventory through draft retry', { timeout: 15000 }, async t => {
-  const { page, posts, replies } = await pageFor(t);
+for (const dirtyClinical of [false, true]) {
+  test(`insufficient-stock rejection keeps medicine local without draft retry (${dirtyClinical ? 'saved pre-dispense draft' : 'clean clinical data'})`, { timeout: 15000 }, async t => {
+    const state = await pageFor(t), { page, posts, replies, dialogs } = state;
+    await tab(page, 'dispense').click(); await active(page, 'dispense');
+    await setValues(page, { medicine_id: '7', quantity: '5', instructions: 'Retain this entry' });
+    if (dirtyClinical) {
+      await setValues(page, { diagnosis: 'Saved before rejection' });
+      replies.push({});
+    }
+    replies.push({ status: 409, body: { success: false, message: 'Insufficient stock; only 3 available' } });
+    await page.getByRole('button', { name: 'Dispense medicine', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('[data-encounter-save-status]').textContent === 'Insufficient stock; only 3 available' && !document.querySelector('[data-encounter-stepper]').inert);
+    assert.equal(await page.locator('[data-encounter-save-status]').evaluate(el => el.classList.contains('text-danger')), true);
+    const expectedPosts = dirtyClinical ? ['/draft', '/dispense'] : ['/dispense'];
+    assert.deepEqual(posts.map(p => p.path), expectedPosts);
+    assert.deepEqual(await page.locator('#step-dispense form').evaluate(form => ['medicine_id', 'quantity', 'instructions'].map(name => form.elements.namedItem(name).value)), ['7', '5', 'Retain this entry']);
+    assert.equal(state.serverStock, 3, 'Rejected dispensing leaves mocked server stock unchanged');
+    assert.equal(page.url(), origin + '/encounter');
+    assert.equal(await unloadBlocked(page), true);
+    assert.equal(await page.locator('[data-save-draft]').isVisible(), false, 'Inventory rejection must not offer an unrelated clinical draft retry');
+    // Observe beyond response completion to catch unintended queued/automatic retries.
+    await page.waitForTimeout(250);
+    assert.deepEqual(posts.map(p => p.path), expectedPosts, 'Rejection must not queue a draft or another inventory request');
+    await page.locator('[data-discard-medicine]').click();
+    assert.equal(dialogs.length, 1);
+    assert.equal(dialogs[0].type, 'confirm');
+    assert.equal(await page.locator('[name="quantity"]').inputValue(), '5', 'Cancelling discard retains the rejected entry');
+    state.acceptDialog = true;
+    await page.locator('[data-discard-medicine]').click(); await saved(page);
+    await active(page, 'dispense');
+    assert.equal(page.url(), origin + '/encounter', 'Explicit discard stays on the encounter, without redirecting');
+    assert.deepEqual(await page.locator('#step-dispense form').evaluate(form => ['medicine_id', 'quantity', 'instructions'].map(name => form.elements.namedItem(name).value)), ['', '1', '']);
+    assert.equal(await unloadBlocked(page), false);
+    assert.equal(state.serverStock, 3);
+    assert.deepEqual(posts.map(p => p.path), expectedPosts, 'Discard is local, with no clinical or inventory writes');
+    if (dirtyClinical) assert.equal(state.serverClinical.diagnosis, 'Saved before rejection');
+  });
+}
+
+test('dispense guards duplicate submits while busy and after confirmed stock deduction', { timeout: 15000 }, async t => {
+  const state = await pageFor(t), { page, posts } = state;
+  await page.evaluate(() => { window.SynapseMutations = { refresh: async () => {} }; });
   await tab(page, 'dispense').click(); await active(page, 'dispense');
-  await setValues(page, { medicine_id: '7', quantity: '5', instructions: 'Retain this entry' });
-  replies.push({ status: 409, body: { success: false, message: 'Stock changed; review quantity' } });
-  await page.getByRole('button', { name: 'Dispense medicine', exact: true }).click();
-  await errorShown(page, 'Stock changed; review quantity');
-  assert.deepEqual(posts.map(p => p.path), ['/dispense'], 'Clean clinical data needs no preliminary draft');
-  assert.equal(await page.locator('[name="quantity"]').inputValue(), '5');
-  assert.equal(await page.locator('[name="instructions"]').inputValue(), 'Retain this entry');
+  await setValues(page, { medicine_id: '7', quantity: '2' });
+  const release = hold(state, t);
+  const submitAgain = () => page.evaluate(() => document.querySelector('#step-dispense form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  await page.getByRole('button', { name: 'Dispense medicine', exact: true }).click(); await posted(state, 1);
+  await submitAgain();
+  assert.deepEqual(posts.map(p => p.path), ['/dispense'], 'Busy dispensing cannot submit twice');
+  release();
+  await page.waitForFunction(() => document.querySelector('[data-encounter-save-status]').textContent === 'Medicine dispensed' && !document.querySelector('[data-encounter-stepper]').inert);
+  await submitAgain();
+  await page.waitForTimeout(250);
+  assert.deepEqual(posts.map(p => p.path), ['/dispense'], 'Confirmed dispensing cannot be submitted again');
+  assert.equal(state.serverStock, 1, 'Mocked stock is deducted only once');
   assert.equal(page.url(), origin + '/encounter');
-  await page.locator('[data-save-draft]').click();
-  assert.deepEqual(posts.map(p => p.path), ['/dispense'], 'Draft retry must never repeat stock deduction');
-  assert.equal(await unloadBlocked(page), true);
 });
 
 test('completion includes current unsaved values and busy state prevents duplicate completion and leaving', { timeout: 15000 }, async t => {

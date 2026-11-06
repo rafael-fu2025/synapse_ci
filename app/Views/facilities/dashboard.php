@@ -18,7 +18,7 @@
 <?= $this->section('content') ?>
 <div class="page-dashboard nd-dashboard">
   <!-- Welcome Banner -->
-  <div class="card border-0 shadow-sm text-white p-4 mb-4" style="background: linear-gradient(135deg, #198754 0%, #0f5132 100%) !important;">
+  <div class="card border-0 shadow-sm text-white p-4 mb-4 nd-welcome-banner nd-welcome-banner--facilities">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div>
         <h2 class="h4 fw-bold mb-1 text-white">Welcome back, <?= esc($user['name'] ?? 'Facilities Operator') ?>!</h2>
@@ -222,79 +222,55 @@
     function initBmgDashboard() {
       var activityTarget = document.querySelector('#bmgActivityChart');
       var statusTarget = document.querySelector('#bmgStatusChart');
-      if (typeof ApexCharts === 'undefined') return;
+      if (typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
 
-      var greenColor = '#198754';
-      var mutedColor = '#6c757d';
-      var borderColor = 'rgba(0,0,0,0.06)';
+      var activitySeries = [{
+        name: 'Batch Operations',
+        data: <?= json_encode($chartSeries) ?>
+      }];
+      var activityCategories = <?= json_encode($chartDays) ?>;
 
-      if (activityTarget && !activityTarget.dataset.rendered) {
-        activityTarget.dataset.rendered = 'true';
-        var activityChart = new ApexCharts(activityTarget, {
-          chart: {
-            type: 'area',
-            height: 300,
-            toolbar: { show: false },
-            zoom: { enabled: false },
-            fontFamily: 'inherit'
-          },
-          series: [{
-            name: 'Batch Operations',
-            data: <?= json_encode($chartSeries) ?>
-          }],
-          colors: [greenColor],
-          stroke: { width: 3, curve: 'smooth' },
+      var idleUnits = Math.max(0, <?= (int) $totalUnits ?> - <?= (int) $activeUnits ?> - <?= (int) $maintenanceUnits ?>);
+      var statusData = [
+        <?= (int) $activeUnits ?>,
+        <?= (int) $maintenanceUnits ?>,
+        idleUnits
+      ];
+      var totalStatus = statusData.reduce(function(a, b) { return a + b; }, 0);
+      if (totalStatus === 0) statusData = [1, 0, 0];
+
+      ChartTheme.create(activityTarget, function(t) {
+        return ChartTheme.base(t, {
+          chart: { type: 'area', height: 300 },
+          series: activitySeries,
+          colors: [t['series-1']],
+          stroke: { width: 3 },
           fill: {
             type: 'gradient',
             gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] }
           },
-          dataLabels: { enabled: false },
-          xaxis: {
-            categories: <?= json_encode($chartDays) ?>,
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            labels: { style: { colors: mutedColor, fontSize: '11px' } }
-          },
-          yaxis: { labels: { style: { colors: mutedColor, fontSize: '11px' } }, min: 0, forceNiceScale: true },
-          grid: { borderColor: borderColor, strokeDashArray: 4 }
+          xaxis: { categories: activityCategories }
         });
-        activityChart.render();
-      }
+      });
 
-      if (statusTarget && !statusTarget.dataset.rendered) {
-        statusTarget.dataset.rendered = 'true';
-        var idleUnits = Math.max(0, <?= (int) $totalUnits ?> - <?= (int) $activeUnits ?> - <?= (int) $maintenanceUnits ?>);
-        var statusData = [
-          <?= (int) $activeUnits ?>,
-          <?= (int) $maintenanceUnits ?>,
-          idleUnits
-        ];
-        var totalStatus = statusData.reduce(function(a, b) { return a + b; }, 0);
-        if (totalStatus === 0) statusData = [1, 0, 0];
-
-        var statusChart = new ApexCharts(statusTarget, {
-          chart: { type: 'donut', height: 230, fontFamily: 'inherit' },
+      ChartTheme.create(statusTarget, function(t) {
+        return ChartTheme.donut(t, {
           series: statusData,
           labels: ['Active', 'Maintenance', 'Idle'],
-          colors: ['#198754', '#ffc107', '#6c757d'],
-          legend: { show: false },
-          dataLabels: { enabled: false },
+          colors: ChartTheme.themedSlices(t, [t['status-success'], t['status-warning'], t['status-idle']]),
           plotOptions: {
             pie: {
               donut: {
-                size: '72%',
                 labels: {
-                  show: true,
-                  name: { show: true, fontSize: '12px' },
-                  value: { show: true, fontSize: '18px', fontWeight: 700 },
                   total: { show: true, label: 'Total Units', formatter: function() { return totalStatus; } }
                 }
               }
             }
           }
         });
-        statusChart.render();
-      }
+      });
+
+      ChartTheme.initialize();
     }
 
     if (document.readyState === 'loading') {

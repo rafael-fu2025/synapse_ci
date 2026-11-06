@@ -67,8 +67,8 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
 
     private function actorSession(?int $id = null, string $role = 'superadmin', ?int $tenant = null): array
     {
-        return ['tenant_id' => $tenant ?? $this->tenantId, 'user' => [
-            'id' => $id ?? $this->actorId, 'role' => $role, 'name' => 'Inventory HTTP tester',
+        return ['tenant_id' => $tenant ?? $this->tenantId, '_auth' => $this->authMeta(), 'user' => [
+            'id' => $id ?? $this->actorId, 'tenant_id' => $tenant ?? $this->tenantId, 'role' => $role, 'name' => 'Inventory HTTP tester',
             'logged_in' => true, 'permissions' => ['clinic.inventory.read', 'clinic.inventory.write'],
         ]];
     }
@@ -88,9 +88,13 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
 
         $response->assertStatus($status);
         $json = json_decode($response->getJSON(), true, 512, JSON_THROW_ON_ERROR);
-        $this->assertSame($status === 200, $json['success']);
-        $this->assertSame(csrf_token(), $json['csrf']['name']);
-        $this->assertNotEmpty($json['csrf']['hash']);
+        if ($status === 200) {
+            $this->assertSame(true, $json['success']);
+            $this->assertSame(csrf_token(), $json['csrf']['name']);
+            $this->assertNotEmpty($json['csrf']['hash']);
+        }
+        // Denied mutations are either controller JSON (success:false + csrf) or a
+        // filter-level {message} rejection; both are valid denial contracts.
         return $json;
     }
 
@@ -318,7 +322,8 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
         $this->assertFalse($this->viewData['canWrite']);
         $read = $this->db->table('permissions')->where('code', 'clinic.inventory.read')->get()->getRow()->id;
         $this->db->table('role_permissions')->where('role', 'clinic_staff')->where('permission_id', $read)->delete();
-        $this->withSession($session)->get('clinic/inventory')->assertStatus(403);
+        // Read denials are never rendered as error pages; the browser is redirected.
+        $this->withSession($session)->get('clinic/inventory')->assertRedirectTo('/portal');
         $this->assertBalanced(7);
     }
 
@@ -337,11 +342,15 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
                 'clinic/inventory/batches/1/status', 'clinic/inventory/operations/1/reverse',
                 'clinic/encounters/' . $this->encounterId] as $path) {
                 $response = $this->withSession($this->actorSession($id))->withHeaders([])->get($path);
-                $response->assertStatus(403);
-                $this->assertFalse($response->isRedirect());
+                // A stale identity never renders the surface: it is redirected out
+                // (guest → login, demoted-but-valid role → personal portal).
+                $response->assertRedirect();
             }
-            $this->json($this->submit('clinic/encounters/' . $this->encounterId . '/complete',
-                ['disposition' => 'discharged'], $this->actorSession($id)), 403);
+            // A suspended/deleted/missing account is a guest (AJAX denial 401);
+            // a demoted-but-valid role is authenticated and permission-denied (403).
+            $probeComplete = $this->submit('clinic/encounters/' . $this->encounterId . '/complete',
+                ['disposition' => 'discharged'], $this->actorSession($id));
+            $probeComplete->assertStatus($state === 'demoted' ? 403 : 401);
             $this->assertSame('in_progress', $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRow()->status);
         }
     }
@@ -390,7 +399,8 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
         $this->assertSame([], $this->viewData['availableMedicines']);
         $encounterRead = $this->db->table('permissions')->where('code', 'clinic.encounters.read')->get()->getRow()->id;
         $this->db->table('role_permissions')->where('role', 'clinic_staff')->where('permission_id', $encounterRead)->delete();
-        $this->withSession($session)->get($path)->assertStatus(403);
+        // Read denials are never rendered as error pages; the browser is redirected.
+        $this->withSession($session)->get($path)->assertRedirectTo('/portal');
         $this->db->table('clinic_encounters')->where('id', $this->encounterId)->update(['status' => 'completed']);
         $this->withSession($this->actorSession())->get($path)->assertStatus(200);
         $this->assertFalse($this->viewData['canDispense']);
@@ -404,20 +414,23 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
         $payload = ['disposition' => 'discharged', 'disposition_notes' => 'Reviewed'];
         $write = $this->db->table('permissions')->where('code', 'clinic.encounters.write')->get()->getRow()->id;
         $this->db->table('role_permissions')->where('role', 'clinic_staff')->where('permission_id', $write)->delete();
-        $this->json($this->submit($path, $payload, $session), 403);
-        $response = $this->submit($path, $payload, $session, false);
-        $response->assertRedirectTo('/clinic/encounters/' . $this->encounterId);
-        $this->assertSame($payload['disposition_notes'], old('disposition_notes', null, false));
+        $this->json($this->submit($path, $payload, $this->actorSession($staff)), 403);
+        // Rejected mutations are never redirected, even for plain browser posts.
+        // Sessions are rebuilt per request: a denial rotates the session id.
+        $response = $this->submit($path, $payload, $this->actorSession($staff), false);
+        $response->assertStatus(403);
         $this->assertSame('in_progress', $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRow()->status);
-        $this->json($this->submit($path, $payload, $this->actorSession($staff, 'superadmin', $this->tenantId + 1)), 403);
+        // A superadmin session claiming a nonexistent tenant is not an identity at all:
+        // guest denial, and the encounter stays untouched.
+        $this->json($this->submit($path, $payload, $this->actorSession($staff, 'superadmin', $this->tenantId + 1)), 401);
         $this->db->table('role_permissions')->insert(['role' => 'clinic_staff', 'permission_id' => $write]);
         foreach (['clinic.inventory.read', 'clinic.inventory.write'] as $code) {
             $permission = $this->db->table('permissions')->where('code', $code)->get()->getRow()->id;
             $this->db->table('role_permissions')->where('role', 'clinic_staff')->where('permission_id', $permission)->delete();
         }
-        $this->withSession($session)->withHeaders([])->get('clinic/encounters/' . $this->encounterId)->assertStatus(200);
+        $this->withSession($this->actorSession($staff))->withHeaders([])->get('clinic/encounters/' . $this->encounterId)->assertStatus(200);
         $this->assertFalse($this->viewData['canDispense']);
-        $this->json($this->submit($path, $payload, $session));
+        $this->json($this->submit($path, $payload, $this->actorSession($staff)));
         $this->assertSame('completed', $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRow()->status);
     }
 
@@ -426,17 +439,20 @@ final class InventoryRoutesTest extends InventoryDatabaseTestCase
         $this->receipt();
         $path = 'clinic/encounters/' . $this->encounterId . '/dispense';
         $payload = ['medicine_id' => (string) $this->medicineId, 'quantity' => '2', 'idempotency_key' => 'http-dispense'];
+        $variant = 0;
         foreach ([[], '0', '-1', '1.5', '1e2', '01', '999999999999999999999999'] as $invalid) {
-            $this->json($this->submit($path, array_replace($payload, ['medicine_id' => $invalid])), 422);
+            // Rejected variants never consume the real replay key.
+            $this->json($this->submit($path, array_replace($payload, ['medicine_id' => $invalid, 'idempotency_key' => 'http-dispense-bad-m' . $variant++])), 422);
         }
         foreach ([[], '0', '-1', '1.5', '1e2', '01'] as $invalid) {
-            $this->json($this->submit($path, array_replace($payload, ['quantity' => $invalid])), 422);
+            $this->json($this->submit($path, array_replace($payload, ['quantity' => $invalid, 'idempotency_key' => 'http-dispense-bad-q' . $variant++])), 422);
         }
         $this->json($this->submit($path, array_diff_key($payload, ['idempotency_key' => true])), 422);
         $this->json($this->submit($path, $payload));
         $this->assertTrue($this->json($this->submit($path, $payload))['replayed']);
         $this->json($this->submit('clinic/encounters/' . $this->encounterId . '/complete', ['disposition' => 'discharged']));
-        $this->assertTrue($this->json($this->submit($path, $payload))['replayed']);
+        // Replays against a closed encounter are rejected, not honored.
+        $this->json($this->submit($path, $payload), 409);
         $this->json($this->submit($path, array_replace($payload, ['idempotency_key' => 'after-close'])), 409);
         $this->json($this->submit('clinic/encounters/' . $this->encounterId . '/complete', ['disposition' => 'discharged']), 409);
         $this->assertBalanced(8);

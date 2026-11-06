@@ -28,7 +28,7 @@ foreach ([17, 42, 93] as $index => $id) {
         'title' => $index === 0 ? 'A long carousel title for campus wellbeing with every word readable on a small phone' : ($index === 1 ? str_repeat('LongUnbrokenTitle', 5) : ''),
         'subtitle' => $index === 2 ? '' : 'A complete subtitle with helpful information for students and staff — ' . str_repeat('unbroken', 12),
         'light_image' => 'assets/img/favicon.png',
-        'dark_image' => $index === 1 ? '' : 'assets/img/favicon.png',
+        'dark_image' => $index === 2 ? '' : 'assets/img/favicon.png',
         'fit_mode' => $index === 1 ? 'contain' : 'cover',
         'is_active' => $index === 1 ? 0 : 1,
     ];

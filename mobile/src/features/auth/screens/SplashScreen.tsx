@@ -9,9 +9,6 @@ export function SplashScreen() {
       <View style={styles.patternOne} />
       <View style={styles.patternTwo} />
       <View style={styles.center}>
-        <View style={styles.mark}>
-          <Image source={require('../../../assets/brand/FoundationU.png')} style={styles.markImage} />
-        </View>
         <Image
           source={require('../../../assets/brand/synapse-white.png')}
           style={styles.logo}
@@ -46,20 +43,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.08)',
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  mark: {
-    width: 68,
-    height: 68,
-    borderRadius: 21,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOpacity: 0.15,
-    shadowRadius: 30,
-    shadowOffset: { width: 0, height: 15 },
-    elevation: 8,
-  },
-  markImage: { width: 52, height: 52, borderRadius: 26 },
-  logo: { width: 215, height: 78, marginTop: 15 },
+  logo: { width: 215, height: 78 },
   spinner: { marginTop: 18 },
 });

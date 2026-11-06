@@ -12,13 +12,13 @@ use App\Services\Api\TokenService;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\Scheduling\SchedulingClock;
-use CodeIgniter\Test\CIUnitTestCase;
+use Tests\Support\FreshDatabaseTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
 use Config\Database;
 
 /** Mobile portal resource contract: appointments, queue, notifications, engagement lists, staff summary. */
-final class MobilePortalApiTest extends CIUnitTestCase
+final class MobilePortalApiTest extends FreshDatabaseTestCase
 {
     use DatabaseTestTrait;
     use FeatureTestTrait;
@@ -34,6 +34,8 @@ final class MobilePortalApiTest extends CIUnitTestCase
     private array $users = [];
     /** @var list<int> */
     private array $appointments = [];
+    /** @var list<int> */
+    private array $tenants = [];
 
     protected function setUp(): void
     {
@@ -54,12 +56,21 @@ final class MobilePortalApiTest extends CIUnitTestCase
         if ($this->users !== []) {
             $db->table('api_tokens')->whereIn('user_id', $this->users)->delete();
             $db->table('queue_entries')->whereIn('person_id', $this->people)->delete();
-            // Booking fixtures record workflow events with the fixture user as actor.
+            // Booking fixtures record workflow events with the fixture user as actor;
+            // their notifications must go before the events themselves (FK).
+            $eventIds = array_column($db->table('workflow_events')->select('id')
+                ->whereIn('actor_user_id', $this->users)->get()->getResultArray(), 'id');
+            if ($eventIds !== []) {
+                $db->table('notifications')->whereIn('workflow_event_id', $eventIds)->delete();
+            }
             $db->table('workflow_events')->whereIn('actor_user_id', $this->users)->delete();
             $db->table('users')->whereIn('id', $this->users)->delete();
         }
         if ($this->people !== []) {
             $db->table('people')->whereIn('id', $this->people)->delete();
+        }
+        if ($this->tenants !== []) {
+            $db->table('tenants')->whereIn('id', $this->tenants)->delete();
         }
         parent::tearDown();
     }
@@ -139,6 +150,7 @@ final class MobilePortalApiTest extends CIUnitTestCase
         $appointmentId = $this->appointment($student, 'confirmed');
         $this->appointment($other, 'confirmed');
         $token = $this->accessToken($student);
+        $date = (new \DateTimeImmutable('tomorrow', new \DateTimeZone('Asia/Manila')))->format('Y-m-d');
 
         $list = $this->withHeaders($this->bearer($token))->get('api/v1/appointments');
         $list->assertStatus(200);
@@ -148,10 +160,14 @@ final class MobilePortalApiTest extends CIUnitTestCase
         foreach (['id', 'unit', 'status', 'type', 'date', 'starts_at', 'ends_at', 'provider_name'] as $field) {
             $this->assertArrayHasKey($field, $items[0]);
         }
+        // Scheduling wall-clock must be served with the explicit Asia/Manila offset.
+        $this->assertSame($date . 'T09:00:00+08:00', $items[0]['starts_at']);
+        $this->assertSame($date . 'T09:30:00+08:00', $items[0]['ends_at']);
 
         $detail = $this->withHeaders($this->bearer($token))->get('api/v1/appointments/' . $appointmentId);
         $detail->assertStatus(200);
         $this->assertSame($appointmentId, $this->json($detail)['data']['id']);
+        $this->assertSame($date . 'T09:00:00+08:00', $this->json($detail)['data']['starts_at']);
 
         // Another person's appointment is invisible, not merely filtered.
         $this->withHeaders($this->bearer($token))
@@ -342,8 +358,108 @@ final class MobilePortalApiTest extends CIUnitTestCase
         $this->assertIsArray($this->json($surveys)['data'] ?? null);
     }
 
+    public function testStaffQueueSnapshotIsPrivateTenantScopedAndExplicitlyTimed(): void
+    {
+        $staff = $this->account('clinic_staff');
+        $patient = $this->account('student');
+        $db = Database::connect();
+        $today = SchedulingClock::today();
+        $db->table('queue_entries')->where('tenant_id', 1)->where('queue_date', $today)->delete();
+        foreach (['waiting', 'called', 'in_consultation', 'skipped', 'done', 'no_show'] as $index => $status) {
+            $db->table('queue_entries')->insert([
+                'tenant_id' => 1, 'unit' => 'clinic', 'person_id' => $patient['person_id'],
+                'queue_date' => $today, 'ticket_no' => $index + 1, 'ticket_code' => 'C-' . ($index + 1),
+                'status' => $status, 'priority' => $status === 'skipped' ? 'emergency' : 'routine',
+                'created_at' => '2026-01-01 00:00:00', 'updated_at' => '2026-01-01 00:00:00',
+                'called_at' => $today . ' 08:01:00', 'started_at' => $today . ' 08:02:00',
+                'skip_until' => $today . ' 08:15:00',
+            ]);
+        }
+        $db->table('tenants')->insert([
+            'slug' => uniqid('queue_other_'), 'name' => 'Other tenant', 'is_active' => 1,
+            'created_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s'),
+        ]);
+        $otherTenant = (int) $db->insertID();
+        $this->tenants[] = $otherTenant;
+        $db->table('people')->insert([
+            'tenant_id' => $otherTenant, 'kind' => 'student', 'mis_id' => uniqid('foreign_'),
+            'first_name' => 'Foreign', 'last_name' => 'Secret',
+            'created_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s'),
+        ]);
+        $foreignPerson = (int) $db->insertID();
+        $this->people[] = $foreignPerson;
+        foreach ([[$otherTenant, $foreignPerson, $today, 'clinic', 'FOREIGN'],
+            [1, $patient['person_id'], '2020-01-01', 'clinic', 'OLD'],
+            [1, $patient['person_id'], $today, 'guidance', 'GUIDANCE']] as [$tenant, $person, $date, $unit, $code]) {
+            $db->table('queue_entries')->insert([
+                'tenant_id' => $tenant, 'person_id' => $person, 'unit' => $unit, 'queue_date' => $date,
+                'ticket_no' => 99, 'ticket_code' => $code, 'status' => 'waiting', 'priority' => 'urgent',
+                'created_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s'),
+            ]);
+        }
+        $token = $this->accessToken($staff);
+        $response = $this->withHeaders($this->bearer($token))
+            ->get('api/v1/staff/queue-summary?unit=all&tenant_id=' . $otherTenant . '&date=2020-01-01');
+        $response->assertStatus(200);
+        $payload = $this->json($response);
+        $this->assertSame(['data', 'meta'], array_keys($payload));
+        $this->assertSame(['date', 'generated_at'], array_keys($payload['meta']));
+        $this->assertSame($today, $payload['meta']['date']);
+        $this->assertStringEndsWith('+08:00', $payload['meta']['generated_at']);
+        $this->assertSame($today, substr($payload['meta']['generated_at'], 0, 10));
+        $this->assertCount(1, $payload['data']);
+        $board = $payload['data'][0];
+        $this->assertSame('clinic', $board['unit']);
+        $this->assertSame(6, $board['counts']['total']);
+        $this->assertSame(['waiting', 'called', 'in_consultation', 'skipped'], array_keys($board['tickets']));
+        foreach ($board['tickets'] as $rows) {
+            $this->assertCount(1, $rows);
+            $this->assertSame(['id', 'ticket_code', 'status', 'priority', 'created_at', 'called_at', 'started_at', 'skip_until'], array_keys($rows[0]));
+            $this->assertSame('2026-01-01T00:00:00+00:00', $rows[0]['created_at']);
+            $this->assertSame($today . 'T08:01:00+08:00', $rows[0]['called_at']);
+            $this->assertSame($today . 'T08:02:00+08:00', $rows[0]['started_at']);
+            $this->assertSame($today . 'T08:15:00+08:00', $rows[0]['skip_until']);
+        }
+        $age = (new \DateTimeImmutable($payload['meta']['generated_at']))->getTimestamp()
+            - (new \DateTimeImmutable('2026-01-01T00:00:00Z'))->getTimestamp();
+        $this->assertSame([
+            'active' => 3, 'priority_mix' => ['routine' => 3, 'urgent' => 0, 'emergency' => 0],
+            'waiting_age' => ['sample_count' => 1, 'total_seconds' => $age, 'oldest_seconds' => $age, 'average_seconds' => $age],
+        ], $board['metrics']);
+        $this->withHeaders($this->bearer($token))->get('api/v1/staff/queue-summary?unit=guidance')->assertStatus(403);
+        $this->withHeaders($this->bearer($token))->get('api/v1/staff/queue-summary?unit=invalid')->assertStatus(404);
+    }
+
+    public function testStaffQueueWritePathTimestampSources(): void
+    {
+        $staff = $this->account('clinic_staff');
+        $patient = $this->account('student');
+        $service = new \App\Services\Scheduling\QueueService();
+        $before = time();
+        $entry = $service->enqueueWalkIn('clinic', $patient['person_id']);
+        $after = time();
+        $created = new \DateTimeImmutable($entry['created_at'], new \DateTimeZone('UTC'));
+        $this->assertGreaterThanOrEqual($before, $created->getTimestamp());
+        $this->assertLessThanOrEqual($after, $created->getTimestamp());
+        $called = $service->callTicket((int) $entry['id'], $staff['id'], 'clinic');
+        $heldPatient = $this->account('student');
+        $heldEntry = $service->enqueueWalkIn('clinic', $heldPatient['person_id']);
+        $service->callTicket((int) $heldEntry['id'], $staff['id'], 'clinic');
+        $held = $service->skipTicket((int) $heldEntry['id'], 60, 'clinic');
+        $deadline = new \DateTimeImmutable($held['skip_until'], SchedulingClock::timezone());
+        $this->assertGreaterThanOrEqual($before + 3600, $deadline->getTimestamp());
+        $this->assertLessThanOrEqual(time() + 3600, $deadline->getTimestamp());
+        $started = $service->startConsultation((int) $entry['id'], 'clinic');
+        foreach ([$called['called_at'], $started['started_at']] as $value) {
+            $instant = new \DateTimeImmutable($value, SchedulingClock::timezone());
+            $this->assertGreaterThanOrEqual($before, $instant->getTimestamp());
+            $this->assertLessThanOrEqual(time(), $instant->getTimestamp());
+        }
+    }
+
     public function testStaffQueueSummaryIsEntitlementGated(): void
     {
+        $this->get('api/v1/staff/queue-summary')->assertStatus(401);
         $student = $this->account('student');
         $this->withHeaders($this->bearer($this->accessToken($student)))
             ->get('api/v1/staff/queue-summary')->assertStatus(403);
@@ -356,5 +472,13 @@ final class MobilePortalApiTest extends CIUnitTestCase
         $this->assertSame('clinic', $units[0]['unit'] ?? null);
         $this->assertArrayHasKey('waiting', $units[0]['counts'] ?? []);
         $this->assertArrayHasKey('waiting', $units[0]['tickets'] ?? []);
+
+        foreach (['counsellor' => ['guidance'], 'superadmin' => ['clinic', 'guidance']] as $role => $expectedUnits) {
+            $account = $this->account($role);
+            $response = $this->withHeaders($this->bearer($this->accessToken($account)))
+                ->get('api/v1/staff/queue-summary');
+            $response->assertStatus(200);
+            $this->assertSame($expectedUnits, array_column($this->json($response)['data'], 'unit'));
+        }
     }
 }

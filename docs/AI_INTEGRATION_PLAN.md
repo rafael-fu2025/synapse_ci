@@ -1,15 +1,21 @@
 # Privacy-preserving AI insights and program planning
 
-Status (2026-10-29): **Six fixed analyses implemented; local AI schema through batch 34 installed; runtime disabled. Final application test results pending. The full roadmap is not complete.**
+Status (2026-11-05): **Six fixed analyses plus conservative recovery/provenance hardening. Isolated tests are separate from deployment acceptance; historical schema/runtime checkpoints below are not current state guarantees. The full roadmap is not complete.**
 Prepared: 2026-10-28; implementation checkpoint updated: 2026-10-29
 Product: SYNAPSE / Foundation University
 Feature: **Department Insights & Program Planning**
+
+## Recovery and provenance hardening (2026-11-05)
+
+The additive `AddAiRecoveryAttempts` migration introduces materialization generations, job lineage, public pipeline-code provenance and payload-free audit records. Explicit snapshot recovery can only re-materialize exactly identical current-window evidence; monthly release fingerprints and masks remain immutable. Explicit new attempts require a terminal lineage with no outbound reservation; ordinary Generate remains deduplicated and ambiguous POSTs are never replayed. Historical/legacy pipeline drafts cannot be accepted or approved under current policy. These controls do not supply a changed-evidence release mechanism, institutional retention policy, independent-approver policy, worker scheduling or provider authorization.
+
+CI uses a separate isolated AI PHPUnit configuration plus pinned AI browser test tooling. Deployment-specific MariaDB/TLS/provider/privacy gates remain separate. See [the operator runbook](AI_OPERATIONS.md) for recovery, activation and rollout restrictions.
 
 ## Implementation checkpoint
 
 The code now supports the legacy Clinic activity analysis plus recorded Clinic complaints, Guidance activity and eligible recorded categories, and BMG batch/rotation-report activity. It includes protected monthly evidence, custom OpenAI-compatible endpoint configuration, encrypted jobs/drafts, bounded transport, explicit department/provider approval, tenant/department/role AI grants, independent source-data authority, staff review/program approval, and finite CLI dispatch/purge commands. Implemented does not mean enabled, department-approved, live-provider-tested, or production-accepted.
 
-Provider setup is **Administration → AI Settings** (`/admin/ai`): choose approved departments, then explicitly **Save settings → Test connection → Enable aggregate AI**. The separate **Department AI access** panel grants/revokes Read, Generate, Review, and Approve for a role in the current tenant and department. Neither provider approval nor these grants supplies source-data access. UI setup manages encryption keys, tested revisions, and the dispatch manifest without manual environment edits. **The UI does not start or schedule the worker.**
+Provider setup is **Administration → AI Settings** (`/admin/ai`): complete **Connection → Access → Activate**, choosing approved departments before **Save settings → Test connection → Enable aggregate AI**. The Access step grants/revokes Read, Generate, Review, and Approve for a role in the current tenant and department. Neither provider approval nor these grants supplies source-data access. UI setup manages encryption keys, tested revisions, and the dispatch manifest without manual environment edits. **The UI does not start or schedule the worker.**
 
 The supplied local installation record is `CreateAiInsights` in `humus_db` batch **33**, followed by `AddAiAnalysisScope` in batch **34**, preserving all **65 unrelated table definitions** and earlier migration history. The six original AI tables remained empty; the new access table has no grants. No AI enablement, worker scheduling, or live provider configuration/call is recorded. A disposable MariaDB migration rehearsal was completed. The pre-scope backup's SHA-256 was verified, but **no full backup restore test was performed**. These supplied outcomes were not rerun during documentation editing; see [AI operations and deployment](AI_OPERATIONS.md) for the exact backup path and installation procedure.
 
@@ -133,7 +139,7 @@ A `superadmin` with `rbac.manage`, or the corresponding explicit configuration p
 1. Set API base URL, key, model, optional reasoning effort, conservative input budget, and output limit. Select at least one approved department: `clinic`, `guidance`, or `bmg`.
 2. **Save settings** pauses analytics and invalidates the prior test. Blank key preserves it; removing it is explicit. Saved keys are never returned to the browser.
 3. **Test connection** sends a fixed harmless fixture to the saved configuration, not departmental data. It can incur costs and does not approve aggregate dispatch. Unsaved edits are not the tested profile.
-4. Separately grant intended tenant/department/role AI capabilities in **Department AI access**; existing source permissions still apply.
+4. Separately grant intended tenant/department/role AI capabilities in the **Access** step; existing source permissions still apply.
 5. After privacy/provider/template authorization, explicitly confirm and **Enable aggregate AI**. The UI checks storage and manages revision acknowledgments and the dispatch manifest. Changing departments/settings requires saving, retesting, and explicit re-enablement.
 6. Arrange a separate supervised CLI worker/scheduler. Enabling the provider or queuing a UI draft does not start a process or execute a job; there is no UI worker activation.
 
@@ -208,8 +214,8 @@ Deploy separately supervised, non-overlapping finite dispatch and cleanup tasks 
 - Administration: GET `/admin/ai` and `/admin/ai/status`; CSRF-protected POST `/admin/ai/save`, `/test`, `/enable`, `/disable`, and `/access` under that prefix.
 - Workspaces: `/clinic/insights`, `/guidance/insights`, `/facilities/insights` (internal unit `bmg`). Each supports GET workspace and `/panel`; POST `/prepare`, `/generate`, `/{id}/review`, and `/jobs/{id}/cancel` under its workspace prefix. Review decisions are fixed `accept`, `reject`, or `approve` with version checks.
 - Workspace path fixes the unit; only a catalog analysis for that unit is accepted. No arbitrary dates, prompts, cohorts, profile/model/endpoint overrides, or patient links are allowed.
-- **Prepare local summary** runs local aggregate/disclosure/storage checks only. It still requires approved analytics scope/revision, source authority, and ready encrypted storage; it is not an unapproved raw-data preview.
-- **Request AI draft** queues work, returning/reusing a job; panel refresh/polling never generates. Scoped browser actions do not automatically replay uncertain POSTs.
+- **Preview data** runs local aggregate/disclosure/storage checks only. It still requires approved analytics scope/revision, source authority, and ready encrypted storage; it is not an unapproved raw-data preview.
+- **Generate draft** queues work, returning/reusing a job; panel refresh/polling never generates. Scoped browser actions do not automatically replay uncertain POSTs.
 - Responses are private/no-store. Provider/configuration errors are not browser-session expiry; only shared authentication handling redirects to sign-in. Suppression, revision conflict, expiry, quota, and ambiguous-outcome states remain explicit.
 - Evidence/numbers and fixed program content render separately from escaped, fallible model prose. Approval is visibly distinct from publication, which is absent.
 

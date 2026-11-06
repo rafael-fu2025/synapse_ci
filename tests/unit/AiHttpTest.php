@@ -110,6 +110,7 @@ final class AiHttpTest extends CIUnitTestCase
         $routes->loadRoutes();
         $reads = ['clinic/insights' => 'index', 'clinic/insights/panel' => 'panel'];
         $mutations = ['clinic/insights/prepare' => 'prepare', 'clinic/insights/generate' => 'generate',
+            'clinic/insights/recover' => 'recover', 'clinic/insights/jobs/([0-9]+)/retry' => 'retry/$1',
             'clinic/insights/([0-9]+)/review' => 'review/$1', 'clinic/insights/jobs/([0-9]+)/cancel' => 'cancel/$1'];
         foreach ($reads as $path => $handler) {
             self::assertStringEndsWith('AiInsightsController::' . $handler, $routes->getRoutes('GET')[$path]);
@@ -128,9 +129,9 @@ final class AiHttpTest extends CIUnitTestCase
 
     public function testGetMutationIsDeniedBeforeIdentityApplicationOrCollectors(): void
     {
-        foreach (['prepare', 'generate', 'review', 'cancel'] as $action) {
+        foreach (['prepare', 'generate', 'recover', 'retry', 'review', 'cancel'] as $action) {
             $controller = $this->controller('GET', application: $this->application(forbidCollection: true));
-            $response = in_array($action, ['review', 'cancel'], true) ? $controller->$action(1) : $controller->$action();
+            $response = in_array($action, ['review', 'cancel', 'retry'], true) ? $controller->$action(1) : $controller->$action();
             self::assertSame(405, $response->getStatusCode());
             self::assertSame('POST', $response->getHeaderLine('Allow'));
             self::assertSame([], $controller->permissionsChecked);
@@ -165,13 +166,25 @@ final class AiHttpTest extends CIUnitTestCase
         $this->assertNoAiRows();
     }
 
+    public function testRecoveryAndRetryRequireExplicitConfirmationBeforeApplication(): void
+    {
+        foreach (['recover', 'retry'] as $action) {
+            $controller = $this->controller(application: $this->application(forbidCollection: true));
+            $response = $action === 'retry' ? $controller->retry(1) : $controller->recover();
+            self::assertSame('invalid_request', $this->json($response, 422)['reason']);
+            self::assertSame(0, $controller->applicationCalls);
+        }
+        $this->assertNoAiRows();
+    }
+
     public function testGetPanelOnlyReadsStoredStateWithoutSourceCollectionOrInference(): void
     {
         $this->control->resume($this->profile, 1);
         $controller = $this->controller('GET', application: $this->application(forbidCollection: true));
         $body = $this->json($controller->panel(), 200);
         self::assertTrue($body['success']);
-        self::assertStringContainsString('No AI drafts yet. Request a draft', $body['html']);
+        self::assertStringContainsString('No AI drafts yet', $body['html']);
+        self::assertStringContainsString('Generate a draft if you have permission', $body['html']);
         self::assertSame(['ai.insights.read'], $controller->permissionsChecked);
         self::assertStringNotContainsString('SYNTHETIC-SECRET', $body['html']);
         self::assertStringNotContainsString('gateway.example.test', $body['html']);
@@ -184,7 +197,7 @@ final class AiHttpTest extends CIUnitTestCase
         $this->setUpStore(false);
         $body = $this->json($this->controller('GET', application: $this->application(forbidCollection: true))->panel(), 200);
         self::assertTrue($body['success']);
-        self::assertStringContainsString('Secure storage for insights is not ready', $body['html']);
+        self::assertStringContainsString('Secure insight storage unavailable', $body['html']);
         self::assertStringNotContainsString('SYNTHETIC-SECRET', $body['html']);
         self::assertSame([], $this->fixtureDb->listTables());
         self::assertSame(0, $this->requests);
@@ -288,10 +301,10 @@ final class AiHttpTest extends CIUnitTestCase
         $job = $this->application()->generate(self::fixtureActor());
         self::assertSame(['processed' => 0, 'failed' => 1, 'outcome_unknown' => 0], $this->worker(providerStatus: 401)->run(1));
         self::assertSame('failed', $this->store->job(1, 'clinic', $job['id'])['status']);
-                self::assertSame('generation_failed', $this->store->job(1, 'clinic', $job['id'])['reason']);
+        self::assertSame('provider_auth_failed', $this->store->job(1, 'clinic', $job['id'])['reason']);
         $body = $this->json($this->controller('GET', application: $this->application(forbidCollection: true))->panel(), 200);
         self::assertTrue($body['success']);
-        self::assertStringContainsString('The draft could not be created.', $body['html']);
+        self::assertStringContainsString('The provider rejected authentication.', $body['html']);
         self::assertSame(1, $this->requests);
     }
 

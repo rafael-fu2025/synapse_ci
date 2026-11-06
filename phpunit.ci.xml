@@ -10,10 +10,13 @@
             <file>tests/unit/MisProfileMapperTest.php</file>
             <file>tests/unit/ProductionSessionConfigTest.php</file>
             <file>tests/unit/SessionRotationSecurityTest.php</file>
+            <file>tests/unit/StrictModeConfigTest.php</file>
+            <file>tests/unit/LikePatternTest.php</file>
             <file>tests/unit/HealthTest.php</file>
             <file>tests/unit/SchedulingClockTest.php</file>
             <file>tests/unit/DashboardStatusContractTest.php</file>
             <file>tests/unit/DashboardAuditAccessTest.php</file>
+            <file>tests/feature/DashboardCacheTest.php</file>
             <file>tests/unit/QueueControllerSafetyTest.php</file>
             <file>tests/unit/AuditHashTest.php</file>
             <file>tests/unit/GuidanceControllerSafetyTest.php</file>
@@ -21,6 +24,8 @@
             <file>tests/unit/LoginSecurityTest.php</file>
             <file>tests/unit/WebSecurityHeadersTest.php</file>
             <file>tests/unit/LoginPipelineTest.php</file>
+            <file>tests/unit/CarouselAssetStoreTest.php</file>
+            <file>tests/unit/CarouselAccessPolicyTest.php</file>
         </testsuite>
         <testsuite name="Authorization remediation regressions">
             <file>tests/feature/BackendRoleAuthorizationTest.php</file>
@@ -36,6 +41,12 @@
             <file>tests/unit/ClinicalBackgroundTest.php</file>
             <file>tests/unit/CarouselReorderTest.php</file>
             <file>tests/unit/QueueBackgroundTest.php</file>
+        </testsuite>
+        <testsuite name="Mobile notification contracts">
+            <!-- The inbox projection runs inside a static closure, so it must never
+                 reach for instance state: the failure appears only as a 500 on the
+                 notifications endpoint. -->
+            <file>tests/unit/NotificationInboxProjectionTest.php</file>
         </testsuite>
     </testsuites>
     <php>

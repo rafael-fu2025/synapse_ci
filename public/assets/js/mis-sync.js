@@ -2,7 +2,8 @@
 (function () {
   'use strict';
   if (window.SynapseMisSync) return;
-  let current = null;
+  const owners = new Map();
+  let busy = false;
   const locked = new WeakSet();
 
   function endpoint(value) {
@@ -12,9 +13,11 @@
     return url.href;
   }
   function init(scope = document) {
-    const root = scope.matches?.('[data-mis-sync]') ? scope : scope.querySelector('[data-mis-sync]');
-    if (!root || current?.root === root) return;
-    destroy();
+    const roots = scope.matches?.("[data-mis-sync]") ? [scope] : scope.querySelectorAll("[data-mis-sync]");
+    roots.forEach(initOne);
+  }
+  function initOne(root) {
+    if (!root || owners.has(root)) return;
     const find = selector => root.querySelector(selector);
     const form = find('[data-mis-sync-form]');
     const button = form?.querySelector('button[type="submit"]');
@@ -24,20 +27,20 @@
     const message = find('[data-sync-message]');
     const result = find('[data-sync-result]');
     const refresh = find('[data-sync-refresh]');
-    if (!form || !button || !panel || !bar || !percent || !message || !result || !refresh
+    if (!form || !button || button.hasAttribute('data-sync-unavailable') || !panel || !bar || !percent || !message || !result || !refresh
         || !window.fetch || !window.crypto?.randomUUID || !window.FormData) return;
     let action, statusUrl;
     try { action = endpoint(form.action); statusUrl = endpoint(root.dataset.statusUrl); }
     catch (_) { return; }
     const owner = { root, dispose: null };
-    current = owner;
+    owners.set(root, owner);
     let pending = false;
     let run = null;
     let value = 0;
     let belowComplete = 0;
     let seen = false;
     let statusRead = null;
-    const alive = () => current === owner && root.isConnected;
+    const alive = () => owners.get(root) === owner && root.isConnected;
     const headers = () => ({ ...window.SynapseCsrf?.headers(), Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' });
     function motion(active) {
       bar.classList.toggle('progress-bar-striped', active);
@@ -57,7 +60,7 @@
     function realtime(event) {
       const detail = event.detail;
       const data = detail?.data;
-      if (!alive() || !pending || detail?.event !== 'mis.sync.progress' || !data || data.progress_id !== run
+      if (!alive() || !pending || detail?.event !== 'mis.sync.progress' || !data || data.progress_id !== run || (root.dataset.syncAction && data.action !== root.dataset.syncAction)
           || typeof data.percent !== 'number' || !Number.isFinite(data.percent)
           || data.percent < 0 || data.percent > 100 || data.percent < value) return;
       seen = true;
@@ -116,6 +119,15 @@
           cancelled
         ]);
         if (!valid()) return;
+        if (root.dataset.syncAction === 'people') {
+          if (!response.ok || !payload?.counts) throw new Error('Invalid people status');
+          for (const kind of ['student', 'employee']) {
+            if (!Number.isInteger(payload.counts[kind]) || payload.counts[kind] < 0) throw new Error('Invalid count');
+            find(`[data-people-count="${kind}"]`).textContent = String(payload.counts[kind]);
+          }
+          find('[data-sync-last]').textContent = payload.lastSync?.occurred_at ?? 'None recorded';
+          return;
+        }
         if (!response.ok || !payload?.catalogs || !Object.hasOwn(payload, 'lastSync')) throw new Error('Status unavailable');
         const catalogs = ['departments', 'programs', 'year_levels'];
         for (const catalog of catalogs) {
@@ -146,11 +158,11 @@
     }
     async function submit(event) {
       event.preventDefault();
-      if (pending || locked.has(root)) return;
+      if (busy || pending || locked.has(root)) return;
       const body = new window.FormData(form);
       run = window.crypto.randomUUID();
       body.set('progress_id', run);
-      pending = true;
+      pending = busy = true;
       seen = false;
       value = belowComplete = 0;
       button.disabled = true;
@@ -174,7 +186,7 @@
         } else {
           if (payload?.success !== true) throw new Error('Unconfirmed outcome');
           progress(100);
-          feedback('MIS reference catalogs synchronized successfully.');
+          feedback(root.dataset.syncAction === 'people' ? 'MIS people directory synchronized successfully. No accounts were changed.' : 'MIS reference catalogs synchronized successfully.');
           await refreshStatus();
         }
       } catch (_) {
@@ -185,7 +197,7 @@
         refresh.hidden = false;
       } finally {
         if (alive()) {
-          pending = false;
+          pending = busy = false;
           run = null;
           motion(false);
           button.disabled = locked.has(root);
@@ -199,7 +211,7 @@
     document.addEventListener('synapse:before-navigate', guard);
     window.addEventListener('beforeunload', unload);
     owner.dispose = () => {
-      if (pending) locked.add(root);
+      if (pending) { locked.add(root); busy = false; }
       statusRead?.abort();
       form.removeEventListener('submit', submit);
       document.removeEventListener('synapse:realtime-event', realtime);
@@ -209,9 +221,11 @@
     };
   }
   function destroy(scope) {
-    if (!current || (scope && scope !== current.root && !scope.contains?.(current.root))) return;
-    current.dispose();
-    current = null;
+    for (const [root, owner] of owners) {
+      if (scope && scope !== root && !scope.contains?.(root)) continue;
+      owner.dispose();
+      owners.delete(root);
+    }
   }
   window.SynapseMisSync = Object.freeze({ init, destroy });
   document.addEventListener('synapse:page-load', event => init(event.detail?.root || document));

@@ -56,7 +56,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
 
 <!-- Staff Role Console Switcher Banner (Shown only if staff logs into personal account) -->
 <?php if (in_array($role, ['superadmin', 'clinic_admin', 'clinic_staff', 'guidance_admin', 'guidance_supervisor', 'counsellor', 'bmg_admin', 'facilities_op'], true)): ?>
-  <div class="alert alert-info border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center mb-4 p-3">
+  <div class="alert alert-info login-banner border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center mb-4 p-3">
     <div class="d-flex align-items-center gap-2">
       <i class="bi bi-person-badge-fill fs-3" aria-hidden="true"></i>
       <div>

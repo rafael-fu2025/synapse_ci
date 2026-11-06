@@ -72,11 +72,43 @@ The public grant permits only carousel invalidations for the server-selected ten
 
 Wi-Fi/LAN is opt-in; use the physical Wi-Fi/Ethernet IPv4 address, explicit listeners/firewall rules, and a rebuilt API URL. See [mobile operations](../docs/MOBILE.md#wi-fi-lan-opt-in), not a VPN/WSL/virtual adapter address.
 
+### Signed-in realtime hints
+
+While signed in, foreground, and online, the app holds one extra socket on the signed-in user's
+private channel via the bearer-authenticated `GET api/v1/realtime/grant` (same Workerman worker,
+same first-frame ticket rule; see [MOBILE_API.md](../docs/MOBILE_API.md#private-mobile-realtime-grant)).
+Payload-free hints refresh the React Query caches: `notifications.changed` (bell inbox),
+`portal.queue.changed` (personal queue card), `portal.appointments.changed` (visits lists/detail),
+and `queue.invalidated` (staff queue board for the named unit). Hints never carry content — the
+socket says "stale", the HTTP refetch says "what". All focus-poll intervals and the 120-second
+reconciliation remain the fallback; a missing or disabled socket changes nothing except latency.
+The socket closes on sign-out/expiry, backgrounding, and offline, like the carousel listener.
+
 **HTTP 429 is not a connectivity failure.** Default login budgets are 5 attempts/300 seconds per IP + identity and 60/60 seconds per IP, shared by web/mobile. Honor `Retry-After`; do not reset credentials or keep probing sign-in. Use only local synthetic accounts described in [LOCAL_TEST_ACCOUNTS.md](../tests/LOCAL_TEST_ACCOUNTS.md); no passwords belong in docs or diagnostics.
 
 ## Theme contrast
 
 Use `theme.brandText` and `theme.brandIcon` for brand-colored text, icons, and loading indicators on themed surfaces: maroon in light mode, white in dark mode. Keep `theme.brand` and `palette.brand*` for maroon fills/gradients with white content; do not use these fixed colors for foregrounds. Semantic guidance, warning, and error colors remain distinct.
+
+## Release builds
+
+Android release artifacts are signed from the environment, never from the repository. A release task
+fails fast when signing is not configured, so a debug-signed APK can never reach a store by accident.
+
+| Variable | Purpose |
+|---|---|
+| `SYNAPSE_VERSION_CODE` / `SYNAPSE_VERSION_NAME` | The version the store receives |
+| `SYNAPSE_UPLOAD_STORE_FILE` | Path to the upload keystore (keep it out of git) |
+| `SYNAPSE_UPLOAD_STORE_PASSWORD` | Keystore password |
+| `SYNAPSE_UPLOAD_KEY_ALIAS` / `SYNAPSE_UPLOAD_KEY_PASSWORD` | Key alias and key password |
+| `SYNAPSE_ENABLE_MINIFICATION` | R8 minification and resource shrinking (default `true`) |
+| `SYNAPSE_ALLOW_DEBUG_SIGNING` | Escape hatch for a local smoke build that will never be distributed |
+
+The same names work as Gradle properties in `android/gradle.properties` (never commit real values).
+`./gradlew :app:assembleRelease` stops with an actionable message when the signing properties are
+missing. Release builds enable R8; the keep rules live in `android/app/proguard-rules.pro`.
+
+There is no automated distribution pipeline yet: builds are produced locally and uploaded by hand.
 
 ## Checks and references
 
@@ -87,6 +119,12 @@ npm run lint
 npm test -- --runInBand
 ```
 
+`.github/workflows/mobile.yml` runs these four gates on every push and pull request. `npm run coverage`
+is available locally but must not be combined with `--runInBand`: coverage instrumentation slows the
+fake-timer suites enough to time them out.
+
 `npm run ios` also uses Metro on 8083 without starting a second packager. iOS requires macOS/Xcode and CocoaPods (`bundle install`, then `bundle exec pod install` from `ios/`). The Android USB routing helpers do not configure physical iOS devices; select a reachable API URL for your iOS setup.
+
+Device push needs the per-machine Firebase project files, which are never committed. `android/app/google-services.json` is picked up by the Google Services Gradle plugin whenever it is present, and `ios/SynapseMobile/GoogleService-Info.plist` must be given Target Membership of the `SynapseMobile` target in Xcode so it is copied into the app bundle. Without either file the app still builds and runs, reporting push as unavailable. iOS push additionally needs a physical device and an APNs key uploaded to the Firebase console.
 
 See [architecture and troubleshooting](../docs/MOBILE.md), [API contract](../docs/MOBILE_API.md), and the [React Native environment setup](https://reactnative.dev/docs/set-up-your-environment). `mobileScreenReference/` is design reference only, excluded from Metro, TypeScript, and ESLint.

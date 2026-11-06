@@ -129,6 +129,24 @@ final class EmployeeAccessHttpTest extends CIUnitTestCase
         $this->assertStringContainsString('no-store', $result->response()->getHeaderLine('Cache-Control'));
     }
 
+    public function testRoleCatalogueListsEveryGrantedRoleIncludingStudent(): void
+    {
+        $granted = array_values(array_unique(array_column($this->db->table('role_permissions')->select('role')->get()->getResultArray(), 'role')));
+        $result = $this->requestAs(2, 'GET', 'admin/access/4/edit?fragment=1');
+        $result->assertStatus(200);
+        $body = $result->getBody();
+        $plain = html_entity_decode($body, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        // The panel states it shows the current database grants, so it must list every granted
+        // role - including the student role, which is never assignable on this screen.
+        $this->assertSame(count($granted), substr_count($body, '<h3 class="h6">'), 'The catalogue must list every role that holds grants.');
+        foreach ($granted as $role) {
+            $label = EmployeeAccessService::ROLES[$role] ?? EmployeeAccessService::CATALOGUE_LABELS[$role] ?? $role;
+            $this->assertStringContainsString($label, $plain);
+        }
+        $this->assertStringContainsString('Student — personal portal only', $plain);
+        $this->assertStringContainsString('portal.appointments.create', $body);
+    }
+
     public function testDirectoryFragmentSupportsLiveSearchAndValidatesPageSize(): void
     {
         $result = $this->requestAs(2, 'GET', 'admin/access?fragment=1&q=MIS-4');

@@ -240,13 +240,16 @@ final class GuidanceCaseService
     {
         \App\Services\EngagementAccess::actor('guidance.cases.read', 'guidance');
         $session = $this->getSession($sessionId);
-        $this->authorizedCase((int) $session['case_id'], 'guidance.cases.read');
+        [, $actor] = $this->authorizedCase((int) $session['case_id'], 'guidance.cases.read');
         $note = $this->noteModel->getDraftNote($sessionId) ?? $this->noteModel->getLatestFinalNote($sessionId);
         if ($note === null) {
             return null;
         }
+        $plaintext = $this->encryptionService->decrypt($note['notes_cipher'], $note['notes_nonce'], $note['notes_tag'], (int) $note['notes_key_version']);
+        // Never release plaintext unless the same-connection audit append succeeds.
+        $this->audit('session', $sessionId, 'note_read', $actor);
         return [
-            'text' => $this->encryptionService->decrypt($note['notes_cipher'], $note['notes_nonce'], $note['notes_tag'], (int) $note['notes_key_version']),
+            'text' => $plaintext,
             'version' => (int) $note['version'], 'is_draft' => (bool) $note['is_draft'],
             'created_at' => $note['created_at'], 'author_id' => (int) $note['created_by_user_id'],
         ];
@@ -290,19 +293,18 @@ final class GuidanceCaseService
         });
     }
 
-    public function closeCase(int $caseId, ?string $summaryNotes = null, bool $confirmed = false): array
+    public function closeCase(int $caseId, ?string $summaryNotes = null, bool $confirmed = false, ?string $closureDisposition = null): array
     {
         if (!$confirmed) {
             throw new InvalidArgumentException('Explicit case closure confirmation is required.', 422);
         }
-        return $this->transaction(function () use ($caseId, $summaryNotes): array {
+        return $this->transaction(function () use ($caseId, $closureDisposition): array {
             [$case, $actor] = $this->authorizedCase($caseId, 'guidance.cases.write', true);
             $this->assertNoActiveSessions($caseId);
             if ($case['status'] !== 'closed') {
-                $changes = ['status' => 'closed', 'closed_at' => date('Y-m-d H:i:s')];
-                if ($summaryNotes !== null) {
-                    $changes['summary_notes'] = trim($summaryNotes);
-                }
+                // summaryNotes remains a compatible legacy argument, never an intake overwrite.
+                $changes = ['status' => 'closed', 'closed_at' => date('Y-m-d H:i:s'), 'closed_by' => (int) $actor['id']]
+                    + $this->outcomePayload('closure_disposition', $closureDisposition);
                 $this->must($this->caseModel->scoped()->update($caseId, $changes));
                 $this->audit('case', $caseId, 'closed', $actor);
             }
@@ -350,9 +352,95 @@ final class GuidanceCaseService
         return $history;
     }
 
+    /**
+     * Decrypt outcome text only after fresh case authorization.
+     *
+     * Kept out of caseDetails() so ordinary packages and portal/referral surfaces
+     * never carry confidential completion or closure plaintext.
+     *
+     * @return array{closure_disposition: ?string, completion_notes: array<int, string>}
+     */
+    public function getDecryptedCaseOutcomes(int $caseId): array
+    {
+        [$case, $actor] = $this->authorizedCase($caseId, 'guidance.cases.read');
+        $closure = $this->decryptOutcome($case, 'closure_disposition');
+        $notes = [];
+        foreach ($this->followupModel->getForCase($caseId) as $followup) {
+            $text = $this->decryptOutcome($followup, 'completion_notes');
+            if ($text !== null) {
+                $notes[(int) $followup['id']] = $text;
+            }
+        }
+        // Fail closed if confidential plaintext is released without its read audit.
+        if ($closure !== null || $notes !== []) {
+            $this->audit('case', $caseId, 'outcomes_read', $actor);
+        }
+        return ['closure_disposition' => $closure, 'completion_notes' => $notes];
+    }
+
+    /** Decrypt one nullable outcome payload; partial or malformed fields are a hard error. */
+    private function decryptOutcome(array $row, string $prefix): ?string
+    {
+        $cipher = $row[$prefix . '_cipher'] ?? null;
+        $nonce = $row[$prefix . '_nonce'] ?? null;
+        $tag = $row[$prefix . '_tag'] ?? null;
+        $version = $row[$prefix . '_key_version'] ?? null;
+        $values = [$cipher, $nonce, $tag, $version];
+        if ($values === [null, null, null, null]) {
+            return null;
+        }
+        if (in_array(null, $values, true) || !is_numeric($version) || (int) $version < 1) {
+            throw new RuntimeException('Guidance outcome ciphertext is incomplete.', 503);
+        }
+        return $this->encryptionService->decrypt((string) $cipher, (string) $nonce, (string) $tag, (int) $version);
+    }
+
+    /** Build nullable encrypted outcome columns; null notes leave legacy behavior unchanged. */
+    private function outcomePayload(string $prefix, ?string $plaintext): array
+    {
+        if ($plaintext === null) {
+            return [];
+        }
+        $plaintext = trim($plaintext);
+        if ($plaintext === '' || mb_strlen($plaintext) > 2000) {
+            throw new InvalidArgumentException('Outcome notes must be between 1 and 2000 characters.', 422);
+        }
+        $encrypted = $this->encryptionService->encrypt($plaintext);
+        return [
+            $prefix . '_cipher' => $encrypted['cipher'],
+            $prefix . '_nonce' => $encrypted['nonce'],
+            $prefix . '_tag' => $encrypted['tag'],
+            $prefix . '_key_version' => $encrypted['key_version'],
+        ];
+    }
+
     private function authorizedCase(int $caseId, string $permission, bool $lock = false): array
     {
         $actor = \App\Services\EngagementAccess::actor($permission, 'guidance');
+        $case = $this->caseRow($caseId, $lock);
+        $this->person((int) $case['person_id']);
+        if ((int) $case['tenant_id'] !== (int) $actor['tenant_id']
+            || ($actor['role'] !== 'superadmin' && (int) $case['counsellor_user_id'] !== (int) $actor['id']
+                && !in_array('guidance.cases.read_any', $actor['permissions'], true))) {
+            throw new \DomainException('Case access forbidden.', 403);
+        }
+        return [$case, $actor];
+    }
+
+    /**
+     * Ownership/tenant check for controller mutation boundaries.
+     *
+     * Applies the same access rule as a case read without appending the public
+     * oversight-read audit event; mutation helpers must never create read events.
+     */
+    public function assertCaseReadable(int $caseId): void
+    {
+        $this->assertCaseAccess($caseId);
+    }
+
+    private function assertCaseAccess(int $caseId, bool $lock = false): array
+    {
+        $actor = \App\Services\EngagementAccess::actor('guidance.cases.read', 'guidance');
         $case = $this->caseRow($caseId, $lock);
         $this->person((int) $case['person_id']);
         if ((int) $case['tenant_id'] !== (int) $actor['tenant_id']
@@ -376,6 +464,8 @@ final class GuidanceCaseService
     public function addFollowup(int $caseId, ?int $sessionId, string $dueDate, string $actionPlan): array
     {
         return $this->transaction(function () use ($caseId, $sessionId, $dueDate, $actionPlan): array {
+            // Internal mutation helper: tenant-scoped lookup only, never a public read audit.
+            // The controller enforces case authorization at its boundary.
             $this->caseRow($caseId, true);
             if ($sessionId !== null && (int) $this->getSession($sessionId)['case_id'] !== $caseId) {
                 throw new InvalidArgumentException('Follow-up session does not belong to this case.', 422);
@@ -394,9 +484,9 @@ final class GuidanceCaseService
         });
     }
 
-    public function completeFollowup(int $followupId): array
+    public function completeFollowup(int $followupId, ?string $completionNotes = null): array
     {
-        return $this->transitionFollowup($followupId, 'completed');
+        return $this->transitionFollowup($followupId, 'completed', $completionNotes);
     }
 
     public function missFollowup(int $followupId): array
@@ -404,9 +494,9 @@ final class GuidanceCaseService
         return $this->transitionFollowup($followupId, 'missed');
     }
 
-    private function transitionFollowup(int $followupId, string $status): array
+    private function transitionFollowup(int $followupId, string $status, ?string $completionNotes = null): array
     {
-        return $this->transaction(function () use ($followupId, $status): array {
+        return $this->transaction(function () use ($followupId, $status, $completionNotes): array {
             // Resolve without a lock, then follow the shared case -> session/follow-up order.
             $candidate = $this->followupModel->scoped()->find($followupId);
             if ($candidate === null) {
@@ -424,19 +514,28 @@ final class GuidanceCaseService
                 if ($followup['status'] !== 'pending') {
                     throw new RuntimeException('Only pending follow-ups may be resolved.', 409);
                 }
-                $this->must($this->followupModel->scoped()->update($followupId, [
-                    'status' => $status, 'completed_at' => $status === 'completed' ? date('Y-m-d H:i:s') : null,
-                ]));
+                $changes = ['status' => $status, 'completed_at' => $status === 'completed' ? date('Y-m-d H:i:s') : null];
+                if ($status === 'completed') {
+                    $changes += $this->outcomePayload('completion_notes', $completionNotes);
+                    $changes['completed_by'] = (int) $actor['id'];
+                }
+                $this->must($this->followupModel->scoped()->update($followupId, $changes));
                 $this->audit('followup', $followupId, $status, $actor);
             }
-            return $this->followupModel->scoped()->find($followupId);
+            $resolved = $this->followupModel->scoped()->find($followupId);
+            return $this->withoutOutcomeColumns($resolved ?? []);
         });
     }
 
     public function getCaseDetails(int $caseId): array
     {
-        [$case] = $this->authorizedCase($caseId, 'guidance.cases.read');
-        return $this->caseDetails($case);
+        [$case, $actor] = $this->authorizedCase($caseId, 'guidance.cases.read');
+        $package = $this->caseDetails($case);
+        $package['oversight_mode'] = (int) $case['counsellor_user_id'] !== (int) $actor['id'];
+        if ($package['oversight_mode']) {
+            $this->audit('case', $caseId, 'oversight_read', $actor);
+        }
+        return $package;
     }
 
     /** Assemble a package only after read authorization or the originating case write. */
@@ -445,13 +544,29 @@ final class GuidanceCaseService
         $caseId = (int) $case['id'];
         $patient = $this->person((int) $case['person_id']);
         return [
-            'case' => $case, 'patient' => $patient,
+            'case' => $this->withoutOutcomeColumns($case), 'patient' => $patient,
             'student' => $patient['kind'] === 'student' ? $this->studentModel->findByPersonId((int) $patient['id']) : null,
             'employee' => $patient['kind'] === 'employee'
                 ? (new EmployeeProfileModel($this->db))->scoped()->where('person_id', $patient['id'])->first() : null,
             'sessions' => $this->sessionModel->getForCase($caseId),
-            'followups' => $this->followupModel->getForCase($caseId),
+            'followups' => array_map([$this, 'withoutOutcomeColumns'], $this->followupModel->getForCase($caseId)),
         ];
+    }
+
+    /**
+     * Keep encrypted outcome material out of ordinary packages.
+     *
+     * Only getDecryptedCaseOutcomes() may handle it, after a fresh authorization
+     * and its own audit append.
+     */
+    private function withoutOutcomeColumns(array $row): array
+    {
+        foreach (array_keys($row) as $key) {
+            if (str_starts_with((string) $key, 'completion_notes_') || str_starts_with((string) $key, 'closure_disposition_')) {
+                unset($row[$key]);
+            }
+        }
+        return $row;
     }
 
     private function caseRow(int $id, bool $lock = false): array

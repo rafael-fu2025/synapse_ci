@@ -5,6 +5,7 @@ import { ListChecks } from 'lucide-react-native';
 import { QueueTicket } from '../../../api/endpoints/queue';
 import { unitLabel } from '../../appointments/status';
 import { PlaceholderCard } from '../../../components/PlaceholderCard';
+import { CardOutline } from '../../../components/CardOutline';
 import { font, palette, type } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 
@@ -40,38 +41,44 @@ export function QueueTicketCard({ ticket }: { ticket: QueueTicket }) {
   const guidance = ticket.unit === 'guidance';
   const view = ticketPresentation(ticket);
   const priority = ticket.priority ? ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1) : 'Normal';
+  // Same branded surface as the Home appointment card: maroon (or violet for
+  // guidance) in light mode, black in dark mode. Content is white on all three.
+  const dark = theme.mode === 'dark';
+  const colors = dark
+    ? ['#1c1c1c', '#0f0f0f']
+    : guidance ? ['#4f3974', palette.violet600] : [palette.brand900, palette.brand700];
 
   return (
-    <LinearGradient
-      colors={guidance ? ['#4f3974', palette.violet600] : [palette.brand900, palette.brand700]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+    <View
       accessible
       accessibilityLabel={`${unitLabel(ticket.unit)} ticket ${ticket.ticket_code}. ${view.statusLabel}. Place in line ${view.place}. People ahead ${view.peopleAhead}. Estimated wait ${view.wait}.`}
-      style={cardStyles.ticket}>
-      <View style={cardStyles.top}>
-        <View style={cardStyles.copy}>
-          <View style={[cardStyles.pill, !guidance && theme.mode === 'dark' && { backgroundColor: theme.surface }]}>
-            <Text style={[cardStyles.pillText, { color: guidance ? palette.violet600 : theme.brandText }]}>
-              Live waiting room ticket
+      style={[cardStyles.shell, dark && cardStyles.shellOnDark]}>
+      <LinearGradient colors={colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={cardStyles.ticket}>
+        <View style={cardStyles.top}>
+          <View style={cardStyles.copy}>
+            <View style={[cardStyles.pill, dark ? cardStyles.pillOnDark : cardStyles.pillOnLight]}>
+            <Text style={[cardStyles.pillText, dark ? cardStyles.pillTextOnDark : guidance ? cardStyles.pillTextGuidance : cardStyles.pillTextClinic]}>
+              Live waiting ticket
+            </Text>
+            </View>
+            <Text style={cardStyles.code}>{ticket.ticket_code}</Text>
+            <Text style={cardStyles.meta}>
+              {unitLabel(ticket.unit)} · {view.statusLabel}
             </Text>
           </View>
-          <Text style={cardStyles.code}>{ticket.ticket_code}</Text>
-          <Text style={cardStyles.meta}>
-            {unitLabel(ticket.unit)} · {view.statusLabel}
-          </Text>
+          <View style={cardStyles.priority}>
+            <Text style={cardStyles.priorityLabel}>PRIORITY</Text>
+            <Text style={cardStyles.priorityValue}>{priority}</Text>
+          </View>
         </View>
-        <View style={cardStyles.priority}>
-          <Text style={cardStyles.priorityLabel}>PRIORITY</Text>
-          <Text style={cardStyles.priorityValue}>{priority}</Text>
+        <View style={cardStyles.stats}>
+          <Stat label="Place in line" value={view.place} />
+          <Stat label="People ahead" value={view.peopleAhead} divider />
+          <Stat label="Est. wait" value={view.wait} divider />
         </View>
-      </View>
-      <View style={cardStyles.stats}>
-        <Stat label="Place in line" value={view.place} />
-        <Stat label="People ahead" value={view.peopleAhead} divider />
-        <Stat label="Est. wait" value={view.wait} divider />
-      </View>
-    </LinearGradient>
+      </LinearGradient>
+      {dark ? <CardOutline radius={16} testID="queueTicketOutline" /> : null}
+    </View>
   );
 }
 
@@ -104,20 +111,33 @@ export function QueueTicketPlaceholder({ loading = false, error = false, onPress
 }
 
 const cardStyles = StyleSheet.create({
-  ticket: {
+  // Outer shell owns the spacing, radius and shadow so the gradient fills the
+  // full card and the outline can sit on its exact bounds (not the padded box).
+  shell: {
     marginBottom: 10,
-    padding: 15,
     borderRadius: 16,
+    overflow: 'hidden',
     elevation: 6,
     shadowColor: '#800000',
     shadowOpacity: 0.2,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
   },
+  // A maroon glow under a black card reads as a colour fringe; match the Home
+  // appointment card's neutral dark shadow instead.
+  shellOnDark: { shadowColor: '#000000', shadowOpacity: 0.5, shadowRadius: 25, shadowOffset: { width: 0, height: 12 } },
+  ticket: { padding: 15 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   copy: { flex: 1, alignItems: 'flex-start' },
-  pill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, backgroundColor: '#ffffff' },
+  pill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999 },
+  pillOnLight: { backgroundColor: '#ffffff' },
+  // On the black dark-mode surface a white pill would glare; match the Home
+  // appointment card's on-brand pill instead (translucent white + white label).
+  pillOnDark: { backgroundColor: 'rgba(255,255,255,0.18)' },
   pillText: { fontSize: 9.5, fontWeight: '700', fontFamily: font.body },
+  pillTextClinic: { color: palette.brand700 },
+  pillTextGuidance: { color: palette.violet600 },
+  pillTextOnDark: { color: '#ffffff' },
   code: { ...type.hero, marginTop: 7, fontSize: 26, color: '#ffffff' },
   meta: { marginTop: 2, color: 'rgba(255,255,255,0.72)', fontSize: 9.5, fontFamily: font.body },
   priority: { alignItems: 'flex-end' },

@@ -18,7 +18,7 @@ function modal(form, attributes = '') {
 function markup(kind, fallback) {
   const generic = kind === 'generic' || kind === 'carousel';
   let fields = '<input name="title" value="Keep these inputs"><button type="submit">Save</button>';
-  if (kind === 'carousel') fields = `<input id="light_file" type="file" name="light_file"><input id="dark_file" type="file" name="dark_file"><input id="light_path" value="assets/img/brand/example.png"><input id="dark_path"><div id="slideFormAlert" class="d-none"></div><button id="slideSubmitBtn" type="submit">Save</button><div class="carousel-upload-progress d-none"><div class="progress-bar"></div><span class="dz-status"></span><span class="dz-pct"></span></div>`;
+  if (kind === 'carousel') fields = `<input id="light_file" type="file" name="light_file"><input id="dark_file" type="file" name="dark_file"><input id="title_probe" name="title" value="Keep these inputs"><div id="slideFormAlert" class="d-none"></div><button id="slideSubmitBtn" type="submit">Save</button><div class="carousel-upload-progress d-none"><div class="progress-bar"></div><span class="dz-status"></span><span class="dz-pct"></span></div>`;
   const form = `<form method="post" action="${kind === 'bmg' ? '/facilities/save' : kind === 'availability' ? '/availability/template' : '/save'}" ${kind === 'carousel' ? 'id="slideForm"' : ''} ${generic ? 'data-modal-submit' : kind === 'bmg' ? 'data-bmg-submit' : 'data-availability-save'}>${fields}</form>`;
   let content = modal(form, generic ? 'id="appFormModal" data-app-form-modal data-modal-direct="true" data-return-url="/cancelled"' : kind === 'bmg' ? 'id="operation" data-bmg-modal' : 'id="operation"');
   if (kind === 'availability') content = `<section data-availability-workspace data-workspace-url="/availability">${content}</section>`;
@@ -100,6 +100,11 @@ async function fixture(t, kind, suffix = '') {
   t.after(() => assert.deepEqual(errors, []));
   await page.goto(`${origin}/fixture/${kind}${suffix}`);
   await page.waitForFunction(() => !!document.querySelector('.modal.show[data-ready="true"]'));
+  if (kind === 'carousel') {
+    // The real create form requires a light image upload; this fixture tests
+    // background-submit locking, not the file picker UI.
+    await page.locator('#light_file').setInputFiles(path.join(root, 'public', 'assets', 'img', 'brand', 'fuel-bg.jpg'));
+  }
   return { page, posts };
 }
 
@@ -227,7 +232,7 @@ test('failed GET offers sticky GET-only retry and marks only the saved form once
 for (const kind of ['generic', 'carousel']) {
   test(`${kind}: pending POST freezes native and custom controls; JSON failure restores original states`, async t => {
     const { page, posts } = await fixture(t, kind);
-    const input = page.locator(kind === 'generic' ? '.modal input[name="title"]' : '#light_path');
+    const input = page.locator(kind === 'generic' ? '.modal input[name="title"]' : '#title_probe');
     const originalValue = await input.inputValue();
     await page.evaluate(() => {
       const form = document.querySelector('.modal form');
@@ -267,7 +272,7 @@ for (const kind of ['generic', 'carousel']) {
     assert.equal(await input.inputValue(), originalValue);
     await page.locator('#custom-control').click();
     assert.equal(await page.evaluate(() => customClicks), 1);
-    await input.fill(kind === 'generic' ? 'Corrected draft' : 'assets/img/brand/corrected.png');
+    await input.fill('Corrected draft');
     assert.equal(await page.evaluate(() => calls.length), 0);
   });
 

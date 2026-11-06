@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controllers\Api\V1;
 
+use App\Services\Api\StaffQueuePresenter;
 use App\Services\Scheduling\QueueService;
+use App\Services\Scheduling\SchedulingClock;
 use CodeIgniter\HTTP\ResponseInterface;
 use RuntimeException;
 
 /** Read-only staff queue monitoring. No staff action exists on the mobile API by design. */
 final class StaffQueueApiController extends ApiV1Controller
 {
-    private const ACTIVE_BUCKETS = ['waiting', 'called', 'in_consultation'];
-
     public function index(): ResponseInterface
     {
         return $this->run(function (): ResponseInterface {
@@ -39,39 +39,19 @@ final class StaffQueueApiController extends ApiV1Controller
                 throw new RuntimeException('Queue monitoring access forbidden.', 403);
             }
 
+            $now = SchedulingClock::now();
+            $date = $now->format('Y-m-d');
             $service = new QueueService();
+            $presenter = new StaffQueuePresenter();
             $summaries = [];
             foreach ($units as $staffUnit) {
-                $board = $service->getBoardSummary($staffUnit);
-                $tickets = [];
-                foreach (self::ACTIVE_BUCKETS as $bucket) {
-                    $tickets[$bucket] = array_map(
-                        $this->presentTicket(...),
-                        is_array($board[$bucket] ?? null) ? $board[$bucket] : []
-                    );
-                }
-                $summaries[] = [
-                    'unit' => $staffUnit,
-                    'counts' => $board['counts'],
-                    'tickets' => $tickets,
-                ];
+                $board = $service->getBoardSummary($staffUnit, $date);
+                $summaries[] = $presenter->present($staffUnit, $board, $now);
             }
-            return $this->ok(['data' => $summaries]);
+            return $this->ok([
+                'data' => $summaries,
+                'meta' => ['date' => $date, 'generated_at' => $now->format(DATE_ATOM)],
+            ]);
         });
-    }
-
-    private function presentTicket(array $item): array
-    {
-        return [
-            'id' => (int) $item['id'],
-            'ticket_code' => (string) $item['ticket_code'],
-            'status' => (string) $item['status'],
-            'priority' => (string) $item['priority'],
-            'patient_name' => trim(($item['first_name'] ?? '') . ' ' . ($item['last_name'] ?? '')),
-            'patient_kind' => $item['kind'] ?? null,
-            'called_at' => $item['called_at'] ?? null,
-            'completed_at' => $item['completed_at'] ?? null,
-            'created_at' => $item['created_at'] ?? null,
-        ];
     }
 }

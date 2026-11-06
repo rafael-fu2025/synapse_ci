@@ -22,11 +22,16 @@ abstract class InventoryDatabaseTestCase extends CIUnitTestCase
     protected int $medicineId;
     protected int $encounterId;
     protected int $patientId;
+    private string $savedDefaultGroup;
 
     protected function setUp(): void
     {
         InventoryTestDatabase::verify();
         parent::setUp();
+        // Route handlers revalidate identity via the default group; bind it to the
+        // migrated tests schema so fixtures and controllers share one database.
+        $this->savedDefaultGroup = config('Database')->defaultGroup;
+        config('Database')->defaultGroup = 'tests';
         $now = date('Y-m-d H:i:s');
         $this->db->table('tenants')->insert(['slug'=>uniqid('inventory_'), 'name'=>'Inventory test', 'is_active'=>1, 'created_at'=>$now, 'updated_at'=>$now]);
         $this->tenantId = (int) $this->db->insertID();
@@ -44,6 +49,7 @@ abstract class InventoryDatabaseTestCase extends CIUnitTestCase
     protected function tearDown(): void
     {
         CurrentTenant::reset();
+        config('Database')->defaultGroup = $this->savedDefaultGroup;
         // Deliberately retain history in this isolated test DB; never disable append-only triggers to clean fixtures.
         parent::tearDown();
     }
@@ -51,8 +57,21 @@ abstract class InventoryDatabaseTestCase extends CIUnitTestCase
     protected function user(string $role, ?int $tenantId = null): int
     {
         $now = date('Y-m-d H:i:s');
-        $this->db->table('users')->insert(['tenant_id'=>$tenantId ?? $this->tenantId, 'username'=>uniqid('inventory_'), 'role'=>$role, 'status'=>'active', 'created_at'=>$now, 'updated_at'=>$now]);
+        // Only superadmin may be person-less; session identity revalidation rejects
+        // person-less staff, so every other role gets a backing person row.
+        $personId = null;
+        if ($role !== 'superadmin') {
+            $this->db->table('people')->insert(['tenant_id'=>$tenantId ?? $this->tenantId, 'kind'=>'employee', 'mis_id'=>uniqid('inventory_user_'), 'first_name'=>'Inventory', 'last_name'=>'Staff', 'created_at'=>$now, 'updated_at'=>$now]);
+            $personId = (int) $this->db->insertID();
+        }
+        $this->db->table('users')->insert(['tenant_id'=>$tenantId ?? $this->tenantId, 'person_id'=>$personId, 'username'=>uniqid('inventory_'), 'role'=>$role, 'status'=>'active', 'created_at'=>$now, 'updated_at'=>$now]);
         return (int) $this->db->insertID();
+    }
+
+    /** _auth metadata required by AuthenticatedUser::current(), bound to this session. */
+    protected function authMeta(): array
+    {
+        return ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()];
     }
 
     protected function receipt(int $quantity = 10, string $lot = 'LOT-A', string $expiry = '+1 year', ?string $key = null): array

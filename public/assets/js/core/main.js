@@ -357,7 +357,9 @@
    * Uses [data-theme="dark"] on <html> to match the v3 demo design tokens
    */
   const setTheme = (dark) => {
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    const previous = document.documentElement.getAttribute('data-theme');
+    const next = dark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('na-dark-mode', dark ? '1' : '0');
     // Update icon if toggle exists
     const icon = document.querySelector('.theme-toggle .theme-icon-dark, .theme-toggle .theme-icon-light, #darkModeToggle i');
@@ -369,6 +371,13 @@
     }
     // Clean up any lingering tooltips when theme toggles
     document.querySelectorAll('.tooltip').forEach(t => t.remove());
+    // Charts resolve CSS tokens at render time, so they must be told to
+    // re-read them. Fired after the attribute settles so tokens are current.
+    if (previous !== next) {
+      document.dispatchEvent(new CustomEvent('synapse:theme-change', {
+        detail: { theme: next, dark: dark }
+      }));
+    }
   };
 
   const stored = localStorage.getItem('na-dark-mode');

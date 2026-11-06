@@ -102,7 +102,10 @@ final class InsightStore
                     }
                 }
             }
-            return true;
+            $recoveryStarted = in_array('materialization_generation', $this->db->getFieldNames('ai_snapshots'), true)
+                || array_intersect(['snapshot_generation', 'pipeline_digest', 'retry_of_id', 'root_job_id'], $this->db->getFieldNames('ai_jobs')) !== []
+                || $this->db->tableExists('ai_storage_audit');
+            return !$recoveryStarted || $this->supportsRecovery();
         } catch (Throwable) {
             return false;
         }
@@ -126,6 +129,22 @@ final class InsightStore
         }
     }
 
+    /** Recovery is opt-in only after all durable lineage constraints are installed. */
+    public function supportsRecovery(): bool
+    {
+        try {
+            $this->db ??= db_connect();
+            return in_array('materialization_generation', $this->db->getFieldNames('ai_snapshots'), true)
+                && array_diff(['snapshot_generation', 'pipeline_digest', 'retry_of_id', 'root_job_id'], $this->db->getFieldNames('ai_jobs')) === []
+                && $this->hasUnique($this->db->getIndexData('ai_jobs'), ['retry_of_id'])
+                && $this->db->tableExists('ai_storage_audit')
+                && array_diff(explode(' ', 'id tenant_id unit actor_id action entity_type entity_id generation created_at'),
+                    $this->db->getFieldNames('ai_storage_audit')) === [];
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
     private function hasUnique(array $indexes, array $fields): bool
     {
         foreach ($indexes as $index) {
@@ -134,6 +153,79 @@ final class InsightStore
             }
         }
         return false;
+    }
+
+    private function currentPeriod(): string
+    {
+        return (new DateTimeImmutable($this->now(), new DateTimeZone('UTC')))
+            ->setTimezone(new DateTimeZone('Asia/Manila'))->modify('first day of this month')->modify('-1 month')->format('Y-m');
+    }
+
+    public function listRecoverableSnapshots(int $tenantId, string $unit): array
+    {
+        return $this->read(function () use ($tenantId, $unit): array {
+            if (!$this->supportsRecovery()) { return []; }
+            $rows = $this->table('ai_snapshots', $tenantId, $unit)->where('period', $this->currentPeriod())
+                ->groupStart()->where('expires_at <=', $this->now())->orWhere('payload', null)->groupEnd()
+                ->orderBy('id')->get()->getResultArray();
+            return array_map(static fn (array $row): array => [
+                'id' => (int) $row['id'], 'analysis_code' => $row['analysis_code'] ?? 'clinic.activity',
+                'period' => $row['period'], 'materialization_generation' => (int) $row['materialization_generation'],
+                'expires_at' => $row['expires_at'],
+            ], $rows);
+        });
+    }
+
+    /** Re-materialize an identical disclosure, never a correction or a job resurrection. */
+    public function recoverSnapshot(int $tenantId, string $unit, array $payload, int $actorId): array
+    {
+        $this->scope($tenantId, $unit);
+        DisclosurePolicy::validatePayload($payload);
+        if ($actorId < 1) { throw new AiFailure('invalid_job', 422); }
+        $analysis = $payload['analysis_code'] ?? 'clinic.activity';
+        if (($payload['schema_version'] === '1' && $unit !== 'clinic')
+            || ($payload['schema_version'] === '2' && ($payload['department'] !== $unit || AnalysisCatalog::get($analysis)['unit'] !== $unit))) {
+            throw new AiFailure('invalid_scope', 422);
+        }
+        return $this->transaction(function () use ($tenantId, $unit, $payload, $actorId, $analysis): array {
+            if (!$this->supportsRecovery()) { throw new AiFailure('store_unavailable', 503); }
+            if ($payload['period']['label'] !== $this->currentPeriod()) { throw new AiFailure('snapshot_expired', 409); }
+            // Match saveSnapshot lock order: release reservations before the snapshot lock.
+            $this->freezeMonths($tenantId, $unit, $payload);
+            $query = $this->table('ai_snapshots', $tenantId, $unit)->where('period', $payload['period']['label']);
+            if ($this->supportsAnalysisScope()) { $query->where('analysis_code', $analysis); }
+            $this->write($query->update(['period' => $payload['period']['label']]));
+            $query = $this->table('ai_snapshots', $tenantId, $unit)->where('period', $payload['period']['label']);
+            if ($this->supportsAnalysisScope()) { $query->where('analysis_code', $analysis); }
+            $row = $query->get()->getRowArray();
+            if ($row === null) { throw new AiFailure('snapshot_not_found', 404); }
+            $fingerprint = $this->cipher->fingerprint($tenantId, $unit, 'snapshot', $this->canonical([
+                'schema_version' => $payload['schema_version'], 'disclosure_version' => self::DISCLOSURE_VERSION, 'payload' => $payload]));
+            if ($row['schema_version'] !== $payload['schema_version'] || $row['disclosure_version'] !== self::DISCLOSURE_VERSION
+                || !hash_equals($row['fingerprint'], $fingerprint)) { throw new AiFailure('snapshot_changed_requires_review', 409); }
+            if ($row['payload'] !== null && $row['expires_at'] > $this->now()) { throw new AiFailure('invalid_job', 409); }
+            $generation = (int) $row['materialization_generation'] + 1;
+            $expires = $this->after($this->retentionDays * 86400);
+            $this->write($this->table('ai_snapshots', $tenantId, $unit)->where('id', $row['id'])->update([
+                'materialization_generation' => $generation, 'expires_at' => $expires,
+                'payload' => $this->cipher->encrypt($tenantId, $unit, 'snapshot:' . $fingerprint, $payload),
+            ]));
+            $this->write($this->table('ai_jobs', $tenantId, $unit)->where('snapshot_id', $row['id'])->where('status', 'queued')
+                ->update(['status' => 'expired', 'reason' => 'snapshot_expired', 'updated_at' => $this->now()]));
+            $this->audit($tenantId, $unit, $actorId, 'snapshot_recovered', 'snapshot', (int) $row['id'], $generation);
+            $this->changed($tenantId, $unit);
+            return ['id' => (int) $row['id'], 'payload' => $payload, 'fingerprint' => $fingerprint,
+                'expires_at' => $expires, 'materialization_generation' => $generation, 'analysis_code' => $analysis];
+        });
+    }
+
+    private function audit(int $tenantId, string $unit, int $actorId, string $action, string $type, int $id, int $generation): void
+    {
+        // No update/delete path exists for this scoped, payload-free application ledger.
+        $this->write($this->db->table('ai_storage_audit')->insert([
+            'tenant_id' => $tenantId, 'unit' => $unit, 'actor_id' => $actorId, 'action' => $action,
+            'entity_type' => $type, 'entity_id' => $id, 'generation' => $generation, 'created_at' => $this->now(),
+        ]));
     }
 
     public function saveSnapshot(int $tenantId, string $unit, array $payload): array
@@ -208,12 +300,15 @@ final class InsightStore
             $key = $this->key([$tenantId, $unit, $snapshotId, $snapshot['fingerprint'], $profileRevision, $model]);
             $existing = $this->table('ai_jobs', $tenantId, $unit)->where('dedupe_key', $key)->get()->getRowArray();
             if ($existing !== null) {
-                return $this->jobMetadata($existing + array_intersect_key($snapshot, ['analysis_code' => true])) + ['reused' => true];
+                return $this->jobMetadata($this->latestAttempt($existing) + array_intersect_key($snapshot, ['analysis_code' => true])) + ['reused' => true];
             }
             // Enqueue-day admission control is separate from outbound-day spend.
             // reserveDispatch() must run immediately before the single provider POST.
             for ($slot = 1; $slot <= $dailyLimit; ++$slot) {
-                $this->write($this->db->table('ai_jobs')->ignore(true)->insert([
+                $this->write($this->db->table('ai_jobs')->ignore(true)->insert(($this->supportsRecovery() ? [
+                    'snapshot_generation' => (int) $snapshot['materialization_generation'],
+                    'pipeline_digest' => PipelineProvenance::digest(),
+                ] : []) + [
                     'tenant_id' => $tenantId, 'unit' => $unit, 'snapshot_id' => $snapshotId, 'actor_id' => $actorId,
                     'profile_revision' => $profileRevision, 'model' => $model, 'dedupe_key' => $key,
                     'budget_key' => $this->key([$tenantId, substr($this->now(), 0, 10), $slot]),
@@ -221,7 +316,15 @@ final class InsightStore
                     'created_at' => $this->now(), 'updated_at' => $this->now(), 'expires_at' => $snapshot['expires_at'],
                 ]));
                 $inserted = $this->db->affectedRows() === 1;
-                if ($inserted) { $this->changed($tenantId, $unit); }
+                // MySQL metadata queries can reset insert_id; capture before readiness inspection.
+                $insertedId = $inserted ? (int) $this->db->insertID() : 0;
+                if ($inserted) {
+                    $this->changed($tenantId, $unit);
+                    if ($this->supportsRecovery()) {
+                        $id = $insertedId;
+                        $this->write($this->table('ai_jobs', $tenantId, $unit)->where('id', $id)->update(['root_job_id' => $id]));
+                    }
+                }
                 $row = $this->table('ai_jobs', $tenantId, $unit)->where('dedupe_key', $key)->get()->getRowArray();
                 if ($row !== null) {
                     return $this->jobMetadata($row + array_intersect_key($snapshot, ['analysis_code' => true])) + ['reused' => !$inserted];
@@ -229,6 +332,97 @@ final class InsightStore
             }
             throw new AiFailure('daily_budget_exceeded', 429);
         });
+    }
+
+    public function retry(int $tenantId, string $unit, int $jobId, int $actorId, string $profileRevision, string $model, int $dailyLimit): array
+    {
+        $this->scope($tenantId, $unit);
+        if ($actorId < 1 || $jobId < 1 || $dailyLimit < 1 || $dailyLimit > 10000) { throw new AiFailure('invalid_job', 422); }
+        $snapshotId = $this->read(function () use ($tenantId, $unit, $jobId): int {
+            if (!$this->supportsRecovery()) { throw new AiFailure('store_unavailable', 503); }
+            $source = $this->table('ai_jobs', $tenantId, $unit)->where('id', $jobId)->get()->getRowArray();
+            if ($source === null) { throw new AiFailure('job_not_found', 404); }
+            return (int) $source['snapshot_id'];
+        });
+        return $this->transaction(function () use ($tenantId, $unit, $jobId, $actorId, $profileRevision, $model, $dailyLimit, $snapshotId): array {
+            // Locate outside the transaction; take a single snapshot writer lock before authority reads.
+            $this->write($this->table('ai_snapshots', $tenantId, $unit)->where('id', $snapshotId)->update(['id' => $snapshotId]));
+            $source = $this->table('ai_jobs', $tenantId, $unit)->where('id', $jobId)->get()->getRowArray();
+            if ($source === null || (int) $source['snapshot_id'] !== $snapshotId
+                || $source['profile_revision'] !== $profileRevision || $source['model'] !== $model || !$this->retryEligible($source, true)) {
+                throw new AiFailure('invalid_job', 409);
+            }
+            $snapshot = $this->snapshot($tenantId, $unit, $snapshotId);
+            $existing = $this->table('ai_jobs', $tenantId, $unit)->where('retry_of_id', $jobId)->get()->getRowArray();
+            if ($existing !== null) { return $this->jobMetadata($this->latestAttempt($existing)) + ['reused' => true]; }
+            $key = $this->key(['retry', $tenantId, $unit, $jobId]);
+            for ($slot = 1; $slot <= $dailyLimit; ++$slot) {
+                $this->write($this->db->table('ai_jobs')->ignore(true)->insert([
+                    'tenant_id' => $tenantId, 'unit' => $unit, 'snapshot_id' => $snapshotId, 'actor_id' => $actorId,
+                    'profile_revision' => $profileRevision, 'model' => $model, 'dedupe_key' => $key,
+                    'snapshot_generation' => (int) $snapshot['materialization_generation'], 'pipeline_digest' => PipelineProvenance::digest(),
+                    'retry_of_id' => $jobId, 'root_job_id' => (int) $source['root_job_id'],
+                    'budget_key' => $this->key([$tenantId, substr($this->now(), 0, 10), $slot]),
+                    'status' => 'queued', 'attempts' => 0, 'created_at' => $this->now(), 'updated_at' => $this->now(),
+                    'expires_at' => $snapshot['expires_at'],
+                ]));
+                if ($this->db->affectedRows() === 1) {
+                    $id = (int) $this->db->insertID();
+                    $this->audit($tenantId, $unit, $actorId, 'job_retried', 'job', $id, (int) $snapshot['materialization_generation']);
+                    $this->changed($tenantId, $unit);
+                    return $this->jobMetadata($this->table('ai_jobs', $tenantId, $unit)->where('id', $id)->get()->getRowArray()) + ['reused' => false];
+                }
+            }
+            throw new AiFailure('daily_budget_exceeded', 429);
+        });
+    }
+
+    private function latestAttempt(array $row): array
+    {
+        if (!$this->supportsRecovery()) { return $row; }
+        for ($depth = 0; $depth < 100; ++$depth) {
+            $next = $this->table('ai_jobs', (int) $row['tenant_id'], $row['unit'])->where('retry_of_id', $row['id'])->get()->getRowArray();
+            if ($next === null) { return $row; }
+            $row = $next;
+        }
+        throw new AiFailure('invalid_job', 409);
+    }
+
+    /** Eligibility never infers transport safety from a provider error code. */
+    private function retryEligible(array $row, bool $allowSuccessor = false): bool
+    {
+        if (!$this->supportsRecovery() || !in_array($row['status'], ['failed', 'cancelled', 'expired'], true)
+            || !is_string($row['pipeline_digest'] ?? null) || preg_match('/\A[a-f0-9]{64}\z/D', (string) ($row['pipeline_digest'] ?? '')) !== 1 || empty($row['root_job_id'])) { return false; }
+        $tenant = (int) $row['tenant_id']; $unit = $row['unit'];
+        $snapshot = $this->table('ai_snapshots', $tenant, $unit)->where('id', $row['snapshot_id'])->get()->getRowArray();
+        if ($snapshot === null || $snapshot['period'] !== $this->currentPeriod() || $snapshot['payload'] === null
+            || $snapshot['expires_at'] <= $this->now()) { return false; }
+        try {
+            $payload = $this->snapshotPayload($tenant, $unit, $snapshot);
+            DisclosurePolicy::validatePayload($payload);
+            if ($snapshot['schema_version'] !== $payload['schema_version'] || $snapshot['disclosure_version'] !== self::DISCLOSURE_VERSION
+                || $payload['period']['label'] !== $snapshot['period']
+                || ($payload['schema_version'] === '1' && $unit !== 'clinic')
+                || ($payload['schema_version'] === '2' && ($payload['department'] !== $unit
+                    || $payload['analysis_code'] !== ($snapshot['analysis_code'] ?? '')))
+                || !hash_equals($snapshot['fingerprint'], $this->cipher->fingerprint($tenant, $unit, 'snapshot', $this->canonical([
+                    'schema_version' => $payload['schema_version'], 'disclosure_version' => self::DISCLOSURE_VERSION, 'payload' => $payload])))) { return false; }
+        } catch (AiFailure) { return false; }
+        if (!$allowSuccessor && $this->latestAttempt($row)['id'] !== $row['id']) { return false; }
+        $family = $this->table('ai_jobs', $tenant, $unit)->where('root_job_id', $row['root_job_id'])->orderBy('id')->get()->getResultArray();
+        if ($family === [] || (int) $family[0]['id'] !== (int) $row['root_job_id'] || $family[0]['retry_of_id'] !== null) { return false; }
+        $previous = null;
+        foreach ($family as $member) {
+            if (($previous !== null && (int) $member['retry_of_id'] !== (int) $previous)
+                || $member['snapshot_id'] !== $row['snapshot_id'] || $member['profile_revision'] !== $row['profile_revision']
+                || $member['model'] !== $row['model'] || preg_match('/\A[a-f0-9]{64}\z/D', (string) $member['pipeline_digest']) !== 1
+                || !in_array($member['status'], ['failed', 'cancelled', 'expired', 'queued'], true)
+                || in_array($member['reason'], ['outcome_unknown', 'lease_lost'], true)
+                || $member['lease_token'] !== null || $member['lease_expires_at'] !== null || $member['active_key'] !== null
+                || $this->table('ai_dispatch_attempts', $tenant, $unit)->where('job_id', $member['id'])->countAllResults() !== 0) { return false; }
+            $previous = $member['id'];
+        }
+        return true;
     }
 
     public function listJobs(int $tenantId, string $unit, ?string $analysis = null): array
@@ -319,7 +513,15 @@ final class InsightStore
                     if ($row['profile_revision'] !== $profileRevision) {
                         continue;
                     }
+                    // Claim already clears stale job owners; do not invert recovery's
+                    // snapshot-before-job locks here. Dispatch locks and rechecks generation.
                     $snapshot = $this->snapshot($tenantId, $unit, (int) $row['snapshot_id']);
+                    if (!$this->generationMatches($row, $snapshot)) {
+                        $this->write($this->table('ai_jobs', $tenantId, $unit)->where('id', $row['id'])->where('status', 'queued')
+                            ->update(['status' => 'expired', 'reason' => 'snapshot_expired', 'updated_at' => $this->now()]));
+                        $this->changed($tenantId, $unit);
+                        continue;
+                    }
                     $payload = $this->snapshotPayload($tenantId, $unit, $snapshot);
                     $token = bin2hex(random_bytes(32));
                     $ok = $this->table('ai_jobs', $tenantId, $unit)->where('id', $row['id'])->where('status', 'queued')->update([
@@ -342,7 +544,8 @@ final class InsightStore
                     return ['id' => (int) $row['id'], 'actor_id' => (int) $row['actor_id'],
                         'snapshot_id' => (int) $row['snapshot_id'], 'profile_revision' => $row['profile_revision'],
                         'model' => $row['model'], 'payload' => $payload, 'lease_token' => $token,
-                        'lease_expires_at' => $this->after($leaseSeconds)] + array_intersect_key($snapshot, ['analysis_code' => true]);
+                        'lease_expires_at' => $this->after($leaseSeconds)] + array_intersect_key($snapshot, ['analysis_code' => true])
+                        + array_intersect_key($row, ['pipeline_digest' => true, 'snapshot_generation' => true]);
                 }
                 return null;
             });
@@ -368,10 +571,16 @@ final class InsightStore
         if ($dailyLimit < 1 || $dailyLimit > 10000) {
             throw new AiFailure('invalid_job', 422);
         }
-        $this->transaction(function () use ($tenantId, $unit, $jobId, $leaseToken, $dailyLimit, $requiredLeaseSeconds): void {
-            // Lock before reads: serialize same-job retries on InnoDB and avoid
-            // SQLite's deferred read-to-write upgrade during overlapping attempts.
-            $this->write($this->table('ai_jobs', $tenantId, $unit)->where('id', $jobId)->update(['id' => $jobId]));
+        $snapshotId = $this->read(function () use ($tenantId, $unit, $jobId): int {
+            $row = $this->table('ai_jobs', $tenantId, $unit)->where('id', $jobId)->get()->getRowArray();
+            if ($row === null) { throw new AiFailure('job_not_found', 404); }
+            return (int) $row['snapshot_id'];
+        });
+        $this->transaction(function () use ($tenantId, $unit, $jobId, $leaseToken, $dailyLimit, $requiredLeaseSeconds, $snapshotId): void {
+            // Common snapshot-before-job order with claim/recovery/retry. Write first
+            // also avoids SQLite deferred read-to-write upgrades during contention.
+            $this->write($this->table('ai_snapshots', $tenantId, $unit)->where('id', $snapshotId)->update(['id' => $snapshotId]));
+            $this->write($this->table('ai_jobs', $tenantId, $unit)->where('id', $jobId)->where('snapshot_id', $snapshotId)->update(['id' => $jobId]));
             $this->assertDispatchLease($tenantId, $unit, $jobId, $leaseToken, $requiredLeaseSeconds, true);
             if ($this->table('ai_dispatch_attempts', $tenantId, $unit)->where('job_id', $jobId)->countAllResults() !== 0) {
                 throw new AiFailure('invalid_job', 409);
@@ -403,7 +612,8 @@ final class InsightStore
         $this->canonical($validatedDraft);
         $this->transaction(function () use ($tenantId, $unit, $jobId, $validatedDraft, $leaseToken): void {
             $row = $this->ownedJob($tenantId, $unit, $jobId, $leaseToken);
-            $this->snapshot($tenantId, $unit, (int) $row['snapshot_id']);
+            $snapshot = $this->snapshot($tenantId, $unit, (int) $row['snapshot_id'], true);
+            if (!$this->generationMatches($row, $snapshot)) { throw new AiFailure('invalid_job', 409); }
             $this->transition($tenantId, $unit, $row, 'succeeded', null);
             $this->write($this->db->table('ai_insights')->insert([
                 'tenant_id' => $tenantId, 'unit' => $unit, 'job_id' => $jobId, 'snapshot_id' => $row['snapshot_id'],
@@ -418,7 +628,8 @@ final class InsightStore
     public function fail(int $tenantId, string $unit, int $jobId, string $reason, bool $ambiguous = false, ?string $leaseToken = null): void
     {
         $allowed = ['generation_failed', 'provider_unavailable', 'provider_timeout', 'invalid_output', 'policy_blocked',
-            'authorization_revoked', 'profile_changed', 'snapshot_expired', 'ai_disabled', 'budget_exceeded', 'outcome_unknown'];
+            'authorization_revoked', 'profile_changed', 'snapshot_expired', 'ai_disabled', 'budget_exceeded', 'outcome_unknown',
+            'provider_auth_failed', 'provider_rate_limited', 'provider_rejected'];
         $reason = $ambiguous ? 'outcome_unknown' : (in_array($reason, $allowed, true) ? $reason : 'generation_failed');
         $this->transaction(function () use ($tenantId, $unit, $jobId, $reason, $ambiguous, $leaseToken): void {
             $row = $this->ownedJob($tenantId, $unit, $jobId, $leaseToken);
@@ -467,11 +678,18 @@ final class InsightStore
     public function purgeExpired(int $tenantId, string $unit): array
     {
         return $this->transaction(function () use ($tenantId, $unit): array {
+            // Recovery and purge both lock snapshots before jobs; never invert this order on InnoDB.
+            $snapshotIds = array_column($this->table('ai_snapshots', $tenantId, $unit)->select('id')
+                ->where('expires_at <=', $this->now())->where('payload !=', null)->orderBy('id')->limit(100)->get()->getResultArray(), 'id');
+            if ($snapshotIds !== []) {
+                $this->write($this->table('ai_snapshots', $tenantId, $unit)->whereIn('id', $snapshotIds)->set('id', 'id', false)->update());
+            }
             $this->expireJobs($tenantId, $unit);
             $counts = [];
             foreach (['ai_snapshots', 'ai_insights'] as $table) {
-                $rows = $this->table($table, $tenantId, $unit)->select('id')->where('expires_at <=', $this->now())
-                    ->where('payload !=', null)->orderBy('id')->limit(100)->get()->getResultArray();
+                $rows = $table === 'ai_snapshots' ? array_map(static fn ($id): array => ['id' => $id], $snapshotIds)
+                    : $this->table($table, $tenantId, $unit)->select('id')->where('expires_at <=', $this->now())
+                        ->where('payload !=', null)->orderBy('id')->limit(100)->get()->getResultArray();
                 $counts[$table] = 0;
                 if ($rows !== []) {
                     $this->write($this->table($table, $tenantId, $unit)->whereIn('id', array_column($rows, 'id'))->update(['payload' => null]));
@@ -606,7 +824,8 @@ final class InsightStore
             throw new AiFailure('invalid_lease', 422);
         }
         $row = $this->ownedJob($tenantId, $unit, $jobId, $token);
-        $this->snapshot($tenantId, $unit, (int) $row['snapshot_id'], $lockSnapshot);
+        $snapshot = $this->snapshot($tenantId, $unit, (int) $row['snapshot_id'], $lockSnapshot);
+        if (!$this->generationMatches($row, $snapshot)) { throw new AiFailure('invalid_job', 409); }
         if ($row['lease_expires_at'] < $this->after($requiredSeconds)) {
             throw new AiFailure('lease_lost', 409);
         }
@@ -639,12 +858,24 @@ final class InsightStore
         $this->changed($tenantId, $unit);
     }
 
+    private function generationMatches(array $job, array $snapshot): bool
+    {
+        // A partial upgrade must fail closed too: never treat a provenance column as legacy.
+        if (!in_array('pipeline_digest', $this->db->getFieldNames('ai_jobs'), true)) { return true; }
+        return $this->supportsRecovery() && PipelineProvenance::matches($job['pipeline_digest'] ?? null)
+            && (int) ($job['snapshot_generation'] ?? 0) === (int) $snapshot['materialization_generation'];
+    }
+
     private function jobMetadata(array $row): array
     {
         $result = array_intersect_key($row, array_flip(['id', 'snapshot_id', 'actor_id', 'profile_revision', 'model',
             'status', 'reason', 'attempts', 'created_at', 'updated_at', 'expires_at', 'analysis_code']));
         foreach (['id', 'snapshot_id', 'actor_id', 'attempts'] as $key) {
             $result[$key] = (int) $result[$key];
+        }
+        if ($this->supportsRecovery()) {
+            $result += array_intersect_key($row, array_flip(['snapshot_generation', 'pipeline_digest', 'retry_of_id', 'root_job_id']));
+            $result['can_retry'] = $this->retryEligible($row);
         }
         return $result;
     }

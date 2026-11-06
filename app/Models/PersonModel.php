@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Libraries\LikePattern;
+
 final class PersonModel extends TenantModel
 {
     protected $table = 'people';
@@ -58,12 +60,10 @@ final class PersonModel extends TenantModel
             return [];
         }
 
-        return $this->scoped()
-            ->groupStart()
-                ->like('first_name', $term)
-                ->orLike('last_name', $term)
-                ->orLike('mis_id', $term)
-            ->groupEnd()
+        $builder = $this->scoped();
+        LikePattern::applyGroup($builder->builder(), ['first_name', 'last_name', 'mis_id'], $term);
+
+        return $builder
             ->orderBy('last_name', 'ASC')
             ->orderBy('first_name', 'ASC')
             ->findAll($limit);

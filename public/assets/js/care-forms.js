@@ -4,24 +4,49 @@
   function patientSearch(config) {
     return {
       searchTerm: '', results: [], selectedPerson: null, searchController: null,
-      async searchPatient() {
+      searching: false, searchError: '', searchComplete: false,
+      resetSearch() {
         this.searchController?.abort();
-        if (this.searchTerm.trim().length < 2) { this.results = []; return; }
+        this.searchController = null;
+        this.results = [];
+        this.searching = false;
+        this.searchError = '';
+        this.searchComplete = false;
+      },
+      patientInput() { this.resetSearch(); },
+      async searchPatient() {
+        this.resetSearch();
+        const term = this.searchTerm.trim();
+        if (term.length < 2 || this.searchTerm.length > 150 || this.selectedPerson) return;
         const controller = new AbortController();
         this.searchController = controller;
+        this.searching = true;
+        const current = () => this.searchController === controller && !controller.signal.aborted
+          && this.searchTerm.trim() === term && !this.selectedPerson;
         const url = new URL(config.patientUrl, location.href);
-        url.searchParams.set('q', this.searchTerm);
-        const finishLoading = window.SynapseLoading?.begin(this.$root?.querySelector('.input-group')?.parentElement, { label: 'Searching directory…' });
+        url.searchParams.set('q', term);
         try {
-          const response = await fetch(url, { signal: controller.signal });
-          if (controller.signal.aborted || window.SynapseCsrf?.fromResponse(response)) return;
-          const payload = response.ok ? await response.json() : null;
-          if (!controller.signal.aborted) this.results = payload?.results || [];
-        } catch (error) { if (error.name !== 'AbortError' && !controller.signal.aborted) this.results = []; }
-        finally { finishLoading?.(); }
+          const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+          if (!current() || window.SynapseCsrf?.fromResponse(response)) return;
+          if (!response.ok) throw new Error('Lookup failed');
+          const payload = await response.json();
+          if (!Array.isArray(payload.results)) throw new Error('Invalid lookup response');
+          if (current()) {
+            this.results = payload.results;
+            this.searchComplete = true;
+          }
+        } catch (error) {
+          if (error.name !== 'AbortError' && current()) this.searchError = 'Unable to search the local directory. Please try again.';
+        } finally {
+          if (this.searchController === controller) {
+            this.searchController = null;
+            this.searching = false;
+          }
+        }
       },
-      selectPerson(person) { this.selectedPerson = person; this.results = []; },
-      destroy() { this.searchController?.abort(); this.slotsController?.abort(); }
+      selectPerson(person) { this.resetSearch(); this.selectedPerson = person; },
+      changePerson() { this.resetSearch(); this.selectedPerson = null; this.searchTerm = ''; },
+      destroy() { this.resetSearch(); this.slotsController?.abort(); }
     };
   }
   window.referralForm = config => {

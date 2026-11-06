@@ -23,10 +23,10 @@
     }
     function dirty() { return Object.keys(patch()).length > 0; }
     function pendingMedicine() { return !dispensed && medicineFields.some((field, index) => field.value !== medicineDefaults[index]); }
-    function announce(message, error = false) {
+    function announce(message, error = false, retryDraft = error) {
       status.textContent = message;
       status.classList.toggle('text-danger', error);
-      retry.hidden = !error;
+      retry.hidden = !retryDraft;
     }
     function showStep(selector) {
       const tab = Array.from(root.querySelectorAll('[data-bs-toggle="tab"]')).find(tab => tab.dataset.bsTarget === selector);
@@ -176,7 +176,8 @@
             window.location.assign(result.redirect);
           }
         } catch (error) {
-          announce(dispensed ? 'Medicine was dispensed, but refreshing failed. Do not dispense again; reload to review.' : error.message, !dispensed);
+          // Inventory feedback is not a clinical draft-save failure and must not offer its retry.
+          announce(dispensed ? 'Medicine was dispensed, but refreshing failed. Do not dispense again; reload to review.' : error.message, !dispensed, false);
         }
         finally { busy = false; root.inert = false; }
       });

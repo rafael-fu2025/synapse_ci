@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Models\CarouselSlideModel;
+use App\Models\PersonModel;
+use App\Models\UserModel;
+use App\Services\Carousel\CarouselAssetStore;
+use App\Database\Seeds\PermissionsAndRolesSeeder;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\DatabaseTestTrait;
 use CodeIgniter\Test\FeatureTestTrait;
+use Config\Services;
 
 /**
  * Covers admin-only management of the login carousel and its multi-tenant scope.
@@ -23,11 +28,95 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
     protected $refresh   = false;
     protected $namespace = 'App';
 
+    private string $savedDefaultGroup;
+    private string $savedStoreRoot;
+    private string $storeRoot;
+    private int $adminId = 0;
+    private int $studentId = 0;
+    private int $studentPersonId = 0;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // The request path revalidates identity via the default group; bind it to the
+        // migrated tests schema so fixtures and route handlers share one database.
+        $this->savedDefaultGroup = config('Database')->defaultGroup;
+        config('Database')->defaultGroup = 'tests';
+        // Keep the managed artwork out of the live private store.
+        $this->savedStoreRoot = config('Carousel')->storeRoot;
+        $this->storeRoot = sys_get_temp_dir() . '/carousel-routes-' . bin2hex(random_bytes(6));
+        config('Carousel')->storeRoot = $this->storeRoot;
+        (new PermissionsAndRolesSeeder(config('Database')))->run();
+        // Session identity is revalidated from the database; the fixture needs real rows.
+        $this->adminId = (int) (new UserModel())->insert([
+            'tenant_id' => 1,
+            'username'  => uniqid('carousel_admin_'),
+            'role'      => 'superadmin',
+            'status'    => 'active',
+        ]);
+        $this->studentPersonId = (int) (new PersonModel())->insert([
+            'tenant_id'  => 1,
+            'kind'       => 'student',
+            'mis_id'     => uniqid('carousel_student_'),
+            'first_name' => 'Carousel',
+            'last_name'  => 'Student',
+        ]);
+        $this->studentId = (int) (new UserModel())->insert([
+            'tenant_id'  => 1,
+            'person_id'  => $this->studentPersonId,
+            'username'   => uniqid('carousel_student_'),
+            'role'       => 'student',
+            'status'     => 'active',
+        ]);
+    }
+
+    protected function tearDown(): void
+    {
+        (new UserModel())->delete($this->adminId, true);
+        (new UserModel())->delete($this->studentId, true);
+        (new PersonModel())->delete($this->studentPersonId, true);
+        config('Carousel')->storeRoot = $this->savedStoreRoot;
+        $this->removeTree($this->storeRoot);
+        config('Database')->defaultGroup = $this->savedDefaultGroup;
+        parent::tearDown();
+    }
+
+    private function removeTree(string $path): void
+    {
+        if (!is_dir($path)) {
+            return;
+        }
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $child = $path . DIRECTORY_SEPARATOR . $entry;
+            is_dir($child) ? $this->removeTree($child) : @unlink($child);
+        }
+        @rmdir($path);
+    }
+
+    /** AuthenticatedUser::current() requires _auth metadata bound to this session id. */
+    private function authMeta(): array
+    {
+        return ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()];
+    }
+
+    /** Valid CSRF pair (cookie + token), as a real browser session would present. */
+    private function csrfData(): array
+    {
+        $hash = service('security')->generateHash();
+        service('superglobals')->setCookie(config('Cookie')->prefix . config('Security')->cookieName, $hash);
+        Services::resetSingle('security');
+        return [config('Security')->tokenName => $hash];
+    }
+
     private function adminSession(): array
     {
         return [
             'user' => [
-                'id'          => 900001,
+                'id'          => $this->adminId,
+                'tenant_id'   => 1,
                 'name'        => 'Carousel Admin',
                 'username'    => 'carousel_admin',
                 'role'        => 'superadmin',
@@ -35,6 +124,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
                 'logged_in'   => true,
             ],
             'tenant_id' => 1,
+            '_auth'     => $this->authMeta(),
         ];
     }
 
@@ -42,7 +132,8 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
     {
         return [
             'user' => [
-                'id'          => 900002,
+                'id'          => $this->studentId,
+                'tenant_id'   => 1,
                 'name'        => 'Regular Student',
                 'username'    => 'student_one',
                 'role'        => 'student',
@@ -50,6 +141,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
                 'logged_in'   => true,
             ],
             'tenant_id' => 1,
+            '_auth'     => $this->authMeta(),
         ];
     }
 
@@ -76,7 +168,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $res = $this->withSession($this->adminSession())->get('admin/carousel');
 
         $res->assertStatus(200);
-        $res->assertSee('Carousel Slides');
+        $res->assertSee('Drag rows or use Move up / Move down to reorder');
         $res->assertSee('University Health Services');
         $res->assertSee('Add Carousel Slide');
     }
@@ -101,7 +193,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
     {
         $id = $this->seedSlide('Toggle Me', 'cover', 1);
 
-        $res = $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/toggle');
+        $res = $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/toggle', $this->csrfData());
         $res->assertRedirectTo('/admin/carousel');
 
         $model = new CarouselSlideModel();
@@ -112,7 +204,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
     {
         $id = $this->seedSlide('Delete Me');
 
-        $res = $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/delete');
+        $res = $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/delete', $this->csrfData());
         $res->assertRedirectTo('/admin/carousel');
 
         $model = new CarouselSlideModel();
@@ -125,7 +217,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $second = $this->seedSlide('Second Slide', 'cover', 1);
 
         // Reverse the order: second, first
-        $res = $this->withSession($this->adminSession())->post('admin/carousel/reorder', [
+        $res = $this->withSession($this->adminSession())->post('admin/carousel/reorder', $this->csrfData() + [
             'order' => $second . ',' . $first,
         ]);
         $res->assertRedirectTo('/admin/carousel');
@@ -170,11 +262,12 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $res->assertSee('Subtitle here');
     }
 
-    public function testUpdatePersistsSlideEdits(): void
+    public function testUpdatePersistsSlideEditsWithoutAcceptingImagePaths(): void
     {
         $id = $this->seedSlide('Old Title', 'cover', 1);
+        $before = (new CarouselSlideModel())->find($id);
 
-        $res = $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/update', [
+        $res = $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/update', $this->csrfData() + [
             'title'       => 'New Title',
             'subtitle'    => 'New subtitle',
             'fit_mode'    => 'contain_blur',
@@ -189,8 +282,9 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $this->assertSame('New Title', $slide['title']);
         $this->assertSame('New subtitle', $slide['subtitle']);
         $this->assertSame('contain_blur', $slide['fit_mode']);
-        $this->assertSame('assets/img/brand/health-light.png', $slide['light_image']);
-        $this->assertSame('assets/img/brand/health-dark.png', $slide['dark_image']);
+        // Operator-supplied paths are ignored; authoritative artwork comes from the row.
+        $this->assertStringStartsWith('uploads/carousel/1/imported_', $slide['light_image']);
+        $this->assertSame($before['dark_image'], $slide['dark_image']);
     }
 
     public function testUpdateCanRemoveDarkImage(): void
@@ -198,7 +292,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $id = $this->seedSlide('Keep Light Only', 'cover', 1);
         (new CarouselSlideModel())->update($id, ['dark_image' => 'assets/img/brand/guidance-dark.png']);
 
-        $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/update', [
+        $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/update', $this->csrfData() + [
             'remove_dark' => '1',
             'fit_mode'    => 'cover',
         ]);
@@ -206,17 +300,19 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $this->assertNull((new CarouselSlideModel())->find($id)['dark_image']);
     }
 
-    public function testUpdateKeepsExistingImageWhenNoUploadOrPathSupplied(): void
+    public function testUpdateKeepsExistingImagesWhenNoUploadOrPathSupplied(): void
     {
         $id = $this->seedSlide('Stable Image', 'cover', 1);
 
-        $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/update', [
+        $this->withSession($this->adminSession())->post('admin/carousel/' . $id . '/update', $this->csrfData() + [
             'title' => 'Renamed Only',
         ]);
 
         $slide = (new CarouselSlideModel())->find($id);
         $this->assertSame('Renamed Only', $slide['title']);
-        $this->assertSame('assets/img/brand/fuel-bg.jpg', $slide['light_image']);
+        // The artwork is retained and now held in the managed store.
+        $this->assertStringStartsWith('uploads/carousel/1/imported_', $slide['light_image']);
+        $this->assertNotNull((new CarouselAssetStore())->absolute($slide['light_image']));
     }
 
     public function testUpdateReturnsJsonForAjaxRequests(): void
@@ -225,7 +321,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
 
         $res = $this->withSession($this->adminSession())
             ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-            ->post('admin/carousel/' . $id . '/update', [
+            ->post('admin/carousel/' . $id . '/update', $this->csrfData() + [
                 'title' => 'Ajax Updated',
             ]);
 
@@ -233,50 +329,13 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $res->assertJSONFragment(['success' => true]);
     }
 
-    /**
-         * Saving must land back on the slide manager rather than bouncing the admin
-         * into the standalone edit screen, and the confirmation has to survive the
-         * client-side navigation that follows the upload XHR.
-         */
-        public function testAjaxSaveReturnsToManagerWithConfirmation(): void
-        {
-            $res = $this->withSession($this->adminSession())
-                ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-                ->post('admin/carousel/store', [
-                    'title'      => 'Manager Landing Slide',
-                    'light_path' => 'assets/img/brand/fuel-bg.jpg',
-                    'fit_mode'   => 'cover',
-                ]);
-
-            $res->assertStatus(200);
-            $payload = json_decode($res->getJSON(), true);
-
-            $this->assertTrue($payload['success']);
-            $this->assertSame(site_url('/admin/carousel'), $payload['redirect']);
-
-            // The success notice must survive the navigation the browser performs
-            // after the XHR resolves.
-            $this->assertSame('Carousel slide created successfully.', session()->getFlashdata('success'));
-
-            // Carry the POST session (including flash metadata) into the GET.
-            $manager = $this->withSession()->withHeaders([])->get('admin/carousel');
-            $manager->assertStatus(200);
-            $manager->assertSee('Carousel slide created successfully.');
-            $manager->assertSee('Manager Landing Slide');
-            $body = $manager->getBody();
-            // The manager page now lists slides and links to a separate modal
-            // for adding new ones, instead of rendering the form inline.
-            $this->assertStringContainsString('href="' . site_url('/admin/carousel/create') . '"', $body);
-            $this->assertStringNotContainsString('action="' . site_url('/admin/carousel/store') . '"', $body);
-        }
-
         public function testAjaxUpdateReturnsToManagerWithConfirmation(): void
         {
             $id = $this->seedSlide('Update Landing', 'cover', 1);
 
             $res = $this->withSession($this->adminSession())
                 ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-                ->post('admin/carousel/' . $id . '/update', ['title' => 'Updated Landing']);
+                ->post('admin/carousel/' . $id . '/update', $this->csrfData() + ['title' => 'Updated Landing']);
 
             $res->assertStatus(200);
             $payload = json_decode($res->getJSON(), true);
@@ -304,7 +363,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
 
             $res = $this->withSession($this->adminSession())
                 ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-                ->post('admin/carousel/' . $id . '/update', ['title' => str_repeat('x', 151)]);
+                ->post('admin/carousel/' . $id . '/update', $this->csrfData() + ['title' => str_repeat('x', 151)]);
 
             $res->assertStatus(422);
             $payload = json_decode($res->getJSON(), true);
@@ -326,6 +385,8 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $this->assertStringContainsString('URL.createObjectURL', $body);
         $this->assertStringContainsString('role="progressbar"', $body);
         $this->assertStringContainsString('Save Changes', $body);
+        $this->assertStringNotContainsString('name="light_path"', $body);
+        $this->assertStringNotContainsString('name="dark_path"', $body);
     }
 
     public function testAjaxValidationReturnsErrorAndFreshCsrfToken(): void
@@ -333,7 +394,7 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $id = $this->seedSlide('Keep Me');
         $res = $this->withSession($this->adminSession())
             ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-            ->post('admin/carousel/' . $id . '/update', ['title' => str_repeat('x', 151)]);
+            ->post('admin/carousel/' . $id . '/update', $this->csrfData() + ['title' => str_repeat('x', 151)]);
         $res->assertStatus(422);
         $payload = json_decode($res->getJSON(), true);
         $this->assertFalse($payload['success']);
@@ -346,14 +407,17 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $id = $this->seedSlide('Protected Slide');
         $res = $this->withSession($this->studentSession())->get('admin/carousel/' . $id . '/edit');
         $res->assertRedirectTo('/');
-        $res = $this->withSession($this->studentSession())->post('admin/carousel/' . $id . '/update', ['title' => 'Changed']);
-        $res->assertRedirectTo('/');
+        $res = $this->withSession($this->studentSession())->post('admin/carousel/' . $id . '/update', $this->csrfData() + ['title' => 'Changed']);
+        // Rejected mutations are never redirected; the browser gets 403 JSON instead.
+        $res->assertStatus(403);
+        $payload = json_decode($res->getJSON(), true);
+        $this->assertSame('You do not have permission to access that resource.', $payload['message'] ?? null);
         $this->assertSame('Protected Slide', (new CarouselSlideModel())->find($id)['title']);
     }
 
     public function testStoreRequiresALightImage(): void
     {
-        $res = $this->withSession($this->adminSession())->post('admin/carousel/store', [
+        $res = $this->withSession($this->adminSession())->post('admin/carousel/store', $this->csrfData() + [
             'title' => 'Missing Image',
         ]);
 
@@ -361,17 +425,20 @@ final class CarouselAdminRoutesTest extends CIUnitTestCase
         $this->assertSame(0, (new CarouselSlideModel())->where('title', 'Missing Image')->countAllResults());
     }
 
-    public function testStoreReturnsJsonForAjaxRequests(): void
+    public function testStoreRequiresALightImageUpload(): void
     {
         $res = $this->withSession($this->adminSession())
             ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-            ->post('admin/carousel/store', [
-                'title'       => 'Lib Path Slide',
-                'light_path'  => 'assets/img/brand/fuel-bg.jpg',
-                'fit_mode'    => 'cover',
+            ->post('admin/carousel/store', $this->csrfData() + [
+                'title'      => 'Path Only',
+                'light_path' => 'assets/img/brand/fuel-bg.jpg',
             ]);
 
-        $res->assertStatus(200);
-        $res->assertJSONFragment(['success' => true]);
+        $res->assertStatus(422);
+        $res->assertJSONFragment([
+            'success' => false,
+            'message' => 'A light mode image upload is required.',
+        ]);
+        $this->assertSame(0, (new CarouselSlideModel())->where('title', 'Path Only')->countAllResults());
     }
 }

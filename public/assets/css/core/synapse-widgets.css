@@ -414,25 +414,37 @@
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-card {
-  border-color: rgba(255, 255, 255, 0.08);
-  background: #1c1c1c;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #161616;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-revenue {
-  background: color-mix(in srgb, #198754, #1c1c1c 88%);
-}
-
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-leads {
-  background: color-mix(in srgb, #0dcaf0, #1c1c1c 88%);
-}
-
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-cycle {
-  background: color-mix(in srgb, #ffc107, #1c1c1c 88%);
-}
-
+/* Neutral black/grey KPI surfaces: the tinted fills read as four unrelated
+   hues on the dark shell, so tone comes from the icon and trend line only. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-revenue,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-leads,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-cycle,
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-retention {
-  background: color-mix(in srgb, var(--accent-color), #1c1c1c 88%);
+  background: #161616;
+}
+
+/* The oversized decorative arc drops to a faint grey wash. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-card::after,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-revenue::after,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-leads::after,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-cycle::after,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-retention::after {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+/* Icon tiles become grey chips with a light glyph, one shared treatment. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-card .nd-kpi-icon,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-revenue .nd-kpi-icon,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-leads .nd-kpi-icon,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-cycle .nd-kpi-icon {
+  background: #262626;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e5e5e5;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-kpi-value {

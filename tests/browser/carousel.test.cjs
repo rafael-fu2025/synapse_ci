@@ -21,7 +21,8 @@ catch (error) {
   playwright = require('playwright');
 }
 const publicRoot = path.join(root, 'public');
-const imagePath = path.join(publicRoot, 'fuel-bg.jpg');
+const imageName = 'assets/img/brand/fuel-bg.jpg';
+const imagePath = path.join(publicRoot, imageName);
 const imageBytes = fs.readFileSync(imagePath);
 const renderedScripts = new Map();
 function formScripts(edit) {
@@ -79,13 +80,11 @@ function bounded(promise, label, milliseconds = 4_000) {
 function fixture({ edit = false, manager = false } = {}) {
   const zones = ['light', 'dark'].map(mode => `
     <label for="${mode}_file">${mode} image</label>
-    <div class="upload-dropzone" data-input="${mode}_file" data-current="${edit ? '/fuel-bg.jpg' : ''}">
-      <input type="file" name="${mode}_file" id="${mode}_file" accept="image/*" class="d-none">
+    <div class="upload-dropzone" data-input="${mode}_file" data-current="${edit ? '/assets/img/brand/fuel-bg.jpg' : ''}">
+      <input type="file" name="${mode}_file" id="${mode}_file" accept="image/jpeg,image/png,image/webp,image/gif" class="d-none">
       <div class="dz-body">Drag &amp; drop or <span class="upload-browse-link">browse</span></div>
       <div class="dz-preview d-none"></div>
-    </div>
-    <label for="${mode}_path">Or use an existing ${mode} image path</label>
-    <input type="text" name="${mode}_path" id="${mode}_path" maxlength="255">`).join('\n');
+    </div>`).join('\n');
   return `<!doctype html><html lang="en"><head>
     <meta charset="utf-8"><meta name="csrf-token" content="initial-csrf">
     <link rel="icon" href="data:,">
@@ -94,7 +93,7 @@ function fixture({ edit = false, manager = false } = {}) {
     </head><body><main>
     ${manager ? `<h1>Carousel manager</h1><p data-testid="fixture-boundary">Mock manager; no PHP database or session assertions</p>
       <div role="status" id="managerSuccess">Carousel slide created successfully.</div>
-      <article id="savedSlide"><h2>Browser upload</h2><img src="/fuel-bg.jpg" alt="Saved slide thumbnail" width="120"></article>` : ''}
+      <article id="savedSlide"><h2>Browser upload</h2><img src="/assets/img/brand/fuel-bg.jpg" alt="Saved slide thumbnail" width="120"></article>` : ''}
     <h2 id="formTitle">${edit ? 'Edit Slide' : 'Add Slide'}</h2>
     <form id="slideForm" action="/store" method="POST" enctype="multipart/form-data">
       <input type="hidden" name="csrf_test_name" value="initial-csrf">
@@ -296,7 +295,7 @@ function assertMultipart(post, csrf = 'initial-csrf') {
   assert.equal(field('title'), 'Browser upload');
   assert.equal(field('csrf_test_name'), csrf);
   for (const mode of ['light', 'dark']) {
-    const part = parts.find(value => value.includes(`name="${mode}_file"; filename="fuel-bg.jpg"`));
+    const part = parts.find(value => value.includes(`name="${mode}_file"; filename="${imageName.split('/').pop()}"`));
     assert.ok(part, `Missing multipart ${mode} image`);
     assert.match(part, /Content-Type: image\/jpeg/);
     assert.deepEqual(Buffer.from(field(`${mode}_file`), 'latin1'), imageBytes);
@@ -316,7 +315,7 @@ async function successfulSave(f) {
     const snapshot = () => ({
       disabled: button.disabled, busy: form.getAttribute('aria-busy'), inert: form.inert,
       nativeControlsLocked: [...form.elements].filter(control => 'disabled' in control).every(control => control.disabled),
-      uploadControlsLocked: ['csrf_test_name', 'title', 'subtitle', 'fit_mode', 'light_file', 'dark_file', 'light_path', 'dark_path']
+      uploadControlsLocked: ['csrf_test_name', 'title', 'subtitle', 'fit_mode', 'light_file', 'dark_file']
         .every(name => form.elements.namedItem(name)?.disabled === true),
       status: form.querySelector('.dz-status').textContent,
       percent: form.querySelector('.dz-pct').textContent,
@@ -387,6 +386,7 @@ async function successfulSave(f) {
 for (const edit of [false, true]) {
   test(`${edit ? 'edit' : 'add'} success clears busy but stays inert and locked through held manager navigation and blocks duplicate POSTs`, { timeout: 15_000 }, async t => {
     const f = await open(t, { edit });
+    assert.equal(await f.page.locator('[name="light_path"], [name="dark_path"]').count(), 0);
     if (edit) {
       await f.page.waitForFunction(() => [...document.querySelectorAll('.dz-preview img')].every(img => img.complete && img.naturalWidth > 0));
       assert.equal(await f.page.locator('.dz-preview img').count(), 2);
@@ -398,6 +398,14 @@ for (const edit of [false, true]) {
     assertMultipart(f.posts[0]);
   });
 }
+
+test('add form requires a light image upload', { timeout: 15_000 }, async t => {
+  const f = await open(t, { edit: false });
+  await f.page.locator('[name="title"]').fill('No image');
+  await f.page.locator('#slideSubmitBtn').click();
+  assert.equal(f.posts.length, 0, 'Missing light upload must block the POST');
+  assert.equal(await f.page.locator('#light_file').evaluate(input => input.validationMessage), 'Choose a light mode image to upload.');
+});
 
 for (const [outcome, status, message] of [
   ['422', 'Not saved', 'Choose a valid image.'],

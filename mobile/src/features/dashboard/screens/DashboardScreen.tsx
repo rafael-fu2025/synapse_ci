@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import {
   Bell,
   Building2,
+  Calendar,
   CalendarPlus,
   ChevronRight,
   ClipboardList,
@@ -20,6 +21,7 @@ import { StatusPill } from '../../../components/StatusPill';
 import { Avatar } from '../../../components/Avatar';
 import { IconAction } from '../../../components/IconAction';
 import { PlaceholderCard } from '../../../components/PlaceholderCard';
+import { CardOutline } from '../../../components/CardOutline';
 import { queryKeys } from '../../../api/queryKeys';
 import { me } from '../../../api/endpoints/me';
 import { useAppointments } from '../../appointments/hooks';
@@ -33,6 +35,7 @@ import { poll } from '../../../api/poll';
 import { useFocusPoll } from '../../../lib/useFocusPoll';
 import { Theme, font, memoizeStyles, palette, type } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
+import { AppointmentArt } from '../../appointments/components/AppointmentArt';
 import {
   formatDate,
   formatDateTile,
@@ -50,12 +53,16 @@ function greetingFor(hour: number): string {
   return hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 }
 
+
 export function DashboardScreen() {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const navigation = useNavigation<HomeNavigation>();
   const { user } = useAuth();
   const photoUri = useProfilePhoto();
+  // Maroon gradient in light mode; a black branded card in dark mode. Content is
+  // white on both, so only the surface changes with the theme.
+  const cardColors = theme.mode === 'dark' ? ['#1c1c1c', '#0f0f0f'] : [palette.brand900, palette.brand700];
 
   const profileRefetch = useFocusPoll(poll.dashboardMs);
   const profileQuery = useQuery({ queryKey: queryKeys.me, queryFn: me, refetchInterval: profileRefetch });
@@ -109,18 +116,20 @@ export function DashboardScreen() {
           accessibilityRole="button"
           accessibilityLabel="View appointment"
           style={styles.nextVisit}>
-          <LinearGradient colors={[palette.brand900, palette.brand700]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <LinearGradient colors={cardColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <AppointmentArt unit={nextVisit.unit} height={126} opacity={0.14} color="#ffffff" />
             <View style={styles.kickerRow}>
               <Text style={styles.nextVisitKicker}>NEXT APPOINTMENT</Text>
-              <StatusPill tone={statusPresentation(nextVisit.status).tone}>
+              <StatusPill tone={statusPresentation(nextVisit.status).tone} onBrand>
                 {statusPresentation(nextVisit.status).label}
               </StatusPill>
             </View>
             <View style={styles.nextVisitRow}>
               {dateTile ? (
                 <View style={styles.dateTile}>
-                  <Text style={styles.dateTileMonth}>{dateTile.month}</Text>
-                  <Text style={styles.dateTileDay}>{dateTile.day}</Text>
+                  <Calendar size={62} color="#ffffff" strokeWidth={1} />
+                  <Text style={[styles.dateTileMonth, styles.dateTileMonthOverlay]}>{dateTile.month}</Text>
+                  <Text style={[styles.dateTileDay, styles.dateTileDayOverlay]}>{dateTile.day}</Text>
                 </View>
               ) : null}
               <View style={styles.nextVisitCopy}>
@@ -128,14 +137,14 @@ export function DashboardScreen() {
                   {nextVisit.unit === 'clinic' ? 'Clinic consultation' : 'Guidance session'}
                 </Text>
                 <View style={styles.metaLine}>
-                  <Clock3 size={14} color="#d5e9e6" />
+                  <Clock3 size={14} color="#ffffff" />
                   <Text style={styles.nextVisitMeta}>
                     {formatDate(nextVisit.starts_at)} · {formatTime(nextVisit.starts_at)} ·{' '}
                     {UNIT_PRESENTATION[nextVisit.unit]?.label ?? unitLabel(nextVisit.unit)}
                   </Text>
                 </View>
                 <View style={styles.metaLine}>
-                  <Stethoscope size={14} color="#d5e9e6" />
+                  <Stethoscope size={14} color="#ffffff" />
                   <Text style={styles.nextVisitMeta}>
                     {nextVisit.provider_name ?? 'Provider assigned on confirmation'}
                   </Text>
@@ -144,9 +153,10 @@ export function DashboardScreen() {
             </View>
             <View style={styles.cardLink}>
               <Text style={styles.cardLinkText}>View appointment</Text>
-              <ChevronRight size={15} color="#f2fbf9" />
+              <ChevronRight size={15} color="#ffffff" />
             </View>
           </LinearGradient>
+          {theme.mode === 'dark' ? <CardOutline testID="nextVisitOutline" /> : null}
         </Pressable>
       ) : (
         <PlaceholderCard
@@ -330,27 +340,29 @@ function createStyles(theme: Theme) {
     welcome: { marginTop: 4, ...type.hero, color: theme.ink900 },
     muted: { marginTop: 3, color: theme.ink500, fontSize: 12, fontFamily: font.body },
     headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    nextVisit: { borderRadius: 15, overflow: 'hidden', elevation: 6, shadowColor: '#800000', shadowOpacity: 0.2, shadowRadius: 25, shadowOffset: { width: 0, height: 12 } },
+    nextVisit: { borderRadius: 15, overflow: 'hidden', elevation: 6, shadowColor: '#000000', shadowOpacity: theme.mode === 'dark' ? 0.5 : 0.2, shadowRadius: 25, shadowOffset: { width: 0, height: 12 } },
     kickerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 12 },
-    nextVisitKicker: { color: '#f2cece', fontSize: 9, fontWeight: '800', letterSpacing: 1, fontFamily: font.body },
+    nextVisitKicker: { color: '#ffffff', fontSize: 9, fontWeight: '800', letterSpacing: 1, fontFamily: font.body },
     nextVisitRow: { flexDirection: 'row', gap: 13, alignItems: 'center', paddingHorizontal: 14, paddingTop: 11, paddingBottom: 13 },
-    dateTile: { width: 51, height: 59, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
-    dateTileMonth: { color: '#d2e8e4', fontSize: 8, fontWeight: '700', fontFamily: font.body },
-    dateTileDay: { fontSize: 23, fontWeight: '800', color: '#ffffff', fontFamily: font.display },
+    // A calendar-page icon: the month sits in the header band, the day in the body.
+    // Icon 62px on a 24-unit grid: header band y≈13–29px, body y≈29–60px of the tile.
+    dateTile: { width: 62, height: 68, alignItems: 'center', justifyContent: 'center' },
+    dateTileMonth: { color: 'rgba(255,255,255,0.85)', fontSize: 7.5, fontWeight: '700', letterSpacing: 0.5, fontFamily: font.body },
+    dateTileDay: { fontSize: 19, fontWeight: '800', color: '#ffffff', fontFamily: font.display },
+    dateTileMonthOverlay: { position: 'absolute', left: 0, right: 0, top: 16, textAlign: 'center' },
+    dateTileDayOverlay: { position: 'absolute', left: 0, right: 0, top: 33, textAlign: 'center' },
     nextVisitCopy: { flex: 1, gap: 3 },
     nextVisitTitle: { ...type.cardTitle, color: '#ffffff' },
     metaLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    nextVisitMeta: { flex: 1, color: '#d5e9e6', fontSize: 10.5, fontFamily: font.body },
+    nextVisitMeta: { flex: 1, color: 'rgba(255,255,255,0.87)', fontSize: 10.5, fontFamily: font.body },
     cardLink: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 5,
       padding: 9,
-      borderTopWidth: 1,
-      borderTopColor: 'rgba(255,255,255,0.12)',
     },
-    cardLinkText: { color: '#f2fbf9', fontSize: 10.5, fontWeight: '700', fontFamily: font.body },
+    cardLinkText: { color: '#ffffff', fontSize: 10.5, fontWeight: '700', fontFamily: font.body },
     quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
     quickLink: {
       minWidth: '47.5%',

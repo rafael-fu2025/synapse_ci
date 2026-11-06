@@ -20,8 +20,7 @@ export function SettingsScreen() {
   const { signOut } = useAuth();
 
   return (
-    <Screen>
-      <PageHeader title="Settings" onBack={navigation.goBack} />
+    <Screen header={<PageHeader edgeToEdge title="Settings" onBack={navigation.goBack} />}>
 
       <View style={styles.group}>
         <Text style={styles.groupLabel}>PREFERENCES</Text>

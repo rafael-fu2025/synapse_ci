@@ -14,7 +14,7 @@
 <?= $this->section('content') ?>
 <div class="page-dashboard nd-dashboard" data-queue-dashboard="guidance" data-queue-counts-url="<?= site_url('/guidance/dashboard/queue-counts') ?>" data-queue-date="<?= esc(\App\Services\Scheduling\SchedulingClock::today(), 'attr') ?>">
   <!-- Welcome Banner -->
-  <div class="card border-0 shadow-sm text-white p-4 mb-4" style="background: linear-gradient(135deg, var(--fu-maroon, #800000) 0%, #5a0000 100%) !important;">
+  <div class="card border-0 shadow-sm text-white p-4 mb-4 nd-welcome-banner nd-welcome-banner--admin">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div>
         <h2 class="h4 fw-bold mb-1 text-white">Welcome back, <?= esc($user['name'] ?? 'Counselor') ?>!</h2>
@@ -216,81 +216,57 @@
     function initGuidanceDashboard() {
       var activityTarget = document.querySelector('#guidanceActivityChart');
       var categoryTarget = document.querySelector('#guidanceCategoryChart');
-      if (typeof ApexCharts === 'undefined') return;
+      if (typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
 
-      var maroonColor = getComputedStyle(document.documentElement).getPropertyValue('--fu-maroon-light').trim() || '#800000';
-      var mutedColor = '#6c757d';
-      var borderColor = 'rgba(0,0,0,0.06)';
+      var activitySeries = [{
+        name: 'Counseling Sessions',
+        data: <?= json_encode($chartSeries) ?>
+      }];
+      var activityCategories = <?= json_encode($chartDays) ?>;
 
-      if (activityTarget && !activityTarget.dataset.rendered) {
-        activityTarget.dataset.rendered = 'true';
-        var activityChart = new ApexCharts(activityTarget, {
-          chart: {
-            type: 'area',
-            height: 300,
-            toolbar: { show: false },
-            zoom: { enabled: false },
-            fontFamily: 'inherit'
-          },
-          series: [{
-            name: 'Counseling Sessions',
-            data: <?= json_encode($chartSeries) ?>
-          }],
-          colors: [maroonColor],
-          stroke: { width: 3, curve: 'smooth' },
+      var catData = [
+        <?= (int) $categoryCounts['academic'] ?>,
+        <?= (int) $categoryCounts['personal'] ?>,
+        <?= (int) $categoryCounts['career'] ?>,
+        <?= (int) $categoryCounts['crisis'] ?>,
+        <?= (int) $categoryCounts['behavioral'] ?>,
+        <?= (int) $categoryCounts['family'] ?>
+      ];
+      var totalCat = catData.reduce(function(a, b) { return a + b; }, 0);
+      if (totalCat === 0) catData = [1, 0, 0, 0, 0, 0];
+
+      ChartTheme.create(activityTarget, function(t) {
+        return ChartTheme.base(t, {
+          chart: { type: 'area', height: 300 },
+          series: activitySeries,
+          colors: [t['series-1']],
+          stroke: { width: 3 },
           fill: {
             type: 'gradient',
             gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] }
           },
-          dataLabels: { enabled: false },
-          xaxis: {
-            categories: <?= json_encode($chartDays) ?>,
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            labels: { style: { colors: mutedColor, fontSize: '11px' } }
-          },
-          yaxis: { labels: { style: { colors: mutedColor, fontSize: '11px' } }, min: 0, forceNiceScale: true },
-          grid: { borderColor: borderColor, strokeDashArray: 4 }
+          xaxis: { categories: activityCategories }
         });
-        activityChart.render();
-      }
+      });
 
-      if (categoryTarget && !categoryTarget.dataset.rendered) {
-        categoryTarget.dataset.rendered = 'true';
-        var catData = [
-          <?= (int) $categoryCounts['academic'] ?>,
-          <?= (int) $categoryCounts['personal'] ?>,
-          <?= (int) $categoryCounts['career'] ?>,
-          <?= (int) $categoryCounts['crisis'] ?>,
-          <?= (int) $categoryCounts['behavioral'] ?>,
-          <?= (int) $categoryCounts['family'] ?>
-        ];
-        var totalCat = catData.reduce(function(a, b) { return a + b; }, 0);
-        if (totalCat === 0) catData = [1, 0, 0, 0, 0, 0];
-
-        var categoryChart = new ApexCharts(categoryTarget, {
-          chart: { type: 'donut', height: 230, fontFamily: 'inherit' },
+      ChartTheme.create(categoryTarget, function(t) {
+        return ChartTheme.donut(t, {
           series: catData,
           labels: ['Academic', 'Personal', 'Career', 'Crisis', 'Behavioral', 'Family'],
-          colors: [maroonColor, '#6610f2', '#0dcaf0', '#dc3545', '#fd7e14', '#198754'],
-          legend: { show: false },
-          dataLabels: { enabled: false },
+          colors: ChartTheme.themedSlices(t, ChartTheme.categorical(t)),
           plotOptions: {
             pie: {
               donut: {
-                size: '72%',
                 labels: {
-                  show: true,
-                  name: { show: true, fontSize: '12px' },
-                  value: { show: true, fontSize: '18px', fontWeight: 700 },
                   total: { show: true, label: 'Total Cases', formatter: function() { return totalCat; } }
                 }
               }
             }
           }
         });
-        categoryChart.render();
-      }
+      });
+
+      ChartTheme.initialize();
     }
 
     if (document.readyState === 'loading') {

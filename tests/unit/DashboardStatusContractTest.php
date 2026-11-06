@@ -23,19 +23,31 @@ final class DashboardStatusContractTest extends TestCase
 
     public function testClinicTriageCountsOnlyActualPriorities(): void
     {
-        $counts = $this->assignment('ClinicController', 'triageCounts');
+        $source = file_get_contents(__DIR__ . '/../../app/Controllers/ClinicController.php');
+        $this->assertNotFalse($source);
+        $start = strpos($source, '$triageCounts = ');
+        $end = strpos($source, '$recentEncounters = ', $start === false ? 0 : $start);
+        $this->assertNotFalse($start);
+        $this->assertNotFalse($end);
+        $counts = substr($source, $start, $end - $start);
 
-        foreach (['emergency', 'urgent', 'routine'] as $priority) {
-            $this->assertStringContainsString(
-                "'{$priority}' => \$db->table('queue_entries')->where('tenant_id', \$tenantId)->where('unit', 'clinic')->where('priority', '{$priority}')->countAllResults()",
-                $counts
-            );
+        // Today's active queue only: the same cohort as the waiting/called KPIs beside it.
+        $this->assertStringContainsString("->where('tenant_id', \$tenantId)", $counts);
+        $this->assertStringContainsString("->where('unit', 'clinic')", $counts);
+        $this->assertStringContainsString("->where('queue_date', \$today)", $counts);
+        $this->assertStringContainsString("->whereIn('status', ['waiting', 'called', 'in_consultation'])", $counts);
+        $this->assertStringContainsString("->groupBy('priority')", $counts);
+
+        // One grouped read replaces one query per priority.
+        $this->assertSame(1, substr_count($counts, '->table('));
+        $this->assertSame(0, substr_count($counts, 'countAllResults()'));
+
+        // A served, skipped or no-show ticket is never part of the live triage mix.
+        foreach (['done', 'skipped', 'no_show'] as $terminal) {
+            $this->assertStringNotContainsString("'{$terminal}'", $counts);
         }
-        $this->assertSame(1, substr_count($counts, "->where('priority', 'urgent')"));
         $this->assertStringNotContainsString("'priority' =>", $counts);
-        $this->assertSame(3, substr_count($counts, '->countAllResults()'));
         $this->assertStringNotContainsString("->where('priority', 'priority')", $counts);
-        $this->assertStringNotContainsString("->where('queue_date'", $counts);
     }
 
     public function testGuidancePendingReferralsUseSubmittedAndAcknowledgedOnly(): void
@@ -92,7 +104,7 @@ final class DashboardStatusContractTest extends TestCase
         $this->assertStringNotContainsString("\$triageCounts['priority']", $source);
         $this->assertStringNotContainsString('<span>Priority</span>', $source);
         $this->assertStringContainsString("labels: ['Emergency', 'Urgent', 'Routine']", $source);
-        $this->assertStringContainsString("colors: ['#dc3545', '#ffc107', '#198754']", $source);
+        $this->assertStringContainsString("colors: ChartTheme.themedSlices(t, ChartTheme.statusPalette(t).slice(0, 3))", $source);
         $this->assertStringContainsString('if (totalTriage === 0) triageData = [0, 0, 1];', $source);
         $matched = preg_match('/var triageData = \\[(.*?)\\];/s', $source, $matches);
         $this->assertSame(1, $matched);
@@ -108,24 +120,58 @@ final class DashboardStatusContractTest extends TestCase
         foreach (['ClinicController' => 'dailyEncounters', 'GuidanceController' => 'dailySessions'] as $controller => $variable) {
             $source = file_get_contents(__DIR__ . '/../../app/Controllers/' . $controller . '.php');
             $this->assertNotFalse($source);
-            $this->assertStringContainsString('$d = date(\'Y-m-d\', strtotime("-{$i} days"));', $source);
-            $start = strpos($source, '$' . $variable . ' = [];');
+            $start = strpos($source, '$ranges = ');
             $end = strpos($source, 'return view(', $start === false ? 0 : $start);
             $this->assertNotFalse($start);
             $this->assertNotFalse($end);
             $series = substr($source, $start, $end - $start);
+            $this->assertStringContainsString('$' . $variable . ' = ', $series);
+
+            // Manila business-day boundaries, resolved once through the clock.
+            $this->assertStringContainsString('SchedulingClock::businessDayRanges(7)', $series);
+            $this->assertStringContainsString('SchedulingClock::businessDayIndex(', $series);
+
+            // A range predicate keeps the index usable; a DATE() comparison cannot.
+            $this->assertStringNotContainsString('DATE(started_at)', $series);
+            $this->assertStringNotContainsString('DATE(created_at)', $series);
+
             if ($controller === 'ClinicController') {
                 $this->assertStringContainsString("->where('tenant_id', \$tenantId)", $series);
-                $this->assertStringContainsString("->where('started_at >=', \$d . ' 00:00:00')", $series);
-                $this->assertStringContainsString("->where('started_at <', date('Y-m-d', strtotime(\$d . ' +1 day')) . ' 00:00:00')", $series);
-                $this->assertStringNotContainsString("->where('DATE(started_at)', \$d)", $series);
+                $this->assertStringContainsString("->where('started_at >=', \$ranges[", $series);
+                $this->assertStringContainsString("->where('started_at <', \$ranges[", $series);
             } else {
+                // The session series inherits the tenant scope from the case builder it clones.
                 $this->assertStringContainsString("->where('counselling_cases.tenant_id', \$tenantId)", $source);
-                $this->assertStringContainsString("->where('counselling_sessions.started_at >=', \$d . ' 00:00:00')", $series);
-                $this->assertStringContainsString("->where('counselling_sessions.started_at <', date('Y-m-d', strtotime(\$d . ' +1 day')) . ' 00:00:00')", $series);
-                $this->assertStringNotContainsString("->where('DATE(started_at)', \$d)", $series);
+                $this->assertStringContainsString("->where('counselling_sessions.started_at >=', \$ranges[", $series);
+                $this->assertStringContainsString("->where('counselling_sessions.started_at <', \$ranges[", $series);
+            }
+
+            // One bounded read per series replaces one query per day.
+            $this->assertSame(0, substr_count($series, 'countAllResults()'));
+            if ($controller === 'ClinicController') {
+                $this->assertSame(1, substr_count($series, '->table('));
+            } else {
+                // The session series reuses the prepared case builder it clones.
+                $this->assertSame(0, substr_count($series, '->table('));
+                $this->assertSame(1, substr_count($series, '(clone $sessions)'));
             }
         }
+    }
+
+    public function testAdminAndFacilitiesSeriesUseBoundedUtcRanges(): void
+    {
+        $admin = file_get_contents(__DIR__ . '/../../app/Controllers/DashboardController.php');
+        $this->assertNotFalse($admin);
+        $this->assertStringContainsString('SchedulingClock::businessDayRanges(7)', $admin);
+        $this->assertStringContainsString('SchedulingClock::businessDayIndex(', $admin);
+        $this->assertStringNotContainsString('DATE(started_at)', $admin);
+        $this->assertStringNotContainsString("date('Y-m-d', strtotime(\"", $admin);
+
+        $facilities = file_get_contents(__DIR__ . '/../../app/Controllers/FacilitiesController.php');
+        $this->assertNotFalse($facilities);
+        $this->assertStringContainsString('SchedulingClock::businessDayRanges(7)', $facilities);
+        $this->assertStringContainsString('SchedulingClock::businessDayIndex(', $facilities);
+        $this->assertStringNotContainsString('DATE(created_at)', $facilities);
     }
 
     private function assignment(string $controller, string $variable): string

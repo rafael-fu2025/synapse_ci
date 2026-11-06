@@ -1,5 +1,5 @@
 <div class="modal fade" id="archiveUnitModal" tabindex="-1" aria-labelledby="archiveUnitTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
-  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 class="modal-title fs-5" id="archiveUnitTitle">Archive drum</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
     <form action="<?= esc(site_url($base . '/archive'), 'attr') ?>" method="POST" data-bmg-submit
           data-confirm="Archive this drum, revoke its controller credentials, disable saved schedule intent and cancel pending commands? History is retained. This does not prove the motor has stopped."

@@ -147,7 +147,11 @@
                 label.append(checkbox, node('span', '', `#${task.id}: ${task.title}`)); taskResults.append(label);
               });
             }
-          } catch (failure) { if (live() && version === taskSearchVersion) taskResults.textContent = failure.message; }
+          } catch (_) {
+            if (live() && version === taskSearchVersion && !taskPicker.hidden) {
+              taskResults.textContent = 'Unable to search tasks. Please try searching again.';
+            }
+          }
         }
     const connection = find('[data-chat-connection]'), older = find('[data-chat-older]');
     const fresh = find('[data-chat-new]'), sendStatus = find('[data-chat-send-status]');
@@ -437,7 +441,9 @@
       if (event.key === 'Enter') event.preventDefault();
     }, { signal: events.signal });
     taskSearch.addEventListener('input', () => {
-      clearTimeout(taskSearchTimer); taskSearchVersion++; taskSearchTimer = setTimeout(loadTasks, 250);
+      clearTimeout(taskSearchTimer); taskSearchVersion++;
+      taskResults.textContent = 'Searching tasks...';
+      taskSearchTimer = setTimeout(loadTasks, 250);
     }, { signal: events.signal });
     document.addEventListener('click', event => {
       if (!mentionPicker.contains(event.target) && event.target !== body) closeMentions();

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="tests/_support/ai-runtime-bootstrap.php"
+         colors="true" failOnRisky="true" failOnWarning="true" cacheResult="false">
+    <!-- Private temporary WRITEPATH, no dotenv, and in-memory SQLite. Platform-specific
+         subprocess/extension tests and the separate MariaDB fixture may legitimately skip. -->
+    <testsuites>
+        <testsuite name="Isolated AI regressions">
+            <file>tests/unit/AiAnalysisScopeMigrationTest.php</file>
+            <file>tests/unit/AiAnalysisScopeStoreTest.php</file>
+            <file>tests/unit/AiAnalyticsTest.php</file>
+            <file>tests/unit/AiApplicationTest.php</file>
+            <file>tests/unit/AiConfigTest.php</file>
+            <file>tests/unit/AiDepartmentAnalyticsTest.php</file>
+            <file>tests/unit/AiDepartmentInsightsHttpTest.php</file>
+            <file>tests/unit/AiDepartmentProgramsTest.php</file>
+            <file>tests/unit/AiDepartmentRoutesTest.php</file>
+            <file>tests/unit/AiDepartmentRuntimeCommandsTest.php</file>
+            <file>tests/unit/AiDepartmentRuntimeTest.php</file>
+            <file>tests/unit/AiDepartmentSettingsTest.php</file>
+            <file>tests/unit/AiDeploymentControlTest.php</file>
+            <file>tests/unit/AiDraftProgressTest.php</file>
+            <file>tests/unit/AiEnabledTestConfirmationTest.php</file>
+            <file>tests/unit/AiEndpointTest.php</file>
+            <file>tests/unit/AiGrantStoreTest.php</file>
+            <file>tests/unit/AiHttpTest.php</file>
+            <file>tests/unit/AiInsightRealtimeTest.php</file>
+            <file>tests/unit/AiInsightsCopyTest.php</file>
+            <file>tests/unit/AiLocalEndpointTest.php</file>
+            <file>tests/unit/AiModelCatalogStoreTest.php</file>
+            <file>tests/unit/AiModelConnectionTest.php</file>
+            <file>tests/unit/AiModelDiscoveryTest.php</file>
+            <file>tests/unit/AiModelSettingsHttpTest.php</file>
+            <file>tests/unit/AiOperatorTest.php</file>
+            <file>tests/unit/AiPipelineProvenanceTest.php</file>
+            <file>tests/unit/AiRecoveryAttemptsTest.php</file>
+            <file>tests/unit/AiSettingsHttpTest.php</file>
+            <file>tests/unit/AiSettingsStoreTest.php</file>
+            <file>tests/unit/AiStoreTest.php</file>
+            <file>tests/unit/AiTokenControlsTest.php</file>
+            <file>tests/unit/AiWorkflowTest.php</file>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="CI_ENVIRONMENT" value="testing" force="true"/>
+        <server name="app.baseURL" value="http://example.com/"/>
+        <server name="CODEIGNITER_SCREAM_DEPRECATIONS" value="0"/>
+        <const name="HOMEPATH" value="./"/>
+        <const name="CONFIGPATH" value="./app/Config/"/>
+        <const name="PUBLICPATH" value="./public/"/>
+    </php>
+</phpunit>

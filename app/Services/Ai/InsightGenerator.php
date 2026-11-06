@@ -50,6 +50,7 @@ final class InsightGenerator
             'narrative' => $narrative,
             'programs' => $selected,
             'provenance' => [
+                'pipeline_digest' => PipelineProvenance::digest(),
                 'prompt_version' => self::PROMPT_VERSION,
                 'library_version' => ProgramLibrary::version(),
                 'profile_revision' => $this->profile->revision(),

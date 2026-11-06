@@ -81,17 +81,10 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
 </div>
 
 <div class="card border-0 shadow-sm">
-  <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center py-3 gap-2">
-    <div>
-      <h5 class="fw-bold mb-0 text-dark">Tamper-evident Cryptographic Audit Ledger</h5>
-      <p class="text-muted small mb-1">Append-only SHA-256 hash-chained log for clinical, governance, and facilities mutations.</p>
-      <p class="text-muted small mb-0">Verification checks the whole tenant chain, not the current filtered page. No external checkpoint is used.</p>
-    </div>
-  </div>
-
   <div class="card-body p-0">
+    <p class="small text-muted px-3 pt-3 mb-0">Append-only SHA-256 hash-chained log for clinical, governance, and facilities mutations. Verification checks the whole tenant chain, not the current filtered page. No external checkpoint is used.</p>
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0 font-monospace" style="font-size: 0.8rem;">
+      <table class="table table-hover align-middle mb-0">
         <thead class="table-light text-uppercase">
           <tr>
             <th class="ps-3">Block #</th>
@@ -105,7 +98,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
         <tbody>
           <?php if (empty($events)): ?>
             <tr>
-              <td colspan="6" class="text-center py-5 text-muted font-sans-serif">
+              <td colspan="6" class="text-center py-5 text-muted">
                 <i class="bi bi-shield-slash fs-1 d-block mb-2 opacity-50"></i>
                 <?php if (! empty($filterErrors)): ?>
                                   Audit events were not loaded because the filters or pagination are invalid.
@@ -123,7 +116,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
                   #<?= esc($ev['id']) ?>
                 </td>
                 <td>
-                  <span class="badge bg-primary-subtle text-primary font-sans-serif">
+                  <span class="badge bg-primary-subtle text-primary">
                     <?= esc($ev['event_type']) ?>
                   </span>
                   <div class="text-muted mt-1 small">Action: <?= esc($ev['action']) ?></div>
@@ -131,7 +124,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
                       $change = json_decode($ev['payload_json'] ?? '', true);
                       $text = static fn (string $key): string => is_array($change) && is_string($change[$key] ?? null) ? $change[$key] : 'Unavailable';
                   ?>
-                    <details class="mt-2 font-sans-serif" data-role-change-details>
+                    <details class="mt-2" data-role-change-details>
                       <summary>Role change details</summary>
                       <dl class="small mt-2 mb-0">
                         <dt>Previous role</dt><dd><?= esc($text('previous_role')) ?></dd>
@@ -156,7 +149,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
                     <span class="text-primary">C:</span> <?= esc(substr($ev['curr_hash'], 0, 16)) ?>...
                   </div>
                 </td>
-                <td class="pe-3 font-sans-serif text-muted small">
+                <td class="pe-3 text-muted small">
                   <?= date('M j, Y', strtotime($ev['occurred_at'])) ?><br>
                   <?= date('h:i:s A', strtotime($ev['occurred_at'])) ?>
                 </td>

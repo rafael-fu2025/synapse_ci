@@ -37,7 +37,7 @@
       const url = new URL(endpoint);
       url.search = '';
       for (const [name, value] of new FormData(form)) {
-        if (['q', 'kind', 'status', 'per_page', 'tab'].includes(name) && typeof value === 'string') {
+        if (['q', 'kind', 'status', 'unit', 'per_page', 'tab'].includes(name) && typeof value === 'string') {
           url.searchParams.set(name, name === 'q' ? value.trim() : value);
         }
       }

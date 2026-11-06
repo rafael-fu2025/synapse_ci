@@ -9,16 +9,19 @@ export function PageHeader({
   subtitle,
   onBack,
   action,
+  edgeToEdge = false,
 }: {
   title: string;
   subtitle?: string;
   onBack?: () => void;
   action?: React.ReactNode;
+  /** Full-width fixed-slot header; removes legacy body-gutter and bottom margins. */
+  edgeToEdge?: boolean;
 }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, edgeToEdge && styles.edgeToEdge]}>
       <View style={styles.row}>
         {onBack ? (
           <Pressable
@@ -52,6 +55,7 @@ function createStyles(theme: Theme) {
       borderBottomWidth: 1,
       borderBottomColor: theme.line,
     },
+    edgeToEdge: { marginHorizontal: 0, marginBottom: 0 },
     row: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 10 },
     back: {
       width: 38,

@@ -63,15 +63,16 @@ final class AiInsightsCopyTest extends CIUnitTestCase
     public function testReadySetupDoesNotClaimDataEligibilityOrRunningWorker(): void
     {
         $html = $this->panel();
-        self::assertStringContainsString('does not confirm that enough eligible data is available', $html);
-        self::assertStringContainsString('or that the separate worker is running', $html);
-        self::assertStringContainsString('separate from AI service connectivity', $html);
-        self::assertStringContainsString('No AI drafts yet. Request a draft', $html);
-        self::assertStringContainsString('Only current, unexpired drafts', $html);
-        self::assertStringContainsString('Prepare local summary', $html);
-        self::assertStringContainsString('Request AI draft', $html);
-        self::assertStringContainsString('name="analysis_code" value="clinic.activity"', $html);
-        self::assertStringContainsString('name="analysis_code" value="clinic.complaints"', $html);
+        self::assertStringContainsString('Eligibility and worker availability are checked separately', $html);
+        self::assertStringContainsString('No AI drafts yet', $html);
+        self::assertStringContainsString('Generate a draft if you have permission', $html);
+        self::assertStringContainsString('Only unexpired drafts are shown; historical policies cannot be accepted or approved', $html);
+        self::assertStringContainsString('Preview data', $html);
+        self::assertStringContainsString('Generate draft', $html);
+        self::assertStringContainsString('data-ai-analysis-selector', $html);
+        self::assertStringContainsString('<option value="clinic.activity" selected>Clinic activity</option>', $html);
+        self::assertStringContainsString('<option value="clinic.complaints">Recorded clinic complaints</option>', $html);
+        self::assertSame(2, substr_count($html, 'data-ai-analysis-value'));
         self::assertStringContainsString('data-ai-refresh', $html);
     }
 
@@ -80,23 +81,41 @@ final class AiInsightsCopyTest extends CIUnitTestCase
         $html = $this->panel(['canGenerate' => false]);
         self::assertStringNotContainsString('data-ai-action', $html);
         $html = $this->panel(['reason' => 'disabled', 'ready' => false]);
-        self::assertStringContainsString('Local summaries still require separate approval and privacy checks', $html);
-        self::assertSame(2 * count(\App\Services\Ai\AnalysisCatalog::forUnit('clinic')), substr_count($html, ' disabled>'));
+        self::assertStringContainsString('Local previews still require approval and privacy checks', $html);
+        self::assertSame(2, substr_count($html, ' disabled>'));
     }
 
-    public function testEligibilityChecklistIsAvailableNearActionsForEveryUnit(): void
+    public function testEligibilityAndPrivacyGuidanceLivesInTheSingleHowItWorksDisclosure(): void
     {
         foreach (['clinic', 'guidance', 'bmg'] as $unit) {
-            $html = $this->panel(['unit' => $unit, 'canGenerate' => false]);
-            self::assertStringContainsString('<summary>Why might a summary be unavailable?</summary>', $html);
-            self::assertStringContainsString('Both completed months need eligible records', $html);
-            self::assertStringContainsString('Required approvals and privacy checks must pass', $html);
+            $page = new class {
+                public function extend(string $layout): string { return ''; }
+                public function section(string $name): string { return ''; }
+                public function endSection(): string { return ''; }
+                public function render(array $data): string
+                {
+                    extract($data);
+                    ob_start();
+                    include APPPATH . 'Views/ai/index.php';
+                    return ob_get_clean();
+                }
+            };
+            $html = $page->render([
+                'unit' => $unit, 'analyses' => \App\Services\Ai\AnalysisCatalog::forUnit($unit),
+                'profile' => ['revision' => 'test-revision'], 'ready' => true, 'reason' => null,
+                'jobs' => [], 'insights' => [], 'canGenerate' => false, 'canReview' => false, 'canApprove' => false,
+                'presentationNow' => new \DateTimeImmutable('2026-10-30T12:00:00+08:00'),
+            ]);
+            self::assertSame(1, substr_count($html, '>How this works</summary>'));
+            self::assertStringContainsString('Dates, privacy rules, and eligible records are fixed', $html);
+            self::assertStringContainsString('Hidden or unavailable values are not zero', $html);
+            self::assertStringContainsString('Staff approval does not publish a program', $html);
             if ($unit === 'bmg') {
-                self::assertStringContainsString('Check batch records or accepted rotation reports', $html);
-                self::assertStringNotContainsString('different people', $html);
+                self::assertStringContainsString('eligible recorded events', $html);
+                self::assertStringNotContainsString('Repeat visits by one person', $html);
             } else {
-                self::assertStringContainsString('Both months need enough different people', $html);
-                self::assertStringContainsString('must be recorded as completed and have valid linked records', $html);
+                self::assertStringContainsString('enough different people', $html);
+                self::assertStringContainsString('Repeat visits by one person', $html);
             }
             self::assertDoesNotMatchRegularExpression('/minimum|threshold|at least 10/i', $html);
         }
@@ -111,7 +130,9 @@ final class AiInsightsCopyTest extends CIUnitTestCase
         ]);
         self::assertStringContainsString('data-ai-pending="true"', $html);
         self::assertStringContainsString('Waiting for a worker', $html);
-        self::assertStringContainsString('name="analysis_code" value="clinic.complaints"', $html);
+        self::assertStringContainsString('data-ai-analysis-selector', $html);
+        self::assertStringContainsString('<option value="clinic.complaints">Recorded clinic complaints</option>', $html);
+        self::assertSame(2, substr_count($html, 'name="analysis_code" value="clinic.activity" data-ai-analysis-value'));
         self::assertStringContainsString('data-ai-action', $html);
         self::assertStringContainsString('/jobs/1/cancel', html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     }
@@ -188,17 +209,18 @@ final class AiInsightsCopyTest extends CIUnitTestCase
             'canGenerate' => false, 'canReview' => false, 'canApprove' => false,
             'presentationNow' => new \DateTimeImmutable('2026-10-30T12:00:00+08:00'),
         ]);
-        foreach (['Compare August 2026 and September 2026', 'without using AI',
-            'a separate worker to process', '<summary>Privacy and how to use these summaries</summary>',
-            'Both months must have enough different people', 'Repeat visits by one person',
+        foreach (['Review approved aggregate activity from August 2026 and September 2026', 'without contacting an AI service',
+            'queues a separate worker', '<summary data-ai-key="how-this-works-summary">How this works</summary>',
+            'enough different people', 'Repeat visits by one person',
             'individual survey answers are never sent', 'does not publish a program',
-            'data-ai-feedback', 'data-ai-baseline', 'data-ai-panel'] as $copy) {
+            'data-ai-feedback', 'data-ai-baseline', 'data-ai-panel', 'data-ai-review-modal'] as $copy) {
             self::assertStringContainsString($copy, $html);
         }
         self::assertStringNotContainsString('data-ai-action', $html);
         self::assertStringNotContainsString('<h1', $html);
-        self::assertStringContainsString('<strong>Guidance planning.</strong>', $html);
+        self::assertStringContainsString('<h2 class="h4 mb-1">Guidance AI insights</h2>', $html);
         self::assertStringContainsString('class="alert alert-info small" hidden', $html);
+        self::assertStringNotContainsString('data-ai-baseline aria-live', $html);
         self::assertDoesNotMatchRegularExpression('/minimum|at least 10/i', $html);
     }
 
@@ -213,8 +235,9 @@ final class AiInsightsCopyTest extends CIUnitTestCase
             'limitations' => ['Synthetic trusted limitation <not markup>'],
         ]], ['saveData' => false]);
         foreach (['240', '200', '40', '20.00%', 'completed clinic visits',
-            '<summary>Privacy and limits of this comparison</summary>', 'Hidden or missing values are not zero',
-            'not the same as 0%', 'Synthetic trusted limitation &lt;not markup&gt;'] as $copy) {
+            '<summary>Privacy and limits of this comparison</summary>', 'Hidden or unavailable values are not zero',
+            'cannot establish cause', 'not the same as 0%', 'Synthetic trusted limitation &lt;not markup&gt;',
+            '<caption>Released values for August 2026 and September 2026.'] as $copy) {
             self::assertStringContainsString($copy, $html);
         }
     }

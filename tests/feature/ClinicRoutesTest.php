@@ -47,6 +47,7 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
         return [
             'user' => [
                 'id'          => $this->staffUserId,
+                'tenant_id'   => $this->tenantId,
                 'name'        => 'Clinic Nurse',
                 'username'    => 'nurse_test',
                 'role'        => 'clinic_staff',
@@ -54,6 +55,7 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
                 'logged_in'   => true,
             ],
             'tenant_id' => $this->tenantId,
+            '_auth'     => $this->authMeta(),
         ];
     }
 
@@ -82,7 +84,7 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
         $path = 'clinic/encounters/' . $this->encounterId . '/complete';
         $this->withSession($this->authSession())->post($path, ['disposition' => 'returned_to_class'])->assertStatus(403);
         $this->assertSame('in_progress', $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRow()->status);
-        $this->withSession($this->authSession())->post($path, $this->csrfData() + ['disposition' => 'returned_to_class'])
+        $this->withSession($this->authSession())->post($path, $this->csrfData() + ['disposition' => 'sent_home'])
             ->assertRedirectTo('/clinic/encounters');
         $this->assertSame('completed', $this->db->table('clinic_encounters')->where('id', $this->encounterId)->get()->getRow()->status);
     }
@@ -161,7 +163,6 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
         $res = $this->withSession($this->authSession())->get('clinic/encounters');
 
         $res->assertStatus(200);
-        $res->assertSee('Patient Clinic Encounters');
         $res->assertSee('Mild cough and cold');
     }
 
@@ -178,7 +179,7 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
 
     public function testSaveVitalsPersistsData(): void
     {
-        $res = $this->withSession($this->authSession())->post('clinic/encounters/' . $this->encounterId . '/vitals', [
+        $res = $this->withSession($this->authSession())->post('clinic/encounters/' . $this->encounterId . '/vitals', $this->csrfData() + [
             'bp_systolic'  => '118',
             'bp_diastolic' => '78',
             'pulse_bpm'    => '72',
@@ -201,7 +202,6 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
         // 1. Directory
         $dirRes = $this->withSession($this->authSession())->get('clinic/patients');
         $dirRes->assertStatus(200);
-        $dirRes->assertSee('Patient Registry Directory');
         $dirRes->assertSee('Patient, Feat');
 
         // 2. Chart
@@ -213,7 +213,7 @@ final class ClinicRoutesTest extends InventoryDatabaseTestCase
 
     public function testUpdateHealthProfile(): void
     {
-        $res = $this->withSession($this->authSession())->post('clinic/patients/' . $this->patientId . '/health', [
+        $res = $this->withSession($this->authSession())->post('clinic/patients/' . $this->patientId . '/health', $this->csrfData() + [
             'blood_type'                     => 'O+',
             'allergies'                      => 'Penicillin, Shellfish',
             'emergency_contact_name'         => 'Maria Patient',

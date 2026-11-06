@@ -27,6 +27,11 @@ public static function timezone(): \DateTimeZone;
 public static function now(?\DateTimeImmutable $instant = null): \DateTimeImmutable;
 public static function today(?\DateTimeImmutable $instant = null): string;
 public static function timestamp(?\DateTimeImmutable $instant = null): string;
+public static function businessDays(int $count, ?\DateTimeImmutable $instant = null): array;
+public static function dayRangeUtc(string $manilaDate): array;
+public static function formatManila(string $storedUtc, string $format): string;
+public static function businessDayRanges(int $count, ?\DateTimeImmutable $instant = null): array;
+public static function businessDayIndex(string $instantUtc, array $ranges): ?int;
 ```
 
 - `timezone()` returns `Asia/Manila` for parsing wall-clock strings explicitly.
@@ -34,6 +39,11 @@ public static function timestamp(?\DateTimeImmutable $instant = null): string;
   instant is converted to Manila without changing the instant or its input object.
 - `today()` formats that instant as `Y-m-d` in Manila.
 - `timestamp()` formats it as `Y-m-d H:i:s` in Manila (not a Unix timestamp).
+- `businessDays()` / `businessDayRanges()` return the last *n* Manila calendar days
+  (1..31, oldest first), the latter as Manila date → `[startUtc, endUtc)`.
+- `dayRangeUtc()` converts one real Manila calendar date to its half-open UTC
+  interval; `formatManila()` renders a stored UTC instant in Manila wall-clock.
+- `businessDayIndex()` names the Manila day that contains a stored UTC instant.
 
 For example, `2026-10-19T16:00:00Z` is `2026-10-20 00:00:00` in Manila.
 Use the same captured `now()` object for related values within a request when they
@@ -57,6 +67,39 @@ Encounter/session timestamps and their historical activity series retain their
 existing convention. This change does not convert those modules to Manila or
 rewrite their history. Do not assume that their timestamps are interchangeable
 with explicit queue lifecycle timestamps.
+
+## Dashboard day boundaries
+
+Clinic encounters, counselling sessions and BMG batches are stored as **UTC
+instants** (the application timezone is `UTC`), while `appointments.local_date`
+and `queue_entries.queue_date` are **Manila calendar dates**. The two are not
+interchangeable, so no dashboard may compare a stored instant against a bare
+`date('Y-m-d')`.
+
+Each dashboard resolves its window through the clock instead:
+
+- `SchedulingClock::businessDayRanges(7)` names the last seven Manila days and
+  gives each one its `[startUtc, endUtc)` interval.
+- The report reads one bounded range per series with
+  `->where('started_at >=', …)` / `->where('started_at <', …)`, which keeps the
+  index usable. A `DATE(column)` predicate cannot use the index and forces a
+  full scan.
+- Rows are bucketed in PHP with `SchedulingClock::businessDayIndex()`, so the
+  day boundaries live in exactly one place instead of being duplicated as a SQL
+  offset.
+- Stored UTC instants are rendered in Manila wall-clock at the display edge with
+  `SchedulingClock::formatManila()`. Storage is never rewritten (see the
+  "no data migration" position above).
+
+Philippines observes no daylight saving, so a Manila day is a fixed 16:00→16:00
+UTC window; the clock still derives it rather than hard-coding the offset.
+
+The page dashboards cache their aggregated payloads briefly
+(`App\Services\DashboardCache`, 60 s), keyed by tenant, Manila business date and
+a permission discriminator, so a cached payload can never cross a tenant, a day,
+or (on the guidance dashboard) another counsellor's caseload. The live queue
+counter at `/{clinic,guidance}/dashboard/queue-counts` is deliberately never
+cached.
 
 ## Queue transition contract
 

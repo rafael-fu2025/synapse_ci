@@ -176,6 +176,70 @@ final class SchedulingClockTest extends TestCase
         $guard->invoke($service, SchedulingClock::now()->modify('-1 hour')->format('Y-m-d H:i:s'));
     }
 
+    public function testBusinessDaysAreOldestFirstAndEndOnTheManilaDay(): void
+    {
+        $instant = new DateTimeImmutable('2026-11-03T05:00:00Z');
+        self::assertSame('2026-11-03', SchedulingClock::today($instant));
+        self::assertSame([
+            '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31',
+            '2026-11-01', '2026-11-02', '2026-11-03',
+        ], SchedulingClock::businessDays(7, $instant));
+        self::assertSame(['2026-11-03'], SchedulingClock::businessDays(1, $instant));
+    }
+
+    public function testBusinessDayCountIsBounded(): void
+    {
+        foreach ([0, -1, 32] as $count) {
+            try {
+                SchedulingClock::businessDays($count);
+                self::fail('Out-of-range business day count was accepted.');
+            } catch (InvalidArgumentException $e) {
+                self::assertNotEmpty($e->getMessage());
+            }
+        }
+    }
+
+    public function testManilaDayMapsOntoTheMatchingUtcInterval(): void
+    {
+        // Manila is UTC+8 year-round, so a Manila day is a fixed 16:00-to-16:00 UTC window.
+        self::assertSame(['2026-11-02 16:00:00', '2026-11-03 16:00:00'], SchedulingClock::dayRangeUtc('2026-11-03'));
+        self::assertSame(['2026-02-28 16:00:00', '2026-03-01 16:00:00'], SchedulingClock::dayRangeUtc('2026-03-01'));
+        self::assertSame(['2028-02-28 16:00:00', '2028-02-29 16:00:00'], SchedulingClock::dayRangeUtc('2028-02-29'));
+        self::assertSame(['2026-12-31 16:00:00', '2027-01-01 16:00:00'], SchedulingClock::dayRangeUtc('2027-01-01'));
+    }
+
+    public function testBusinessDayRejectsDatesThatDoNotExist(): void
+    {
+        foreach (['2026-02-30', '2026-13-01', 'not-a-date', '2026-1-9', ''] as $invalid) {
+            try {
+                SchedulingClock::dayRangeUtc($invalid);
+                self::fail('Malformed business day was accepted: ' . $invalid);
+            } catch (InvalidArgumentException $e) {
+                self::assertNotEmpty($e->getMessage());
+            }
+        }
+    }
+
+    public function testBusinessDayIndexLocatesTheContainingDay(): void
+    {
+        $ranges = SchedulingClock::businessDayRanges(2, new DateTimeImmutable('2026-11-03T05:00:00Z'));
+        self::assertSame('2026-11-02', array_key_first($ranges));
+        self::assertSame('2026-11-03', array_key_last($ranges));
+        self::assertSame(0, SchedulingClock::businessDayIndex('2026-11-01 16:00:00', $ranges));
+        self::assertSame(0, SchedulingClock::businessDayIndex('2026-11-02 15:59:59', $ranges));
+        self::assertSame(1, SchedulingClock::businessDayIndex('2026-11-02 16:00:00', $ranges));
+        self::assertSame(1, SchedulingClock::businessDayIndex('2026-11-03 15:59:59', $ranges));
+        self::assertNull(SchedulingClock::businessDayIndex('2026-11-01 15:59:59', $ranges));
+        self::assertNull(SchedulingClock::businessDayIndex('2026-11-03 16:00:00', $ranges));
+    }
+
+    public function testStoredUtcTimestampsRenderInManilaWallClock(): void
+    {
+        self::assertSame('2026-11-03 00:30:00', SchedulingClock::formatManila('2026-11-02 16:30:00', 'Y-m-d H:i:s'));
+        self::assertSame('2026-11-02 23:30:00', SchedulingClock::formatManila('2026-11-02 15:30:00', 'Y-m-d H:i:s'));
+        self::assertSame('Nov 3', SchedulingClock::formatManila('2026-11-02 16:30:00', 'M j'));
+    }
+
     private function serviceWithoutDatabase(): AppointmentService
     {
         return (new ReflectionClass(AppointmentService::class))->newInstanceWithoutConstructor();

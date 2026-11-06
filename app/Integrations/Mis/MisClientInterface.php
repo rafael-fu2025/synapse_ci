@@ -45,6 +45,15 @@ interface MisClientInterface
      */
     public function fetchDepartments(): array;
 
+    /** Unfiltered directory pages, never search results. Documented page size is 25.
+     * @return array{data:array, current_page:int, max_page:int, limit:int, total?:int}
+     * Implementations must throw on unavailable, malformed or incomplete responses.
+     */
+    public function fetchStudentsPage(int $page = 1, int $limit = 25): array;
+
+    /** @return array{data:array, current_page:int, max_page:int, limit:int, total?:int} */
+    public function fetchEmployeesPage(int $page = 1, int $limit = 25): array;
+
     /**
      * Retrieve authoritative MIS academic program registry.
      *

@@ -1,19 +1,34 @@
 import { request } from '../client';
 
+export type QueueUnit = 'clinic' | 'guidance';
+export type QueueStage = 'waiting' | 'called' | 'in_consultation' | 'skipped';
+export type QueuePriority = 'routine' | 'urgent' | 'emergency';
+
+/** Operational identifiers only. Never add patient information to this projection. */
 export interface StaffQueueTicket {
   id: number;
   ticket_code: string;
-  status: string;
-  priority: string;
-  patient_name: string;
-  patient_kind: string | null;
-  called_at: string | null;
-  completed_at: string | null;
+  status: QueueStage;
+  priority: QueuePriority;
   created_at: string | null;
+  called_at: string | null;
+  started_at: string | null;
+  skip_until: string | null;
+}
+
+export interface StaffQueueMetrics {
+  active: number;
+  priority_mix: Record<QueuePriority, number>;
+  waiting_age: {
+    sample_count: number;
+    total_seconds: number;
+    oldest_seconds: number | null;
+    average_seconds: number | null;
+  };
 }
 
 export interface StaffQueueSummary {
-  unit: 'clinic' | 'guidance';
+  unit: QueueUnit;
   counts: {
     total: number;
     waiting: number;
@@ -23,15 +38,16 @@ export interface StaffQueueSummary {
     skipped: number;
     no_show: number;
   };
-  tickets: {
-    waiting: StaffQueueTicket[];
-    called: StaffQueueTicket[];
-    in_consultation: StaffQueueTicket[];
-  };
+  tickets: Record<QueueStage, StaffQueueTicket[]>;
+  metrics: StaffQueueMetrics;
 }
 
-/** Read-only staff monitoring; no action endpoint exists on the mobile API. */
-export function summary(unit?: 'clinic' | 'guidance'): Promise<{ data: StaffQueueSummary[] }> {
-  const query = unit !== undefined ? `?unit=${unit}` : '';
-  return request<{ data: StaffQueueSummary[] }>(`api/v1/staff/queue-summary${query}`);
+export interface StaffQueueResponse {
+  data: StaffQueueSummary[];
+  meta: { date: string; generated_at: string };
+}
+
+/** Fetch every authorized unit; mobile has no queue mutation endpoints. */
+export function summary(unit?: QueueUnit): Promise<StaffQueueResponse> {
+  return request<StaffQueueResponse>(`api/v1/staff/queue-summary${unit ? `?unit=${unit}` : ''}`);
 }

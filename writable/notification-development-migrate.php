@@ -1,4 +1,10 @@
 <?php
+/*
+ * Superseded for schema changes: the tables and columns this script prepares are
+ * owned by the versioned migration 2026-10-16-000002_CreateNotifications. Run `php spark migrate --all`
+ * for a schema change. The preflight, backup and evidence steps below remain
+ * useful for an attended deployment, but this script no longer owns any DDL.
+ */
 
 declare(strict_types=1);
 

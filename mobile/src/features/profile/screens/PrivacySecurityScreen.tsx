@@ -21,8 +21,7 @@ export function PrivacySecurityScreen() {
   const { user, signOut } = useAuth();
 
   return (
-    <Screen>
-      <PageHeader title="Privacy & security" onBack={navigation.goBack} />
+    <Screen header={<PageHeader edgeToEdge title="Privacy & security" onBack={navigation.goBack} />}>
 
       <LinearGradient colors={[palette.brand900, palette.brand600]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <ShieldCheck size={34} color="#ffffff" />

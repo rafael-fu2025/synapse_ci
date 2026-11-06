@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Clinic;
 
+use App\Libraries\LikePattern;
 use App\Libraries\TablePage;
 use App\Services\CurrentTenant;
 use CodeIgniter\Database\BaseConnection;
@@ -55,16 +56,14 @@ final class PatientDirectoryService
         }
         if ($page->q !== '') {
             // Escape LIKE metacharacters without SQL-escaping the bound value a second time.
-            $literal = static fn (string $value): string => str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
             // IDs retain their original whitespace/punctuation; only names are tokenized.
-            $builder->groupStart()->like('p.mis_id', $literal($page->q));
+            $builder->groupStart();
+            LikePattern::apply($builder, 'p.mis_id', $page->q);
             $tokens = preg_split('/\s+/u', $page->q, -1, PREG_SPLIT_NO_EMPTY);
             if ($tokens !== []) {
                 $builder->orGroupStart();
                 foreach ($tokens as $token) {
-                    $token = $literal($token);
-                    $builder->groupStart()->like('p.first_name', $token)->orLike('p.last_name', $token)
-                        ->orLike('p.middle_name', $token)->groupEnd();
+                    LikePattern::applyGroup($builder, ['p.first_name', 'p.last_name', 'p.middle_name'], $token);
                 }
                 $builder->groupEnd();
             }

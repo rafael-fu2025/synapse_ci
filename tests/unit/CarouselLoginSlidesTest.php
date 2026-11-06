@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Models\CarouselSlideModel;
+use App\Services\Carousel\CarouselAssetStore;
 use App\Services\Carousel\CarouselService;
 use App\Services\CurrentTenant;
 use CodeIgniter\Test\CIUnitTestCase;
@@ -40,8 +41,9 @@ final class CarouselLoginSlidesTest extends CIUnitTestCase
 
         $this->assertCount(1, $slides);
         $this->assertSame('Foundation University', $slides[0]['title']);
-        $this->assertSame('assets/img/brand/fuel-bg.jpg', $slides[0]['light_image']);
-        $this->assertSame('assets/img/brand/FoundationU-Dark.png', $slides[0]['dark_image']);
+        // The permanent default pair is the managed Foundation University artwork.
+        $this->assertSame(CarouselAssetStore::DEFAULT_LIGHT_ASSET, $slides[0]['light_image']);
+        $this->assertSame(CarouselAssetStore::DEFAULT_DARK_ASSET, $slides[0]['dark_image']);
         $this->assertSame('cover', $slides[0]['fit_mode']);
 
         $this->db->table('carousel_slides')->where('tenant_id', 1)->delete();

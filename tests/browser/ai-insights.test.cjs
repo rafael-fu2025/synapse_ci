@@ -11,10 +11,10 @@ const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
 const root = path.resolve(__dirname, '../..');
-const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
+const { chromium } = require('playwright');
 const origin = 'http://127.0.0.1:47991'; // Intercepted virtual origin; nothing binds this port.
 const base = '/clinic/insights';
-const sources = Object.fromEntries(['ai-insights', 'csrf', 'auth-session', 'toast'].map(name =>
+  const sources = Object.fromEntries(['ai-insights', 'csrf', 'auth-session', 'toast'].map(name =>
   [`/assets/js/${name}.js`, fs.readFileSync(path.join(root, `public/assets/js/${name}.js`), 'utf8')]));
 sources['/assets/vendor/bootstrap/js/bootstrap.bundle.min.js'] = fs.readFileSync(path.join(root, 'public/assets/vendor/bootstrap/js/bootstrap.bundle.min.js'), 'utf8');
 const fixtures = new Map();
@@ -53,13 +53,13 @@ const ok = (extra = {}) => json({ success: true, ...extra });
 
 before(async () => {
   let executablePath = chromium.executablePath();
-  if (!fs.existsSync(executablePath)) {
+  if (!fs.existsSync(executablePath) && process.platform === 'win32') {
     const dir = path.join(os.homedir(), 'AppData/Local/ms-playwright');
-    executablePath = fs.readdirSync(dir).filter(name => /^chromium-\d+$/.test(name))
+    executablePath = (fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter(name => /^chromium-\d+$/.test(name))
       .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))
       .map(name => path.join(dir, name, 'chrome-win64/chrome.exe')).find(file => fs.existsSync(file));
   }
-  assert.ok(executablePath && fs.existsSync(executablePath), 'A locally installed Chromium is required');
+  assert.ok(executablePath && fs.existsSync(executablePath), 'Run npm exec --prefix tests/browser -- playwright install chromium');
   browser = await chromium.launch({ headless: true, executablePath, timeout: 20000 });
 }, { timeout: 30000 });
 after(async () => { await browser?.close(); });
@@ -112,7 +112,7 @@ async function open(t, options = {}) {
     if (sources[url.pathname] && request.method() === 'GET') {
       return route.fulfill({ contentType: 'text/javascript', body: sources[url.pathname] });
     }
-    if (/^\/clinic\/insights\/(?:panel|prepare|generate|47\/review|jobs\/31\/cancel)$/.test(url.pathname)) {
+    if (/^\/clinic\/insights\/(?:panel|prepare|generate|recover|47\/review|jobs\/31\/(?:cancel|retry))$/.test(url.pathname)) {
       const entry = { path: url.pathname, method: request.method(), headers: request.headers(), body: request.postData() };
       h.requests.push(entry);
       try {
@@ -218,6 +218,25 @@ async function beforeSwap(h) {
   })));
 }
 
+async function openReview(h, id = '47') {
+  assert.equal(await h.page.evaluate(() => Boolean(window.bootstrap?.Modal)), true, 'Bootstrap modal API is available');
+  const modal = h.page.locator('[data-ai-review-modal]');
+  await h.page.locator(`[data-ai-open-review][data-ai-insight-id="${id}"]`).click();
+  await h.page.clock.runFor(500);
+  const state = await modal.evaluate(element => ({
+    className: element.className,
+    body: element.querySelector('[data-ai-review-modal-body]').textContent,
+    actions: element.querySelector('[data-ai-review-modal-actions]').textContent,
+  }));
+  assert.match(state.className, /\bshow\b/, `Review modal did not open: ${JSON.stringify(state)}`);
+}
+
+async function closeReview(h) {
+  await h.page.locator('[data-ai-review-modal] [data-bs-dismiss="modal"]').last().click();
+  await h.page.clock.runFor(500);
+  assert.doesNotMatch(await h.page.locator('[data-ai-review-modal]').getAttribute('class'), /\bshow\b/);
+}
+
 async function hint(h, unit = 'clinic', count = 1) {
   await h.page.evaluate(({ unit, count }) => {
     for (let i = 0; i < count; i++) document.dispatchEvent(new CustomEvent('synapse:realtime-event', {
@@ -225,6 +244,60 @@ async function hint(h, unit = 'clinic', count = 1) {
     }));
   }, { unit, count });
 }
+
+for (const action of ['recover', 'retry']) {
+  test(`${action} confirmation cancellation sends nothing; explicit acceptance submits fixed fields once`, { timeout: 20000 }, async t => {
+    const h = await open(t);
+    const suffix = action === 'recover' ? '/recover' : '/jobs/31/retry';
+    const fields = action === 'recover' ? { analysis_code: 'clinic_monthly_demand', confirm_recovery: '1' } : { confirm_retry: '1' };
+    await h.page.locator('[data-ai-panel]').evaluate((panel, { suffix, fields }) => {
+      const form = document.createElement('form');
+      form.method = 'post'; form.action = '/clinic/insights' + suffix;
+      form.dataset.aiAction = ''; form.dataset.aiConfirm = 'Explicit synthetic recovery confirmation';
+      for (const [name, value] of Object.entries({ csrf_fixture: 'initial-token', ...fields })) {
+        const input = document.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; form.append(input);
+      }
+      const button = document.createElement('button'); button.type = 'submit'; button.textContent = 'Synthetic recovery action'; form.append(button); panel.append(form);
+    }, { suffix, fields });
+    h.page.once('dialog', dialog => dialog.dismiss());
+    await h.page.getByRole('button', { name: 'Synthetic recovery action' }).click();
+    await delay(100);
+    assert.deepEqual(h.requests, []);
+    h.page.once('dialog', dialog => dialog.accept());
+    await h.page.getByRole('button', { name: 'Synthetic recovery action' }).click();
+    await until(() => h.posts().length === 1, 'Explicit recovery mutation');
+    await idle(h);
+    assert.equal(h.posts()[0].path, base + suffix);
+    assert.deepEqual(Object.fromEntries(new URLSearchParams(h.posts()[0].body)), { csrf_fixture: 'initial-token', ...fields });
+    assert.equal(h.gets().length, 1, 'Only authoritative status reconciliation follows the mutation');
+    await h.page.clock.runFor(30001);
+    await idle(h);
+    assert.equal(h.posts().length, 1, 'Never replay recovery or retry automatically');
+    await samePage(h);
+  });
+}
+
+test('unchanged polling preserves the focused draft opener and DOM identity', { timeout: 20000 }, async t => {
+  const h = await open(t, { insight: true });
+  await h.page.getByRole('button', { name: 'Open draft', exact: true }).focus();
+  await h.page.evaluate(() => { window.fixtureFocusedReview = document.activeElement; });
+  await h.page.clock.runFor(30001);
+  await until(() => h.gets().length === 1, 'Idle status reconciliation');
+  await idle(h);
+  assert.equal(await h.page.evaluate(() => window.fixtureFocusedReview === document.activeElement && window.fixtureFocusedReview.isConnected), true);
+  assert.equal(h.posts().length, 0);
+});
+
+test('legacy policy drafts expose reject only inside the review modal', { timeout: 20000 }, async t => {
+  const h = await open(t, { insight: true, legacyPolicy: true });
+  await openReview(h);
+  assert.equal(await h.page.getByRole('button', { name: 'Accept insight', exact: true }).count(), 0);
+  assert.equal(await h.page.getByRole('button', { name: 'Approve program draft', exact: true }).count(), 0);
+  await h.page.getByRole('button', { name: 'Reject insight', exact: true }).click();
+  await until(() => h.posts().length === 1, 'Legacy rejection submitted');
+  await idle(h);
+  assert.equal(new URLSearchParams(h.posts()[0].body).get('decision'), 'reject');
+});
 
 test('realtime hints refetch only the current department and never render event content', { timeout: 20000 }, async t => {
   const h = await open(t);
@@ -261,7 +334,9 @@ test('persisted progress rerenders queued to running to ready on realtime hints'
     assert.equal(await request.locator('form').count(), 0, 'Only queued requests can be cancelled');
     assert.equal(await h.page.locator('[data-ai-panel] article').count(), status === 'succeeded' ? 1 : 0);
   }
-  assert.match(await request.innerText(), /Ready for review/);
+  assert.equal(await h.page.locator('[data-ai-key="request-history"]').count(), 1);
+  await h.page.locator('[data-ai-key="request-history"]').evaluate(details => { details.open = true; });
+  assert.match(await h.page.locator('[data-ai-key="request-history"]').innerText(), /Ready for review/);
   assert.equal(await request.locator('[aria-live], [role="status"], [aria-valuenow]').count(), 0);
   assert.doesNotMatch(await h.page.locator('[data-ai-panel]').innerText(), /DO NOT RENDER/);
   assert.equal(await h.page.locator('[data-ai-panel] img').count(), 0);
@@ -383,7 +458,7 @@ for (const outcome of ['success', 'warning', 'error']) {
 
 test('prepare local summary replaces only the baseline and refreshes status', { timeout: 20000 }, async t => {
   const h = await open(t, { reason: 'disabled' });
-  assert.equal(await h.page.getByRole('button', { name: 'Request AI draft', exact: true }).isDisabled(), true);
+  assert.equal(await h.page.getByRole('button', { name: 'Generate draft', exact: true }).isDisabled(), true);
   const baseline = render().baseline;
   h.respond = request => request.method === 'POST' ? ok({ baseline, message: 'Protected local summary prepared.' }) : ok({ html: h.panel });
   await submit(h, '/prepare');
@@ -407,7 +482,7 @@ test('queue 202 then GET status, with no duplicate submit while the write is unr
   await h.page.locator('form[action$="/generate"] button').click();
   await until(() => h.posts().length === 1, 'Queue write started');
   assert.equal(await h.page.locator('[data-ai-workspace]').getAttribute('aria-busy'), 'true');
-  assert.equal(await h.page.locator('[data-ai-workspace] button:enabled').count(), 0);
+  assert.equal(await h.page.locator('[data-ai-workspace] form[data-ai-action] button:enabled').count(), 0);
     assert.equal(await h.page.locator('[data-ai-feedback]').isVisible(), true);
     assert.match(await h.page.locator('[data-ai-feedback]').getAttribute('class'), /alert alert-info/);
     assert.match(await h.page.locator('[data-ai-feedback]').innerText(), /requesting an AI draft/);
@@ -545,23 +620,29 @@ for (const failure of ['network', 'timeout']) {
   });
 }
 
-test('409 conflict reports stale version in place and next review sends the current rendered version', { timeout: 20000 }, async t => {
+test('409 conflict marks the open review stale, disables decisions, and current version can be reopened', { timeout: 20000 }, async t => {
   const h = await open(t, { insight: true, version: 7 });
   h.panel = render({ insight: true, version: 8 }).panel;
   h.respond = request => request.method === 'POST'
-    ? json({ success: false, message: 'The insight changed. Review its current version.' }, 409,
+    ? json({ success: false, reason: 'review_conflict', message: 'The insight changed. Review its current version.' }, 409,
       { 'X-Synapse-Auth': 'session_expired', 'X-Synapse-Login': '/auth/login' })
     : ok({ html: h.panel });
+  await openReview(h);
   await h.page.getByRole('button', { name: 'Accept insight', exact: true }).click();
   await until(() => h.posts().length === 1, 'Review submitted');
   await idle(h);
   assert.deepEqual(Object.fromEntries(new URLSearchParams(h.posts()[0].body)), {
     csrf_fixture: 'initial-token', version: '7', decision: 'accept',
   });
-  await h.page.waitForFunction(() => document.querySelector('input[name="version"]')?.value === '8');
+  assert.equal(await h.page.locator('[data-ai-review-modal] [data-ai-review-stale]:not([hidden])').count(), 1);
+  assert.equal(await h.page.locator('[data-ai-review-modal-actions] button:enabled').count(), 0);
+  assert.equal(await h.page.locator('[data-ai-review-modal] [data-bs-dismiss="modal"]:enabled').count(), 2);
   await notice(h, 'error', /insight changed/);
-    assert.doesNotMatch(await h.page.locator('.synapse-toast-message').textContent(), /could not confirm|automatic retry/);
-  await samePage(h);
+  assert.doesNotMatch(await h.page.locator('.synapse-toast-message').textContent(), /could not confirm|automatic retry/);
+  await closeReview(h);
+  assert.equal(await h.page.getByRole('button', { name: 'Open draft', exact: true }).evaluate(button => document.activeElement === button), true);
+  await openReview(h);
+  assert.deepEqual(await h.page.locator('[data-ai-review-modal] input[name="version"]').evaluateAll(inputs => inputs.map(input => input.value)), ['8', '8']);
   h.respond = request => request.method === 'POST' ? ok({ message: 'Rejected current insight.' }) : ok({ html: h.panel });
   await h.page.getByRole('button', { name: 'Reject insight', exact: true }).click();
   await until(() => h.posts().length === 2, 'Current review submitted');
@@ -695,19 +776,28 @@ test('PHP views escape hostile synthetic narrative, evidence, provenance, progra
     })),
   }));
   assert.equal(result.executable, 0);
-  for (const label of ['Summary', 'Interpretation', 'Alternative explanation', 'Current complete month',
+  assert.match(result.text, new RegExp('Summary ' + fixture.attack.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  await openReview(h);
+  const review = await h.page.locator('[data-ai-review-modal]').evaluate(modal => ({
+    executable: modal.querySelectorAll('script, img, iframe, object, embed, [onerror], [onmouseover]').length,
+    text: modal.textContent, links: [...modal.querySelectorAll('a')].map(link => ({
+      href: link.getAttribute('href'), target: link.target, rel: link.rel, navigation: link.dataset.navigation,
+    })),
+  }));
+  assert.equal(review.executable, 0);
+  for (const label of ['Interpretation', 'Alternative explanation', 'Current complete month',
     'Previous complete month', 'Aggregate limitations', 'Fixture model', 'Fixture prompt', 'Operations planning',
     'Objective', 'Department staff', 'Activity', 'Resource assumption', 'Evaluation measure', 'Program limitation',
     'Operations reviewer', 'Reference title']) {
-    assert.ok(result.text.includes(label + ' ' + fixture.attack), `${label} remains literal text`);
+    assert.ok(review.text.includes(label + ' ' + fixture.attack), `${label} remains literal text`);
   }
   assert.equal(await h.page.evaluate(() => window.aiFixtureXss), undefined);
-  assert.equal(result.links.length, 1);
-  assert.equal(result.links[0].href, 'https://example.invalid/reference?label=" onmouseover="window.aiFixtureXss=1');
-  assert.equal(result.links[0].target, '_blank');
-  assert.match(result.links[0].rel, /noopener/);
-  assert.match(result.links[0].rel, /noreferrer/);
-  assert.equal(result.links[0].navigation, 'false');
+  assert.equal(review.links.length, 1);
+  assert.equal(review.links[0].href, 'https://example.invalid/reference?label=" onmouseover="window.aiFixtureXss=1');
+  assert.equal(review.links[0].target, '_blank');
+  assert.match(review.links[0].rel, /noopener/);
+  assert.match(review.links[0].rel, /noreferrer/);
+  assert.equal(review.links[0].navigation, 'false');
   assert.match(result.text, /It will not be sent again automatically/);
   await samePage(h);
 });
@@ -720,7 +810,7 @@ test('view permission/readiness/state gates and current-revision pending marker 
     [{ ready: false }, { prepare: true, generate: true, cancel: 0, review: [] }],
     [{ reason: 'disabled' }, { prepare: false, generate: true, cancel: 0, review: [] }],
     [{ jobStatus: 'running' }, { prepare: false, generate: false, cancel: 0, review: [] }],
-    [{ jobStatus: 'queued', jobRevision: 'older-revision' }, { prepare: false, generate: false, cancel: 1, review: [], pending: 'false' }],
+    [{ jobStatus: 'queued', jobRevision: 'older-revision' }, { prepare: false, generate: false, cancel: 1, review: [], pending: 'false', history: true }],
     [{ insight: true, insightStatus: 'accepted', version: 19 }, { prepare: false, generate: false, cancel: 0, review: ['reject', 'approve'] }],
   ];
   for (const [options, expected] of cases) {
@@ -728,8 +818,11 @@ test('view permission/readiness/state gates and current-revision pending marker 
     assert.equal(await h.page.locator('form[action$="/prepare"] button').isDisabled(), expected.prepare);
     assert.equal(await h.page.locator('form[action$="/generate"] button').isDisabled(), expected.generate);
     assert.equal(await h.page.locator('form[action$="/cancel"]').count(), expected.cancel);
-    assert.deepEqual(await h.page.locator('input[name="decision"]').evaluateAll(inputs => inputs.map(input => input.value)), expected.review);
+    const decisionTemplates = await h.page.locator('template[data-ai-review-actions]').evaluateAll(templates => templates.flatMap(template =>
+      [...template.content.querySelectorAll('input[name="decision"]')].map(input => input.value)));
+    assert.deepEqual(decisionTemplates, expected.review);
     if (expected.pending) assert.equal(await h.page.locator('[data-ai-pending]').getAttribute('data-ai-pending'), expected.pending);
+    if (expected.history) assert.equal(await h.page.locator('[data-ai-key="request-history"]').count(), 1);
   }
 });
 

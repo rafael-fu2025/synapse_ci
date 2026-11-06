@@ -10,13 +10,13 @@ const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
 const root = path.resolve(__dirname, '../..');
-const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
+const { chromium } = require('playwright');
 const origin = 'http://127.0.0.1:47991'; // Virtual origin; no listening socket.
 const base = '/admin/ai';
 const secret = 'synthetic-browser-settings-secret';
 const version = 'a'.repeat(32);
 const nextVersion = 'b'.repeat(32);
-const sources = Object.fromEntries(['ai-settings', 'csrf', 'auth-session'].map(name =>
+const sources = Object.fromEntries(['ai-settings', 'csrf', 'auth-session', 'loading'].map(name =>
   [`/assets/js/${name}.js`, fs.readFileSync(path.join(root, `public/assets/js/${name}.js`), 'utf8')]));
 sources['/assets/js/toast.js'] = fs.readFileSync(path.join(root, 'public/assets/js/toast.js'), 'utf8');
 sources['/assets/vendor/bootstrap/js/bootstrap.bundle.min.js'] = fs.readFileSync(path.join(root, 'public/assets/vendor/bootstrap/js/bootstrap.bundle.min.js'), 'utf8');
@@ -27,7 +27,7 @@ function render(settings = {}, access = { ready: true, grants: [] }) {
   const input = JSON.stringify({ settings, access });
   if (!fixtures.has(input)) {
     const result = spawnSync('php', ['tests/_support/render-ai-settings-fixture.php'], {
-      cwd: root, input, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024,
+      cwd: root, input, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024,
     });
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -59,9 +59,9 @@ async function until(predicate, message, timeout = 8000) {
 
 before(async () => {
   let executablePath = chromium.executablePath();
-  if (!fs.existsSync(executablePath)) {
+  if (!fs.existsSync(executablePath) && process.platform === 'win32') {
     const dir = path.join(os.homedir(), 'AppData/Local/ms-playwright');
-    executablePath = fs.readdirSync(dir).filter(name => /^chromium-\d+$/.test(name))
+    executablePath = (fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter(name => /^chromium-\d+$/.test(name))
       .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))
       .map(name => path.join(dir, name, 'chrome-win64/chrome.exe')).find(file => fs.existsSync(file));
   }
@@ -77,7 +77,7 @@ async function open(t, settings = {}, access = { ready: true, grants: [] }) {
   page.setDefaultTimeout(8000);
   const h = {
     page, context, requests: [], documents: [], unexpected: [], errors: [], gates: [], authEvents: [],
-    respond: entry => ok(saved(entry.path.endsWith('/test') ? { connection_tested: true } : {})),
+    respond: entry => ok(saved(entry.path.endsWith('/test') || entry.path.endsWith('/status') ? { connection_tested: true } : {})),
     posts() { return h.requests.filter(entry => entry.method === 'POST'); },
     gets() { return h.requests.filter(entry => entry.method === 'GET'); },
     hold() { const gate = deferred(); h.gates.push(gate); return gate; },
@@ -104,6 +104,7 @@ async function open(t, settings = {}, access = { ready: true, grants: [] }) {
           <meta charset="utf-8"><meta name="csrf-name" content="csrf_fixture"><meta name="csrf-token" content="initial-token">
           <meta name="csrf-header" content="X-CSRF-TOKEN"><meta name="synapse-login-url" content="/auth/login">
           <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+          <script src="/assets/js/loading.js"></script>
           <script src="/assets/js/toast.js"></script>
           <script src="/assets/js/auth-session.js"></script><script src="/assets/js/csrf.js"></script>
           </head><body><aside id="shell"><input value="keep me"></aside>${fixture.html}</body></html>` });
@@ -132,6 +133,20 @@ async function open(t, settings = {}, access = { ready: true, grants: [] }) {
   await page.addInitScript(() => {
     window.fixtureCalls = [];
     window.fixtureStorageWrites = [];
+    window.fixtureMarkedSaved = [];
+    window.fixtureDirtyForms = new Set();
+    window.SynapseNavigation = {
+      markSaved(form) { window.fixtureDirtyForms.delete(form); window.fixtureMarkedSaved.push(form?.id || ''); },
+      hasUnsavedChanges() { return [...window.fixtureDirtyForms].some(form => form.isConnected); },
+    };
+    document.addEventListener('input', event => {
+      const form = event.target.form || event.target.closest?.('form');
+      if (form && form.dataset.navigationDirty !== 'false' && form.method.toUpperCase() !== 'GET') window.fixtureDirtyForms.add(form);
+    });
+    document.addEventListener('change', event => {
+      const form = event.target.form || event.target.closest?.('form');
+      if (form && form.dataset.navigationDirty !== 'false' && form.method.toUpperCase() !== 'GET') window.fixtureDirtyForms.add(form);
+    });
     const setItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) {
       window.fixtureStorageWrites.push([String(key), String(value)]);
@@ -165,7 +180,7 @@ async function open(t, settings = {}, access = { ready: true, grants: [] }) {
 }
 const form = (h, action) => h.page.locator(`[data-ai-settings-form="${action}"]`);
 async function idle(h) {
-  await h.page.waitForFunction(() => document.querySelector('[data-ai-settings]').getAttribute('aria-busy') === 'false' &&
+  await h.page.waitForFunction(() => !document.querySelector('[data-ai-settings] [aria-busy="true"]') &&
     window.fixtureCalls.every(call => call.finished));
 }
 async function submit(h, action) {
@@ -202,9 +217,205 @@ async function noStoredSecret(h) {
   }
 }
 
+test('anchored three-step flow and setup summary reconcile after each authoritative action', { timeout: 40000 }, async t => {
+  const h = await open(t, saved(), { ready: true, grants: [] });
+  const steps = h.page.locator('[data-ai-step-link]');
+  assert.equal(await steps.count(), 3);
+  assert.deepEqual(await steps.evaluateAll(nodes => nodes.map(node => ({ text: node.querySelector('strong').textContent, href: node.getAttribute('href') }))), [
+    { text: 'Connection', href: '#ai-section-connection' },
+    { text: 'Access', href: '#ai-section-access' },
+    { text: 'Activate', href: '#ai-section-activation' },
+  ]);
+  assert.equal(await h.page.locator('[data-ai-progress-item]').count(), 8);
+  assert.equal(await h.page.locator('[data-ai-progress-endpoint]').textContent(), 'https://gateway.example.test/team/v1');
+  assert.equal(await h.page.locator('[data-ai-progress-model]').textContent(), 'org/synthetic-model');
+  assert.equal(await h.page.locator('[data-ai-progress-key]').textContent(), 'Saved securely');
+  assert.equal(await h.page.locator('[data-ai-progress-grants]').textContent(), '0 active');
+  assert.equal(await h.page.locator('[data-ai-progress-step="access"]').getAttribute('aria-current'), 'step');
+  assert.deepEqual(h.requests, [], 'SSR summary must not trigger an initial status GET');
+
+  const access = form(h, 'access').filter({ has: h.page.locator('[name="role"][value="clinic_staff"]') })
+    .filter({ has: h.page.locator('[name="permission"][value="ai.insights.read"]') });
+  h.respond = () => json({ success: true, access: { ready: true, grants: [
+    { unit: 'clinic', role: 'clinic_staff', permission: 'ai.insights.read' },
+  ] }, message: 'Granted.', csrf: { name: 'csrf_fixture', hash: 'grant-token' } });
+  await access.locator('button').click();
+  await idle(h);
+  assert.equal(await h.page.locator('[data-ai-progress-grants]').textContent(), '1 active');
+  assert.equal(await h.page.locator('[data-ai-progress-step="activate"]').getAttribute('aria-current'), 'step');
+
+  h.respond = () => ok(saved({ version: nextVersion, connection_tested: true }));
+  await submit(h, 'test');
+  assert.equal(await h.page.locator('[data-ai-progress-test]').textContent(), 'Passed');
+  assert.equal(await h.page.locator('[data-ai-progress-analytics]').textContent(), 'Paused');
+  assert.equal(await h.page.locator('[data-ai-progress-grants]').textContent(), '1 active', 'Settings-only responses preserve reconciled access');
+
+  await h.page.locator('#ai-confirm-analytics').check();
+  h.respond = () => ok(saved({ version: nextVersion, connection_tested: true, enabled: true }));
+  await submit(h, 'enable');
+  assert.equal(await h.page.locator('[data-ai-progress-analytics]').textContent(), 'Enabled');
+  assert.match(await h.page.locator('[data-ai-settings-state]').textContent(), /enabled/);
+});
+
+test('SSR baseline is clean, edits warn, and restoring every editable value marks the save form clean again', { timeout: 20000 }, async t => {
+  const h = await open(t, saved({ connection_tested: true }));
+  assert.equal(await form(h, 'save').getAttribute('id'), 'ai-settings-provider-form');
+  assert.equal(await h.page.locator('[data-ai-model-select]').getAttribute('form'), 'ai-settings-provider-form');
+  assert.equal(await h.page.locator('[data-ai-model-select]').getAttribute('name'), null);
+  assert.deepEqual(await h.page.evaluate(() => window.fixtureMarkedSaved), ['ai-settings-provider-form']);
+  const original = await h.page.locator('[name="model"]').inputValue();
+  await h.page.locator('[name="model"]').fill('temporary-model');
+  assert.match(await h.page.locator('[data-ai-settings-feedback]').textContent(), /Unsaved changes/);
+  assert.equal(await h.page.locator('[data-ai-settings-test]').isDisabled(), true);
+  await h.page.locator('[name="model"]').fill(original);
+  await h.page.waitForFunction(() => window.fixtureMarkedSaved.length === 2);
+  assert.equal(await h.page.locator('[data-ai-settings-test]').isEnabled(), true);
+  assert.match(await h.page.locator('[data-ai-settings-feedback]').textContent(), /restored/);
+});
+
+test('Save, Reload, and Test authoritative settings apply mark the provider form clean', { timeout: 20000 }, async t => {
+  const h = await open(t, saved());
+  await h.page.locator('[name="model"]').fill('edited/model');
+  h.respond = () => ok(saved({ model: 'saved/model' }));
+  await submit(h, 'save');
+  assert.equal(await h.page.evaluate(() => window.fixtureMarkedSaved.length), 2);
+
+  await h.page.locator('[name="model"]').fill('edited/again');
+  h.page.once('dialog', dialog => dialog.accept());
+  h.respond = () => ok(saved({ model: 'reloaded/model' }));
+  await h.page.locator('[data-ai-settings-reload]').click();
+  await idle(h);
+  assert.equal(await h.page.evaluate(() => window.fixtureMarkedSaved.length), 3);
+
+  h.respond = () => ok(saved({ model: 'reloaded/model', connection_tested: true }));
+  await submit(h, 'test');
+  assert.equal(await h.page.evaluate(() => window.fixtureMarkedSaved.length), 5, 'Test response and status reconciliation are both authoritative applies');
+});
+
+test('command forms opt out of shared navigation dirty tracking', { timeout: 20000 }, async t => {
+  const h = await open(t, saved({ connection_tested: true }));
+  for (const action of ['test', 'enable', 'disable', 'access']) {
+    const forms = form(h, action);
+    assert.ok(await forms.count() > 0, action);
+    assert.equal(await forms.first().getAttribute('data-navigation-dirty'), 'false', action);
+  }
+  assert.equal(await form(h, 'save').getAttribute('data-navigation-dirty'), null);
+});
+test('drawer returns focus after Escape and close without implicit model fetch', { timeout: 20000 }, async t => {
+  const h = await open(t, saved());
+  const trigger = h.page.locator('[data-ai-model-drawer-open]');
+  const drawer = h.page.locator('[data-ai-model-drawer]');
+  assert.equal(await trigger.isEnabled(), true);
+  await trigger.focus();
+  await trigger.click();
+  await h.page.waitForTimeout(500);
+  const drawerClass = await drawer.getAttribute('class');
+  assert.match(drawerClass, /show/, drawerClass);
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+  assert.equal(await h.page.evaluate(() => document.activeElement.matches('[data-ai-model-drawer-close]')), true);
+  assert.deepEqual(h.requests, [], 'Opening the drawer never fetches models');
+  await h.page.keyboard.press('Escape');
+  await h.page.waitForFunction(() => !document.querySelector('[data-ai-model-drawer]').classList.contains('show'));
+  await h.page.waitForTimeout(50);
+  assert.equal(await h.page.evaluate(() => document.activeElement.matches('[data-ai-model-drawer-open]')), true);
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+
+  await trigger.click();
+  await h.page.waitForFunction(() => document.querySelector('[data-ai-model-drawer]').classList.contains('show'));
+  await drawer.locator('[data-ai-model-drawer-close]').click();
+  await h.page.waitForFunction(() => !document.querySelector('[data-ai-model-drawer]').classList.contains('show'));
+  await h.page.waitForTimeout(50);
+  assert.equal(await h.page.evaluate(() => document.activeElement.matches('[data-ai-model-drawer-open]')), true);
+});
+
+test('permission rows expose labels, state, source reason, and unsafe grant revocation', { timeout: 20000 }, async t => {
+  const grant = { unit: 'guidance', role: 'counsellor', permission: 'ai.insights.generate' };
+  const h = await open(t, saved(), { ready: true, grants: [grant] });
+  const formLocator = form(h, 'access').filter({ has: h.page.locator('[name="role"][value="counsellor"]') })
+    .filter({ has: h.page.locator('[name="permission"][value="ai.insights.generate"]') });
+  const row = formLocator.locator('xpath=ancestor::*[@data-ai-permission-row]');
+  assert.equal(await row.locator('.ai-settings-permission-title').textContent(), 'Generate insights');
+  assert.equal(await row.locator('[data-ai-permission-state]').textContent(), 'Granted');
+  assert.match(await row.locator('[data-ai-source-reason]').textContent(), /cannot enable generation.*revocable/);
+  assert.match(await formLocator.locator('button').getAttribute('aria-label'), /Revoke Generate for Counsellor in Guidance/);
+  assert.equal(await formLocator.locator('button').isDisabled(), false);
+
+  h.respond = () => json({ success: true, access: { ready: true, grants: [] }, message: 'Revoked.',
+    csrf: { name: 'csrf_fixture', hash: 'fresh-token' } });
+  await formLocator.locator('button').click();
+  await idle(h);
+  assert.equal(await row.locator('[data-ai-permission-state]').textContent(), 'Unavailable');
+  assert.match(await row.locator('[data-ai-source-reason]').textContent(), /lack guidance\.cases\.read_any/);
+  assert.equal(await formLocator.locator('button').isDisabled(), true);
+});
+
+test('mobile settings layout has no horizontal document overflow', { timeout: 20000 }, async t => {
+  const h = await open(t, saved(), { ready: true, grants: [] });
+  await h.page.setViewportSize({ width: 360, height: 800 });
+  assert.equal(await h.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
+  await h.page.locator('[data-ai-model-drawer-open]').click();
+  await h.page.waitForFunction(() => document.querySelector('[data-ai-model-drawer]').classList.contains('show'));
+  assert.equal(await h.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
+});
+test('initial persisted grant survives initialization without a status fetch', { timeout: 20000 }, async t => {
+  const grant = { unit: 'guidance', role: 'counsellor', permission: 'ai.insights.read' };
+  const h = await open(t, saved(), { ready: true, grants: [grant] });
+  const access = form(h, 'access').filter({ has: h.page.locator('[name="role"][value="counsellor"]') })
+    .filter({ has: h.page.locator('[name="permission"][value="ai.insights.read"]') });
+  assert.equal(await access.locator('[name="operation"]').inputValue(), 'revoke');
+  assert.match(await access.locator('button').textContent(), /Revoke Read/);
+  assert.deepEqual(h.requests, []);
+});
+
+test('persisted counsellor Generate grant stays revocable while a new unsafe grant stays blocked', { timeout: 20000 }, async t => {
+  const grant = { unit: 'guidance', role: 'counsellor', permission: 'ai.insights.generate' };
+  const h = await open(t, saved(), { ready: true, grants: [grant] });
+  const access = form(h, 'access').filter({ has: h.page.locator('[name="role"][value="counsellor"]') })
+    .filter({ has: h.page.locator('[name="permission"][value="ai.insights.generate"]') });
+  assert.equal(await access.locator('[name="operation"]').inputValue(), 'revoke');
+  assert.equal(await access.locator('button').isDisabled(), false);
+  h.respond = () => json({ success: true, access: { ready: true, grants: [] }, message: 'Revoked.',
+    csrf: { name: 'csrf_fixture', hash: 'fresh-token' } });
+  await access.locator('button').click();
+  await until(() => h.posts().length === 1, 'Existing unsafe grant can be revoked');
+  await idle(h);
+  assert.equal(new URLSearchParams(h.posts()[0].body).get('operation'), 'revoke');
+  assert.equal(await access.locator('[name="operation"]').inputValue(), 'grant');
+  assert.equal(await access.locator('button').isDisabled(), true);
+});
+
+for (const accept of [false, true]) {
+  test(`testing enabled analytics requires explicit pause confirmation (${accept ? 'accept' : 'cancel'})`, { timeout: 20000 }, async t => {
+    const h = await open(t, saved({ enabled: true, connection_tested: true }));
+    let dialogs = 0;
+    h.page.on('dialog', async dialog => {
+      dialogs++;
+      assert.match(dialog.message(), /Pause aggregate analytics.*stay paused/);
+      if (accept) await dialog.accept(); else await dialog.dismiss();
+    });
+    h.respond = entry => entry.method === 'GET' ? ok(saved({ enabled: false, connection_tested: false }))
+      : json({ success: false, reason: 'provider_rejected', message: 'Synthetic probe failed.' }, 503);
+    await form(h, 'test').locator('button').click();
+    if (accept) {
+      await until(() => h.gets().length === 1, 'Probe completion reconciles authoritative status');
+      await idle(h);
+      assert.equal(h.posts().length, 1);
+      assert.deepEqual(Object.fromEntries(new URLSearchParams(h.posts()[0].body)), { csrf_fixture: 'initial-token', version, confirm_pause: '1' });
+      assert.equal(await form(h, 'disable').isHidden(), true);
+      assert.match(await h.page.locator('[data-ai-settings-feedback]').textContent(), /Synthetic probe failed.*analytics is paused/);
+    } else {
+      await delay(100);
+      assert.deepEqual(h.requests, []);
+      assert.equal(await form(h, 'disable').isVisible(), true);
+    }
+    assert.equal(dialogs, 1);
+    await samePage(h);
+  });
+}
+
 test('advanced thinking mode saves explicitly, reloads, and requires a new test independently of reasoning', { timeout: 20000 }, async t => {
   const h = await open(t, saved({ connection_tested: true }));
-  await h.page.locator('details summary').click();
+  await h.page.locator('.ai-settings-advanced > summary').click();
   const thinking = h.page.locator('[name="thinking_mode"]');
   assert.deepEqual(await thinking.locator('option').allTextContents(), ['Provider default', 'Disabled', 'Enabled']);
   assert.equal(await thinking.inputValue(), '');
@@ -333,10 +544,10 @@ test('initial GET renders editable endpoint/key/model, provider-default reasonin
 test('Save posts exact form contract with CSRF, applies server JSON, clears password and updates every version without reload', { timeout: 20000 }, async t => {
   const h = await open(t);
   await fill(h);
+  await h.page.locator('.ai-settings-advanced > summary').click();
   await h.page.locator('#ai-reasoning').selectOption('high');
   await h.page.locator('#ai-input-tokens').fill('16384');
   await h.page.locator('#ai-output-tokens').fill('3072');
-  await h.page.locator('details summary').click();
   await h.page.locator('#ai-auth-mode').selectOption('api_key_header');
   await h.page.locator('#ai-token-field').selectOption('max_completion_tokens');
   await h.page.locator('#ai-structured').selectOption('json_object');
@@ -371,9 +582,9 @@ test('Save posts exact form contract with CSRF, applies server JSON, clears pass
   await noStoredSecret(h);
 });
 
-test('settings header has no duplicate page heading and connection results announce through a toast', { timeout: 20000 }, async t => {
+test('settings view has no duplicate H1 and connection results announce through a toast', { timeout: 20000 }, async t => {
   const h = await open(t, saved());
-  assert.equal(await h.page.locator('[data-ai-settings] h1, [data-ai-settings] h2').count(), 0);
+  assert.equal(await h.page.locator('[data-ai-settings] h1').count(), 0);
   assert.equal(await h.page.locator('[data-ai-settings]').getByText('AI Settings', { exact: true }).count(), 0);
   const message = 'Connection successful. Endpoint, API key, model, and selected options worked.';
   h.respond = () => ok(saved({ connection_tested: true }), message);
@@ -386,7 +597,7 @@ test('settings header has no duplicate page heading and connection results annou
   assert.match(await toast.textContent(), /Connection successful/);
   assert.equal(await toast.locator('.synapse-toast-message').textContent(), message);
   assert.equal(await toast.getAttribute('data-type'), 'success');
-  assert.equal(await h.page.locator('[data-ai-settings-feedback]').textContent(), message);
+  assert.match(await h.page.locator('[data-ai-settings-feedback]').textContent(), /Connection successful.*Aggregate analytics is paused/);
   await samePage(h);
   await noStoredSecret(h);
 });
@@ -408,6 +619,31 @@ test('blank key Save retains saved-key state and Test sends only saved version p
   await noStoredSecret(h);
 });
 
+test('authoritative baselines synchronize shared navigation while real provider edits remain dirty', { timeout: 30000 }, async t => {
+  const h = await open(t, saved({ connection_tested: true }), { ready: true, grants: [] });
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), false, 'SSR hydration is clean');
+  const original = await h.page.locator('[name="model"]').inputValue();
+  await h.page.locator('[name="model"]').fill('unsaved/model');
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), true);
+  await h.page.locator('[name="model"]').fill(original);
+  await h.page.clock.runFor(1);
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), false, 'Restoring the baseline clears shared dirty state');
+
+  await h.page.locator('[name="model"]').fill('saved/model');
+  h.respond = () => ok(saved({ model: 'saved/model', connection_tested: false, version: nextVersion }));
+  await submit(h, 'save');
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), false, 'Save applies a clean authoritative baseline');
+  await submit(h, 'test');
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), false, 'Test reconciliation stays clean');
+
+  await h.page.locator('#ai-confirm-analytics').check();
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), false, 'Command-only confirmation does not dirty provider settings');
+  const access = form(h, 'access').first();
+  access.locator('button').click();
+  await until(() => h.posts().length >= 3, 'Access command');
+  await idle(h);
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), false, 'Access commands do not dirty provider settings');
+});
 test('dirty settings disable Test and Enable, including synthetic submits, until Save completes', { timeout: 20000 }, async t => {
   const h = await open(t, saved({ connection_tested: true }));
   assert.equal(await h.page.locator('[data-ai-settings-enable]').isDisabled(), false);
@@ -449,7 +685,7 @@ test('Enable requires confirmation, then server response switches to Pause witho
 for (const status of [401, 503]) {
   test(`provider model/key error (${status}) stays in place and never invokes login`, { timeout: 20000 }, async t => {
     const h = await open(t, saved());
-    h.respond = () => json({ success: false, reason: 'provider_rejected',
+    h.respond = entry => entry.method === 'GET' ? ok(saved()) : json({ success: false, reason: 'provider_rejected',
       message: 'The endpoint did not accept the selected model or options.', csrf: { name: 'csrf_fixture', hash: 'error-token' } }, status,
     status === 503 ? { 'X-Synapse-Auth': 'authentication_required', 'X-Synapse-Login': '/auth/login' } : {});
     await submit(h, 'test');
@@ -474,7 +710,31 @@ test('explicit user authentication denial delegates to shared auth owner once be
   assert.deepEqual(h.documents, [{ path: base, method: 'GET' }, { path: '/auth/login', method: 'GET' }]);
 });
 
-test('busy controls and repeated init/submits permit only one unresolved mutation', { timeout: 20000 }, async t => {
+test('unresolved mutations block navigation and unload independently of provider-form dirtiness', { timeout: 20000 }, async t => {
+  const h = await open(t, saved());
+  const gate = h.hold();
+  h.respond = async () => { await gate.promise; return ok(saved()); };
+  await form(h, 'save').locator('button[type="submit"]').click();
+  await until(() => h.posts().length === 1, 'Pending save mutation');
+  assert.equal(await h.page.evaluate(() => window.SynapseNavigation.hasUnsavedChanges()), false, 'Pending mutation is not represented as an unsaved draft');
+  const guard = await h.page.evaluate(() => {
+    const navigate = new CustomEvent('synapse:before-navigate', { cancelable: true });
+    const accepted = document.dispatchEvent(navigate);
+    const unload = new Event('beforeunload', { cancelable: true });
+    const unloadAccepted = window.dispatchEvent(unload);
+    return { accepted, prevented: navigate.defaultPrevented, unloadAccepted, unloadPrevented: unload.defaultPrevented };
+  });
+  assert.deepEqual(guard, { accepted: false, prevented: true, unloadAccepted: false, unloadPrevented: true });
+  assert.match(await h.page.locator('[data-ai-settings-feedback]').textContent(), /still in progress/);
+  gate.resolve();
+  await idle(h);
+  const terminal = await h.page.evaluate(() => {
+    const navigate = new CustomEvent('synapse:before-navigate', { cancelable: true });
+    return { accepted: document.dispatchEvent(navigate), prevented: navigate.defaultPrevented };
+  });
+  assert.deepEqual(terminal, { accepted: true, prevented: false });
+});
+test('scoped loading and repeated init/submits permit one unresolved mutation while unrelated controls stay usable', { timeout: 20000 }, async t => {
   const h = await open(t, saved({ connection_tested: true }));
   const gate = h.hold();
   h.respond = async () => { await gate.promise; return ok(saved()); };
@@ -486,8 +746,15 @@ test('busy controls and repeated init/submits permit only one unresolved mutatio
   });
   await form(h, 'save').locator('button[type="submit"]').click();
   await until(() => h.posts().length === 1, 'First pending Save');
-  assert.equal(await h.page.locator('[data-ai-settings]').getAttribute('aria-busy'), 'true');
-  assert.equal(await h.page.locator('[data-ai-settings] button:not(:disabled)').count(), 0);
+  assert.equal(await h.page.locator('[data-ai-settings]').getAttribute('aria-busy'), null, 'The page root is never made busy');
+  assert.equal(await form(h, 'save').getAttribute('aria-busy'), 'true');
+  assert.equal(await form(h, 'save').locator('.app-loading-spinner').count(), 1);
+  assert.equal(await form(h, 'save').locator('button[type="submit"]').isDisabled(), true);
+  assert.equal(await h.page.locator('[name="base_url"]').isDisabled(), true);
+  assert.equal(await h.page.locator('[data-ai-settings-test]').isDisabled(), true);
+  assert.equal(await h.page.locator('[data-ai-settings-reload]').isDisabled(), true);
+  assert.equal(await h.page.locator('[data-ai-model-drawer-open]').isEnabled(), true);
+  assert.equal(await h.page.locator('[data-ai-step-link]').first().isEnabled(), true);
   await h.page.evaluate(() => {
     for (let i = 0; i < 3; i++) for (const form of document.querySelectorAll('[data-ai-settings-form]')) {
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -505,7 +772,8 @@ for (const action of ['save', 'test']) {
     test(`${action} ${failure} makes no automatic POST replay; explicit recovery is one redacted GET`, { timeout: 20000 }, async t => {
       const h = await open(t, saved());
       const gate = h.hold();
-      h.respond = failure === 'network' ? () => 'network-error' : async () => { await gate.promise; return ok(saved()); };
+      h.respond = entry => entry.method === 'GET' ? ok(saved())
+        : failure === 'network' ? 'network-error' : gate.promise.then(() => ok(saved()));
       await form(h, action).locator('button[type="submit"]').click();
       await until(() => h.posts().length === 1, 'Initial mutation');
       if (failure === 'timeout') await h.page.clock.fastForward(action === 'test' ? 135001 : 15001);
@@ -514,10 +782,10 @@ for (const action of ['save', 'test']) {
       if (failure === 'timeout') assert.equal(await h.page.evaluate(() => window.fixtureCalls[0].aborted), true);
       await h.page.clock.fastForward(300000);
       assert.equal(h.posts().length, 1);
-      assert.equal(h.gets().length, 0, 'Recovery must be explicit');
+      assert.equal(h.gets().length, action === 'test' ? 1 : 0, 'A test reconciles paused status once; saves require explicit recovery');
       h.respond = () => ok(saved({ version: nextVersion }));
       await h.page.getByRole('button', { name: 'Reload saved settings' }).click();
-      await until(() => h.gets().length === 1, 'Explicit status GET');
+      await until(() => h.gets().length === (action === 'test' ? 2 : 1), 'Explicit status GET');
       await idle(h);
       assert.equal(h.gets()[0].path, base + '/status');
       assert.equal(h.gets()[0].body, null);

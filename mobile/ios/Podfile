@@ -8,11 +8,15 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
-  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
-  use_frameworks! :linkage => linkage.to_sym
-end
+# Only the permissions this app actually requests are compiled into the pod.
+require_relative '../node_modules/react-native-permissions/scripts/setup'
+setup_permissions(['Notifications'])
+
+# React Native Firebase resolves the Firebase Apple SDK with Swift Package
+# Manager, whose products are automatic libraries rather than dynamic ones. Under
+# static pod linkage each pod embeds its own copy and the app fails to link with
+# duplicate symbols, so `pod install` rejects that combination outright.
+use_frameworks! :linkage => :dynamic
 
 target 'SynapseMobile' do
   config = use_native_modules!

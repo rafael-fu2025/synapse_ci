@@ -35,11 +35,13 @@ class Database extends Config
         'pConnect'     => false,
         'DBDebug'      => true,
         'charset'      => 'utf8mb4',
-        'DBCollat'     => 'utf8mb4_general_ci',
+        'DBCollat'     => 'utf8mb4_unicode_ci',
         'swapPre'      => '',
         'encrypt'      => false,
         'compress'     => false,
-        'strictOn'     => false,
+        // Strict mode rejects out-of-range values instead of truncating them silently.
+        // Run "php spark synapse:strict-mode-audit" before changing this.
+        'strictOn'     => true,
         'failover'     => [],
         'port'         => 3306,
         'numberNative' => false,

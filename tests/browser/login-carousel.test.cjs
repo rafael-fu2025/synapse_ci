@@ -144,7 +144,7 @@ for (const theme of ['light', 'dark']) {
 }
 
 for (const theme of ['light', 'dark']) {
-  test(`${theme}: login theme icon is centered in its circular button`, async t => {
+  test(`${theme}: login theme icon is centered in its button`, async t => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
     t.after(() => context.close());
     const page = await context.newPage();
@@ -162,7 +162,7 @@ for (const theme of ['light', 'dark']) {
     assert.ok(alignment.x <= 1 && alignment.y <= 1, 'Theme icon must be centered on both axes');
     assert.equal(alignment.pseudoDisplay, 'block', 'Icon must not use an inline baseline offset');
   });
-  test(`${theme}: login banner close icons stay dark on light alert fills and dismiss correctly`, async t => {
+  test(`${theme}: login banner close icons maintain contrast across themes and dismiss correctly`, async t => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
     t.after(() => context.close());
     const page = await context.newPage();
@@ -177,7 +177,11 @@ for (const theme of ['light', 'dark']) {
         const css = getComputedStyle(el);
         return { filter: css.filter, opacity: Number(css.opacity), size: parseFloat(css.backgroundSize), top: parseFloat(css.top), right: parseFloat(css.right), rem: parseFloat(getComputedStyle(document.documentElement).fontSize) };
       });
-      assert.equal(style.filter, 'none', 'Dark-mode inversion must not whiten the glyph on a pale banner');
+      if (theme === 'dark') {
+        assert.match(style.filter, /invert\(1\)/, 'Dark-mode black banners must use the light close glyph');
+      } else {
+        assert.equal(style.filter, 'none', 'Light-mode banners must use the dark close glyph');
+      }
       assert.ok(style.opacity >= 0.75);
       assert.equal(style.size, 0.625 * style.rem);
       assert.deepEqual([style.top, style.right], [0.25 * style.rem, 0.25 * style.rem]);

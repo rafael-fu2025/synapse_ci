@@ -178,6 +178,76 @@ final class HttpMisClient implements MisClientInterface
         return is_array($res) ? $res : ['data' => [], 'limit' => $limit, 'current_page' => $page, 'max_page' => 0];
     }
 
+    public function fetchStudentsPage(int $page = 1, int $limit = 25): array
+    {
+        return $this->fetchPeoplePage('/api/v1/students', $page, $limit);
+    }
+
+    public function fetchEmployeesPage(int $page = 1, int $limit = 25): array
+    {
+        return $this->fetchPeoplePage('/api/v1/employees', $page, $limit);
+    }
+
+    /** Unfiltered listing only; never mistake a failed request for an empty directory. */
+    private function fetchPeoplePage(string $path, int $page, int $limit): array
+    {
+        try {
+            if ($page < 1 || $page > 400 || $limit !== 25) {
+                throw new MisUnavailableException();
+            }
+            $token = $this->getServiceAccessToken();
+            if ($token === null) { throw new MisUnavailableException(); }
+            $response = $this->getJson($path . '?' . http_build_query(['limit' => $limit, 'page' => $page]), $token);
+            if ($response === null) { throw new MisUnavailableException(); }
+            // Accept the documented top-level page and the MIS data-wrapped page.
+            if (is_array($response['data'] ?? null) && !array_is_list($response['data'])
+                && array_key_exists('data', $response['data'])) {
+                $nested = $response['data'];
+                foreach (['limit', 'current_page', 'max_page', 'total'] as $field) {
+                    if (array_key_exists($field, $response)
+                        && (!(is_int($response[$field]) || is_string($response[$field]))
+                            || !array_key_exists($field, $nested)
+                            || !(is_int($nested[$field]) || is_string($nested[$field]))
+                            || (string) $response[$field] !== (string) $nested[$field])) {
+                        throw new MisUnavailableException();
+                    }
+                }
+                $response = $nested;
+            }
+            $normalized = [];
+            foreach (['limit' => 25, 'current_page' => 400, 'max_page' => 400] as $field => $bound) {
+                $value = $response[$field] ?? null;
+                // An empty directory may report max_page=0 on its first page.
+                $normalized[$field] = $field === 'max_page' && ($value === 0 || $value === '0')
+                    ? 0 : $this->paginationInteger($value, $bound);
+                if ($normalized[$field] === null) { throw new MisUnavailableException(); }
+            }
+            $data = $response['data'] ?? null;
+            $max = $normalized['max_page'];
+            if (!is_array($data) || !array_is_list($data) || $normalized['limit'] !== $limit
+                || $normalized['current_page'] !== $page || count($data) > $limit
+                || ($max === 0 && ($page !== 1 || $data !== []))
+                || ($max > 0 && ($page > $max || ($page < $max && count($data) !== $limit)
+                    || ($page > 1 && $data === [])))) {
+                throw new MisUnavailableException();
+            }
+            $normalized['data'] = $data;
+            if (array_key_exists('total', $response)) {
+                $value = $response['total'];
+                $total = $value === 0 || $value === '0' ? 0 : $this->paginationInteger($value, 10000);
+                if ($total === null || max(1, $max) !== max(1, (int) ceil($total / $limit))
+                    || ($page === max(1, $max) && count($data) !== $total - ($page - 1) * $limit)) {
+                    throw new MisUnavailableException();
+                }
+                $normalized['total'] = $total;
+            }
+            return $normalized;
+        } catch (\Throwable) {
+            // Never expose upstream response bodies, token/cache errors, or transport details.
+            throw new MisUnavailableException();
+        }
+    }
+
     public function fetchDepartments(): array
     {
         return $this->fetchReference('/api/v1/employees/departments');

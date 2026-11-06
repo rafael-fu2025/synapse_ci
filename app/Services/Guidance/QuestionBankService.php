@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Guidance;
 
+use App\Libraries\LikePattern;
 use App\Services\Audit\AuditService;
 use App\Services\EngagementAccess;
 use Config\Database;
@@ -42,9 +43,7 @@ final class QuestionBankService
         if ($category !== '') $query->where('r.category', $category);
         if ($audience !== '') $query->whereIn('r.audience', $audience === 'all' ? ['all'] : ['all', $audience]);
         if ($search !== '') {
-            $escape = Database::connect()->likeEscapeChar;
-            $searchTerm = strtr($search, [$escape => $escape . $escape, '%' => $escape . '%', '_' => $escape . '_']);
-            $query->groupStart()->like('r.label', $searchTerm)->orLike('r.category', $searchTerm)->groupEnd();
+            LikePattern::applyGroup($query, ['r.label', 'r.category'], $search);
         }
         $total = $query->countAllResults(false);
         $pages = max(1, (int) ceil($total / 20));

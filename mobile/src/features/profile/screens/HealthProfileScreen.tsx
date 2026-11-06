@@ -31,8 +31,7 @@ export function HealthProfileScreen() {
 
   if (!data) {
     return (
-      <Screen scroll={false}>
-        <PageHeader title="Health profile" subtitle="University profile and medical flags" onBack={navigation.goBack} />
+      <Screen scroll={false} bodyStyle={styles.pendingBody} header={<PageHeader edgeToEdge title="Health profile" subtitle="University profile and medical flags" onBack={navigation.goBack} />}>
         {query.isLoading ? (
           <ActivityIndicator color={theme.brandIcon} />
         ) : (
@@ -59,8 +58,7 @@ export function HealthProfileScreen() {
   const card = profileCardFromSummary(data);
 
   return (
-    <Screen>
-      <PageHeader title="Health profile" subtitle="University profile and medical flags" onBack={navigation.goBack} />
+    <Screen header={<PageHeader edgeToEdge title="Health profile" subtitle="University profile and medical flags" onBack={navigation.goBack} />}>
 
       <ProfileCard {...card} />
 
@@ -126,6 +124,7 @@ export function HealthProfileScreen() {
 function createStyles(theme: Theme) {
   const dark = theme.mode === 'dark';
   return StyleSheet.create({
+    pendingBody: { paddingTop: 18 },
     sectionLabel: { marginHorizontal: 2, marginTop: 18, marginBottom: 7, color: theme.ink400, fontSize: 9.5, fontWeight: '800', letterSpacing: 1.1, fontFamily: font.body },
     flag: {
       flexDirection: 'row',

@@ -257,6 +257,7 @@ final class AiWorkflowTest extends TestCase
         self::assertSame(self::narrative(), $draft['narrative']);
         self::assertSame([ProgramLibrary::all()[0]], $draft['programs']);
         self::assertSame([
+            'pipeline_digest' => \App\Services\Ai\PipelineProvenance::digest(),
             'prompt_version' => InsightGenerator::PROMPT_VERSION, 'library_version' => ProgramLibrary::version(),
             'profile_revision' => $profile->revision(), 'profile_id' => $profile->config->profileId, 'model' => $profile->config->model,
         ], $draft['provenance']);

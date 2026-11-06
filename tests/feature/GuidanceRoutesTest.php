@@ -85,7 +85,7 @@ final class GuidanceRoutesTest extends CIUnitTestCase
         $res = $this->withSession($this->authSession())->get('guidance/cases');
 
         $res->assertStatus(200);
-        $res->assertSee('Student Counseling Cases');
+        $res->assertSee('Counseling Cases');
         $res->assertSee('Exam Anxiety Case');
     }
 
@@ -96,6 +96,9 @@ final class GuidanceRoutesTest extends CIUnitTestCase
         $res->assertStatus(200);
         $res->assertSee('Exam Anxiety Case');
         $res->assertSee('AES-256-GCM Note Encryption Active');
+        // An owner workspace without a note must not claim a successful audited read.
+        $res->assertDontSee('This access has been audited');
+        $res->assertDontSee('Oversight mode');
     }
 
     public function testReferralsInboxRenders(): void

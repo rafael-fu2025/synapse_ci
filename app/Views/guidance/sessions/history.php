@@ -2,7 +2,10 @@
 <?= $this->section('content') ?>
 <div class="p-1">
   <h2 class="h5">Finalized Note Version History</h2>
-  <p class="small text-muted">Finalized amendments only. The current draft, if any, is shown separately in the session reader. Access to this history is audited.</p>
+  <p class="small text-muted">Finalized amendments only. The current draft, if any, is shown separately in the session reader.</p>
+  <?php if (!empty($historyReadAudited)): ?>
+    <p class="small text-muted">This access has been audited<?= !empty($oversightMode) ? ' · Oversight mode' : '' ?>.</p>
+  <?php endif; ?>
   <?php if ($history === []): ?>
     <div class="alert alert-light">No finalized versions have been recorded.</div>
   <?php endif; ?>

@@ -12,6 +12,7 @@
 .availability-workspace .av-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
 .availability-workspace .av-section-heading > div { flex: 1 1 20rem; min-width: 0; }
 .availability-workspace .av-form-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; }
+.availability-workspace .av-modal-footer { gap: .75rem; }
 .availability-workspace .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 2.4rem; }
 .availability-workspace .btn-sm { min-height: 2rem; }
 .availability-workspace .table { margin-bottom: 0; }
@@ -27,7 +28,7 @@
 @media (max-width: 575.98px) {
   .availability-workspace .av-section-link { flex: 1 1 auto; text-align: center; padding: .65rem .75rem; }
   .availability-workspace .av-exception-row { flex-direction: column; align-items: stretch; }
-  .availability-workspace .av-form-footer > .btn { flex: 1 1 auto; }
+  .availability-workspace :is(.av-form-footer, .av-modal-footer) > .btn { flex: 1 1 auto; }
   .availability-workspace .av-section-heading > .btn { width: 100%; }
   .availability-workspace .modal-body { padding: 1rem; }
 }

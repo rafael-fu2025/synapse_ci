@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers\Api\V1;
 
+use App\Services\Carousel\CarouselAssetStore;
 use App\Services\Carousel\CarouselService;
 use App\Services\CurrentTenant;
 use App\Services\Realtime\CarouselTicketIssuer;
@@ -59,7 +60,7 @@ final class LoginCarouselController extends ApiV1Controller
     {
         // Project only local raster paths; never normalize untrusted paths into allowed ones.
         if (!is_string($path) || strlen($path) > 255
-            || !preg_match('#\A(?:assets/img/brand/(?:[A-Za-z0-9_-][A-Za-z0-9._-]*/)*|uploads/carousel/)[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?i:png|jpe?g|webp|gif)\z#D', $path)
+            || preg_match(CarouselAssetStore::PUBLISHED_PATTERN, $path) !== 1
         ) {
             return null;
         }

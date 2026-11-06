@@ -276,6 +276,601 @@ test('all dashboard donut centers remain readable across live and legacy theme c
   }
 });
 
+test('dashboard welcome banner and ApexCharts follow real theme tokens', { timeout: 40000 }, async t => {
+  const page = await pageFor(t, 'light', false);
+  await page.addStyleTag({ content: '* { transition: none !important; }' });
+  await page.addScriptTag({ url: origin + '/assets/vendor/apexcharts/apexcharts.min.js' });
+  // Exercise the real module, not a hand-written chart config.
+  await page.addScriptTag({ url: origin + '/assets/js/chart-theme.js' });
+
+  await page.evaluate(() => {
+    const banner = document.createElement('div');
+    banner.id = 'banner-fixture';
+    banner.className = 'card nd-welcome-banner nd-welcome-banner--admin';
+    banner.innerHTML = '<h2 class="h4">Welcome back</h2><p>Subtitle</p><span class="badge bg-white text-danger">Superadmin</span>';
+    document.querySelector('main').prepend(banner);
+
+    const card = document.createElement('section');
+    card.className = 'card';
+    const line = document.createElement('div');
+    line.id = 'lineFixture';
+    const donut = document.createElement('div');
+    donut.id = 'donutFixture';
+    card.append(line, donut);
+    document.querySelector('main').prepend(card);
+  });
+
+  // The banner gradient must live in CSS, never an inline !important, or it
+  // outranks every stylesheet rule and dark mode cannot retheme it.
+  const inlineImportant = await page.locator('#banner-fixture').evaluate(el => {
+    const style = el.getAttribute('style') || '';
+    return /background[^;]*!important/.test(style);
+  });
+  assert.equal(inlineImportant, false, 'The banner must not hard-code its gradient with inline !important');
+
+  await page.evaluate(() => {
+    window.__fixtureSeries = [
+      { name: 'Clinic Visits', data: [0, 0, 0, 1, 3, 0, 0] },
+      { name: 'Guidance Sessions', data: [0, 0, 0, 1, 2, 0, 0] }
+    ];
+    window.__fixturePop = [2008, 619];
+
+    ChartTheme.create(document.querySelector('#lineFixture'), function (tokens) {
+      return ChartTheme.base(tokens, {
+        chart: { type: 'area', height: 200, animations: { enabled: false } },
+        series: window.__fixtureSeries,
+        colors: [tokens['series-1'], tokens['series-2']],
+        stroke: { width: [2.5, 2.5] },
+        fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] } },
+        xaxis: { categories: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] },
+        legend: { position: 'top', horizontalAlign: 'left' }
+      });
+    });
+
+    ChartTheme.create(document.querySelector('#donutFixture'), function (tokens) {
+      return ChartTheme.donut(tokens, {
+        series: window.__fixturePop,
+        labels: ['Students', 'Employees'],
+        colors: [tokens['series-1'], tokens['series-2']],
+        plotOptions: {
+          pie: {
+            donut: {
+              labels: {
+                total: { show: true, label: 'Population', formatter: function () { return 2627; } }
+              }
+            }
+          }
+        }
+      });
+    });
+  });
+
+  const read = () => page.evaluate(() => {
+    const banner = document.querySelector('#banner-fixture');
+    const cs = getComputedStyle(banner);
+    const line = document.querySelector('#lineFixture');
+    const donut = document.querySelector('#donutFixture');
+    const gridline = line.querySelector('.apexcharts-gridline');
+    const xLabel = line.querySelector('.apexcharts-xaxis-label');
+    const legendText = line.querySelector('.apexcharts-legend-text');
+    const seriesPaths = [...line.querySelectorAll('.apexcharts-series .apexcharts-area')]
+      .filter(p => p.getAttribute('fill') === 'none');
+    const slice0 = donut.querySelector('.apexcharts-donut-slice-0');
+    const slice1 = donut.querySelector('.apexcharts-donut-slice-1');
+    const centerLabel = donut.querySelector('.apexcharts-datalabel-label');
+    const centerValue = donut.querySelector('.apexcharts-datalabel-value');
+    const svg = line.querySelector('.apexcharts-canvas svg');
+    return {
+      // Read from body: the legacy body.dark-mode path declares the dark
+      // palette on the body selector, not on <html>.
+      tokens: (function () {
+        var ts = getComputedStyle(document.body);
+        return {
+          series1: ts.getPropertyValue('--chart-series-1').trim(),
+          series2: ts.getPropertyValue('--chart-series-2').trim(),
+          grid: ts.getPropertyValue('--chart-grid').trim(),
+          axis: ts.getPropertyValue('--chart-axis-label').trim(),
+          tooltipBg: ts.getPropertyValue('--chart-tooltip-bg').trim(),
+          donutGap: ts.getPropertyValue('--chart-donut-gap').trim()
+        };
+      })(),
+      bannerBg: cs.backgroundImage,
+      bannerColor: cs.color,
+      badgeBg: getComputedStyle(banner.querySelector('.badge')).backgroundColor,
+      gridStroke: gridline ? getComputedStyle(gridline).stroke : 'MISSING',
+      axisFill: xLabel ? getComputedStyle(xLabel).fill : 'MISSING',
+      legendColor: legendText ? getComputedStyle(legendText).color : 'MISSING',
+      seriesStrokes: seriesPaths.map(p => getComputedStyle(p).stroke),
+      slice0: slice0 ? getComputedStyle(slice0).fill : 'MISSING',
+      slice1: slice1 ? getComputedStyle(slice1).fill : 'MISSING',
+      // ApexCharts applies stroke-width only after the slice animation ends,
+      // so assert the attribute ApexCharts paints rather than racing it.
+      sliceStroke: slice0 ? getComputedStyle(slice0).stroke : 'MISSING',
+      // Regression guard: ApexCharts' own theme.mode forces #424242 here.
+      svgBackground: svg ? (svg.style.background || 'none') : 'MISSING',
+      centerLabel: centerLabel ? centerLabel.textContent.trim() : 'MISSING',
+      centerValue: centerValue ? centerValue.textContent.trim() : 'MISSING',
+      centerLabelFill: centerLabel ? getComputedStyle(centerLabel).fill : 'MISSING'
+    };
+  });
+
+  // ApexCharts draws pie slices with stroke-width 0 and only applies the
+  // real width when the entry animation ends, so wait for the stroke
+  // attribute instead of guessing a delay.
+  await page.waitForSelector('#donutFixture .apexcharts-donut-slice-0', { state: 'attached' });
+  await page.waitForSelector('#lineFixture .apexcharts-gridline', { state: 'attached' });
+  await page.waitForFunction(() => {
+    const s = document.querySelector('#donutFixture .apexcharts-donut-slice-0');
+    return s && s.getAttribute('stroke') && s.getAttribute('stroke') !== 'none';
+  }, { timeout: 8000 });
+
+  const light = await read();
+  assert.match(light.bannerBg, /rgb\(128, 0, 0\)/, 'Light mode keeps the maroon welcome banner');
+  assert.equal(light.tokens.series1, '#800000', 'Light chart series 1 must come from the maroon token');
+  assert.equal(light.slice0, 'rgb(128, 0, 0)', 'Light mode keeps maroon donut slices');
+  assert.equal(light.sliceStroke, 'rgb(255, 255, 255)', 'Light slice gap must use the white surface token');
+  assert.equal(light.centerLabel, 'Population', 'Donut center label must render (deep merge must not drop it)');
+  assert.equal(light.centerValue, '2627', 'Donut center value must render');
+
+  // --chart-donut-gap resolves to --surface-color (#1c1c1c) in dark mode.
+  const darkSliceGap = 'rgb(28, 28, 28)';
+  for (const theme of ['dark', 'legacy-dark']) {
+    await page.evaluate(t => {
+      if (t === 'legacy-dark') {
+        document.documentElement.removeAttribute('data-theme');
+        document.body.classList.add('dark-mode');
+      } else {
+        document.documentElement.setAttribute('data-theme', t);
+        document.body.classList.remove('dark-mode');
+      }
+    }, theme);
+    // Let the MutationObserver / theme-change listener re-render the charts,
+    // then wait for the slice animation to re-apply the stroke width.
+    await page.waitForFunction(expected => {
+      const s = document.querySelector('#donutFixture .apexcharts-donut-slice-0');
+      if (!s) return false;
+      const stroke = getComputedStyle(s).stroke;
+      return stroke === expected;
+    }, darkSliceGap, { timeout: 8000 }).catch(async () => {
+      const diag = await page.evaluate(() => {
+        const s = document.querySelector('#donutFixture .apexcharts-donut-slice-0');
+        return {
+          exists: !!s,
+          stroke: s ? getComputedStyle(s).stroke : null,
+          strokeAttr: s ? s.getAttribute('stroke') : null,
+          sliceCount: document.querySelectorAll('#donutFixture .apexcharts-donut-slice-0').length,
+          theme: document.documentElement.getAttribute('data-theme'),
+          bodyDark: document.body.classList.contains('dark-mode'),
+          gapToken: getComputedStyle(document.documentElement).getPropertyValue('--chart-donut-gap').trim(),
+          svgHtml: s ? s.outerHTML.slice(0, 200) : null
+        };
+      });
+      throw new Error('dark slice gap never applied: ' + JSON.stringify(diag));
+    });
+    const dark = await read();
+
+    assert.match(dark.bannerBg, /rgb\(31, 31, 31\)/, `${theme}: welcome banner must use the neutral black surface`);
+    assert.equal(dark.bannerColor, 'rgb(240, 240, 240)', `${theme}: banner text must stay light`);
+    assert.equal(dark.badgeBg, 'rgb(46, 46, 46)', `${theme}: the role pill must stop being a white chip`);
+
+    // Charts must re-read the dark tokens, not keep light values.
+    assert.equal(dark.tokens.series1, '#e5e5e5', `${theme}: dark series-1 token must be light grey`);
+    assert.equal(dark.tokens.series2, '#8f8f8f', `${theme}: dark series-2 token must be mid grey`);
+    assert.equal(dark.tokens.grid, '#383838', `${theme}: dark grid token must come from the border palette`);
+    assert.equal(dark.tokens.tooltipBg, '#1c1c1c', `${theme}: tooltip must use the dark surface token`);
+    assert.equal(dark.tokens.donutGap, '#1c1c1c', `${theme}: slice gap must use the dark surface token`);
+
+    assert.equal(dark.gridStroke, 'rgb(56, 56, 56)', `${theme}: gridlines must use the dark grid token`);
+    assert.equal(dark.axisFill, 'rgb(163, 163, 163)', `${theme}: axis labels must use the muted token`);
+    assert.equal(dark.legendColor, 'rgb(163, 163, 163)', `${theme}: legend text must use the muted token`);
+
+    assert.deepEqual(dark.seriesStrokes, ['rgb(229, 229, 229)', 'rgb(143, 143, 143)'],
+      `${theme}: both series must use the dark chart tokens, not maroon`);
+    assert.equal(dark.slice0, 'rgb(229, 229, 229)', `${theme}: donut slice 0 must use series-1`);
+    assert.equal(dark.slice1, 'rgb(143, 143, 143)', `${theme}: donut slice 1 must use series-2`);
+    assert.equal(dark.sliceStroke, 'rgb(28, 28, 28)', `${theme}: slice gap must be the dark surface`);
+
+    // ApexCharts' theme.mode paints #424242 over the card; we must avoid it.
+    assert.notEqual(dark.svgBackground, 'rgb(66, 66, 66)',
+      `${theme}: the chart must not inherit ApexCharts' hard-coded dark canvas background`);
+    assert.equal(dark.centerLabel, 'Population', `${theme}: donut center label must survive re-render`);
+    assert.equal(dark.centerValue, '2627', `${theme}: donut center value must survive re-render`);
+
+    const lum = c => c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255)
+      .map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const a = lum(dark.slice0), b = lum(dark.slice1);
+    const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    assert.ok(ratio >= 2.5, `${theme}: donut slices must stay distinguishable (${ratio.toFixed(2)}:1)`);
+  }
+});
+
+test('categorical and status donut palettes stay legible in dark mode', { timeout: 30000 }, async t => {
+  const page = await pageFor(t, 'light', false);
+  await page.addStyleTag({ content: '* { transition: none !important; }' });
+  await page.addScriptTag({ url: origin + '/assets/vendor/apexcharts/apexcharts.min.js' });
+  await page.addScriptTag({ url: origin + '/assets/js/chart-theme.js' });
+
+  await page.evaluate(() => {
+    const host = document.createElement('section');
+    host.className = 'card';
+    host.id = 'palette-host';
+    const cat = document.createElement('div');
+    cat.id = 'catDonut';
+    const status = document.createElement('div');
+    status.id = 'statusDonut';
+    host.append(cat, status);
+    document.querySelector('main').prepend(host);
+
+    ChartTheme.create(cat, function (t) {
+      return ChartTheme.donut(t, {
+        series: [4, 3, 2, 1, 2, 1],
+        labels: ['A', 'B', 'C', 'D', 'E', 'F'],
+        colors: ChartTheme.categorical(t)
+      });
+    });
+    ChartTheme.create(status, function (t) {
+      return ChartTheme.donut(t, {
+        series: [2, 3, 5],
+        labels: ['Danger', 'Warning', 'Success'],
+        colors: ChartTheme.statusPalette(t).slice(0, 3)
+      });
+    });
+  });
+
+  await page.waitForSelector('#catDonut .apexcharts-donut-slice-0', { state: 'attached' });
+  await page.waitForSelector('#statusDonut .apexcharts-donut-slice-0', { state: 'attached' });
+
+  const read = () => page.evaluate(() => {
+    const lum = c => c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255)
+      .map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const card = document.querySelector('#palette-host');
+    const bg = getComputedStyle(card).backgroundColor;
+    const bgLum = lum(bg);
+    const grab = id => [...document.querySelectorAll(`#${id} .apexcharts-pie-area`)]
+      .map(p => getComputedStyle(p).fill);
+    const contrast = fill => {
+      const l = lum(fill);
+      return (Math.max(l, bgLum) + 0.05) / (Math.min(l, bgLum) + 0.05);
+    };
+    const catFills = grab('catDonut');
+    const statusFills = grab('statusDonut');
+    return {
+      bg,
+      catFills,
+      catRatios: catFills.map(f => +contrast(f).toFixed(2)),
+      statusFills,
+      statusRatios: statusFills.map(f => +contrast(f).toFixed(2)),
+      catTokens: [1, 2, 3, 4, 5, 6].map(i => getComputedStyle(document.body).getPropertyValue('--chart-cat-' + i).trim())
+    };
+  });
+
+  const light = await read();
+  assert.equal(light.catFills.length, 6, 'Light mode must render all six categorical slices');
+  assert.equal(light.statusFills.length, 3, 'Light mode must render all three status slices');
+
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await page.waitForFunction(() => {
+    const s = document.querySelector('#catDonut .apexcharts-donut-slice-0');
+    return s && getComputedStyle(s).stroke === 'rgb(28, 28, 28)';
+  }, { timeout: 8000 });
+
+  const dark = await read();
+  assert.equal(dark.catFills.length, 6);
+  assert.equal(dark.statusFills.length, 3);
+
+  // The maroon categorical hue is ~1.7:1 on the dark card, which made its
+  // slice disappear; the dark token must lift it into a legible range.
+  for (let i = 0; i < dark.catFills.length; i++) {
+    assert.ok(dark.catRatios[i] >= 3,
+      `categorical slice ${i + 1} (${dark.catFills[i]}) must reach 3:1 on the dark card, got ${dark.catRatios[i]}:1`);
+  }
+  for (let i = 0; i < dark.statusFills.length; i++) {
+    assert.ok(dark.statusRatios[i] >= 3,
+      `status slice ${i + 1} (${dark.statusFills[i]}) must reach 3:1 on the dark card, got ${dark.statusRatios[i]}:1`);
+  }
+
+  // Hues must remain distinct, or a categorical donut loses its meaning.
+  assert.equal(new Set(dark.catFills).size, 6, 'all six categorical slices must stay distinct hues');
+  assert.equal(new Set(dark.statusFills).size, 3, 'all three status slices must stay distinct hues');
+
+  // The dark palette must differ from light where lightness was the problem.
+  assert.notEqual(dark.catFills[0], light.catFills[0],
+    'the maroon categorical hue must be lifted for dark mode');
+});
+
+test('status donuts switch to a neutral ramp in dark mode only', { timeout: 30000 }, async t => {
+  const page = await pageFor(t, 'light', false);
+  await page.addStyleTag({ content: '* { transition: none !important; }' });
+  await page.addScriptTag({ url: origin + '/assets/vendor/apexcharts/apexcharts.min.js' });
+  await page.addScriptTag({ url: origin + '/assets/js/chart-theme.js' });
+
+  await page.evaluate(() => {
+    const host = document.createElement('section');
+    host.className = 'card';
+    host.id = 'neutral-host';
+    const three = document.createElement('div');
+    three.id = 'threeDonut';
+    const six = document.createElement('div');
+    six.id = 'sixDonut';
+    host.append(three, six);
+    document.querySelector('main').prepend(host);
+
+    // Mirrors the clinic/BMG (3 slices) and guidance (6 slices) dashboards.
+    ChartTheme.create(three, function (t) {
+      return ChartTheme.donut(t, {
+        series: [2, 3, 5],
+        labels: ['A', 'B', 'C'],
+        colors: ChartTheme.themedSlices(t, ChartTheme.statusPalette(t).slice(0, 3))
+      });
+    });
+    ChartTheme.create(six, function (t) {
+      return ChartTheme.donut(t, {
+        series: [4, 3, 2, 1, 2, 1],
+        labels: ['A', 'B', 'C', 'D', 'E', 'F'],
+        colors: ChartTheme.themedSlices(t, ChartTheme.categorical(t))
+      });
+    });
+  });
+
+  await page.waitForSelector('#threeDonut .apexcharts-donut-slice-0', { state: 'attached' });
+  await page.waitForSelector('#sixDonut .apexcharts-donut-slice-0', { state: 'attached' });
+
+  const read = () => page.evaluate(() => {
+    const grab = id => [...document.querySelectorAll(`#${id} .apexcharts-pie-area`)]
+      .map(p => getComputedStyle(p).fill);
+    return {
+      three: grab('threeDonut'),
+      six: grab('sixDonut'),
+      cardBg: getComputedStyle(document.querySelector('#neutral-host')).backgroundColor
+    };
+  });
+
+  const lum = c => c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255)
+    .map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (a, b) => {
+    const la = lum(a), lb = lum(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  };
+  const isGrey = fill => {
+    const v = fill.match(/[\d.]+/g).slice(0, 3).map(Number);
+    return Math.max(...v) - Math.min(...v) <= 2;
+  };
+
+  // Light mode must keep the semantic hues.
+  const light = await read();
+  assert.equal(light.three.length, 3);
+  assert.equal(light.six.length, 6);
+  assert.ok(light.three.some(f => !isGrey(f)), 'light mode must keep semantic status hues');
+  assert.ok(light.six.some(f => !isGrey(f)), 'light mode must keep categorical hues');
+
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await page.waitForFunction(() => {
+    const s = document.querySelector('#threeDonut .apexcharts-donut-slice-0');
+    return s && getComputedStyle(s).stroke === 'rgb(28, 28, 28)';
+  }, { timeout: 8000 });
+
+  const dark = await read();
+  assert.equal(dark.three.length, 3);
+  assert.equal(dark.six.length, 6);
+
+  // Dark mode must be fully neutral, matching the admin population donut.
+  for (const fill of dark.three.concat(dark.six)) {
+    assert.ok(isGrey(fill), `dark slice ${fill} must be neutral grey, not a hue`);
+  }
+
+  for (const set of [dark.three, dark.six]) {
+    const label = set === dark.three ? '3-slice' : '6-slice';
+    assert.equal(new Set(set).size, set.length, `${label}: slices must all be distinct steps`);
+    for (const fill of set) {
+      const r = contrast(fill, dark.cardBg);
+      assert.ok(r >= 3, `${label}: slice ${fill} must reach 3:1 on the dark card, got ${r.toFixed(2)}:1`);
+    }
+    // Adjacent slices must be far enough apart to read as separate wedges.
+    for (let i = 0; i < set.length - 1; i++) {
+      const r = contrast(set[i], set[i + 1]);
+      assert.ok(r >= 1.25,
+        `${label}: adjacent slices ${set[i]} / ${set[i + 1]} must be distinguishable, got ${r.toFixed(2)}:1`);
+    }
+  }
+});
+test('sidebar hover state is visible in both themes', { timeout: 30000 }, async t => {
+  const page = await pageFor(t, 'light', false);
+  await page.addStyleTag({ content: '* { transition: none !important; }' });
+
+  // Build inside the real app shell so the sidebar is positioned on-screen;
+  // a bare <aside> sits off-canvas and can never be hovered.
+  await page.evaluate(() => {
+    const shell = document.createElement('div');
+    shell.className = 'app-shell';
+    shell.id = 'sb-fixture';
+    shell.style.position = 'fixed';
+    shell.style.inset = '0';
+    shell.style.zIndex = '9999';
+    shell.innerHTML =
+      '<aside class="sidebar"><div class="sidebar-shell"><nav class="sidebar-nav"><ul class="nav-menu">' +
+      '<li class="nav-item"><a class="nav-link" href="#"><span class="nav-icon"><i class="bi bi-grid"></i></span><span class="nav-text">Dashboard</span></a></li>' +
+      '<li class="nav-item"><a class="nav-link" href="#"><span class="nav-icon"><i class="bi bi-list"></i></span><span class="nav-text">Queue</span></a></li>' +
+      '</ul></nav></div></aside>';
+    document.body.append(shell);
+  });
+
+  const link = page.locator('#sb-fixture .sidebar-nav .nav-item > .nav-link').first();
+  await link.waitFor({ state: 'visible' });
+
+  const read = () => page.evaluate(() => {
+    const side = document.querySelector('#sb-fixture .sidebar');
+    const a = side.querySelector('.sidebar-nav .nav-item > .nav-link');
+    return {
+      sidebarBg: getComputedStyle(side).backgroundColor,
+      linkBg: getComputedStyle(a).backgroundColor,
+      hoverToken: getComputedStyle(side).getPropertyValue('--sidebar-hover-bg').trim()
+    };
+  });
+
+  // Composite a possibly-translucent colour over the sidebar so the measured
+  // value reflects what the eye actually sees.
+  const flatten = (fg, bg) => {
+    const parse = c => {
+      const m = c.match(/[\d.]+/g);
+      if (!m) return null;
+      const v = m.slice(0, 3).map(Number);
+      return { v, a: m.length > 3 ? Number(m[3]) : 1 };
+    };
+    const f = parse(fg), b = parse(bg);
+    if (!f || !b) return null;
+    return f.v.map((c, i) => c * f.a + b.v[i] * (1 - f.a));
+  };
+  const lum = v => v.map(c => c / 255)
+    .map(c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+    .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => {
+    const la = lum(a), lb = lum(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  };
+
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') {
+      await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+      await page.waitForTimeout(250);
+    }
+    // Park the cursor away from the link first, otherwise the previous
+    // iteration's hover is still applied and "rest" reads as hovered.
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(250);
+    const rest = await read();
+    await link.hover();
+    await page.waitForTimeout(250);
+    const hover = await read();
+
+    assert.ok(hover.hoverToken.length > 0, `${theme}: --sidebar-hover-bg must resolve`);
+    assert.notEqual(hover.linkBg, rest.linkBg,
+      `${theme}: hover must change the link background (rest=${rest.linkBg} hover=${hover.linkBg} token=${hover.hoverToken})`);
+
+    const sideFlat = flatten(rest.sidebarBg, 'rgb(255, 255, 255)');
+    const hoverFlat = flatten(hover.linkBg, rest.sidebarBg);
+    assert.ok(sideFlat && hoverFlat, `${theme}: colours must be parseable`);
+
+    // A 5% accent tint over the dark sidebar measured 1.003:1 — invisible.
+    const r = ratio(hoverFlat, sideFlat);
+    assert.ok(r >= 1.15,
+      `${theme}: hover background must be distinguishable from the sidebar, got ${r.toFixed(3)}:1`);
+
+    // The hover must use the themed token, not a hardcoded accent tint.
+    // Compare resolved RGB: the token is a hex string while the computed
+    // background is rgb(), so a string compare would always fail.
+    const toRgb = c => {
+      const hex = c.trim().match(/^#([0-9a-f]{6})$/i);
+      if (hex) {
+        const n = hex[1];
+        return [0, 2, 4].map(i => parseInt(n.slice(i, i + 2), 16)).join(',');
+      }
+      const m = c.match(/[\d.]+/g);
+      if (!m) return c;
+      return m.slice(0, 3).map(Number).join(',');
+    };
+    assert.equal(toRgb(hover.linkBg), toRgb(hover.hoverToken),
+      `${theme}: hover must consume --sidebar-hover-bg (${hover.hoverToken}), got ${hover.linkBg}`);
+  }
+});
+test('donut tooltip text stays readable in both themes', { timeout: 40000 }, async t => {
+  const page = await pageFor(t, 'light', false);
+  await page.addStyleTag({ content: '* { transition: none !important; }' });
+  await page.addScriptTag({ url: origin + '/assets/vendor/apexcharts/apexcharts.min.js' });
+  await page.addScriptTag({ url: origin + '/assets/js/chart-theme.js' });
+
+  await page.evaluate(() => {
+    const host = document.createElement('section');
+    host.className = 'card';
+    host.id = 'tip-host';
+    const target = document.createElement('div');
+    target.id = 'tipDonut';
+    host.append(target);
+    document.querySelector('main').prepend(host);
+
+    ChartTheme.create(target, function (t) {
+      return ChartTheme.donut(t, {
+        series: [2008, 619],
+        labels: ['Students', 'Employees'],
+        colors: [t['series-1'], t['series-2']]
+      });
+    });
+  });
+
+  await page.waitForSelector('#tipDonut .apexcharts-donut-slice-0', { state: 'attached' });
+  await page.waitForTimeout(1500);
+
+  // Hover the ring itself; the donut centre is a hole with no slice under it.
+  const hit = await page.evaluate(() => {
+    const svg = document.querySelector('#tipDonut .apexcharts-canvas svg');
+    if (!svg) return null;
+    const r = svg.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    for (const dx of [50, 70, 30, 90, -50, -70]) {
+      const el = document.elementFromPoint(cx + dx, cy);
+      if (el && (el.getAttribute('class') || '').includes('apexcharts-pie-area')) {
+        return { x: cx + dx, y: cy };
+      }
+    }
+    return null;
+  });
+  assert.ok(hit, 'the donut ring must be hoverable to produce a tooltip');
+
+  const readTip = () => page.evaluate(() => {
+    const tip = document.querySelector('#tipDonut .apexcharts-tooltip');
+    if (!tip) return { missing: true };
+    const cs = getComputedStyle(tip);
+    const row = tip.querySelector('.apexcharts-tooltip-series-group');
+    const label = tip.querySelector('.apexcharts-tooltip-text-y-label');
+    const value = tip.querySelector('.apexcharts-tooltip-text-y-value');
+    return {
+      tipBg: cs.backgroundColor,
+      rowBg: row ? getComputedStyle(row).backgroundColor : null,
+      labelText: label ? label.textContent.trim() : '',
+      labelColor: label ? getComputedStyle(label).color : null,
+      valueText: value ? value.textContent.trim() : '',
+      valueColor: value ? getComputedStyle(value).color : null
+    };
+  });
+
+  const lum = c => c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => v / 255)
+    .map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (a, b) => {
+    const la = lum(a), lb = lum(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  };
+
+  for (const theme of ['light', 'dark']) {
+    if (theme === 'dark') {
+      await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+      await page.waitForTimeout(600);
+    }
+    await page.mouse.move(hit.x, hit.y);
+    await page.waitForTimeout(600);
+    const tip = await readTip();
+
+    assert.ok(!tip.missing, `${theme}: donut tooltip must render`);
+    assert.ok(tip.labelText.length > 0, `${theme}: tooltip label must have text`);
+    assert.ok(tip.valueText.length > 0, `${theme}: tooltip value must have text`);
+
+    // ApexCharts forces fillSeriesColor on donuts, which paints the row in the
+    // slice colour. On a light slice that made the text white-on-white.
+    assert.equal(tip.rowBg, 'rgba(0, 0, 0, 0)',
+      `${theme}: the tooltip row must not be filled with the series colour`);
+
+    const labelRatio = contrast(tip.labelColor, tip.tipBg);
+    const valueRatio = contrast(tip.valueColor, tip.tipBg);
+    assert.ok(labelRatio >= 4.5,
+      `${theme}: tooltip label contrast ${labelRatio.toFixed(2)}:1 must reach 4.5:1`);
+    assert.ok(valueRatio >= 4.5,
+      `${theme}: tooltip value contrast ${valueRatio.toFixed(2)}:1 must reach 4.5:1`);
+  }
+});
+
 // Compute WCAG contrast from resolved styles, not tokens or snapshots. Composite alpha,
 // ancestor opacity, and Bootstrap's enormous inset table-cell shadow before measuring.
 async function installMetrics(page) {
@@ -413,6 +1008,44 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark']) {
       assert.equal(await page.locator('#button-1').evaluate(el => el === document.activeElement && el.matches(':focus-visible')), true,
         'Tab skips disabled buttons/anchors/fieldsets and shows keyboard focus');
     });
+    await t.test('KPI rail cards go neutral black and grey in dark mode', async () => {
+      await page.evaluate(() => {
+        const fixture = document.createElement('div');
+        fixture.id = 'kpi-rail-fixture';
+        fixture.innerHTML = ['nd-kpi-leads', 'nd-kpi-revenue', 'nd-kpi-retention', 'nd-kpi-cycle'].map(cls =>
+          `<article class="nd-kpi-card ${cls}"><span class="nd-kpi-icon"><i class="bi bi-people"></i></span>` +
+          '<span class="nd-kpi-label">Label</span><strong class="nd-kpi-value">1</strong>' +
+          '<span class="nd-kpi-trend up">Trend</span></article>').join('');
+        document.body.append(fixture);
+      });
+      const cards = await page.locator('#kpi-rail-fixture .nd-kpi-card').evaluateAll(elements => elements.map(el => {
+        const icon = el.querySelector('.nd-kpi-icon');
+        const cardCss = getComputedStyle(el);
+        const iconCss = getComputedStyle(icon);
+        const box = icon.getBoundingClientRect();
+        return {
+          cls: el.className,
+          background: cardCss.backgroundColor,
+          border: cardCss.borderColor,
+          iconBackground: iconCss.backgroundColor,
+          iconColor: iconCss.color,
+          iconBox: [Math.round(box.width), Math.round(box.height)]
+        };
+      }));
+      assert.equal(cards.length, 4);
+      for (const card of cards) {
+        assert.deepEqual(card.iconBox, [44, 44], `${card.cls}: icon tile geometry must not shift`);
+        if (theme === 'dark') {
+          assert.equal(card.background, 'rgb(22, 22, 22)', `${card.cls}: dark KPI cards must use the neutral black surface, not a hue tint`);
+          assert.equal(card.iconBackground, 'rgb(38, 38, 38)', `${card.cls}: dark KPI icon tiles must be grey`);
+          assert.equal(card.iconColor, 'rgb(229, 229, 229)', `${card.cls}: dark KPI glyphs must be light grey`);
+        } else {
+          // Light mode keeps the tinted status surfaces untouched.
+          assert.notEqual(card.background, 'rgb(22, 22, 22)', `${card.cls}: light KPI cards keep their tinted fill`);
+        }
+      }
+      await page.locator('#kpi-rail-fixture').evaluate(el => el.remove());
+    });
     await t.test('maroon buttons and tabs stay white; accent icons become white on dark surfaces', async () => {
       for (const state of ['rest', 'hover', 'focus', 'active']) {
         const clear = await forceState(page, '[data-brand-control]', state);
@@ -468,17 +1101,45 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark']) {
         if (row.checked || row.indeterminate) assert.notEqual(row.image, 'none', `${row.element}: disabled control must retain its selected indicator`);
       }
     });
-    await t.test('welcome alert close icon stays dark without changing modal close icons', async () => {
+    await t.test('staff-session and welcome banners follow the dark surface palette', async () => {
       await page.evaluate(() => {
         const fixture = document.createElement('div');
         fixture.id = 'welcome-alert-fixture';
-        fixture.innerHTML = '<div class="alert alert-success alert-dismissible" role="alert">Welcome back, Fixture User!<button type="button" class="btn-close" aria-label="Close"></button></div>' +
+        fixture.innerHTML = '<div class="alert alert-info login-banner border-0" role="alert">Staff Member Personal Health Session' +
+          '<a href="#console" class="btn btn-outline-secondary">Clinic Staff Console</a>' +
+          '<a href="#console" class="text-decoration-none">Plain banner link</a>' +
+          '<button type="button" class="btn-close" aria-label="Close"></button></div>' +
+          '<div class="alert alert-success alert-dismissible" role="alert">Welcome back, Fixture User!<button type="button" class="btn-close" aria-label="Close"></button></div>' +
           '<div class="modal"><button type="button" class="btn-close" aria-label="Close modal"></button></div>';
         document.body.append(fixture);
       });
+      const banners = await page.locator('#welcome-alert-fixture .alert').evaluateAll(elements => elements.map(el => {
+        const css = getComputedStyle(el);
+        return { background: css.backgroundColor, color: css.color, borderLeftWidth: css.borderLeftWidth, borderLeftStyle: css.borderLeftStyle, borderLeftColor: css.borderLeftColor };
+      }));
       const filters = await page.locator('#welcome-alert-fixture .btn-close').evaluateAll(elements => elements.map(el => getComputedStyle(el).filter));
-      assert.equal(filters[0], 'none', 'The welcome alert must use the dark close glyph');
-      if (theme === 'dark') assert.match(filters[1], /invert\(1\)/, 'Dark modal close icons must stay light');
+      const bannerButton = await page.locator('#welcome-alert-fixture .alert .btn').evaluate(el => {
+        const css = getComputedStyle(el);
+        return { color: css.color, background: css.backgroundColor };
+      });
+      const bannerLink = await page.locator('#welcome-alert-fixture .alert a:not(.btn)').evaluate(el => getComputedStyle(el).color);
+      if (theme === 'dark') {
+        assert.equal(banners[0].background, 'rgb(22, 22, 22)', 'The staff-session banner must use the dark banner surface');
+        assert.equal(banners[1].background, 'rgb(22, 22, 22)', 'Other dark-mode banners must use the dark banner surface');
+        assert.equal(banners[0].color, 'rgb(240, 240, 240)', 'The staff-session banner text must stay readable on the dark surface');
+        assert.equal(banners[0].borderLeftStyle, 'solid', 'border-0 must not erase the status edge');
+        assert.equal(banners[0].borderLeftWidth, '4px', 'The status edge must stay visible on the dark banner');
+        assert.equal(banners[0].borderLeftColor, 'rgb(158, 204, 255)', 'The info status edge must survive the dark surface');
+        assert.equal(bannerButton.color, 'rgb(255, 255, 255)', 'Banner buttons must keep their own action color, not the alert link color');
+        assert.equal(bannerButton.background, 'rgb(89, 89, 89)', 'Banner buttons must keep their own action fill');
+        assert.equal(bannerLink, 'rgb(158, 204, 255)', 'Plain banner links still use the status link color');
+        assert.match(filters[0], /invert\(1\)/, 'The dark staff-session banner needs the light close glyph');
+        assert.match(filters[1], /invert\(1\)/, 'Dark-mode black banners must use the light close glyph');
+        assert.match(filters[2], /invert\(1\)/, 'Dark modal close icons must stay light');
+      } else {
+        assert.equal(filters[0], 'none', 'Light-mode banners must use the dark close glyph');
+        assert.equal(filters[1], 'none', 'Light-mode banners must use the dark close glyph');
+      }
       await page.locator('#welcome-alert-fixture').evaluate(el => el.remove());
     });
     await t.test('breadcrumb separators, table tags, text utilities and links', async () => {
@@ -572,3 +1233,10 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark']) {
     assert.equal(await page.evaluate(() => localStorage.getItem('na-dark-mode')), theme === 'dark' ? '1' : '0', 'Real toggle returns to the original theme');
   });
 }
+
+
+
+
+
+
+

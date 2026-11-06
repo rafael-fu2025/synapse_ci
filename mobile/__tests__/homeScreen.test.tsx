@@ -30,17 +30,24 @@ jest.mock('../src/lib/useFocusPoll', () => ({ useFocusPoll: () => false }));
 jest.mock('../src/store/auth', () => ({
   useAuth: () => ({ user: { name: 'Alex Rivera', avatar_initials: 'AR' } }),
 }));
+let mockThemeMode: 'light' | 'dark' = 'light';
 jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }),
+  useTheme: () => {
+    const tokens = jest.requireActual('../src/theme/tokens');
+    return { theme: mockThemeMode === 'dark' ? tokens.darkTheme : tokens.lightTheme, mode: mockThemeMode };
+  },
 }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
 jest.mock('react-native-svg', () => {
   const { View } = jest.requireActual('react-native');
-  return { __esModule: true, default: View, Svg: View, Path: View, Defs: View, G: View, Rect: View };
+  return {
+    __esModule: true, default: View, Svg: View, Path: View, Defs: View, G: View, Rect: View,
+    SvgXml: View, LinearGradient: View, Stop: View,
+  };
 });
 jest.mock('lucide-react-native', () => ({
-  Bell: () => null, Building2: () => null, CalendarPlus: () => null,
+  Bell: () => null, Building2: () => null, Calendar: () => null, CalendarPlus: () => null,
   ChevronRight: () => null, ClipboardList: () => null, Clock3: () => null,
   ListChecks: () => null, Megaphone: () => null, Stethoscope: () => null,
 }));
@@ -85,8 +92,11 @@ function render() {
 function texts() {
   return renderer!.root.findAllByType(Text).map(node => React.Children.toArray(node.props.children).join(''));
 }
-function press(label: string) {
-  const button = renderer!.root.findAll(node =>
+/** Host nodes only: the composite CardOutline forwards the same testID. */
+function outlineHosts() {
+  return renderer!.root.findAll(node => typeof node.type === 'string' && node.props.testID === 'nextVisitOutline');
+}
+function press(label: string) {  const button = renderer!.root.findAll(node =>
     typeof node.props.onPress === 'function' && node.props.accessibilityRole === 'button').find(node =>
     node.props.accessibilityLabel === label ||
     node.findAllByType(Text).some(child => React.Children.toArray(child.props.children).join('') === label));
@@ -109,6 +119,7 @@ const slots = [
 
 beforeEach(() => {
   jest.resetAllMocks();
+  mockThemeMode = 'light';
   jest.mocked(useProfilePhoto).mockReturnValue(null);
   (useQuery as jest.Mock).mockReturnValue(result({ entitlements: { staff_queue_units: [] } }));
   (useNotificationInbox as jest.Mock).mockReturnValue(result({ data: { unread_count: 2 } }));
@@ -203,7 +214,7 @@ describe('Home dashboard', () => {
     render();
     expect(texts()).toEqual(expect.arrayContaining([
       'NEXT APPOINTMENT', 'Clinic consultation', 'Dr. Rivera', 'Confirmed',
-      'My queue ticket', 'Live waiting room ticket', 'C-042', '#3', '~15 min',
+      'My queue ticket', 'Live waiting ticket', 'C-042', '#3', '~15 min',
       announcement.title, announcement.excerpt, survey.title, survey.description, 'Start survey',
     ]));
     expect(renderer!.root.findAllByType(QueueTicketCard)).toHaveLength(1);
@@ -271,5 +282,29 @@ describe('Home dashboard', () => {
       'Clinic consultation', 'C-042', announcement.title, survey.title,
     ]));
     slots.forEach(slot => { expect(texts()).not.toContain(slot.empty); });
+  });
+
+  it('outlines the next-appointment card in dark mode with a gradient that fades out to the right', () => {
+    withRealData();
+    render();
+    expect(outlineHosts()).toHaveLength(0);
+
+    mockThemeMode = 'dark';
+    act(() => { renderer!.update(<DashboardScreen />); });
+    // Host nodes only: the composite CardOutline forwards the same testID.
+    const outline = outlineHosts()[0];
+    // Decorative: the outline must never swallow taps meant for the card.
+    expect(outline.props.pointerEvents).toBe('none');
+
+    const stroke = outline.findAll(node => typeof node.props.stroke === 'string' && node.props.stroke.startsWith('url('))[0];
+    expect(stroke.props.fill).toBe('none');
+
+    // Scoped to this outline: the Home screen also renders the queue ticket's outline.
+    const stops = outline.findAll(node =>
+      typeof node.type === 'string' && typeof node.props.stopOpacity === 'number');
+    expect(stops.map(node => node.props.stopOpacity)).toEqual([0.55, 0.3, 0]);
+    // The last stop is fully transparent, so the right edge has no hard line.
+    expect(stops[stops.length - 1].props.stopOpacity).toBe(0);
+    stops.forEach(node => expect(node.props.stopColor).toBe('#ffffff'));
   });
 });

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Services\AuthenticatedUser;
+use App\Services\DashboardCache;
 use App\Services\Facilities\BmgRotationService;
 use App\Services\Facilities\BmgService;
+use App\Services\Scheduling\SchedulingClock;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
@@ -28,49 +30,56 @@ final class FacilitiesController extends BaseController
             $tenantId = \App\Services\CurrentTenant::id();
             $db = \Config\Database::connect();
 
-            $overview = $this->rotation->overview();
-            $stats = $this->rotation->statistics();
-            $totalUnits = $stats['total'];
-            $activeUnits = $stats['active'];
-            $maintenanceUnits = $stats['maintenance'];
-            $boundDevices = $stats['bound'];
+            $metrics = DashboardCache::remember('facilities.dashboard', DashboardCache::TTL, function () use ($tenantId, $db): array {
+                $overview = $this->rotation->overview();
+                $stats = $this->rotation->statistics();
 
-            $totalBatches = $db->table('bmg_batches')
-                ->where('tenant_id', $tenantId)->countAllResults();
-            $activeBatches = $db->table('bmg_batches')
-                ->where('tenant_id', $tenantId)->whereIn('status', ['processing', 'awaiting_output', 'curing'])->countAllResults();
+                $totalBatches = $db->table('bmg_batches')
+                    ->where('tenant_id', $tenantId)->countAllResults();
+                $activeBatches = $db->table('bmg_batches')
+                    ->where('tenant_id', $tenantId)->whereIn('status', ['processing', 'awaiting_output', 'curing'])->countAllResults();
 
-            $totalWeightRow = $db->table('bmg_batches')
-                ->where('tenant_id', $tenantId)->where('status', 'released')
-                ->selectSum('total_input_weight_kg', 'total_kg')->get()->getRowArray();
-            $totalTreatedKg = (float) ($totalWeightRow['total_kg'] ?? 0);
+                $totalWeightRow = $db->table('bmg_batches')
+                    ->where('tenant_id', $tenantId)->where('status', 'released')
+                    ->selectSum('total_input_weight_kg', 'total_kg')->get()->getRowArray();
 
-            $days = [];
-            $batchRuns = [];
-            for ($i = 6; $i >= 0; $i--) {
-                $d = date('Y-m-d', strtotime("-{$i} days"));
-                $days[] = date('M j', strtotime($d));
-                $batchRuns[] = $db->table('bmg_batches')
-                    ->where('tenant_id', $tenantId)->where('DATE(created_at)', $d)->countAllResults();
-            }
+                // One bounded range read, bucketed on the Manila business day in PHP:
+                // created_at is stored as a UTC instant, so the Manila day is a UTC range.
+                $ranges = SchedulingClock::businessDayRanges(7);
+                $days = array_map(static fn (string $businessDay): string => date('M j', strtotime($businessDay)), array_keys($ranges));
+                $batchRuns = array_fill(0, count($ranges), 0);
+                foreach ($db->table('bmg_batches')
+                    ->where('tenant_id', $tenantId)
+                    ->where('created_at >=', $ranges[array_key_first($ranges)][0])
+                    ->where('created_at <', $ranges[array_key_last($ranges)][1])
+                    ->select('created_at')->get()->getResultArray() as $batchRow) {
+                    $bucket = SchedulingClock::businessDayIndex((string) $batchRow['created_at'], $ranges);
+                    if ($bucket !== null) {
+                        $batchRuns[$bucket]++;
+                    }
+                }
+
+                return [
+                    'totalUnits'       => $stats['total'],
+                    'activeUnits'      => $stats['active'],
+                    'maintenanceUnits' => $stats['maintenance'],
+                    'boundDevices'     => $stats['bound'],
+                    'totalBatches'     => $totalBatches,
+                    'activeBatches'    => $activeBatches,
+                    'totalTreatedKg'   => (float) ($totalWeightRow['total_kg'] ?? 0),
+                    'units'            => $overview,
+                    'chartDays'        => $days,
+                    'chartSeries'      => $batchRuns,
+                ];
+            });
 
             $user = session()->get('user') ?? [];
 
-            return view('facilities/dashboard', $this->access() + [
-                'title'             => 'Facilities Dashboard',
-                'pageTitle'         => 'Facilities & BMG Dashboard',
-                'user'              => $user,
-                'totalUnits'        => $totalUnits,
-                'activeUnits'       => $activeUnits,
-                'maintenanceUnits'  => $maintenanceUnits,
-                'boundDevices'      => $boundDevices,
-                'totalBatches'      => $totalBatches,
-                'activeBatches'     => $activeBatches,
-                'totalTreatedKg'    => $totalTreatedKg,
-                'units'             => $overview,
-                'chartDays'         => $days,
-                'chartSeries'       => $batchRuns,
-                'breadcrumbs'       => [
+            return view('facilities/dashboard', $this->access() + $metrics + [
+                'title'       => 'Facilities Dashboard',
+                'pageTitle'   => 'Facilities & BMG Dashboard',
+                'user'        => $user,
+                'breadcrumbs' => [
                     ['label' => 'Facilities', 'url' => site_url('/facilities/dashboard')],
                     ['label' => 'Dashboard', 'url' => ''],
                 ],

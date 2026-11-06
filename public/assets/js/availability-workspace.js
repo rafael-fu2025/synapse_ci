@@ -59,7 +59,9 @@
       const action = new URL(form.action, location.href);
       const paths = ['', '/template', '/enroll', '/exceptions', '/exceptions/remove'].map(suffix => base.pathname + suffix);
       if (form.method.toUpperCase() !== 'POST' || action.origin !== base.origin || !paths.includes(action.pathname) || action.search || action.hash) throw new Error('The action must stay in this department’s availability workspace.');
-      const body = event.submitter ? new FormData(form, event.submitter) : new FormData(form);
+      const body = event.submitter
+        ? new FormData(form, event.submitter)
+        : new FormData(form);
       finish = window.SynapseLoading?.begin(form, { label: 'Saving availability…', button: event.submitter, disableButton: false }) || finish;
       controls.forEach(([button]) => { button.disabled = true; });
       const response = await fetch(action.href, { method: 'POST', body, credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: job.controller.signal,

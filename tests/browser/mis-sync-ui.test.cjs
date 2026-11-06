@@ -13,7 +13,7 @@ const root = path.resolve(__dirname, '../..');
 const { chromium, expect } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright/test'));
 let server, browser, origin, html;
 
-function renderView() {
+function renderView(withPeople = false) {
   const rendered = spawnSync('php', [], {
     cwd: root, encoding: 'utf8', timeout: 10000,
     input: `<?php
@@ -28,6 +28,7 @@ function renderView() {
           $actor = ['tenant_id' => 7];
           $catalogs = array_fill_keys(['departments', 'programs', 'year_levels'], ['total' => 0, 'last_synced_at' => null]);
           $lastSync = ['occurred_at' => '2026-01-01 00:00:00', 'actor_user_id' => 42];
+          ${withPeople ? "$peopleStatus = ['counts' => ['student' => 0, 'employee' => 0], 'lastSync' => null, 'unavailableReason' => null];" : ''}
           include 'app/Views/admin/mis_sync.php';
         }
       }
@@ -77,7 +78,7 @@ async function progress(page, progressId, percent) {
   await page.evaluate(({ progressId, percent }) => {
     document.dispatchEvent(new CustomEvent('synapse:realtime-event', { detail: {
       event: 'mis.sync.progress', channel: 'user:7',
-      data: { progress_id: progressId, percent, message: `Completed stage ${percent}` }
+      data: { progress_id: progressId, action: 'references', percent, message: `Completed stage ${percent}` }
     } }));
   }, { progressId, percent });
 }
@@ -168,6 +169,43 @@ for (const success of [true, false]) {
     assert.deepEqual(errors, []);
   });
 }
+
+test('two actions isolate progress, share write lock and preserve uncertain outcomes without retry', { timeout: 20000 }, async t => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  let posts = 0, body = '', release;
+  const reply = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  await context.route('**/admin/mis-sync/people', async route => {
+    posts++; body = route.request().postData();
+    await reply;
+    return route.abort();
+  });
+  await context.route('**/admin/mis-sync', route => route.fulfill({ contentType: 'text/html', body: renderView(true) }));
+  await page.goto(origin + '/admin/mis-sync');
+  const roots = page.locator('[data-mis-sync]');
+  await roots.nth(1).locator('button').click();
+  await expect.poll(() => posts).toBe(1);
+  const id = /name="progress_id"\r\n\r\n([^\r]+)/.exec(body)?.[1];
+  await page.evaluate(({ id }) => {
+    const send = action => document.dispatchEvent(new CustomEvent('synapse:realtime-event', { detail: {
+      event: 'mis.sync.progress', data: { progress_id: id, action, percent: 40, message: 'People stage' }
+    } }));
+    send('references');
+  }, { id });
+  await expect(roots.nth(1).locator('[data-sync-percent]')).toHaveText('Waiting…');
+  await page.evaluate(({ id }) => document.dispatchEvent(new CustomEvent('synapse:realtime-event', { detail: {
+    event: 'mis.sync.progress', data: { progress_id: id, action: 'people', percent: 40, message: 'People stage' }
+  } })), { id });
+  await expect(roots.nth(1).locator('[data-sync-percent]')).toHaveText('40%');
+  await expect(roots.nth(0).locator('[data-sync-progress]')).toBeHidden();
+  release();
+  await expect(roots.nth(1).locator('[data-sync-result]')).toContainText('unconfirmed');
+  await expect(roots.nth(1).locator('button')).toBeDisabled();
+  await roots.nth(1).locator('form').evaluate(form => form.dispatchEvent(new Event('submit', { cancelable: true })));
+  assert.equal(posts, 1);
+});
 
 test('production form still submits natively without JavaScript, with POST intercepted', { timeout: 15000 }, async t => {
   const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: 'block' });

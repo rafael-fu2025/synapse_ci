@@ -221,7 +221,7 @@ for (const theme of ['light', 'dark']) for (const width of [320, 390, 768, 1440]
           const bounds = text.getBoundingClientRect();
           for (const rect of range.getClientRects()) if (rect.right > bounds.right + 1 || rect.bottom > bounds.bottom + 1) issues.push('hidden full text');
         }
-        for (const button of row.querySelectorAll('.btn')) {
+        for (const button of row.querySelectorAll('.slide-actions button, .slide-actions a')) {
           const rect = button.getBoundingClientRect();
           if (rect.width < 44 || rect.height < 44 || !button.getAttribute('aria-label')) issues.push('small/unnamed action');
         }
@@ -232,11 +232,55 @@ for (const theme of ['light', 'dark']) for (const width of [320, 390, 768, 1440]
     assert.equal(await page.locator('.slide-title').first().textContent(), 'A long carousel title for campus wellbeing with every word readable on a small phone');
     assert.equal(await page.locator('.slide-title').last().textContent(), 'Untitled Slide');
     assert.equal(await page.locator('.slide-subtitle').last().textContent(), '—');
-    assert.equal(await page.locator('.slide-thumb').count(), 6);
+    assert.equal(await page.locator('.slide-thumb').count(), 5);
     for (const img of await page.locator('.slide-thumb img').all()) assert.ok(await img.evaluate(img => img.complete && img.naturalWidth > 0));
     assert.equal(await page.locator('.slide-row').nth(1).getByText('Hidden', { exact: true }).isVisible(), true);
     assert.equal(await page.getByText('Contained + Blur', { exact: true }).isVisible(), true);
-    assert.equal(await page.getByText('none', { exact: true }).isVisible(), true);
+    // Slides without a dark variant render no placeholder thumb at all.
+    assert.equal(await page.getByText('none', { exact: true }).isVisible(), false);
+    assert.equal(await page.locator('.slide-thumb-dark').count(), 2);
+    // Card stack: the active theme's variant sits flat in front, the other
+    // peeks out tilted behind; single-variant slides stay flat.
+    const stack = await page.locator('.slide-row').first().locator('.slide-thumb').evaluateAll(thumbs =>
+      thumbs.map(t => ({ variant: t.className.includes('slide-thumb-dark') ? 'dark' : 'light', z: getComputedStyle(t).zIndex, tilted: getComputedStyle(t).transform !== 'none' })));
+    assert.equal(stack.length, 2);
+    const frontVariant = theme === 'dark' ? 'dark' : 'light';
+    for (const thumb of stack) {
+      if (thumb.variant === frontVariant) {
+        assert.equal(thumb.z, '2', `${theme}: ${frontVariant} thumb must be the front card`);
+        assert.equal(thumb.tilted, false, `${theme}: ${frontVariant} thumb must sit flat`);
+      } else {
+        assert.equal(thumb.z, '1', `${theme}: non-front thumb must peek from behind`);
+        assert.equal(thumb.tilted, true, `${theme}: non-front thumb must be tilted`);
+      }
+    }
+    assert.equal(await page.locator('.slide-row').nth(2).locator('.slide-thumb').evaluate(t => getComputedStyle(t).transform), 'none',
+      'single-variant slides have no stack tilt');
+    // Hidden slides ease the back card away: only the active theme's variant stays visible.
+    const hiddenStack = await page.locator('.slide-row').nth(1).locator('.slide-thumb').evaluateAll(thumbs =>
+      thumbs.map(t => ({ variant: t.className.includes('slide-thumb-dark') ? 'dark' : 'light', opacity: getComputedStyle(t).opacity })));
+    assert.equal(hiddenStack.length, 2);
+    for (const thumb of hiddenStack) {
+      assert.equal(thumb.opacity, thumb.variant === frontVariant ? '1' : '0',
+        `${theme}: hidden slide must keep only the ${frontVariant} card visible`);
+    }
+    // Thumbnails use the shell's Bootstrap tooltips, never the native title tooltip.
+    assert.equal(await page.locator('.slide-thumb[title]').count(), 0, 'thumbnails must not carry native title tooltips');
+    assert.equal(await page.locator('.slide-thumb[data-bs-toggle="tooltip"]').count(), 5);
+    assert.equal(await page.evaluate(() => {
+      const el = document.querySelector('.slide-thumb[data-bs-toggle="tooltip"]');
+      return Boolean(el && window.bootstrap?.Tooltip?.getInstance(el));
+    }), true, 'thumbnail tooltips must be initialized by the shell');
+    // One tooltip language across the row: no native titles; 5 thumbs + 3 drag
+    // handles + 15 action controls, all Bootstrap.
+    assert.equal(await page.locator('.slide-row [title]').count(), 0, 'no native title tooltips anywhere in the slide rows');
+    assert.equal(await page.locator('.slide-row [data-bs-toggle="tooltip"]').count(), 23);
+    assert.equal(await page.locator('.drag-handle[data-bs-toggle="tooltip"]').count(), 3);
+    assert.equal(await page.locator('.slide-actions [data-bs-toggle="tooltip"]').count(), 15);
+    assert.equal(await page.evaluate(() => {
+      const armed = document.querySelector('.slide-actions [data-bs-toggle="tooltip"]');
+      return Boolean(armed && window.bootstrap?.Tooltip?.getInstance(armed));
+    }), true, 'action-button tooltips must be initialized by the shell');
     const first = page.locator('.slide-row').first(), last = page.locator('.slide-row').last();
     assert.equal(await first.locator('[data-slide-move="up"]').isDisabled(), true);
     assert.equal(await last.locator('[data-slide-move="down"]').isDisabled(), true);

@@ -39,6 +39,32 @@ final class ReferralRoutesTest extends FreshDatabaseTestCase
     private array $admin;
     private array $grants = [];
 
+    /** Tables the referral workflow can leave behind, ordered child before parent. */
+    private const TENANT_SCOPED_TABLES = [
+        'notifications', 'workflow_events', 'referrals',
+        'counselling_notes', 'counselling_sessions', 'counselling_cases',
+        'clinic_dispensations', 'clinic_vitals', 'clinic_encounters',
+        'queue_entries', 'appointments',
+        'team_chat_reads', 'team_chat_messages', 'team_task_comments', 'team_task_activity',
+        'team_event_participants', 'team_events', 'team_tasks',
+        'announcements_reads', 'announcements',
+        'survey_responses', 'survey_question_bank_revisions', 'survey_question_bank', 'surveys',
+        'inventory_operations', 'stock_movements', 'department_staff',
+        'provider_availability', 'availability_exceptions',
+        'employee_profiles', 'health_profiles', 'student_profiles',
+    ];
+
+    /** Columns that point at a user row. */
+    private const OWNER_COLUMNS = [
+        'actor_id', 'actor_user_id', 'assigned_user_id', 'assignee_user_id', 'attending_user_id',
+        'booked_by_user_id', 'called_by_user_id', 'counsellor_user_id', 'created_by', 'created_by_user_id',
+        'dispensed_by_user_id', 'enrolled_by_user_id', 'issuer_user_id', 'provider_user_id',
+        'recorded_by_user_id', 'recipient_user_id', 'sender_user_id', 'submitted_by', 'user_id',
+    ];
+
+    /** Columns that point at a person row. */
+    private const PERSON_COLUMNS = ['person_id', 'patient_person_id', 'recipient_person_id'];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -69,10 +95,7 @@ final class ReferralRoutesTest extends FreshDatabaseTestCase
             }
         }
         if (isset($this->tenant)) {
-            foreach (['notifications', 'referrals', 'clinic_encounters', 'counselling_cases', 'users', 'people'] as $table) {
-                $this->db->table($table)->where('tenant_id', $this->tenant)->delete();
-            }
-            $this->db->table('tenants')->where('id', $this->tenant)->delete();
+            $this->purgeTenant();
         }
         foreach (['renderer', 'security', 'misClient'] as $service) {
             Services::resetSingle($service);
@@ -98,6 +121,45 @@ final class ReferralRoutesTest extends FreshDatabaseTestCase
         // Cached authority is deliberately forged; database identity/grants must win.
         return ['id' => $id, 'tenant_id' => $this->tenant, 'role' => 'superadmin',
             'permissions' => ['*'], 'logged_in' => true, 'name' => 'Route tester'];
+    }
+
+    /**
+     * Child rows first. Workflow, clinical and team rows reference the users and people that are
+     * removed last, so the tenant has to be cleared in dependency order: otherwise the foreign
+     * keys refuse the delete and the test errors in teardown instead of asserting.
+     */
+    private function purgeTenant(): void
+    {
+        $userIds = array_column($this->db->table('users')->select('id')->where('tenant_id', $this->tenant)->get()->getResultArray(), 'id');
+        $personIds = array_column($this->db->table('people')->select('id')->where('tenant_id', $this->tenant)->get()->getResultArray(), 'id');
+        foreach (self::TENANT_SCOPED_TABLES as $table) {
+            if (! $this->db->tableExists($table)) {
+                continue;
+            }
+            $builder = $this->db->table($table);
+            $fields = $this->db->getFieldNames($table);
+            if (in_array('tenant_id', $fields, true)) {
+                $builder->where('tenant_id', $this->tenant);
+            } else {
+                $columns = array_values(array_intersect($fields, self::OWNER_COLUMNS));
+                if ($columns === []) {
+                    continue;
+                }
+                $builder->groupStart();
+                foreach ($columns as $column) {
+                    $ids = in_array($column, self::PERSON_COLUMNS, true) ? $personIds : $userIds;
+                    if ($ids !== []) {
+                        $builder->orWhereIn($column, $ids);
+                    }
+                }
+                $builder->groupEnd();
+            }
+            $builder->delete();
+        }
+        foreach (['users', 'people'] as $table) {
+            $this->db->table($table)->where('tenant_id', $this->tenant)->delete();
+        }
+        $this->db->table('tenants')->where('id', $this->tenant)->delete();
     }
 
     private function authSession(array $actor): array
@@ -421,6 +483,57 @@ final class ReferralRoutesTest extends FreshDatabaseTestCase
             $this->assertSame('1', $meta->getAttribute('data-filtered'));
             $this->assertSame('27', $meta->getAttribute('data-total'));
         }
+    }
+
+    public function testListFiltersByReferralStatusAndReceivingUnit(): void
+    {
+        $submitted = $this->referral();
+        $acknowledged = $this->referral();
+        $this->postAs($this->guidance, 'guidance/referrals/' . $acknowledged['id'] . '/acknowledge')->assertStatus(200);
+        $this->referral('guidance');
+
+        // Every referral status is accepted: the list must not be validated against the
+        // medicine vocabulary (a shared filter helper used to answer "Invalid medicine status.").
+        foreach (['submitted', 'acknowledged', 'under_review', 'converted_to_case', 'closed'] as $status) {
+            $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'status' => $status])->assertStatus(200);
+        }
+        $badStatus = $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'status' => 'low_stock']);
+        $badStatus->assertStatus(422);
+        $this->assertSame('Invalid referral status.', $badStatus->response()->getBody());
+
+        // Status narrows the rows.
+        $onlySubmitted = $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'status' => 'submitted']);
+        $onlySubmitted->assertStatus(200);
+        $onlySubmitted->assertSee($submitted['referral_code']);
+        $onlySubmitted->assertDontSee($acknowledged['referral_code']);
+        $onlyAcknowledged = $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'status' => 'acknowledged']);
+        $onlyAcknowledged->assertStatus(200);
+        $onlyAcknowledged->assertSee($acknowledged['referral_code']);
+        $onlyAcknowledged->assertDontSee($submitted['referral_code']);
+
+        // Receiving unit narrows the rows (the sent rows all target Guidance).
+        $toGuidance = $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'unit' => 'guidance']);
+        $toGuidance->assertStatus(200);
+        $toGuidance->assertSee($submitted['referral_code']);
+        $toGuidance->assertSee($acknowledged['referral_code']);
+        $toClinic = $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'unit' => 'clinic']);
+        $toClinic->assertStatus(200);
+        $toClinic->assertDontSee($submitted['referral_code']);
+        $toClinic->assertDontSee($acknowledged['referral_code']);
+
+        // The app's own vocabulary for the same column is accepted too.
+        $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'target_module' => 'guidance'])->assertStatus(200);
+        $badUnit = $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent', 'unit' => 'reception']);
+        $badUnit->assertStatus(422);
+        $this->assertSame('Invalid referral unit.', $badUnit->response()->getBody());
+
+        // The controls exist, so a user can actually filter the list.
+        $page = $this->getAs($this->clinic, 'clinic/referrals', ['tab' => 'sent']);
+        $page->assertStatus(200);
+        $page->assertSee('name="status"');
+        $page->assertSee('name="unit"');
+        $page->assertSee('All statuses');
+        $page->assertSee('All units');
     }
 
     public function testReceivingActionsRequireAcknowledgementCorrectContextAndProperState(): void

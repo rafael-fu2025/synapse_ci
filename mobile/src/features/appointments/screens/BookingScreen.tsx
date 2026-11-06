@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, usePreventRemove } from '@react-navigation/native';
 import type { CompositeNavigationProp, NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,7 +16,7 @@ import { useCreateAppointment } from '../hooks';
 import { UNIT_PRESENTATION, unitLabel } from '../status';
 import { AppTabsParamList, VisitsStackParamList } from '../../../navigation/types';
 import { formatDateTile, formatFullDate } from '../../../lib/format';
-import { BOOKING_STEPS, BookingStep, PREFERRED_TIMES, TYPE_LABELS, formatPreferredTime, nextDays, previousBookingStep } from '../booking';
+import { BOOKING_STEPS, BookingStep, PREFERRED_TIMES, TYPE_LABELS, formatPreferredTime, isHalfDay, nextDays, previousBookingStep } from '../booking';
 import { appointmentErrorMessage } from '../errors';
 
 // Keep nested tab destinations typed locally; Booking may be hosted from Home or Visits.
@@ -48,7 +48,16 @@ export function BookingScreen() {
   const days = useMemo(() => nextDays(14), []);
   const types = unit === 'guidance' ? GUIDANCE_TYPES : CLINIC_TYPES;
   const morning = PREFERRED_TIMES.filter((value) => value < '12:00');
-  const afternoon = PREFERRED_TIMES.filter((value) => value >= '12:00');
+  // Saturdays are half-day, so the afternoon group is not offered at all.
+  const halfDay = date !== null && isHalfDay(date);
+  const afternoon = halfDay ? [] : PREFERRED_TIMES.filter((value) => value >= '12:00');
+
+  // Switching to a Saturday must not leave an afternoon preference selected.
+  useEffect(() => {
+    if (halfDay && time !== null && time >= '12:00') {
+      setTime(null);
+    }
+  }, [halfDay, time]);
 
   function viewVisits() {
     if (navigation.getState().routeNames.includes('Appointments')) {
@@ -149,223 +158,235 @@ export function BookingScreen() {
   }
 
   return (
-    <Screen>
+    <Screen scroll={false}>
       <PageHeader
         title={step === 'unit' ? 'Choose a service' : step === 'details' ? 'Appointment details' : step === 'date-time' ? 'Choose date & time' : 'Review appointment'}
         subtitle={`Step ${BOOKING_STEPS.findIndex(value => value === step) + 1} of 4`}
         onBack={onBack}
       />
-      <View style={styles.progress} accessibilityLabel={`Step ${BOOKING_STEPS.findIndex(value => value === step) + 1} of 4`}>
-        {BOOKING_STEPS.map((value, index) => (
-          <View key={value} style={[styles.stepBar, index <= BOOKING_STEPS.findIndex(item => item === step) && styles.stepBarDone]} />
-        ))}
-      </View>
-
-      {step === 'unit' ? (
-        <View>
-          {(['clinic', 'guidance'] as const).map((key) => {
-            const presentation = UNIT_PRESENTATION[key];
-            const selected = unit === key;
-            return (
-              <Pressable
-                key={key}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                onPress={() => {
-                  if (unit !== key) {
-                    setVisitType(null);
-                  }
-                  setUnit(key);
-                  setReviewed(false);
-                  setError(null);
-                  setStep('details');
-                }}
-                style={[styles.serviceChoice, selected && styles.serviceChoiceSelected]}>
-                <Image
-                  source={key === 'clinic'
-                    ? require('../../../assets/brand/health-services.png')
-                    : require('../../../assets/brand/guidance-center.png')}
-                  style={styles.serviceLogo}
-                  resizeMode="contain"
-                  accessible={false}
-                />
-                <View style={styles.serviceCopy}>
-                  <Text style={styles.serviceTitle}>{presentation.label}</Text>
-                  <Text style={styles.serviceBody}>
-                    {key === 'clinic'
-                      ? 'Consultations, vitals, medicine dispensing, and health clearances.'
-                      : 'Confidential counselling sessions and developmental assessments.'}
-                  </Text>
-                </View>
-                <ChevronRight size={18} color={theme.ink400} />
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {step === 'details' && unit ? (
-        <View>
-          <View style={styles.selectedBar}>
-            <Image
-              source={unit === 'clinic'
-                ? require('../../../assets/brand/health-services.png')
-                : require('../../../assets/brand/guidance-center.png')}
-              style={styles.selectedLogo}
-              resizeMode="contain"
-              accessible={false}
-            />
-            <View style={styles.selectedCopy}>
-              <Text style={styles.selectedKicker}>SELECTED SERVICE</Text>
-              <Text style={styles.selectedTitle}>{UNIT_PRESENTATION[unit].label}</Text>
-            </View>
-          </View>
-
-
-          <Text style={styles.formLabel}>Type of visit</Text>
-          <View style={styles.typeRow}>
-            {types.map((option) => (
-              <Pressable
-                key={option}
-                accessibilityRole="button"
-                accessibilityState={{ selected: visitType === option }}
-                onPress={() => setVisitType(option)}
-                style={[styles.typeChip, visitType === option && styles.typeChipActive]}>
-                <Text style={[styles.typeText, visitType === option && styles.typeTextActive]}>
-                  {TYPE_LABELS[option] ?? option}
-                </Text>
-              </Pressable>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.scroll}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          <View style={styles.progress} accessibilityLabel={`Step ${BOOKING_STEPS.findIndex(value => value === step) + 1} of 4`}>
+            {BOOKING_STEPS.map((value, index) => (
+              <View key={value} style={[styles.stepBar, index <= BOOKING_STEPS.findIndex(item => item === step) && styles.stepBarDone]} />
             ))}
           </View>
 
-          <TextField
-            label="Reason for the visit (optional)"
-            placeholder="Help the staff prepare for your consultation"
-            multiline
-            maxLength={255}
-            hint={`${reason.length} / 255 characters. Do not include emergency or highly sensitive information.`}
-            value={reason}
-            onChangeText={setReason}
-          />
+          {step === 'unit' ? (
+            <View>
+              {(['clinic', 'guidance'] as const).map((key) => {
+                const presentation = UNIT_PRESENTATION[key];
+                const selected = unit === key;
+                return (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      if (unit !== key) {
+                        setVisitType(null);
+                      }
+                      setUnit(key);
+                      setReviewed(false);
+                      setError(null);
+                      setStep('details');
+                    }}
+                    style={[styles.serviceChoice, selected && styles.serviceChoiceSelected]}>
+                    <Image
+                      source={key === 'clinic'
+                        ? require('../../../assets/brand/health-services.png')
+                        : require('../../../assets/brand/guidance-center.png')}
+                      style={styles.serviceLogo}
+                      resizeMode="contain"
+                      accessible={false}
+                    />
+                    <View style={styles.serviceCopy}>
+                      <Text style={styles.serviceTitle}>{presentation.label}</Text>
+                      <Text style={styles.serviceBody}>
+                        {key === 'clinic'
+                          ? 'Consultations, vitals, medicine dispensing, and health clearances.'
+                          : 'Confidential counselling sessions and developmental assessments.'}
+                      </Text>
+                    </View>
+                    <ChevronRight size={18} color={theme.ink400} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
 
-          {error ? <Text style={styles.formError}>{error}</Text> : null}
+          {step === 'details' && unit ? (
+            <View>
+              <View style={styles.selectedBar}>
+                <Image
+                  source={unit === 'clinic'
+                    ? require('../../../assets/brand/health-services.png')
+                    : require('../../../assets/brand/guidance-center.png')}
+                  style={styles.selectedLogo}
+                  resizeMode="contain"
+                  accessible={false}
+                />
+                <View style={styles.selectedCopy}>
+                  <Text style={styles.selectedKicker}>SELECTED SERVICE</Text>
+                  <Text style={styles.selectedTitle}>{UNIT_PRESENTATION[unit].label}</Text>
+                </View>
+              </View>
 
+
+              <Text style={styles.formLabel}>Type of visit</Text>
+              <View style={styles.typeRow}>
+                {types.map((option) => (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: visitType === option }}
+                    onPress={() => setVisitType(option)}
+                    style={[styles.typeChip, visitType === option && styles.typeChipActive]}>
+                    <Text style={[styles.typeText, visitType === option && styles.typeTextActive]}>
+                      {TYPE_LABELS[option] ?? option}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <TextField
+                label="Reason for the visit (optional)"
+                placeholder="Help the staff prepare for your consultation"
+                multiline
+                maxLength={255}
+                hint={`${reason.length} / 255 characters. Do not include emergency or highly sensitive information.`}
+                value={reason}
+                onChangeText={setReason}
+              />
+
+              {error ? <Text style={styles.formError}>{error}</Text> : null}
+            </View>
+          ) : null}
+
+          {step === 'date-time' ? (
+            <View>
+              <Text style={styles.noticeText}>
+                Choose a preferred date and time. These are suggestions, not live availability. Staff may propose another time.
+              </Text>
+              <Text style={styles.formLabel}>Preferred date</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateStrip}>
+                {days.map((day) => {
+                  const active = date === day.date;
+                  return (
+                    <Pressable
+                      key={day.date}
+                      accessibilityRole="button"
+                      accessibilityLabel={formatFullDate(`${day.date}T00:00:00+08:00`)}
+                      accessibilityState={{ selected: active }}
+                      onPress={() => setDate(day.date)}
+                      style={[styles.dateCell, active && styles.dateCellActive]}>
+                      <Text style={[styles.dateWeekday, active && styles.dateTextActive]}>{day.weekday}</Text>
+                      <Text style={[styles.dateDay, active && styles.dateTextActive]}>{day.day}</Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              <Text style={styles.formLabel}>Preferred time</Text>
+              {([['Morning', morning], ['Afternoon', afternoon]] as const)
+                .filter(([, times]) => times.length > 0)
+                .map(([period, times]) => (
+                  <View key={period}>
+                    <View style={styles.periodRow}>
+                      <Text style={styles.periodLabel}>{period}</Text>
+                      <View style={styles.periodLine} />
+                    </View>
+                    <View style={styles.timeGrid}>
+                      {times.map(value => <TimeCell key={value} value={value} active={time === value} onPress={setTime} />)}
+                    </View>
+                  </View>
+                ))}
+              {halfDay ? (
+                <Text style={styles.noticeText}>Saturdays are half-day: only morning times are available.</Text>
+              ) : null}
+              {error ? <Text style={styles.formError} accessibilityRole="alert">{error}</Text> : null}
+            </View>
+          ) : null}
+
+          {step === 'review' && unit && date && time && visitType ? (
+            <View>
+              <View style={styles.reviewBanner}>
+                <Image
+                  source={unit === 'clinic'
+                    ? require('../../../assets/brand/health-services.png')
+                    : require('../../../assets/brand/guidance-center.png')}
+                  style={styles.selectedLogo}
+                  resizeMode="contain"
+                  accessible={false}
+                />
+                <View style={styles.selectedCopy}>
+                  <Text style={styles.selectedKicker}>REVIEW</Text>
+                  <Text style={styles.selectedTitle}>{UNIT_PRESENTATION[unit].label}</Text>
+                </View>
+              </View>
+              <View style={styles.checkList}>
+                <CheckRow label="Preferred date" value={formatFullDate(`${date}T00:00:00+08:00`)} />
+                <CheckRow label="Preferred time" value={`${formatPreferredTime(time)} (30-minute request)`} />
+                <CheckRow label="Assigned staff" value="Not yet assigned" />
+                <CheckRow label="Visit type" value={TYPE_LABELS[visitType] ?? visitType} />
+                {reason.trim() !== '' ? <CheckRow label="Reason" value={reason.trim()} /> : null}
+              </View>
+              <View style={styles.notice}>
+                <Check size={14} color={theme.brandIcon} />
+                <Text style={styles.noticeText}>
+                  This is a preferred time, not a confirmed appointment. The department will review your request and notify you when a time is confirmed.
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityLabel="I confirm that these appointment details are correct."
+                accessibilityState={{ checked: reviewed, disabled: create.isPending }}
+                disabled={create.isPending}
+                onPress={() => setReviewed(value => !value)}
+                style={styles.reviewCheck}>
+                <View style={[styles.checkbox, reviewed && styles.checkboxChecked]}>
+                  {reviewed ? <Check size={12} color="#ffffff" /> : null}
+                </View>
+                <Text style={styles.noticeText}>I confirm that these appointment details are correct.</Text>
+              </Pressable>
+              {error ? <Text style={styles.formError} accessibilityRole="alert">{error}</Text> : null}
+            </View>
+          ) : null}
+        </ScrollView>
+        {step !== 'unit' ? (
           <View style={styles.actions}>
-            <Action
-              full
-              onPress={() => {
-                if (visitType === null) {
-                  setError('Choose a visit type to continue.');
+            {step === 'details' && unit ? (
+              <Action
+                full
+                onPress={() => {
+                  if (visitType === null) {
+                    setError('Choose a visit type to continue.');
+                    return;
+                  }
+                  setError(null);
+                  setStep('date-time');
+                }}>
+                Continue to date & time
+              </Action>
+            ) : null}
+            {step === 'date-time' ? (
+              <Action full onPress={() => {
+                if (!date || !time) {
+                  setError('Choose a preferred date and time to continue.');
                   return;
                 }
                 setError(null);
-                setStep('date-time');
-              }}>
-              Continue to date & time
-            </Action>
+                setReviewed(false);
+                setStep('review');
+              }}>Review appointment</Action>
+            ) : null}
+            {step === 'review' && unit && date && time && visitType ? (
+              <Action full loading={create.isPending} disabled={!reviewed} onPress={submit}>
+                Submit appointment request
+              </Action>
+            ) : null}
           </View>
-        </View>
-      ) : null}
-
-      {step === 'date-time' ? (
-        <View>
-          <Text style={styles.noticeText}>
-            Choose a preferred date and time. These are suggestions, not live availability. Staff may propose another time.
-          </Text>
-          <Text style={styles.formLabel}>Preferred date</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateStrip}>
-            {days.map((day) => {
-              const active = date === day.date;
-              return (
-                <Pressable
-                  key={day.date}
-                  accessibilityRole="button"
-                  accessibilityLabel={formatFullDate(`${day.date}T00:00:00+08:00`)}
-                  accessibilityState={{ selected: active }}
-                  onPress={() => setDate(day.date)}
-                  style={[styles.dateCell, active && styles.dateCellActive]}>
-                  <Text style={[styles.dateWeekday, active && styles.dateTextActive]}>{day.weekday}</Text>
-                  <Text style={[styles.dateDay, active && styles.dateTextActive]}>{day.day}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <Text style={styles.formLabel}>Preferred time</Text>
-          {([['Morning', morning], ['Afternoon', afternoon]] as const).map(([period, times]) => (
-            <View key={period}>
-              <View style={styles.periodRow}>
-                <Text style={styles.periodLabel}>{period}</Text>
-                <View style={styles.periodLine} />
-              </View>
-              <View style={styles.timeGrid}>
-                {times.map(value => <TimeCell key={value} value={value} active={time === value} onPress={setTime} />)}
-              </View>
-            </View>
-          ))}
-          {error ? <Text style={styles.formError} accessibilityRole="alert">{error}</Text> : null}
-          <View style={styles.actions}>
-            <Action full onPress={() => {
-              if (!date || !time) {
-                setError('Choose a preferred date and time to continue.');
-                return;
-              }
-              setError(null);
-              setReviewed(false);
-              setStep('review');
-            }}>Review appointment</Action>
-          </View>
-        </View>
-      ) : null}
-
-      {step === 'review' && unit && date && time && visitType ? (
-        <View>
-          <View style={styles.reviewBanner}>
-            <Image
-              source={unit === 'clinic'
-                ? require('../../../assets/brand/health-services.png')
-                : require('../../../assets/brand/guidance-center.png')}
-              style={styles.selectedLogo}
-              resizeMode="contain"
-              accessible={false}
-            />
-            <View style={styles.selectedCopy}>
-              <Text style={styles.selectedKicker}>REVIEW</Text>
-              <Text style={styles.selectedTitle}>{UNIT_PRESENTATION[unit].label}</Text>
-            </View>
-          </View>
-          <View style={styles.checkList}>
-            <CheckRow label="Preferred date" value={formatFullDate(`${date}T00:00:00+08:00`)} />
-            <CheckRow label="Preferred time" value={`${formatPreferredTime(time)} (30-minute request)`} />
-            <CheckRow label="Assigned staff" value="Not yet assigned" />
-            <CheckRow label="Visit type" value={TYPE_LABELS[visitType] ?? visitType} />
-            {reason.trim() !== '' ? <CheckRow label="Reason" value={reason.trim()} /> : null}
-          </View>
-          <View style={styles.notice}>
-            <Check size={14} color={theme.brandIcon} />
-            <Text style={styles.noticeText}>
-              This is a preferred time, not a confirmed appointment. The department will review your request and notify you when a time is confirmed.
-            </Text>
-          </View>
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityLabel="I confirm that these appointment details are correct."
-            accessibilityState={{ checked: reviewed, disabled: create.isPending }}
-            disabled={create.isPending}
-            onPress={() => setReviewed(value => !value)}
-            style={styles.reviewCheck}>
-            <View style={[styles.checkbox, reviewed && styles.checkboxChecked]}>
-              {reviewed ? <Check size={12} color="#ffffff" /> : null}
-            </View>
-            <Text style={styles.noticeText}>I confirm that these appointment details are correct.</Text>
-          </Pressable>
-          {error ? <Text style={styles.formError} accessibilityRole="alert">{error}</Text> : null}
-          <View style={styles.actions}>
-            <Action full loading={create.isPending} disabled={!reviewed} onPress={submit}>
-              Submit appointment request
-            </Action>
-          </View>
-        </View>
-      ) : null}
+        ) : null}
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -528,7 +549,9 @@ function createStyles(theme: Theme) {
       backgroundColor: theme.brand50,
     },
     noticeText: { flex: 1, color: theme.ink700, fontSize: 10, lineHeight: 14, fontFamily: font.body },
-    actions: { marginTop: 24 },
+    scroll: { flex: 1 },
+    scrollContent: { flexGrow: 1, paddingBottom: 12 },
+    actions: { flexShrink: 0, paddingTop: 24 },
   });
 }
 

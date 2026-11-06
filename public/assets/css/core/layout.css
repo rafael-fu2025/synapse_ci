@@ -1,4 +1,4 @@
-﻿/* layout.css
+/* layout.css
  * Header, sidebar, footer, main content, overlays, and responsive shell rules.
  * Extracted from assets/css/style.css without changing selector order.
  */
@@ -1852,7 +1852,9 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
 }
 
 .sidebar-nav .nav-item>.nav-link:hover {
-  background: color-mix(in srgb, var(--accent-color), transparent 95%);
+  /* --sidebar-hover-bg is themed (white 10% on maroon, #282828 on dark).
+     A 5% accent tint over #141414 measured 1.003:1 and was invisible. */
+  background: var(--sidebar-hover-bg);
   color: color-mix(in srgb, var(--heading-color), black 4%);
 }
 
@@ -1956,7 +1958,7 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
 }
 
 .sidebar-nav .nav-item.has-submenu.open>.nav-link:not(.active) {
-  background: color-mix(in srgb, var(--accent-color), transparent 95%);
+  background: var(--sidebar-hover-bg);
 }
 
 .sidebar-nav .nav-submenu {
@@ -2001,7 +2003,7 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
 }
 
 .sidebar-nav .nav-submenu>li>.nav-link:hover {
-  background: color-mix(in srgb, var(--accent-color), transparent 96%);
+  background: var(--sidebar-hover-bg);
   color: var(--sidebar-color);
 }
 
@@ -2141,8 +2143,8 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
 }
 
 .sidebar-account-action:hover {
-  border-color: color-mix(in srgb, var(--accent-color), transparent 58%);
-  background: color-mix(in srgb, var(--accent-color), transparent 95%);
+  border-color: color-mix(in srgb, var(--sidebar-color), transparent 70%);
+  background: var(--sidebar-hover-bg);
   color: var(--sidebar-color);
 }
 
@@ -2180,8 +2182,8 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
 }
 
 .sidebar-footer-link:hover {
-  border-color: color-mix(in srgb, var(--accent-color), transparent 58%);
-  background: color-mix(in srgb, var(--accent-color), transparent 95%);
+  border-color: color-mix(in srgb, var(--sidebar-color), transparent 70%);
+  background: var(--sidebar-hover-bg);
   color: var(--sidebar-color);
 }
 

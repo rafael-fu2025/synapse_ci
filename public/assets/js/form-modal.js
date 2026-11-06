@@ -90,6 +90,25 @@
     box.textContent = message;
     box.classList.remove('d-none');
   }
+  function separateActions(root) {
+    const content = root.querySelector('.modal-content');
+    const actions = content?.querySelector('.modal-body .form-actions');
+    if (!actions) return;
+    const form = actions.closest('form');
+    if (form) {
+      if (!form.id) form.id = 'appModalEditor';
+      actions.querySelectorAll('button, input, select, textarea').forEach(control => {
+        if (!control.hasAttribute('form')) control.setAttribute('form', form.id);
+      });
+    }
+    // Retain the original reactive scope when moving outside an x-data subtree.
+    window.Alpine?.addScopeToNode(actions, {}, actions.parentElement);
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    actions.classList.add('modal-footer-actions');
+    const move = () => { footer.append(actions); content.append(footer); };
+    if (window.Alpine) Alpine.mutateDom(move); else move();
+  }
   function busy(root) { return Boolean(root.querySelector('form[aria-busy="true"]')); }
   function updateCsrf(csrf) {
     if (!csrf) return;
@@ -143,6 +162,7 @@
       }
     }, { once: true });
     initialize(root);
+    separateActions(root);
     modal.show(opener);
     return record;
   }
@@ -157,8 +177,8 @@
       '<button type="button" class="btn-close" aria-label="Close" data-app-modal-close></button></div>' +
       '<div class="modal-body"><div class="alert alert-danger d-none" role="alert" data-modal-error></div>' +
       '<div data-modal-loading><p role="status"><span class="app-loading-spinner" aria-hidden="true"></span>Loading form…</p>' +
-      '<div class="app-loading-skeleton mb-3" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>' +
-      '<button type="button" class="btn btn-outline-secondary" data-app-modal-close>Cancel</button></div></div></div>';
+      '<div class="app-loading-skeleton mb-3" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div></div>' +
+      '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-app-modal-close>Cancel</button></div></div></div>';
     document.body.appendChild(root);
     return root;
   }
@@ -177,14 +197,16 @@
       if (active !== record || record.controller.signal.aborted) return;
       const source = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-app-form-modal]');
       if (!source?.querySelector('.modal-content .modal-body')) throw new Error('The form response could not be loaded.');
+      const sourceContent = source.querySelector('.modal-content');
       const target = record.root.querySelector('.modal-content');
       const insert = () => {
-        target.innerHTML = source.querySelector('.modal-content').innerHTML;
+        target.innerHTML = sourceContent.innerHTML;
         // Components are globally registered. Never execute scripts fetched as HTML.
         target.querySelectorAll('script').forEach(script => script.remove());
         if (window.Alpine) Alpine.initTree(target);
       };
       if (window.Alpine) Alpine.mutateDom(insert); else insert();
+      separateActions(record.root);
       record.root.dataset.returnUrl = source.dataset.returnUrl;
       const dialog = record.root.querySelector('.modal-dialog');
       for (const size of ['modal-lg', 'modal-xl']) dialog.classList.toggle(size, source.querySelector('.modal-dialog').classList.contains(size));

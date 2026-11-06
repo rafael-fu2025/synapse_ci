@@ -37,6 +37,25 @@ runner tests mock subprocess/database access and verify refusal and cleanup
 behavior without connecting. The Node tests exercise queue JavaScript handlers;
 they are not full-browser HTTP tests.
 
+## Isolated AI regression gate
+
+The dedicated `phpunit.ai.xml` uses `tests/_support/ai-runtime-bootstrap.php`: a temporary writable directory, no dotenv, and disposable SQLite fixtures. It explicitly lists AI test classes rather than relying on the unrelated baseline suite; CI verifies that every AI-prefixed test is listed, except the separately guarded MariaDB fixture. Tests use synthetic evidence and fake/loopback transports, not configured provider credentials or operational records.
+
+```sh
+php vendor/bin/phpunit --configuration phpunit.ai.xml --no-coverage
+npm ci --prefix tests/browser
+npm exec --prefix tests/browser -- playwright install chromium
+npm test --prefix tests/browser
+```
+
+The browser tests load real presentation views and JavaScript with intercepted synthetic responses; they are not a live authenticated provider/worker/database end-to-end test. Platform skips must be reported, not treated as production certification. Additive recovery migrations and MySQL behavior use the separately guarded fixture:
+
+```sh
+python -I tests/_support/run-fresh-database-tests.py tests/unit/AiRecoveryMariaDbTest.php
+```
+
+This checks full migrations, lineage/root IDs, unique successors, encryption/generation recovery and reserved-attempt rejection on a new disposable schema. It is sequential coverage, not proof of all overlapping-worker interleavings. Never run migrations against the operational schema just to validate a test.
+
 ## Fresh migrations and core service tests
 
 Run from the project root:
@@ -92,13 +111,55 @@ an old test database migrate.
 
 `.github/workflows/tests.yml` runs on push, pull request, or manual dispatch with
 PHP 8.2 and 8.3, a disposable MariaDB 10.11 service, locked Composer dependencies,
-PHP lint, runner safety tests, the DB-free baseline, the five fresh-migration
-service files, and queue JS tests. It uses read-only repository permissions.
+a PHP lint sweep over `app`, `tests` and `tools`, the tenant-scope lint, runner
+safety tests, the DB-free baseline, the five fresh-migration service files, and
+queue JS tests. It uses read-only repository permissions.
 
 The workflow has been authored and its commands validated locally, but has not
 been executed on GitHub from this workspace. GitHub execution requires the project
 to be tracked and pushed as a repository with the workflow at its root. No Git
 repository was initialized, no files staged, and no commit/push performed here.
+
+## Tenant-scope lint
+
+MariaDB has no row-level security, so a `tenant_id` predicate is the only
+isolation mechanism, and a forgotten one is invisible in review because the
+defect is the absence of a line. `tools/tenant-scope-lint.php` fails when a
+statement touches a tenant-scoped table through `table()` or `join()` without
+naming `tenant_id`:
+
+```sh
+php tools/tenant-scope-lint.php               # exit 1 on a new violation
+php tools/tenant-scope-lint.php --list-tables # every table name the app queries
+php tools/tenant-scope-lint.php --write-allow-list
+```
+
+- Statements are read from the token stream, so comments and string literals
+  cannot produce false matches, and each statement runs to its terminating `;`.
+- Reviewed exceptions live in `tools/tenant-scope-allowlist.json`, keyed by
+  `path#table#ordinal` and never by line number, so an unrelated edit above a
+  query cannot invalidate the list. Entries that no longer match any violation
+  are reported and fail the lint, so the allow-list cannot silently rot.
+- `app/Database/` is skipped: migrations and seeds are schema/backfill work that
+  deliberately touches every tenant.
+- The lint landed green: the current tree's reviewed exceptions were recorded
+  before the gate became blocking, so it fails only on new violations.
+
+## Strict SQL mode preflight
+
+`app/Config/Database.php` enables strict SQL mode for every connection group, so
+a non-conforming row causes the first write to fail rather than truncate. Before
+enabling strict mode on a database that already holds data — after a restore, an
+import, or on an existing installation — run the read-only audit:
+
+```sh
+php spark synapse:strict-mode-audit
+```
+
+It reports the over-length `VARCHAR`/`CHAR` values, zero or out-of-range dates
+and NULLs in `NOT NULL` columns that a strict session would reject, and exits
+non-zero when it finds any. It performs no writes and no schema change; see
+`tests/unit/StrictModeConfigTest.php` for the pinned contract.
 
 ## Separate concurrency validation
 

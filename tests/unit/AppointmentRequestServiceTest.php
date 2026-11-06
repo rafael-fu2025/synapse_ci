@@ -6,6 +6,8 @@ namespace Tests\Unit;
 
 use App\Models\AppointmentModel;
 use App\Models\AvailabilityExceptionModel;
+use App\Models\DepartmentStaffModel;
+use App\Models\EmployeeProfileModel;
 use App\Models\PersonModel;
 use App\Models\ProviderAvailabilityModel;
 use App\Models\UserModel;
@@ -29,6 +31,8 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
     private array $patient;
     private array $staff;
     private array $counsellor;
+    /** Staff user id => department_staff assignment id; confirmation keys on assignments. */
+    private array $assignments = [];
 
     protected function setUp(): void
     {
@@ -38,12 +42,30 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
         $this->patient = $this->user('student');
         $this->staff = $this->user('clinic_staff');
         $this->counsellor = $this->user('counsellor');
-        $this->availability($this->staff, 'clinic');
-        $this->availability($this->counsellor, 'guidance');
+        $this->assignments[$this->staff['id']] = $this->assignment($this->staff, 'clinic');
+        $this->assignments[$this->counsellor['id']] = $this->assignment($this->counsellor, 'guidance');
+        // bookingDate() is +7 days, so its weekday matches today's availability rows.
+        $this->availability($this->assignments[$this->staff['id']], 'clinic');
+        $this->availability($this->assignments[$this->counsellor['id']], 'guidance');
     }
 
     protected function tearDown(): void
     {
+        // FK-safe order: availability/exceptions/appointments (+ their notifications)
+        // reference assignments; assignments and profiles reference fixture people.
+        if ($this->assignments !== []) {
+            $assignmentIds = array_values($this->assignments);
+            $this->db->table('provider_availability')->whereIn('staff_assignment_id', $assignmentIds)->delete();
+            $this->db->table('availability_exceptions')->whereIn('staff_assignment_id', $assignmentIds)->delete();
+            $apptIds = array_column($this->db->table('appointments')->select('id')
+                ->whereIn('staff_assignment_id', $assignmentIds)->get()->getResultArray(), 'id');
+            if ($apptIds !== []) {
+                $this->db->table('notifications')->whereIn('appointment_id', $apptIds)->delete();
+                $this->db->table('appointments')->whereIn('id', $apptIds)->delete();
+            }
+            $this->db->table('department_staff')->whereIn('id', $assignmentIds)->delete();
+            $this->db->table('employee_profiles')->whereIn('person_id', $this->appointmentFixturePeople)->delete();
+        }
         $this->cleanupAppointmentFixtures();
         CurrentTenant::reset();
         parent::tearDown();
@@ -61,10 +83,20 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
         return (new UserModel())->find($id);
     }
 
-    private function availability(array $user, string $unit): void
+    /** Confirmation and availability operate on department staff assignments. */
+    private function assignment(array $user, string $unit): int
     {
-        (new ProviderAvailabilityModel())->insert(['tenant_id' => (int) $user['tenant_id'],
-            'provider_user_id' => $user['id'], 'unit' => $unit, 'day_of_week' => (int) date('w'),
+        $department = $unit === 'clinic' ? 'Health Services' : 'guidance';
+        (new EmployeeProfileModel())->insert(['tenant_id' => (int) $user['tenant_id'], 'person_id' => (int) $user['person_id'],
+            'department' => $department, 'position' => 'Staff', 'employment_status' => 'active']);
+        return (int) (new DepartmentStaffModel())->insert(['tenant_id' => (int) $user['tenant_id'],
+            'person_id' => (int) $user['person_id'], 'unit' => $unit, 'status' => 'active']);
+    }
+
+    private function availability(int $assignmentId, string $unit): void
+    {
+        (new ProviderAvailabilityModel())->insert(['tenant_id' => 1,
+            'staff_assignment_id' => $assignmentId, 'unit' => $unit, 'day_of_week' => (int) date('w'),
             'start_time' => '08:00:00', 'end_time' => '17:00:00', 'slot_duration_minutes' => 30, 'is_active' => 1]);
     }
 
@@ -85,7 +117,8 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
 
     private function confirmation(array $appt, ?array $provider = null): array
     {
-        return ['provider_user_id' => ($provider ?? $this->staff)['id'], 'starts_at' => $appt['local_date'] . 'T09:00',
+        $providerId = ($provider ?? $this->staff)['id'];
+        return ['staff_assignment_id' => $this->assignments[$providerId] ?? 0, 'starts_at' => $appt['local_date'] . 'T09:00',
             'ends_at' => $appt['local_date'] . 'T09:30', 'version' => $appt['version']];
     }
 
@@ -255,7 +288,7 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
         $confirmed = $this->service->confirmAppointment('clinic', (int) $appt['id'], $this->confirmation($appt), $this->staff);
         $this->assertSame('confirmed', $confirmed['status']);
         $this->assertSame(2, (int) $confirmed['version']);
-        $this->assertSame((int) $this->staff['id'], (int) $confirmed['provider_user_id']);
+        $this->assertSame($this->assignments[$this->staff['id']], (int) $confirmed['staff_assignment_id']);
         $this->assertSame((int) $this->staff['id'], (int) $confirmed['confirmed_by_user_id']);
         $this->assertSame((int) $this->staff['id'], (int) $confirmed['assigned_by_user_id']);
         $this->assertNotEmpty($confirmed['confirmed_at']);
@@ -269,14 +302,16 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $this->confirmation($appt, $this->counsellor), $this->staff));
         $admin = $this->user('clinic_admin');
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $this->confirmation($appt, $admin), $this->staff));
-        $this->availability($admin, 'clinic');
+        $adminAssignment = $this->assignment($admin, 'clinic');
+        $this->assignments[$admin['id']] = $adminAssignment;
+        $this->availability($adminAssignment, 'clinic');
         $this->assertNotContains((int) $admin['id'], array_column($this->service->providers('clinic'), 'id'));
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $this->confirmation($appt, $admin), $this->staff));
         (new UserModel())->update($admin['id'], ['status' => 'suspended']);
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $this->confirmation($appt, $admin), $this->staff));
         $bad = array_replace($this->confirmation($appt), ['starts_at' => $this->bookingDate() . ' 17:00:00', 'ends_at' => $this->bookingDate() . ' 17:30:00']);
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $bad, $this->staff));
-        (new AvailabilityExceptionModel())->insert(['tenant_id' => 1, 'provider_user_id' => $this->staff['id'],
+        (new AvailabilityExceptionModel())->insert(['tenant_id' => 1, 'staff_assignment_id' => $this->assignments[$this->staff['id']],
             'exception_date' => $this->bookingDate(), 'is_unavailable' => 1]);
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $this->confirmation($appt), $this->staff));
     }
@@ -300,13 +335,13 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
     public function testConfirmationUsesWindowAnchoredGridRatherThanWallClockBoundaries(): void
     {
         $model = new ProviderAvailabilityModel();
-        $window = $model->scoped()->where('provider_user_id', $this->staff['id'])->where('unit', 'clinic')->first();
+        $window = $model->scoped()->where('staff_assignment_id', $this->assignments[$this->staff['id']])->where('unit', 'clinic')->first();
         $model->update($window['id'], ['start_time' => '08:05:00', 'end_time' => '09:00:00']);
         $appt = $this->request();
         $bad = array_replace($this->confirmation($appt), ['starts_at' => $this->bookingDate() . ' 08:15:00',
             'ends_at' => $this->bookingDate() . ' 08:45:00']);
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $bad, $this->staff));
-        $slots = $this->service->getAvailableSlots('clinic', (int) $this->staff['id'], $this->bookingDate());
+        $slots = $this->service->getAvailableSlots('clinic', (int) $this->assignments[$this->staff['id']], $this->bookingDate());
         $this->assertCount(1, $slots);
         $this->assertSame('08:05', $slots[0]['slot_time']);
         $confirmed = $this->service->confirmAppointment('clinic', (int) $appt['id'],
@@ -317,13 +352,13 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
     public function testConfirmationMatchesGeneratorMinimumTenMinuteStepForLegacyWindows(): void
     {
         $model = new ProviderAvailabilityModel();
-        $window = $model->scoped()->where('provider_user_id', $this->staff['id'])->where('unit', 'clinic')->first();
+        $window = $model->scoped()->where('staff_assignment_id', $this->assignments[$this->staff['id']])->where('unit', 'clinic')->first();
         $model->update($window['id'], ['slot_duration_minutes' => 5]);
         $appt = $this->request();
         $bad = array_replace($this->confirmation($appt), ['starts_at' => $this->bookingDate() . ' 09:00:00',
             'ends_at' => $this->bookingDate() . ' 09:05:00']);
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'], $bad, $this->staff));
-        $slots = $this->service->getAvailableSlots('clinic', (int) $this->staff['id'], $this->bookingDate());
+        $slots = $this->service->getAvailableSlots('clinic', (int) $this->assignments[$this->staff['id']], $this->bookingDate());
         $this->assertSame($this->bookingDate() . ' 08:10:00', $slots[0]['ends_at']);
         $confirmed = $this->service->confirmAppointment('clinic', (int) $appt['id'],
             array_replace($this->confirmation($appt), $slots[0]), $this->staff);
@@ -333,16 +368,16 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
     public function testConfirmationRechecksDurationAfterAvailabilityChanges(): void
     {
         $appt = $this->request();
-        $selection = $this->service->getAvailableSlots('clinic', (int) $this->staff['id'], $this->bookingDate())[2];
+        $selection = $this->service->getAvailableSlots('clinic', (int) $this->assignments[$this->staff['id']], $this->bookingDate())[2];
         $this->assertSame('09:00', $selection['slot_time']);
         $admin = $this->user('clinic_admin');
-        $this->service->saveAvailability('clinic', ['provider_user_id' => $this->staff['id'],
+        $this->service->saveAvailability('clinic', ['staff_assignment_id' => $this->assignments[$this->staff['id']],
             'day_of_week' => date('w', strtotime($this->bookingDate())), 'start_time' => '08:00', 'end_time' => '17:00',
             'slot_duration_minutes' => 60, 'is_active' => 1], $admin);
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $appt['id'],
             array_replace($this->confirmation($appt), $selection), $admin));
         $this->assertSame(1, (int) $this->service->appointment('clinic', (int) $appt['id'])['version']);
-        $fresh = $this->service->getAvailableSlots('clinic', (int) $this->staff['id'], $this->bookingDate())[1];
+        $fresh = $this->service->getAvailableSlots('clinic', (int) $this->assignments[$this->staff['id']], $this->bookingDate())[1];
         $this->assertSame($this->bookingDate() . ' 10:00:00', $fresh['ends_at']);
         $confirmed = $this->service->confirmAppointment('clinic', (int) $appt['id'],
             array_replace($this->confirmation($appt), $fresh), $admin);
@@ -359,12 +394,16 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
                 ['status' => 'suspended'], ['status' => 'locked'], ['deleted' => true]];
             foreach ($changes as $change) {
                 $provider = $this->user($clinicalRole);
-                $appt = $this->service->bookAppointment(['unit' => $unit, 'person_id' => $this->patient['person_id'],
-                    'provider_user_id' => $provider['id'], 'starts_at' => date('Y-m-d') . ' 09:00:00',
-                    'ends_at' => date('Y-m-d') . ' 09:30:00']);
-                // A persisted confirmed fixture allows same-day check-in without changing the clock.
-                (new AppointmentModel())->update($appt['id'], ['status' => 'confirmed',
-                    'confirmed_by_user_id' => $actor['id'], 'confirmed_at' => date('Y-m-d H:i:s')]);
+                $assignmentId = $this->assignment($provider, $unit);
+                $this->assignments[$provider['id']] = $assignmentId;
+                $apptId = (new AppointmentModel())->insert([
+                    'tenant_id' => 1, 'person_id' => (int) $this->patient['person_id'], 'unit' => $unit,
+                    'staff_assignment_id' => $assignmentId, 'status' => 'confirmed',
+                    'type' => $unit === 'clinic' ? 'routine' : 'initial',
+                    'starts_at' => date('Y-m-d') . ' 09:00:00', 'ends_at' => date('Y-m-d') . ' 09:30:00',
+                    'local_date' => date('Y-m-d'), 'confirmed_by_user_id' => (int) $actor['id'],
+                    'confirmed_at' => date('Y-m-d H:i:s'),
+                ]);
                 if (isset($change['deleted'])) {
                     (new UserModel())->delete($provider['id']);
                 } else {
@@ -372,10 +411,10 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
                 }
                 $counter = $this->db->table('daily_ticket_counters')->where('tenant_id', 1)
                     ->where('unit', $unit)->where('queue_date', date('Y-m-d'))->get()->getRowArray();
-                $this->rejected(fn () => (new QueueService())->enqueueAppointment((int) $appt['id'], $unit, $actor), 409);
-                $this->assertSame('confirmed', $this->service->appointment($unit, (int) $appt['id'])['status']);
-                $this->assertSame(1, (int) $this->service->appointment($unit, (int) $appt['id'])['version']);
-                $this->assertSame(0, $this->db->table('queue_entries')->where('appointment_id', $appt['id'])->countAllResults());
+                $this->rejected(fn () => (new QueueService())->enqueueAppointment((int) $apptId, $unit, $actor), 409);
+                $this->assertSame('confirmed', $this->service->appointment($unit, (int) $apptId)['status']);
+                $this->assertSame(1, (int) $this->service->appointment($unit, (int) $apptId)['version']);
+                $this->assertSame(0, $this->db->table('queue_entries')->where('appointment_id', $apptId)->countAllResults());
                 $this->assertSame($counter, $this->db->table('daily_ticket_counters')->where('tenant_id', 1)
                     ->where('unit', $unit)->where('queue_date', date('Y-m-d'))->get()->getRowArray());
             }
@@ -387,18 +426,28 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
         $actor = $this->user('superadmin');
         foreach (['clinic', 'guidance'] as $unit) {
             $admin = $this->user($unit === 'clinic' ? 'clinic_admin' : 'guidance_supervisor');
-            $legacy = $this->service->bookAppointment(['unit' => $unit, 'person_id' => $this->patient['person_id'],
-                'provider_user_id' => $admin['id'], 'starts_at' => date('Y-m-d') . ' 09:00:00',
-                'ends_at' => date('Y-m-d') . ' 09:30:00']);
-            $this->rejected(fn () => (new QueueService())->enqueueAppointment((int) $legacy['id'], $unit, $actor), 409);
-            $this->assertSame('scheduled', $this->service->appointment($unit, (int) $legacy['id'])['status']);
+            $adminAssignment = $this->assignment($admin, $unit);
+            $this->assignments[$admin['id']] = $adminAssignment;
+            $legacy = (new AppointmentModel())->insert([
+                'tenant_id' => 1, 'person_id' => (int) $this->patient['person_id'], 'unit' => $unit,
+                'staff_assignment_id' => $adminAssignment, 'status' => 'scheduled',
+                'type' => $unit === 'clinic' ? 'routine' : 'initial',
+                'starts_at' => date('Y-m-d') . ' 09:00:00', 'ends_at' => date('Y-m-d') . ' 09:30:00',
+                'local_date' => date('Y-m-d'),
+            ]);
+            $this->rejected(fn () => (new QueueService())->enqueueAppointment((int) $legacy, $unit, $actor), 409);
+            $this->assertSame('scheduled', $this->service->appointment($unit, (int) $legacy)['status']);
             $provider = $unit === 'clinic' ? $this->staff : $this->counsellor;
-            $booking = $this->service->bookAppointment(['unit' => $unit, 'person_id' => $this->patient['person_id'],
-                'provider_user_id' => $provider['id'], 'starts_at' => date('Y-m-d') . ' 09:00:00',
-                'ends_at' => date('Y-m-d') . ' 09:30:00']);
-            $entry = (new QueueService())->enqueueAppointment((int) $booking['id'], $unit, $actor);
+            $booking = (new AppointmentModel())->insert([
+                'tenant_id' => 1, 'person_id' => (int) $this->patient['person_id'], 'unit' => $unit,
+                'staff_assignment_id' => $this->assignments[$provider['id']], 'status' => 'confirmed',
+                'type' => $unit === 'clinic' ? 'routine' : 'initial',
+                'starts_at' => date('Y-m-d') . ' 09:30:00', 'ends_at' => date('Y-m-d') . ' 10:00:00',
+                'local_date' => date('Y-m-d'),
+            ]);
+            $entry = (new QueueService())->enqueueAppointment((int) $booking, $unit, $actor);
             $this->assertSame($unit, $entry['unit']);
-            $this->assertSame('checked_in', $this->service->appointment($unit, (int) $booking['id'])['status']);
+            $this->assertSame('checked_in', $this->service->appointment($unit, (int) $booking)['status']);
         }
     }
 
@@ -419,8 +468,8 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
         $confirmed = $this->service->confirmAppointment('guidance', (int) $guidance['id'],
             $this->confirmation($guidance, $this->counsellor), $this->counsellor);
         $this->assertSame('confirmed', $confirmed['status']);
-        $this->service->bookAppointment(['unit' => 'guidance', 'person_id' => $this->patient['person_id'],
-            'provider_user_id' => $this->staff['id'], 'starts_at' => $this->bookingDate() . ' 09:00:00',
+        $this->service->bookAppointment(['unit' => 'clinic', 'person_id' => $this->patient['person_id'],
+            'staff_assignment_id' => $this->assignments[$this->staff['id']], 'starts_at' => $this->bookingDate() . ' 09:00:00',
             'ends_at' => $this->bookingDate() . ' 09:30:00']);
         $clinic = $this->request();
         $this->rejected(fn () => $this->service->confirmAppointment('clinic', (int) $clinic['id'],
@@ -429,11 +478,11 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
 
     public function testCustomHoursCannotGrantWrongDepartmentAndDeletedProvidersCannotBeAssigned(): void
     {
-        (new AvailabilityExceptionModel())->insert(['tenant_id' => 1, 'provider_user_id' => $this->counsellor['id'],
+        (new AvailabilityExceptionModel())->insert(['tenant_id' => 1, 'staff_assignment_id' => $this->assignments[$this->counsellor['id']],
             'exception_date' => $this->bookingDate(), 'is_unavailable' => 0,
             'custom_start_time' => '10:00:00', 'custom_end_time' => '12:00:00']);
-        $this->rejected(fn () => $this->service->getAvailableSlots('clinic', (int) $this->counsellor['id'], $this->bookingDate()));
-        $slots = $this->service->getAvailableSlots('guidance', (int) $this->counsellor['id'], $this->bookingDate());
+        $this->rejected(fn () => $this->service->getAvailableSlots('clinic', (int) $this->assignments[$this->counsellor['id']], $this->bookingDate()));
+        $slots = $this->service->getAvailableSlots('guidance', (int) $this->assignments[$this->counsellor['id']], $this->bookingDate());
         $this->assertCount(4, $slots);
         $this->assertSame('10:00', $slots[0]['slot_time']);
         $appt = $this->request();
@@ -444,8 +493,11 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
 
     public function testCheckInRejectsOtherDates(): void
     {
-        $appt = $this->service->bookAppointment(['unit' => 'clinic', 'person_id' => $this->patient['person_id'],
-            'provider_user_id' => $this->staff['id'], 'starts_at' => '2099-01-01 09:00:00', 'ends_at' => '2099-01-01 09:30:00']);
+        $appt = (new AppointmentModel())->insert([
+            'tenant_id' => 1, 'person_id' => (int) $this->patient['person_id'], 'unit' => 'clinic',
+            'staff_assignment_id' => $this->assignments[$this->staff['id']], 'status' => 'confirmed', 'type' => 'routine',
+            'starts_at' => '2099-01-01 09:00:00', 'ends_at' => '2099-01-01 09:30:00', 'local_date' => '2099-01-01']);
+        $appt = ['id' => $appt];
         $this->rejected(fn () => (new QueueService())->enqueueAppointment((int) $appt['id'], 'clinic', $this->staff), 409);
     }
 
@@ -566,14 +618,16 @@ final class AppointmentRequestServiceTest extends CIUnitTestCase
         $this->assertSame([200, 200], array_column($results, 'code'));
         $this->assertSame($results[0]['id'], $results[1]['id']);
         $this->assertSame(1, (new ProviderAvailabilityModel())->scoped()->where('unit', 'clinic')
-            ->where('provider_user_id', $provider['id'])->where('day_of_week', 0)->countAllResults());
+            ->where('staff_assignment_id', $this->assignments[$provider['id']])->where('day_of_week', 0)->countAllResults());
     }
 
     private function checkInBooking(): array
     {
-        return $this->service->bookAppointment(['unit' => 'clinic', 'person_id' => $this->patient['person_id'],
-            'provider_user_id' => $this->staff['id'], 'starts_at' => date('Y-m-d') . ' 09:00:00',
-            'ends_at' => date('Y-m-d') . ' 09:30:00']);
+        $id = (new AppointmentModel())->insert([
+            'tenant_id' => 1, 'person_id' => (int) $this->patient['person_id'], 'unit' => 'clinic',
+            'staff_assignment_id' => $this->assignments[$this->staff['id']], 'status' => 'confirmed', 'type' => 'routine',
+            'starts_at' => date('Y-m-d') . ' 09:00:00', 'ends_at' => date('Y-m-d') . ' 09:30:00', 'local_date' => date('Y-m-d')]);
+        return ['id' => $id];
     }
 
     public function testConcurrentCheckInCreatesOneTicket(): void

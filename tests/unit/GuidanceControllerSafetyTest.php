@@ -178,7 +178,8 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
     public function testFinalServiceIntegrationSourceContracts(): void
     {
         $source = file_get_contents(APPPATH . 'Controllers/GuidanceController.php');
-        self::assertSame(3, substr_count($source, '$this->caseService->getSession($sessionId)'));
+        // History now resolves scoped case metadata after the audited read for its oversight marker.
+        self::assertSame(4, substr_count($source, '$this->caseService->getSession($sessionId)'));
         self::assertStringNotContainsString("get('user.id')", $source);
         self::assertStringNotContainsString('$this->sessionModel->find(', $source);
         self::assertStringContainsString('(new UserModel())->scoped()->find(', $source);

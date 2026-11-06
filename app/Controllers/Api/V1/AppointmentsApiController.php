@@ -7,6 +7,8 @@ namespace App\Controllers\Api\V1;
 use App\Services\Clinic\PatientHistoryService;
 use App\Services\Scheduling\AppointmentService;
 use CodeIgniter\HTTP\ResponseInterface;
+use DateTimeImmutable;
+use DateTimeZone;
 use RuntimeException;
 
 /** Personal appointment self-service: list, detail, request, cancel. */
@@ -126,12 +128,25 @@ final class AppointmentsApiController extends ApiV1Controller
             'status' => (string) $appointment['status'],
             'type' => (string) $appointment['type'],
             'date' => (string) $appointment['local_date'],
-            'starts_at' => (string) $appointment['starts_at'],
-            'ends_at' => (string) $appointment['ends_at'],
+            'starts_at' => $this->presentTime((string) $appointment['starts_at']),
+            'ends_at' => $this->presentTime((string) $appointment['ends_at']),
             'reason' => $appointment['reason'] ?? null,
             'cancellation_reason' => $appointment['cancellation_reason'] ?? null,
             'provider_name' => $appointment['provider_name'] ?? null,
             'version' => (int) ($appointment['version'] ?? 1),
         ];
+    }
+
+    /**
+     * Scheduling stores Manila wall-clock; the mobile contract serves ISO-8601 with
+     * the Asia/Manila offset so clients cannot mistake the instant for UTC.
+     */
+    private function presentTime(string $wallClock): string
+    {
+        $time = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $wallClock, new DateTimeZone('Asia/Manila'));
+        if ($time === false || $time->format('Y-m-d H:i:s') !== $wallClock) {
+            return $wallClock;
+        }
+        return $time->format(DATE_ATOM);
     }
 }

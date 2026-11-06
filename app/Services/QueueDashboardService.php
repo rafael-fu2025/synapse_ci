@@ -36,13 +36,8 @@ final class QueueDashboardService
             throw new RuntimeException('Dashboard access forbidden.', 403);
         }
         // Match the dashboard's combined-data access gate, not just the queue board gate.
-        $permissions = $unit === 'clinic'
-            ? ['clinic.queue.read', 'clinic.encounters.read', 'clinic.appointments.read', 'clinic.inventory.read']
-            : ['guidance.cases.read', 'guidance.queue.read', 'referrals.read'];
-        foreach ($permissions as $permission) {
-            if ($actor['role'] !== 'superadmin' && !in_array($permission, $actor['permissions'] ?? [], true)) {
-                throw new RuntimeException('Dashboard access forbidden.', 403);
-            }
+        if (DashboardAccess::missing($actor, $unit) !== []) {
+            throw new RuntimeException('Dashboard access forbidden.', 403);
         }
 
         $db = $this->db ?? Database::connect();

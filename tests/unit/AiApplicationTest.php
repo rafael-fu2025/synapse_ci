@@ -256,6 +256,27 @@ final class AiApplicationTest extends TestCase
         self::assertSame(1, $this->fixtureDb->table('ai_reviews')->countAllResults());
     }
 
+    public function testLegacyPipelineDraftIsHistoricalAndCanOnlyBeRejected(): void
+    {
+        $this->seedSource();
+        $this->control->resume($this->profile, 1);
+        $app = $this->application();
+        $app->generate(self::fixtureActor());
+        $this->worker()->run(1);
+        $row = $this->store->listInsights(1, 'clinic')[0];
+        $draft = $row['draft'];
+        unset($draft['provenance']['pipeline_digest']);
+        $cipher = new \App\Services\Ai\PayloadCipher($this->profile->config->encryptionKey);
+        $this->fixtureDb->table('ai_insights')->where('tenant_id', 1)->where('unit', 'clinic')->where('id', $row['id'])
+            ->update(['payload' => $cipher->encrypt(1, 'clinic', 'insight:' . $row['job_id'], $draft)]);
+        self::assertFalse($app->panel(self::fixtureActor())['insights'][0]['current_policy']);
+        foreach (['accept', 'approve'] as $decision) {
+            $this->assertAiFailure('pipeline_changed', fn () => $app->review(self::fixtureActor(), $row['id'], 1, $decision), 409);
+        }
+        $app->review(self::fixtureActor(), $row['id'], 1, 'reject');
+        self::assertSame('rejected', $this->store->getInsight(1, 'clinic', $row['id'])['status']);
+    }
+
     public function testChangedSourceCannotReplaceFrozenRelease(): void
     {
         $this->seedSource();
@@ -352,6 +373,21 @@ final class AiApplicationTest extends TestCase
         $this->assertAiFailure('insufficient_data', fn () => $app->prepare(self::fixtureActor()), 422);
         $this->assertAiFailure('insufficient_data', fn () => $app->generate(self::fixtureActor()), 422);
         $this->assertNoAiRows();
+    }
+
+    public function testPanelReadFailureClearsReadinessAfterSchemaChecksPass(): void
+    {
+        $this->seedSource();
+        $this->control->resume($this->profile, 1);
+        $app = $this->application();
+        $app->generate(self::fixtureActor());
+        $this->worker()->run(1);
+        $this->fixtureDb->table('ai_insights')->where('tenant_id', 1)->where('unit', 'clinic')
+            ->update(['payload' => 'corrupt-envelope']);
+        $panel = $app->panel(self::fixtureActor());
+        self::assertFalse($panel['ready']);
+        self::assertSame('payload_unavailable', $panel['reason']);
+        self::assertSame([], $panel['insights']);
     }
 
     public function testUninstalledEncryptedStoreReturnsCleanPanelWithoutSourceReads(): void

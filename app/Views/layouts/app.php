@@ -80,7 +80,7 @@
 </head>
 
 <?php // Path-based workstations share a shell; dedicated hosts retain their portal boundary. ?>
-<body class="app-shell" hx-boost="false" data-navigation-scope="<?= esc(hash('sha256', serialize([session()->get('user'), session()->get('tenant_id'), \App\Services\PortalContext::hostPortal() ?? 'single-host'])), 'attr') ?>">
+<body class="app-shell" hx-boost="false" data-navigation-scope="<?= esc(hash('sha256', serialize([session()->get('user'), session()->get('tenant_id'), \App\Services\PortalContext::hostPortal() ?? 'single-host'])), 'attr') ?>" data-user-id="<?= esc((string) (session()->get('user')['id'] ?? '')) ?>" data-tenant-id="<?= esc((string) (session()->get('tenant_id') ?? '')) ?>">
   <div id="page-styles" hidden><?= $this->renderSection('styles') ?></div>
   <?= $this->include('partials/header') ?>
   <?= $this->include('partials/sidebar') ?>
@@ -124,7 +124,7 @@
 
   <!-- Theme-Aware Logout Confirmation Modal -->
   <div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 400px;">
       <div class="modal-content border-0 shadow">
         <div class="modal-header border-bottom py-3">
           <h5 class="modal-title fs-6 fw-bold text-dark d-flex align-items-center mb-0" id="logoutModalLabel">
@@ -152,7 +152,7 @@
 
   <!-- Theme-Aware Confirmation Modal (shared; driven by assets/js/confirm.js) -->
   <div class="modal fade" id="synapseConfirmModal" tabindex="-1" aria-labelledby="synapseConfirmTitle" aria-describedby="synapseConfirmMessage" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 420px;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 420px;">
       <div class="modal-content border-0 shadow">
         <!-- Header: icon inherits tone; title is the single accessible name. -->
         <div class="modal-header border-bottom py-3">
@@ -183,6 +183,7 @@
 
   <!-- Vendor JS Files -->
   <script src="<?= base_url('assets/vendor/apexcharts/apexcharts.min.js') ?>"></script>
+  <script src="<?= base_url('assets/js/chart-theme.js') ?>"></script>
   <script src="<?= base_url('assets/vendor/bootstrap/js/bootstrap.bundle.min.js') ?>"></script>
   <script src="<?= base_url('assets/vendor/simple-datatables/simple-datatables.js') ?>"></script>
   <!-- Custom widgets: BalaySelect upgrades native selects; BalayDatepicker reuses BalaySelect
@@ -195,6 +196,7 @@
   <script src="<?= base_url('assets/js/auth-session.js') ?>"></script>
   <script src="<?= base_url('assets/js/csrf.js') ?>"></script>
   <script src="<?= base_url('assets/js/toast.js') ?>"></script>
+  <script src="<?= base_url('assets/js/banner-dismiss.js') ?>"></script>
   <script src="<?= base_url('assets/js/realtime.js') ?>"></script>
   <script src="<?= base_url('assets/js/mis-sync.js') ?>"></script>
   <script src="<?= base_url('assets/js/report-download.js') ?>"></script>

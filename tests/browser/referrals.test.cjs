@@ -120,6 +120,7 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
     const modal = page.locator('#appFormModal');
     assert.equal(await modal.locator('[x-data="referralForm($el.dataset)"]').getAttribute('data-initial-person'), 'null');
     assert.equal(await modal.locator('button[type=submit]').isDisabled(), true);
+    assert.equal(await modal.getByRole('button', { name: 'Change', exact: true }).isVisible(), false);
     await page.locator('#referralPatientSearch').fill('Ada');
     await modal.locator('.list-group button').filter({ hasText: 'Student, Ada' }).click();
     assert.equal(await modal.locator('[name=patient_person_id]').inputValue(), '11');
@@ -149,6 +150,7 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
     assert.equal(posts.length, before + 2);
     assert.deepEqual(posts.at(-1).fields, { ...submitted.fields, csrf_test_name: 'retry-token' });
     await open(page, '/create?prefill=1' + (unit === 'clinic' ? '&source=1' : ''));
+    await page.waitForFunction(() => document.querySelector('#appFormModal [name=patient_person_id]')?.value === '11');
     assert.equal(await page.locator('#appFormModal [name=patient_person_id]').inputValue(), '11');
     assert.equal(await page.locator('#referralPatientSearch').isVisible(), false);
     assert.equal(await page.locator('#appFormModal button').filter({ hasText: /^Change$/ }).count(), unit === 'clinic' ? 0 : 1);
@@ -244,6 +246,34 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
     await dismiss(page, 'a[data-app-modal-close]');
   });
 }
+test('referral live search shows failure, retry, no matches and clears selection', async t => {
+  const page = await pageFor(t, 'clinic', 'light');
+  let mode = 'error';
+  await page.route('**/api/patients/search?*', route => route.fulfill({
+    status: mode === 'error' ? 500 : 200, contentType: 'application/json',
+    body: JSON.stringify({ results: mode === 'match' ? [{ id: 11, first_name: 'Ada', last_name: 'Student', mis_id: 'S001', kind: 'student' }] : [] })
+  }));
+  await open(page);
+  const modal = page.locator('#appFormModal');
+  await page.locator('#referralPatientSearch').fill('Ada');
+  await modal.getByText('Unable to search the local directory. Please try again.', { exact: true }).waitFor();
+  mode = 'empty';
+  await modal.getByRole('button', { name: 'Retry', exact: true }).click();
+  await modal.getByText('No matching local records.', { exact: true }).waitFor();
+  mode = 'match';
+  await page.locator('#referralPatientSearch').fill('Student');
+  await modal.locator('.list-group button').filter({ hasText: 'Student, Ada' }).click();
+  await page.locator('#referralPatientSearch').waitFor({ state: 'hidden' });
+  await modal.getByRole('button', { name: 'Change', exact: true }).click();
+  assert.equal(await page.locator('#referralPatientSearch').inputValue(), '');
+  assert.equal(await modal.locator('[name=patient_person_id]').inputValue(), '');
+  assert.equal(await modal.getByRole('button', { name: 'Change', exact: true }).isVisible(), false);
+  await dismiss(page, 'a[data-app-modal-close]');
+  await open(page);
+  assert.equal(await page.locator('#referralPatientSearch').inputValue(), '');
+  assert.equal(await modal.getByRole('button', { name: 'Change', exact: true }).isVisible(), false);
+});
+
 test('legacy referral route requires an explicit workstation, with no active sidebar default', async t => {
   const page = await pageFor(t, 'clinic', 'light');
   await page.goto(origin + '/referrals');

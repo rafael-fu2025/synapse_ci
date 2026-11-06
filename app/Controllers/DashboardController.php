@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Services\AuthenticatedUser;
+use App\Services\DashboardCache;
 use App\Services\PortalContext;
+use App\Services\Scheduling\SchedulingClock;
 use CodeIgniter\Database\BaseConnection;
 
 final class DashboardController extends BaseController
@@ -49,63 +51,86 @@ final class DashboardController extends BaseController
     {
         $tenantId = \App\Services\CurrentTenant::id();
         $db = \Config\Database::connect();
-        $today = date('Y-m-d');
+        $canReadAudit = $this->canRead($user, 'audit.read');
 
-        // 1. Campus Directory Population
-        $studentsCount = $db->table('people')
-            ->where('tenant_id', $tenantId)->where('kind', 'student')->where('deleted_at', null)->countAllResults();
-        $employeesCount = $db->table('people')
-            ->where('tenant_id', $tenantId)->where('kind', 'employee')->where('deleted_at', null)->countAllResults();
-        $totalPopulation = $studentsCount + $employeesCount;
+        // The audit sections are permission-gated, so the discriminator keeps a
+        // reports-only viewer from ever being served the cached audit dataset.
+        $metrics = DashboardCache::remember('admin.dashboard.' . ($canReadAudit ? '1' : '0'), DashboardCache::TTL,
+            function () use ($db, $user, $tenantId): array {
+                // 1. Campus Directory Population
+                $studentsCount = $db->table('people')
+                    ->where('tenant_id', $tenantId)->where('kind', 'student')->where('deleted_at', null)->countAllResults();
+                $employeesCount = $db->table('people')
+                    ->where('tenant_id', $tenantId)->where('kind', 'employee')->where('deleted_at', null)->countAllResults();
+                $totalPopulation = $studentsCount + $employeesCount;
 
-        // 2. Cross-Department Care Volume
-        $totalClinicEncounters = $db->table('clinic_encounters')
-            ->where('tenant_id', $tenantId)->where('status', 'completed')->countAllResults();
-        $totalGuidanceSessions = $db->table('counselling_sessions s')
-            ->join('counselling_cases c', 'c.id = s.case_id AND c.tenant_id = s.tenant_id')
-            ->where('s.tenant_id', $tenantId)->where('s.status', 'completed')->countAllResults();
-        $totalOperationsVolume = $totalClinicEncounters + $totalGuidanceSessions;
+                // 2. Cross-Department Care Volume
+                $totalClinicEncounters = $db->table('clinic_encounters')
+                    ->where('tenant_id', $tenantId)->where('status', 'completed')->countAllResults();
+                $totalGuidanceSessions = $db->table('counselling_sessions s')
+                    ->join('counselling_cases c', 'c.id = s.case_id AND c.tenant_id = s.tenant_id')
+                    ->where('s.tenant_id', $tenantId)->where('s.status', 'completed')->countAllResults();
+                $totalOperationsVolume = $totalClinicEncounters + $totalGuidanceSessions;
 
-        // Audit access gates the queries as well as the rendered sections.
-        $audit = $this->auditSummary($db, $user, $tenantId);
+                // Audit access gates the queries as well as the rendered sections.
+                $audit = $this->auditSummary($db, $user, $tenantId);
 
-        // 4. Active Accounts & Roles
-        $activeAccounts = $db->table('users')
-            ->where('tenant_id', $tenantId)->where('status', 'active')->where('deleted_at', null)->countAllResults();
+                // 4. Active Accounts & Roles
+                $activeAccounts = $db->table('users')
+                    ->where('tenant_id', $tenantId)->where('status', 'active')->where('deleted_at', null)->countAllResults();
 
+                // 6. Cross-department volume velocity (last 7 days)
+                // One bounded range read per series, bucketed on the Manila business day in PHP:
+                // started_at is stored as a UTC instant, so the Manila day is a UTC range and a
+                // range predicate keeps the index usable.
+                $ranges = SchedulingClock::businessDayRanges(7);
+                $days = array_map(static fn (string $businessDay): string => date('M j', strtotime($businessDay)), array_keys($ranges));
+                $windowStart = $ranges[array_key_first($ranges)][0];
+                $windowEnd = $ranges[array_key_last($ranges)][1];
+                $clinicSeries = array_fill(0, count($ranges), 0);
+                foreach ($db->table('clinic_encounters')
+                    ->where('tenant_id', $tenantId)
+                    ->where('started_at >=', $windowStart)->where('started_at <', $windowEnd)
+                    ->select('started_at')->get()->getResultArray() as $encounterRow) {
+                    $bucket = SchedulingClock::businessDayIndex((string) $encounterRow['started_at'], $ranges);
+                    if ($bucket !== null) {
+                        $clinicSeries[$bucket]++;
+                    }
+                }
+                $guidanceSeries = array_fill(0, count($ranges), 0);
+                foreach ($db->table('counselling_sessions')
+                    ->where('tenant_id', $tenantId)
+                    ->where('started_at >=', $windowStart)->where('started_at <', $windowEnd)
+                    ->select('started_at')->get()->getResultArray() as $sessionRow) {
+                    $bucket = SchedulingClock::businessDayIndex((string) $sessionRow['started_at'], $ranges);
+                    if ($bucket !== null) {
+                        $guidanceSeries[$bucket]++;
+                    }
+                }
 
-        // 6. Cross-department volume velocity (last 7 days)
-        $days = [];
-        $clinicSeries = [];
-        $guidanceSeries = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $d = date('Y-m-d', strtotime("-{$i} days"));
-            $days[] = date('M j', strtotime($d));
-            $clinicSeries[] = $db->table('clinic_encounters')
-                ->where('tenant_id', $tenantId)->where('DATE(started_at)', $d)->countAllResults();
-            $guidanceSeries[] = $db->table('counselling_sessions')
-                ->where('tenant_id', $tenantId)->where('DATE(started_at)', $d)->countAllResults();
-        }
+                return [
+                    'totalPopulation'       => $totalPopulation,
+                    'studentsCount'         => $studentsCount,
+                    'employeesCount'        => $employeesCount,
+                    'totalOperationsVolume' => $totalOperationsVolume,
+                    'totalClinicEncounters' => $totalClinicEncounters,
+                    'totalGuidanceSessions' => $totalGuidanceSessions,
+                    'totalAuditEvents'      => $audit['totalAuditEvents'],
+                    'activeAccounts'        => $activeAccounts,
+                    'recentAudit'           => $audit['recentAudit'],
+                    'chartDays'             => $days,
+                    'clinicSeries'          => $clinicSeries,
+                    'guidanceSeries'        => $guidanceSeries,
+                ];
+            });
 
-        return view('dashboard/index', [
-            'title'                  => $audit['canReadAudit'] ? 'Executive Admin Dashboard' : 'Reports Dashboard',
-            'pageTitle'              => $audit['canReadAudit'] ? 'Executive Operations Dashboard' : 'Operations Reports Dashboard',
-            'canReadAudit'           => $audit['canReadAudit'],
+        return view('dashboard/index', $metrics + [
+            'title'                  => $canReadAudit ? 'Executive Admin Dashboard' : 'Reports Dashboard',
+            'pageTitle'              => $canReadAudit ? 'Executive Operations Dashboard' : 'Operations Reports Dashboard',
+            'canReadAudit'           => $canReadAudit,
             'user'                   => $user,
-            'totalPopulation'        => $totalPopulation,
-            'studentsCount'          => $studentsCount,
-            'employeesCount'         => $employeesCount,
-            'totalOperationsVolume'  => $totalOperationsVolume,
-            'totalClinicEncounters'  => $totalClinicEncounters,
-            'totalGuidanceSessions'  => $totalGuidanceSessions,
-            'totalAuditEvents'       => $audit['totalAuditEvents'],
-            'activeAccounts'         => $activeAccounts,
-            'recentAudit'            => $audit['recentAudit'],
-            'chartDays'              => $days,
-            'clinicSeries'           => $clinicSeries,
-            'guidanceSeries'         => $guidanceSeries,
             'breadcrumbs'            => [
-                $audit['canReadAudit']
+                $canReadAudit
                                     ? ['label' => 'Administration', 'url' => site_url('/admin')]
                                     : ['label' => 'Reports', 'url' => site_url('/dashboard')],
                 ['label' => 'Dashboard', 'url' => ''],

@@ -79,7 +79,9 @@ final class DeploymentControl
             __DIR__ . '/EndpointPolicy.php', __DIR__ . '/CurlTransport.php', __DIR__ . '/AnalysisCatalog.php',
             __DIR__ . '/BroadDisclosurePolicy.php', __DIR__ . '/DepartmentSnapshotBuilder.php', __DIR__ . '/ClinicSnapshotBuilder.php',
             __DIR__ . '/Profile.php', __DIR__ . '/AiAccess.php', __DIR__ . '/AiGrantStore.php',
-            __DIR__ . '/InsightApplication.php', __DIR__ . '/InsightWorker.php', __DIR__ . '/InsightStore.php', __FILE__];
+            __DIR__ . '/InsightApplication.php', __DIR__ . '/InsightWorker.php', __DIR__ . '/InsightStore.php',
+            __DIR__ . '/PipelineProvenance.php', __DIR__ . '/ChatClient.php', __DIR__ . '/InputBudget.php',
+            dirname(__DIR__) . '/Reporting/ClinicReportInsights.php', __FILE__];
         $settings = WRITEPATH . 'ai-settings/provider.enc';
         if (is_file($settings)) { $files[] = $settings; }
         $stamps = [];

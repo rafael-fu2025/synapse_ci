@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Clinic;
 
+use App\Libraries\LikePattern;
 use App\Services\CurrentTenant;
 use CodeIgniter\Database\BaseConnection;
 use Config\Database;
@@ -16,6 +17,18 @@ final class InventoryService
 {
     private BaseConnection $db;
     private const MAX_STOCK = 4294967295;
+    /** The medicine columns the catalogue exposes; the catalogue never selects the table blindly. */
+    private const MEDICINE_COLUMNS = [
+        'id', 'tenant_id', 'name', 'generic_name', 'category', 'dosage_form', 'strength',
+        'unit_of_measure', 'minimum_stock_level', 'total_stock', 'is_active', 'version',
+        'created_at', 'updated_at',
+    ];
+    /** Stock figures derived from the batch ledger, not from the medicine row. */
+    private const STOCK_PROJECTION = [
+        'batch_total_stock', 'usable_stock', 'expired_stock', 'quarantined_stock', 'near_expiry_stock',
+    ];
+    private const INSTALL_CACHE_KEY = 'inventory_schema_installed';
+    private const INSTALL_CACHE_TTL = 60;
     private ?bool $installed = null;
     public const SETUP_PENDING_MESSAGE = 'Clinic inventory setup is pending. Administrator must complete the inventory migration; no stock operations are available.';
 
@@ -30,32 +43,53 @@ final class InventoryService
         if ($this->installed !== null) {
             return $this->installed;
         }
+        // A shared cache avoids re-reading table and column metadata on every request.
+        // The answer only changes when a migration runs, so a short TTL is enough.
+        $cached = cache()->get(self::INSTALL_CACHE_KEY);
+        if (is_array($cached) && array_key_exists('installed', $cached)) {
+            return $this->installed = (bool) $cached['installed'];
+        }
         $this->installed = false;
         try {
-            // Shared connections may retain pre-migration table and field metadata.
-            $this->db->resetDataCache();
             $history = config('Migrations')->table;
-            $required = [
-                'clinic_medicines' => ['id', 'tenant_id', 'name', 'generic_name', 'category', 'dosage_form', 'strength', 'unit_of_measure', 'minimum_stock_level', 'total_stock', 'is_active', 'version', 'created_at', 'updated_at'],
-                'clinic_medicine_batches' => ['id', 'tenant_id', 'medicine_id', 'batch_number', 'expiration_date', 'initial_quantity', 'remaining_quantity', 'status', 'created_at', 'updated_at'],
-                'clinic_dispensations' => ['id', 'tenant_id', 'encounter_id', 'medicine_id', 'batch_id', 'quantity', 'instructions', 'dispensed_by_user_id', 'created_at', 'operation_id', 'snapshot_name', 'snapshot_generic_name', 'snapshot_strength', 'snapshot_dosage_form', 'snapshot_unit', 'snapshot_batch_number', 'snapshot_expiration_date', 'snapshot_reconstructed'],
-                'inventory_operations' => ['id', 'tenant_id', 'medicine_id', 'encounter_id', 'actor_id', 'idempotency_key', 'payload_hash', 'type', 'reason', 'supplier', 'reference', 'reversal_of', 'reversal_mode', 'created_at'],
-                'stock_movements' => ['id', 'tenant_id', 'medicine_id', 'batch_id', 'operation_id', 'actor_id', 'delta', 'reason', 'original_movement_id', 'created_at'],
-                $history => ['version', 'namespace'],
-            ];
-            foreach ($required as $table => $columns) {
-                if (!$this->db->tableExists($table)
-                    || array_diff($columns, $this->db->getFieldNames($table)) !== []) {
-                    return false;
-                }
-            }
+            // The migration marker is the deciding fact and costs one query. Only when it is
+            // present is the column-level guarantee worth paying for, and that answer is cached.
             $this->installed = $this->db->table($history)
                 ->where('version', '2026-10-15-000002')->where('namespace', 'App')->countAllResults() > 0;
+            if ($this->installed) {
+                $this->installed = $this->columnsInstalled();
+            }
         } catch (Throwable $e) {
             // An unreadable or partially deployed schema must never enable stock operations.
             $this->installed = false;
         }
+        cache()->save(self::INSTALL_CACHE_KEY, ['installed' => $this->installed], self::INSTALL_CACHE_TTL);
+
         return $this->installed;
+    }
+
+    /** The catalogue selects these columns by name, so a missing one must not reach SQL. */
+    private function columnsInstalled(): bool
+    {
+        $history = config('Migrations')->table;
+        // Shared connections may retain pre-migration table and field metadata.
+        $this->db->resetDataCache();
+        $required = [
+            'clinic_medicines' => self::MEDICINE_COLUMNS,
+            'clinic_medicine_batches' => ['id', 'tenant_id', 'medicine_id', 'batch_number', 'expiration_date', 'initial_quantity', 'remaining_quantity', 'status', 'created_at', 'updated_at'],
+            'clinic_dispensations' => ['id', 'tenant_id', 'encounter_id', 'medicine_id', 'batch_id', 'quantity', 'instructions', 'dispensed_by_user_id', 'created_at', 'operation_id', 'snapshot_name', 'snapshot_generic_name', 'snapshot_strength', 'snapshot_dosage_form', 'snapshot_unit', 'snapshot_batch_number', 'snapshot_expiration_date', 'snapshot_reconstructed'],
+            'inventory_operations' => ['id', 'tenant_id', 'medicine_id', 'encounter_id', 'actor_id', 'idempotency_key', 'payload_hash', 'type', 'reason', 'supplier', 'reference', 'reversal_of', 'reversal_mode', 'created_at'],
+            'stock_movements' => ['id', 'tenant_id', 'medicine_id', 'batch_id', 'operation_id', 'actor_id', 'delta', 'reason', 'original_movement_id', 'created_at'],
+            $history => ['version', 'namespace'],
+        ];
+        foreach ($required as $table => $columns) {
+            if (!$this->db->tableExists($table)
+                || array_diff($columns, $this->db->getFieldNames($table)) !== []) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public function assertInstalled(): void
@@ -98,7 +132,7 @@ final class InventoryService
         }
         $builder = $this->db->table('clinic_medicines')->where('tenant_id', CurrentTenant::id());
         if ($query !== '') {
-            $builder->groupStart()->like('name', trim($query))->orLike('generic_name', trim($query))->groupEnd();
+            LikePattern::applyGroup($builder, ['name', 'generic_name'], trim($query));
         }
         if ($status === 'active' || $status === 'archived') {
             $builder->where('is_active', $status === 'active' ? 1 : 0);
@@ -126,7 +160,7 @@ final class InventoryService
             SUM(CASE WHEN status='quarantined' THEN remaining_quantity ELSE 0 END) AS quarantined_stock,
             SUM(CASE WHEN {$usable} AND expiration_date <= {$near} THEN remaining_quantity ELSE 0 END) AS near_expiry_stock
             FROM " . $this->t('clinic_medicine_batches') . ' WHERE tenant_id=? GROUP BY tenant_id, medicine_id';
-        $catalog = 'SELECT m.*, COALESCE(b.physical_stock,0) AS batch_total_stock,
+        $catalog = 'SELECT m.' . implode(', m.', self::MEDICINE_COLUMNS) . ', COALESCE(b.physical_stock,0) AS batch_total_stock,
             CASE WHEN m.is_active=1 THEN COALESCE(b.usable_stock,0) ELSE 0 END AS usable_stock,
             COALESCE(b.expired_stock,0) AS expired_stock, COALESCE(b.quarantined_stock,0) AS quarantined_stock,
             CASE WHEN m.is_active=1 THEN COALESCE(b.near_expiry_stock,0) ELSE 0 END AS near_expiry_stock
@@ -135,8 +169,9 @@ final class InventoryService
         $params = [$tenant, $tenant];
         $where = ' WHERE 1=1';
         if ($page->q !== '') {
-            $where .= " AND (name LIKE ? ESCAPE '!' OR generic_name LIKE ? ESCAPE '!')";
-            $term = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $page->q) . '%';
+            $escape = $this->db->likeEscapeChar;
+            $where .= " AND (name LIKE ? ESCAPE '{$escape}' OR generic_name LIKE ? ESCAPE '{$escape}')";
+            $term = '%' . LikePattern::literal($page->q) . '%';
             array_push($params, $term, $term);
         }
         if ($page->status === 'active' || $page->status === 'archived') {
@@ -153,7 +188,10 @@ final class InventoryService
             COALESCE(SUM(CASE WHEN near_expiry_stock > 0 THEN 1 ELSE 0 END),0) AS near' . $source, $params)->getRowArray();
         $pagination = $page->metadata($total, (int) $stats['filtered']);
         $offset = ($pagination['page'] - 1) * $page->perPage;
-        $rows = $this->db->query('SELECT *' . $source . ' ORDER BY name ASC, id ASC LIMIT '
+        // Select the catalogue explicitly: a blind SELECT * widens the row with every
+        // column the table may grow and hides which projection the caller receives.
+        $projection = 'catalog.' . implode(', catalog.', array_merge(self::MEDICINE_COLUMNS, self::STOCK_PROJECTION));
+        $rows = $this->db->query('SELECT ' . $projection . $source . ' ORDER BY catalog.name ASC, catalog.id ASC LIMIT '
             . $page->perPage . ' OFFSET ' . $offset, $params)->getResultArray();
         foreach ($rows as &$row) {
             $totals = $row;

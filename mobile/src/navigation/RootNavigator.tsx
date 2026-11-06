@@ -14,8 +14,11 @@ import { SessionExpiredScreen } from '../features/auth/screens/SessionExpiredScr
 import { SignInScreen } from '../features/auth/screens/SignInScreen';
 import { SplashScreen } from '../features/auth/screens/SplashScreen';
 import { OfflineBanner } from '../components/OfflineBanner';
+import { PushBanner } from '../components/PushBanner';
 import { useAuth } from '../store/auth';
 import { useTheme } from '../theme/ThemeProvider';
+import { UserRealtimeGate } from '../features/realtime/UserRealtimeGate';
+import { navigationRef } from './navigationRef';
 import { AppTabs } from './AppTabs';
 import { RootStackParamList } from './types';
 
@@ -50,7 +53,7 @@ export function RootNavigator() {
   );
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer theme={navigationTheme} ref={navigationRef}>
       {status === 'restoring' ? (
         <SplashScreen />
       ) : status === 'signedOut' ? (
@@ -59,7 +62,9 @@ export function RootNavigator() {
         <SessionExpiredScreen />
       ) : (
         <View style={styles.flex}>
+          <UserRealtimeGate />
           {offline ? <OfflineBanner /> : null}
+          <PushBanner />
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="AppTabs" component={AppTabs} />
             <Stack.Screen

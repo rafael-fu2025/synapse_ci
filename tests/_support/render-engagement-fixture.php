@@ -38,7 +38,8 @@ if ($kind === 'announcements') {
         echo view('announcements/form', $data + ['announcement' => $edit ? $notice : null, 'formAction' => $baseUrl . ($edit ? '/1/update' : '/store')]);
     } elseif ($portal && str_ends_with($path, '/1')) {
         $notice['published_at'] = '2026-10-16 08:00:00';
-        $notice['read_at'] = isset($_GET['read']) ? '2026-10-16 09:00:00' : null;
+        // Read state comes from the confirmed mutation, never a synthetic query marker.
+        $notice['read_at'] = !empty($fixture['savedRead']) ? '2026-10-16 09:00:00' : null;
         echo view('announcements/show', $data + ['announcement' => $notice]);
     } else {
         $items = [];

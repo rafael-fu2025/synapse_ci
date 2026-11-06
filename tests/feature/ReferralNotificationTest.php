@@ -171,7 +171,7 @@ final class ReferralNotificationTest extends FreshDatabaseTestCase
         $this->login($this->guidance);
         $inbox = $service->ownInbox();
         $this->assertSame(1, $inbox['unread_count']);
-        $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'url'], array_keys($inbox['items'][0]));
+        $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'target', 'url'], array_keys($inbox['items'][0]));
         $this->assertSame('Incoming referral', $inbox['items'][0]['title']);
         $this->assertSame(site_url('/guidance/referrals?tab=incoming'), $inbox['items'][0]['url']);
         $this->assertStringNotContainsString('SECRET', json_encode($inbox));
@@ -219,7 +219,7 @@ final class ReferralNotificationTest extends FreshDatabaseTestCase
             $this->assertNull($item['read_at']);
             $this->assertSame($status === 'closed' ? $historyUrl
                 : PortalContext::urlFor($portal, '/' . $unit . '/referrals?tab=incoming'), $item['url']);
-            $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'url'], array_keys($item));
+            $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'target', 'url'], array_keys($item));
             $this->assertStringNotContainsString('SECRET', json_encode($inbox));
             $this->assertTrue($service->canReceiveInvalidation($this->tenant, (int) $receiver['id'], [$id]));
             $this->assertFalse($service->canReceiveInvalidation($this->tenant, (int) $sender['id'], [$id]));
@@ -283,6 +283,138 @@ final class ReferralNotificationTest extends FreshDatabaseTestCase
         $this->assertSame(2, $restored['unread_count']);
         $this->assertCount(3, $restored['items']);
         $this->assertSame([$rows[0], $rows[1], $after[2]], $this->notices(), 'Suppression must not erase history or read state.');
+    }
+
+    #[DataProvider('referralDirections')]
+    public function testStudentDeliveryUsesStoredPatientAndOwnerAuthority(bool $reverse): void
+    {
+        $this->db->table('people')->where('id', $this->patient)->update(['kind' => 'student']);
+        $owner = $this->account('student', ['person_id' => $this->patient]);
+        $stranger = $this->account('student');
+        $ref = $this->create($reverse);
+        $rows = $this->notices();
+        $this->assertCount(2, $rows);
+        $student = $rows[1];
+        $this->assertSame('student_referral', $student['type']);
+        $this->assertSame($this->patient, (int) $student['recipient_person_id']);
+        $this->assertNull($student['recipient_user_id']);
+        $id = (int) $student['id'];
+        $service = new NotificationService();
+        $this->db->transBegin();
+        try {
+            // Caller-supplied patient must not redirect ownership, and retries preserve read state.
+            $this->assertSame([], $service->notifyReferral(array_replace($ref, ['patient_person_id' => 0])));
+            $this->assertTrue($this->db->transCommit());
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            throw $e;
+        }
+        foreach ([$stranger, $this->clinic, $this->guidance] as $actor) {
+            $this->login($actor);
+            $this->assertFalse($service->canReceiveInvalidation($this->tenant, (int) $actor['id'], [$id]));
+            $this->rejected(404, fn () => $service->markRead($id));
+        }
+        $this->login($owner);
+        $this->assertSame(1, $service->ownInbox()['unread_count']);
+        $this->assertSame(1, $service->ownPage()['total']);
+        $item = $service->ownInbox()['items'][0];
+        $this->assertSame($id, $item['id']);
+        $this->assertNull($item['url']);
+        $this->assertNull($item['target']);
+        $this->assertStringNotContainsString('SECRET', json_encode($item));
+        $this->assertTrue($service->canReceiveInvalidation($this->tenant, (int) $owner['id'], [$id]));
+        $service->markRead($id);
+        $read = $this->notices()[1];
+        $service->markRead($id);
+        $service->markAllRead();
+        $this->assertSame($read, $this->notices()[1]);
+        $this->db->transBegin();
+        try {
+            $this->assertSame([], $service->notifyReferral($ref));
+            $this->assertTrue($this->db->transCommit());
+        } catch (\Throwable $e) {
+            $this->db->transRollback();
+            throw $e;
+        }
+        $this->assertSame($read, $this->notices()[1], 'Delivery retry must not reset read state.');
+        $foreignOwner = $this->account('student', ['tenant_id' => $this->tenant()]);
+        $this->assertFalse($service->canReceiveInvalidation((int) $foreignOwner['tenant_id'], (int) $foreignOwner['id'], [$id]));
+        $this->db->table('people')->where('id', $this->patient)->update(['deleted_at' => date('Y-m-d H:i:s')]);
+        $this->assertFalse($service->canReceiveInvalidation($this->tenant, (int) $owner['id'], [$id]));
+        $this->db->table('people')->where('id', $this->patient)->update(['deleted_at' => null]);
+        $this->assertSame(0, $service->ownPage(1, 'unread')['total']);
+        $this->db->table('referrals')->where('id', $ref['id'])->update(['status' => 'closed']);
+        $this->assertSame($id, $service->ownInbox()['items'][0]['id']);
+        // Current referral ownership, not just the notification's person field, gates every surface.
+        $this->db->table('referrals')->where('id', $ref['id'])->update(['patient_person_id' => $this->person()]);
+        $this->assertSame(['items' => [], 'unread_count' => 0], $service->ownInbox());
+        $this->assertSame(0, $service->ownPage()['total']);
+        $this->assertFalse($service->canReceiveInvalidation($this->tenant, (int) $owner['id'], [$id]));
+        $this->rejected(404, fn () => $service->markRead($id));
+        $service->markAllRead();
+        $this->assertSame($read, $this->notices()[1]);
+    }
+
+    public function testStudentMigrationIsRestartablePreservesHistoryAndEnforcesDeliveryShape(): void
+    {
+        $this->db->table('people')->where('id', $this->patient)->update(['kind' => 'student']);
+        $this->create();
+        $before = $this->notices();
+        $definition = $this->db->query('SHOW CREATE TABLE notifications')->getRowArray();
+        $migration = new \App\Database\Migrations\AddStudentReferralNotifications();
+        $migration->up();
+        $migration->up();
+        $this->assertSame($definition, $this->db->query('SHOW CREATE TABLE notifications')->getRowArray());
+        $this->assertSame($before, $this->notices());
+        $this->rejected(0, fn () => $migration->down());
+        $row = $before[1];
+        unset($row['id'], $row['team_delivery_key']);
+        foreach ([[], ['recipient_person_id' => null], ['recipient_user_id' => $this->clinic['id']],
+            ['referral_id' => null], ['appointment_version' => 1]] as $change) {
+            $failed = false;
+            try { $failed = !$this->db->table('notifications')->insert(array_replace($row, $change)); }
+            catch (\Throwable) { $failed = true; }
+            $this->assertTrue($failed, 'Duplicate or malformed student delivery must fail.');
+        }
+        $this->assertSame($before, $this->notices());
+    }
+
+    public function testStudentInvalidationIsPostcommitOwnerOnlyAndContentFree(): void
+    {
+        $this->db->table('people')->where('id', $this->patient)->update(['kind' => 'student']);
+        $owner = $this->account('student', ['person_id' => $this->patient]);
+        $this->create();
+        $id = (int) $this->notices()[1]['id'];
+        $sent = [];
+        $publisher = new \App\Services\NotificationInvalidation($this->db,
+            send: static function ($channel, $event, $data) use (&$sent): bool {
+                $sent[] = [$channel, $event, $data];
+                return true;
+            }, enabled: true);
+        $this->db->transBegin();
+        $publisher->publishCommitted($this->tenant, [$id]);
+        $this->assertSame([], $sent);
+        $this->db->transRollback();
+        $this->db->resetTransStatus();
+        $publisher->publishCommitted($this->tenant, [$id]);
+        $this->assertCount(1, $sent);
+        $this->assertSame(\App\Services\Realtime\Channel::user($this->tenant, (int) $owner['id']), $sent[0][0]);
+        $this->assertSame(['notifications.changed', []], array_slice($sent[0], 1));
+    }
+
+    public function testStudentNoticeFailureRollsBackReferralAndStaffDelivery(): void
+    {
+        $this->db->table('people')->where('id', $this->patient)->update(['kind' => 'student']);
+        $this->trigger = $this->db->prefixTable(uniqid('student_notice_fail_'));
+        $trigger = $this->db->protectIdentifiers($this->trigger);
+        $table = $this->db->protectIdentifiers($this->db->prefixTable('notifications'));
+        $this->db->query("CREATE TRIGGER {$trigger} BEFORE INSERT ON {$table} FOR EACH ROW
+            BEGIN IF NEW.type='student_referral' THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Fixture failure'; END IF; END");
+        $failed = false;
+        try { $this->create(); } catch (\Throwable) { $failed = true; }
+        $this->assertTrue($failed);
+        $this->assertSame([], $this->notices());
+        $this->assertSame(0, $this->db->table('referrals')->where('tenant_id', $this->tenant)->countAllResults());
     }
 
     public function testBmgAndForgedSourceCannotCreateNotifications(): void

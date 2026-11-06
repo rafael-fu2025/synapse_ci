@@ -49,6 +49,22 @@ tickets remain in the first frame, never query strings. The listener pauses whil
 keyboard-hidden/backgrounded/offline, renews grants, retries with backoff, and reconciles every
 120 seconds plus foreground/reconnect. Restart the realtime worker after deploying this code.
 
+## Private mobile realtime grant
+
+`GET api/v1/realtime/grant` is the bearer-authenticated counterpart for the signed-in mobile app.
+It issues a short-lived grant for exactly `private.tenant.{tenantId}.user.{userId}`, derived from
+the freshly DB-validated API identity; caller-selected tenants, users, channels, and origins are
+ignored, and no AI-insight or department topics are granted on mobile. A per-user budget allows
+60 requests per minute. Response shape, origin allowlist, HTTPS→WSS rule, first-frame
+authentication, and reconnect/renewal rules match the public carousel grant (see
+[MOBILE_API.md](MOBILE_API.md#private-mobile-realtime-grant)).
+
+While signed in, foreground, and online, the app consumes payload-free hints on that channel —
+`notifications.changed`, `portal.queue.changed`, `portal.appointments.changed` (empty payloads) and
+`queue.invalidated` (`{unit, date}`) — and refetches the authoritative snapshot over HTTP. Unknown
+events are ignored, sign-out/expiry closes the socket, and every focus-poll interval remains
+unchanged as the fallback. Hints never carry notification bodies, ticket codes, or identities.
+
 ## Application events
 
 - **MIS synchronization:** `mis.sync.progress` hints are sent to the requesting

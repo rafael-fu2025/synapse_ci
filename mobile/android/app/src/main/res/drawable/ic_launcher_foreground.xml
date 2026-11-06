@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The source artwork is a pre-composed square (maroon field, white mark, crest
+  badge in the top-right corner).
+
+  Adaptive icons are masked to a circle of 66dp diameter, so the artwork must fit
+  inside that circle rather than the 66dp square box: a square's diagonal is
+  side*1.414, and only a 46dp square fits within a 66dp circle without its
+  corners being cut. (108 - 46) / 2 = 31dp per side.
+
+  The maroon background colour matches the artwork's own field, so the inset
+  edges are invisible and only the mark appears scaled down.
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_launcher_source"
+    android:inset="31dp" />

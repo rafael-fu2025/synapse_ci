@@ -1,6 +1,6 @@
 <?php $editing = $editUnit !== null; ?>
 <div class="modal fade" id="unitModal" tabindex="-1" aria-labelledby="unitModalTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
-  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 class="modal-title fs-5" id="unitModalTitle"><?= $editing ? 'Edit drum' : 'Add drum' ?></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
     <form action="<?= esc(site_url($editing ? '/facilities/unit/' . (int) $editUnit['id'] . '/update' : '/facilities/units/store')) ?>" method="POST" data-bmg-submit <?= !$editing ? 'data-bmg-create' : '' ?>>
       <?= csrf_field() ?>

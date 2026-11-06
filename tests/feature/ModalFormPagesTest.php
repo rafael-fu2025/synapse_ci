@@ -69,6 +69,12 @@ final class ModalFormPagesTest extends CIUnitTestCase
                 $response->assertStatus(200);
                 $html = (string) $response->response()->getBody();
                 $this->checkDialog($html, $title, $cancel, $action);
+                if (str_contains($route, 'carousel')) {
+                    $this->assertStringContainsString('name="light_file"', $html);
+                    $this->assertStringContainsString('name="dark_file"', $html);
+                    $this->assertStringNotContainsString('name="light_path"', $html);
+                    $this->assertStringNotContainsString('name="dark_path"', $html);
+                }
                 if ($query === '') {
                     $this->assertStringContainsString('assets/js/form-modal.js', $html);
                     $this->assertStringContainsString('data-modal-direct="true"', $html);
@@ -91,6 +97,8 @@ final class ModalFormPagesTest extends CIUnitTestCase
             $response->assertStatus(200);
             $this->checkDialog($response->getBody(), 'Edit Carousel Slide', '/admin/carousel', '/admin/carousel/' . $id . '/update');
             $this->assertStringContainsString('value="Existing Slide"', $response->getBody());
+            $this->assertStringNotContainsString('name="light_path"', $response->getBody());
+            $this->assertStringNotContainsString('name="dark_path"', $response->getBody());
             $this->withSession($this->user('student'))->get('admin/carousel/' . $id . '/edit?fragment=1')->assertRedirectTo('/');
             $this->withSession($this->user('student'))->get('admin/carousel/create?fragment=1')->assertRedirectTo('/');
         } finally { $model->delete($id); }

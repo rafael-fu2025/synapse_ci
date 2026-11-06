@@ -1,18 +1,17 @@
 <?= $this->extend('layouts/auth') ?>
 
 <?= $this->section('content') ?>
-<!-- Floating Theme Toggle in Upper Right of Login Screen -->
+<!-- Floating Theme Toggle in Upper Right of Login Screen (same control as the app header) -->
 <div class="position-fixed top-0 end-0 p-3 auth-theme-control" style="z-index: 1050;">
-  <button class="btn btn-sm rounded-circle d-flex align-items-center justify-content-center shadow-sm auth-theme-toggle"
+  <button class="header-action theme-toggle auth-theme-toggle"
           type="button"
           id="authThemeToggle"
           data-bs-title="Toggle Theme (Light / Dark mode)"
           data-bs-toggle="tooltip"
           data-bs-placement="bottom"
-          aria-label="Toggle dark mode"
-          style="width: 42px; height: 42px;">
-    <i class="bi bi-moon-stars theme-icon-dark fs-5"></i>
-    <i class="bi bi-sun theme-icon-light fs-5"></i>
+          aria-label="Toggle dark mode">
+    <i class="bi bi-moon-stars theme-icon-dark"></i>
+    <i class="bi bi-sun theme-icon-light"></i>
   </button>
 </div>
 

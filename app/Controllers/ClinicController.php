@@ -15,6 +15,7 @@ use App\Services\Clinic\EncounterService;
 use App\Services\Clinic\InventoryService;
 use App\Services\Clinic\PatientHistoryService;
 use App\Services\CurrentTenant;
+use App\Services\DashboardCache;
 use App\Services\Scheduling\SchedulingClock;
 use Config\Database;
 
@@ -44,69 +45,90 @@ final class ClinicController extends BaseController
         $db = Database::connect();
 
         $today = SchedulingClock::today();
-        $queueWaiting = $db->table('queue_entries')
-            ->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('queue_date', $today)
-            ->where('status', 'waiting')->countAllResults();
-        $queueCalled = $db->table('queue_entries')
-            ->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('queue_date', $today)
-            ->where('status', 'called')->countAllResults();
-        $queueCompleted = $db->table('queue_entries')
-            ->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('queue_date', $today)
-            ->where('status', 'done')->countAllResults();
 
-        $encountersCount = $db->table('clinic_encounters')
-            ->where('tenant_id', $tenantId)->where('status', 'completed')->countAllResults();
+        // A workstation reload must not re-run the whole summary; the payload
+        // describes today only, so a short TTL cannot cross a day boundary.
+        $metrics = DashboardCache::remember('clinic.dashboard', DashboardCache::TTL, static function () use ($db, $tenantId, $today): array {
+            $queueWaiting = $db->table('queue_entries')
+                ->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('queue_date', $today)
+                ->where('status', 'waiting')->countAllResults();
+            $queueCalled = $db->table('queue_entries')
+                ->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('queue_date', $today)
+                ->where('status', 'called')->countAllResults();
+            $queueCompleted = $db->table('queue_entries')
+                ->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('queue_date', $today)
+                ->where('status', 'done')->countAllResults();
 
-        $appointmentsToday = $db->table('appointments')
-            ->where('tenant_id', $tenantId)->where('unit', 'clinic')
-            ->where('local_date', $today)->countAllResults();
+            $encountersCount = $db->table('clinic_encounters')
+                ->where('tenant_id', $tenantId)->where('status', 'completed')->countAllResults();
 
-        $inventoryInstalled = (new InventoryService($db))->isInstalled();
-        $medicinesCount = $inventoryInstalled ? $db->table('clinic_medicines')
-            ->where('tenant_id', $tenantId)->where('is_active', 1)->countAllResults() : null;
+            $appointmentsToday = $db->table('appointments')
+                ->where('tenant_id', $tenantId)->where('unit', 'clinic')
+                ->where('local_date', $today)->countAllResults();
 
-        $triageCounts = [
-            'emergency' => $db->table('queue_entries')->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('priority', 'emergency')->countAllResults(),
-            'urgent'    => $db->table('queue_entries')->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('priority', 'urgent')->countAllResults(),
+            $inventoryInstalled = (new InventoryService($db))->isInstalled();
+            $medicinesCount = $inventoryInstalled ? $db->table('clinic_medicines')
+                ->where('tenant_id', $tenantId)->where('is_active', 1)->countAllResults() : null;
 
-            'routine'   => $db->table('queue_entries')->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('priority', 'routine')->countAllResults(),
-        ];
+            // Today's active queue by priority: the triage breakdown must describe the same
+            // cohort as the waiting/called/completed KPIs beside it, and must never count
+            // served, skipped or no-show tickets as if they were still waiting.
+            $triageCounts = ['emergency' => 0, 'urgent' => 0, 'routine' => 0];
+            foreach ($db->table('queue_entries')
+                ->where('tenant_id', $tenantId)->where('unit', 'clinic')->where('queue_date', $today)
+                ->whereIn('status', ['waiting', 'called', 'in_consultation'])
+                ->select('priority, COUNT(*) AS total')->groupBy('priority')
+                ->get()->getResultArray() as $triageRow) {
+                if (isset($triageCounts[$triageRow['priority']])) {
+                    $triageCounts[$triageRow['priority']] = (int) $triageRow['total'];
+                }
+            }
 
-        $recentEncounters = $db->table('clinic_encounters e')
-            ->join('people p', 'p.id = e.person_id AND p.tenant_id = e.tenant_id')
-            ->join('users u', 'u.id = e.attending_user_id AND u.tenant_id = e.tenant_id', 'left')
-            ->where('e.tenant_id', $tenantId)
-            ->select('e.id, e.chief_complaint, e.status, e.started_at, p.first_name, p.last_name, p.mis_id, p.kind, u.username as attending_name')
-            ->orderBy('e.id', 'DESC')->limit(6)->get()->getResultArray();
+            $recentEncounters = $db->table('clinic_encounters e')
+                ->join('people p', 'p.id = e.person_id AND p.tenant_id = e.tenant_id')
+                ->join('users u', 'u.id = e.attending_user_id AND u.tenant_id = e.tenant_id', 'left')
+                ->where('e.tenant_id', $tenantId)
+                ->select('e.id, e.chief_complaint, e.status, e.started_at, p.first_name, p.last_name, p.mis_id, p.kind, u.username as attending_name')
+                ->orderBy('e.id', 'DESC')->limit(6)->get()->getResultArray();
 
-        $days = [];
-        $dailyEncounters = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $d = date('Y-m-d', strtotime("-{$i} days"));
-            $days[] = date('M j', strtotime($d));
-            $dailyEncounters[] = $db->table('clinic_encounters')
-                ->where('tenant_id', $tenantId)->where('started_at >=', $d . ' 00:00:00')
-                ->where('started_at <', date('Y-m-d', strtotime($d . ' +1 day')) . ' 00:00:00')->countAllResults();
-        }
+            // One bounded range read, bucketed on the Manila business day in PHP:
+            // started_at is stored as a UTC instant, so the Manila day is a UTC range.
+            $ranges = SchedulingClock::businessDayRanges(7);
+            $days = array_map(static fn (string $businessDay): string => date('M j', strtotime($businessDay)), array_keys($ranges));
+            $dailyEncounters = array_fill(0, count($ranges), 0);
+            foreach ($db->table('clinic_encounters')
+                ->where('tenant_id', $tenantId)
+                ->where('started_at >=', $ranges[array_key_first($ranges)][0])
+                ->where('started_at <', $ranges[array_key_last($ranges)][1])
+                ->select('started_at')->get()->getResultArray() as $encounterRow) {
+                $bucket = SchedulingClock::businessDayIndex((string) $encounterRow['started_at'], $ranges);
+                if ($bucket !== null) {
+                    $dailyEncounters[$bucket]++;
+                }
+            }
+
+            return [
+                'queueWaiting'       => $queueWaiting,
+                'queueCalled'        => $queueCalled,
+                'queueCompleted'     => $queueCompleted,
+                'encountersCount'    => $encountersCount,
+                'appointmentsToday'  => $appointmentsToday,
+                'medicinesCount'     => $medicinesCount,
+                'inventoryInstalled' => $inventoryInstalled,
+                'triageCounts'       => $triageCounts,
+                'recentEncounters'   => $recentEncounters,
+                'chartDays'          => $days,
+                'chartSeries'        => $dailyEncounters,
+            ];
+        });
 
         $user = session()->get('user') ?? [];
 
-        return view('clinic/dashboard', [
-            'title'             => 'Clinic Dashboard',
-            'pageTitle'         => 'Clinic Workstation Dashboard',
-            'user'              => $user,
-            'queueWaiting'      => $queueWaiting,
-            'queueCalled'       => $queueCalled,
-            'queueCompleted'    => $queueCompleted,
-            'encountersCount'   => $encountersCount,
-            'appointmentsToday' => $appointmentsToday,
-            'medicinesCount'    => $medicinesCount,
-            'inventoryInstalled' => $inventoryInstalled,
-            'triageCounts'      => $triageCounts,
-            'recentEncounters'  => $recentEncounters,
-            'chartDays'         => $days,
-            'chartSeries'       => $dailyEncounters,
-            'breadcrumbs'       => [
+        return view('clinic/dashboard', $metrics + [
+            'title'       => 'Clinic Dashboard',
+            'pageTitle'   => 'Clinic Workstation Dashboard',
+            'user'        => $user,
+            'breadcrumbs' => [
                 ['label' => 'Clinic', 'url' => site_url('/clinic')],
                 ['label' => 'Dashboard', 'url' => ''],
             ],

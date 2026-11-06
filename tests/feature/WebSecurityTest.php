@@ -33,7 +33,7 @@ final class WebSecurityTest extends InventoryDatabaseTestCase
 
     private function identity(?int $id = null): array
     {
-        return ['tenant_id' => $this->tenantId, 'theme' => 'dark', 'user' => [
+        return ['tenant_id' => $this->tenantId, 'theme' => 'dark', '_auth' => $this->authMeta(), 'user' => [
             'id' => $id ?? $this->actorId, 'tenant_id' => $this->tenantId,
             'role' => 'superadmin', 'permissions' => ['audit.read','rbac.manage'], 'logged_in' => true,
         ]];

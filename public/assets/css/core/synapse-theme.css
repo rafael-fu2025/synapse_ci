@@ -281,6 +281,26 @@ fieldset:disabled .btn {
   margin: 0;
 }
 
+.modal-footer > .modal-footer-actions {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.modal-dialog-scrollable .modal-content > form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 575.98px) {
+  .modal-footer > .modal-footer-actions > .btn {
+    flex: 1 1 auto;
+  }
+}
+
 /* -------------------------------------------------------------
  * 2. Shell & Body
  * ------------------------------------------------------------- */
@@ -630,15 +650,105 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
   filter: invert(1) grayscale(100%) brightness(200%);
 }
 
-/* Bootstrap alert fills remain pale, including the post-login welcome alert. */
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert .btn-close {
-  filter: none;
-  opacity: 0.75;
+/* Dark-mode banners use the black surface palette, including the staff
+   personal-session banner (.login-banner) on the portal dashboard. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert {
+  background-color: #161616 !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  /* border-0 banners must still show the status edge, so restore the style. */
+  border-left-style: solid !important;
+  border-left-width: 4px !important;
+  color: #f0f0f0 !important;
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert .btn-close:hover,
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert .btn-close:focus-visible {
-  opacity: 1;
+/* Status tone is carried by the left edge (and matching links below) so the
+   black surfaces stay readable without pale fills. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-info {
+  border-left-color: #9eccff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-warning {
+  border-left-color: #ffc085 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-success {
+  border-left-color: #8bebb0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-danger {
+  border-left-color: #ff9999 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-primary {
+  border-left-color: var(--fu-brand, #b3001b) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-secondary,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-light {
+  border-left-color: #9a9a9a !important;
+}
+
+/* Alert links only: buttons inside a banner keep their own action colors. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert :is(a:not(.btn), .alert-link) {
+  color: #9eccff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-warning :is(a:not(.btn), .alert-link) {
+  color: #ffc085 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-success :is(a:not(.btn), .alert-link) {
+  color: #8bebb0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert-danger :is(a:not(.btn), .alert-link) {
+  color: #ff9999 !important;
+}
+
+/* -------------------------------------------------------------
+ * 8b. Dashboard Welcome Banner
+ * ------------------------------------------------------------- */
+/* The banner gradient lives in CSS rather than an inline style: an inline
+   !important declaration outranks every stylesheet rule, which made the
+   banner impossible to retheme. */
+.nd-welcome-banner--admin {
+  background: linear-gradient(135deg, var(--fu-maroon, #800000) 0%, #5a0000 100%);
+}
+
+.nd-welcome-banner--facilities {
+  background: linear-gradient(135deg, #198754 0%, #0f5132 100%);
+}
+
+/* Neutral black/grey keeps the banner consistent with the KPI rail below it. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-welcome-banner {
+  background: linear-gradient(135deg, #1f1f1f 0%, #121212 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-welcome-banner .h4,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-welcome-banner h2 {
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-welcome-banner p {
+  color: #b8b8b8 !important;
+  opacity: 1 !important;
+}
+
+/* Role pill: solid grey instead of a white chip. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-welcome-banner .badge {
+  background-color: #2e2e2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f0f0f0 !important;
+}
+
+/* Chart header "7 Days" pill is a bg-light chip; on the dark card a pale
+   solid glares, so it becomes a quiet outline chip using theme tokens. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .nd-chart-header .badge {
+  background-color: var(--na-surface-2) !important;
+  border-color: var(--border-color) !important;
+  color: var(--default-color) !important;
 }
 
 /* -------------------------------------------------------------
@@ -923,17 +1033,6 @@ html:not([data-theme="dark"]) .synapse-logo-light {
   box-shadow: none !important;
   border: 0 !important;
   outline: 0 !important;
-}
-
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-theme-toggle {
-  background-color: #1c1c1c !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #f0f0f0 !important;
-}
-
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-theme-toggle:hover {
-  background-color: #282828 !important;
-  color: #ffffff !important;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .social-dock {

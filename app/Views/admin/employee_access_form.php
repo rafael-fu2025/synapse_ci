@@ -17,7 +17,7 @@
 <details class="mb-3"><summary>Review role permissions before saving</summary>
 <p class="small text-muted mt-2">These are the current database grants. Record ownership and department restrictions still apply. Superadmin has special platform-wide authority; this is not limited to the listed grants. Hardware commissioning remains separately controlled.</p>
 <?php foreach ($permissions as $permissionRole => $grants): ?>
-<section class="mt-3"><h3 class="h6"><?= esc(\App\Services\EmployeeAccessService::ROLES[$permissionRole] ?? $permissionRole) ?></h3><ul class="small">
+<section class="mt-3"><h3 class="h6"><?= esc(\App\Services\EmployeeAccessService::ROLES[$permissionRole] ?? \App\Services\EmployeeAccessService::CATALOGUE_LABELS[$permissionRole] ?? $permissionRole) ?></h3><ul class="small">
 <?php foreach ($grants as $grant): ?><li><?= esc($grant['name']) ?> <code><?= esc($grant['code']) ?></code></li><?php endforeach; ?>
 <?php if ($grants === []): ?><li>No explicit permissions configured.</li><?php endif; ?>
 </ul></section><?php endforeach; ?></details>

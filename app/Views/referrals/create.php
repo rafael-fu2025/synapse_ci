@@ -15,9 +15,14 @@
       <label class="form-label fw-semibold" for="referralPatientSearch">Student / employee</label>
       <div class="input-group mb-2" x-show="!selectedPerson">
         <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-        <input type="search" id="referralPatientSearch" class="form-control" placeholder="Search Student ID or Name..." x-model="searchTerm" @input.debounce.300ms="searchPatient()" maxlength="150">
+        <input type="search" id="referralPatientSearch" class="form-control" placeholder="Search Student ID or Name..." x-model="searchTerm" @input="patientInput()" @input.debounce.300ms="searchPatient()" maxlength="150">
       </div>
-      <div x-show="results.length > 0 && !selectedPerson" style="display: none;" class="list-group mb-2 border" style="max-height:180px;overflow-y:auto">
+      <div role="status" aria-live="polite" class="small text-muted mb-2" x-show="!selectedPerson" x-cloak>
+        <span x-show="searching">Searching local directory...</span>
+        <span x-show="searchComplete && !searching && !searchError && results.length === 0">No matching local records.</span>
+        <span x-show="searchError" class="text-danger"><span x-text="searchError"></span> <button type="button" class="btn btn-link btn-sm p-0" @click="searchPatient()">Retry</button></span>
+      </div>
+      <div x-show="results.length > 0 && !selectedPerson" class="list-group mb-2 border" style="display:none;max-height:180px;overflow-y:auto">
         <template x-for="p in results" :key="p.id">
           <button type="button" class="list-group-item list-group-item-action p-2 d-flex justify-content-between align-items-center" @click="selectPerson(p)">
             <span><strong class="d-block" x-text="p.last_name + ', ' + p.first_name"></strong><small x-text="'ID: ' + p.mis_id + ' (' + (p.kind || '').toUpperCase() + ')'"></small></span>
@@ -25,9 +30,9 @@
           </button>
         </template>
       </div>
-      <div x-show="selectedPerson" style="display: none;" class="border rounded p-3 d-flex justify-content-between align-items-center">
+      <div x-show.important="selectedPerson" style="display: none;" class="border rounded p-3 d-flex justify-content-between align-items-center">
         <span><strong class="d-block" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name) : ''"></strong><small class="text-muted" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></small></span>
-        <?php if (empty($sourceEncounterId)): ?><button type="button" class="btn btn-outline-secondary btn-sm" @click="selectedPerson = null">Change</button><?php endif; ?>
+        <?php if (empty($sourceEncounterId)): ?><button type="button" class="btn btn-outline-secondary btn-sm" @click="changePerson()">Change</button><?php endif; ?>
       </div>
       <?php if (!empty($sourceEncounterId)): ?><p class="form-text">Person and source visit are linked from the clinic chart.</p><?php endif; ?>
     </div>

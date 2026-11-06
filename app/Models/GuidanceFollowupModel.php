@@ -20,6 +20,11 @@ final class GuidanceFollowupModel extends TenantModel
         'action_plan',
         'status',
         'completed_at',
+        'completed_by',
+        'completion_notes_cipher',
+        'completion_notes_nonce',
+        'completion_notes_tag',
+        'completion_notes_key_version',
     ];
 
     protected $useTimestamps = true;

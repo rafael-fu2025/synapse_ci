@@ -4,7 +4,8 @@ $editing = $row !== null;
 $prefix = 'exception' . ($row['id'] ?? 'New');
 $type = $editing && empty($row['is_unavailable']) ? 'custom_hours' : 'leave';
 ?>
-<form action="<?= esc(site_url('/' . $unit . '/appointments/availability/exceptions')) ?>" method="POST" data-availability-save x-data="{ exceptionType: '<?= $type ?>' }">
+<?php $formId = $prefix . 'Form'; ?>
+<form id="<?= esc($formId, 'attr') ?>" action="<?= esc(site_url('/' . $unit . '/appointments/availability/exceptions')) ?>" method="POST" data-availability-save x-data="{ exceptionType: '<?= $type ?>' }">
   <?= csrf_field() ?>
   <?= view('appointments/_availability_context', ['workspaceContext' => $workspaceContext ?? \App\Services\Scheduling\AvailabilityWorkspaceContext::DEFAULTS, 'returnSection' => 'exceptions']) ?>
   <input type="hidden" name="workspace_form" value="exception">
@@ -26,7 +27,6 @@ $type = $editing && empty($row['is_unavailable']) ? 'custom_hours' : 'leave';
     <div class="col-sm-6"><label for="<?= $prefix ?>End" class="form-label">Custom end</label><?= view('partials/schedule_time', ['id' => $prefix . 'End', 'name' => 'custom_end_time', 'label' => 'Custom end', 'value' => substr((string) ($row['custom_end_time'] ?? ''), 0, 5)]) ?></div>
   </div></template>
   <div class="mb-4"><label for="<?= $prefix ?>Reason" class="form-label">Reason (record leave or closure here)</label><input id="<?= $prefix ?>Reason" name="reason" class="form-control" maxlength="255" required value="<?= esc($row['reason'] ?? '') ?>"></div>
-  <div class="av-form-footer justify-content-end"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary">Save exception</button></div>
 </form>
 <?php if ($editing): ?>
 <form action="<?= esc(site_url('/' . $unit . '/appointments/availability/exceptions/remove')) ?>" method="POST" data-availability-save class="border-top pt-3 mt-3" data-confirm="Remove this date-specific exception? Existing appointments will not be cancelled or moved." data-confirm-title="Remove availability exception" data-confirm-label="Remove exception" data-confirm-tone="danger">

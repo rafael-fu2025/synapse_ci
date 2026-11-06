@@ -106,9 +106,10 @@ final class InventoryReadinessTest extends CIUnitTestCase
     public function testUnavailableResultIsCachedOnlyForTheServiceInstance(): void
     {
         $db = $this->createMock(BaseConnection::class);
-        $db->expects($this->exactly(2))->method('tableExists')->willReturn(false);
+        // The migration marker decides first, so a marker-only schema costs no column introspection.
+        $db->expects($this->never())->method('tableExists');
         $db->expects($this->never())->method('getFieldNames');
-        $db->expects($this->never())->method('table');
+        $db->expects($this->never())->method('query');
         $inventory = new InventoryService($db);
         $this->assertFalse($inventory->isInstalled());
         $this->assertFalse($inventory->isInstalled());
@@ -118,6 +119,11 @@ final class InventoryReadinessTest extends CIUnitTestCase
     public function testMetadataFailureIsCachedAndDoesNotExposeSqlDetails(): void
     {
         $db = $this->createMock(BaseConnection::class);
+        // The marker is present, so the column guarantee is verified and its failure is swallowed.
+        $history = $this->createMock(BaseBuilder::class);
+        $history->method('where')->willReturnSelf();
+        $history->method('countAllResults')->willReturn(1);
+        $db->method('table')->willReturn($history);
         $db->expects($this->once())->method('tableExists')->willThrowException(new \RuntimeException('SQL secret unknown column status'));
         $inventory = new InventoryService($db);
         $this->assertFalse($inventory->isInstalled());
@@ -129,5 +135,19 @@ final class InventoryReadinessTest extends CIUnitTestCase
             $this->assertSame(InventoryService::SETUP_PENDING_MESSAGE, $e->getMessage());
             $this->assertNull($e->getPrevious());
         }
+    }
+
+    public function testTheReadinessAnswerIsSharedThroughTheCache(): void
+    {
+        cache()->delete('inventory_schema_installed');
+        $first = $this->createMock(BaseConnection::class);
+        $first->expects($this->never())->method('tableExists');
+        $this->assertFalse((new InventoryService($first))->isInstalled());
+
+        // A second request reuses the cached answer instead of re-reading metadata.
+        $second = $this->createMock(BaseConnection::class);
+        $second->expects($this->never())->method('table');
+        $second->expects($this->never())->method('tableExists');
+        $this->assertFalse((new InventoryService($second))->isInstalled());
     }
 }

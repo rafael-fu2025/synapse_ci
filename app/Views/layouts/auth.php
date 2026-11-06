@@ -123,9 +123,12 @@
       height: 1rem;
       padding: 0.5rem;
       background-size: 0.625rem;
-      /* Alert fills stay light in dark mode; do not invert the dismiss glyph. */
       filter: none;
       opacity: 0.75;
+    }
+
+    :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .auth-pane .alert.alert-dismissible .btn-close {
+      filter: invert(1) grayscale(100%) brightness(200%);
     }
 
     .auth-pane .alert-dismissible .btn-close:hover,
@@ -321,22 +324,13 @@
     /* The floating wrapper must not block nearby controls with its padding. */
     .auth-theme-control { pointer-events: none; }
 
+    /* The login toggle reuses the app header's .header-action control, so its
+       surface, border, and icon colors come from the shared theme tokens. */
     .auth-theme-toggle {
       pointer-events: auto;
       padding: 0;
       gap: 0;
       line-height: 1;
-      background-color: #ffffff;
-      border: 1px solid #dee2e6;
-      color: #495057;
-      transition: all 0.15s ease-in-out;
-      cursor: pointer;
-    }
-
-    .auth-theme-toggle:hover {
-      background-color: #f8f9fa;
-      color: var(--fu-maroon, #800000);
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
     }
 
     .auth-theme-toggle > .bi {

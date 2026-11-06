@@ -17,9 +17,11 @@
   <div class="card mb-3"><div class="card-body pt-3">
     <form data-table-filters method="GET" action="<?= esc($baseUrl) ?>" class="row g-3 align-items-end" role="search">
       <input type="hidden" name="tab" value="<?= esc($tab) ?>">
-      <div class="col-md-6"><label for="referralSearch" class="form-label">Search referrals</label><input type="search" name="q" id="referralSearch" class="form-control" maxlength="150" value="<?= esc($filters['q']) ?>" placeholder="Referral code, person ID, name or sender"></div>
-      <div class="col-md-3"><label for="referralPageSize" class="form-label">Per page</label><select name="per_page" id="referralPageSize" class="form-select"><?php foreach ([25,50,100] as $size): ?><option value="<?= $size ?>" <?= (int) $filters['per_page'] === $size ? 'selected' : '' ?>><?= $size ?></option><?php endforeach; ?></select></div>
-      <div class="col-md-3 d-flex gap-2"><button class="btn btn-primary" type="submit">Search</button><a class="btn btn-outline-secondary" data-table-reset href="<?= esc($baseUrl . '?' . http_build_query(['tab' => $tab])) ?>">Reset</a></div>
+      <div class="col-md-4"><label for="referralSearch" class="form-label">Search referrals</label><input type="search" name="q" id="referralSearch" class="form-control" maxlength="150" value="<?= esc($filters['q']) ?>" placeholder="Referral code, person ID, name or sender"></div>
+      <div class="col-md-3"><label for="referralStatus" class="form-label">Status</label><select name="status" id="referralStatus" class="form-select"><?php foreach (['all' => 'All statuses'] + \App\Services\Referrals\ReferralService::LIST_STATUS_LABELS as $key => $label): ?><option value="<?= esc($key) ?>" <?= (string) $filters['status'] === $key ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?></select></div>
+      <div class="col-md-3"><label for="referralUnit" class="form-label">Receiving unit</label><select name="unit" id="referralUnit" class="form-select"><?php foreach (['all' => 'All units'] + \App\Services\Referrals\ReferralService::LIST_UNIT_LABELS as $key => $label): ?><option value="<?= esc($key) ?>" <?= (string) $filters['target_unit'] === $key ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?></select></div>
+      <div class="col-md-2"><label for="referralPageSize" class="form-label">Per page</label><select name="per_page" id="referralPageSize" class="form-select"><?php foreach ([25,50,100] as $size): ?><option value="<?= $size ?>" <?= (int) $filters['per_page'] === $size ? 'selected' : '' ?>><?= $size ?></option><?php endforeach; ?></select></div>
+      <div class="col-md-12 d-flex gap-2"><button class="btn btn-primary" type="submit">Search</button><a class="btn btn-outline-secondary" data-table-reset href="<?= esc($baseUrl . '?' . http_build_query(['tab' => $tab])) ?>">Reset</a></div>
     </form>
   </div></div>
   <p data-table-status role="status" aria-live="polite" class="small text-muted"></p>

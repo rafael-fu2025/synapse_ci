@@ -14,7 +14,7 @@
 <?= $this->section('content') ?>
 <div class="page-dashboard nd-dashboard" data-queue-dashboard="clinic" data-queue-counts-url="<?= site_url('/clinic/dashboard/queue-counts') ?>" data-queue-date="<?= esc(\App\Services\Scheduling\SchedulingClock::today(), 'attr') ?>">
   <!-- Welcome Banner -->
-  <div class="card border-0 shadow-sm text-white p-4 mb-4" style="background: linear-gradient(135deg, var(--fu-maroon, #800000) 0%, #5a0000 100%) !important;">
+  <div class="card border-0 shadow-sm text-white p-4 mb-4 nd-welcome-banner nd-welcome-banner--admin">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div>
         <h2 class="h4 fw-bold mb-1 text-white">Welcome back, <?= esc($user['name'] ?? 'Clinic Staff') ?>!</h2>
@@ -170,7 +170,7 @@
       <!-- Triage Severity Donut Chart -->
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-transparent py-3">
-          <h5 class="card-title mb-0 fw-bold">Patient Triage Breakdown</h5>
+          <h5 class="card-title mb-0 fw-bold">Patient Triage Breakdown &mdash; Today&rsquo;s Active Queue</h5>
         </div>
         <div class="card-body">
           <div id="clinicTriageChart" class="nd-donut-canvas"></div>
@@ -218,79 +218,54 @@
     function initClinicDashboard() {
       var activityTarget = document.querySelector('#clinicActivityChart');
       var triageTarget = document.querySelector('#clinicTriageChart');
-      if (typeof ApexCharts === 'undefined') return;
+      if (typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
 
-      var maroonColor = getComputedStyle(document.documentElement).getPropertyValue('--fu-maroon-light').trim() || '#800000';
-      var mutedColor = '#6c757d';
-      var borderColor = 'rgba(0,0,0,0.06)';
+      var activitySeries = [{
+        name: 'Encounters',
+        data: <?= json_encode($chartSeries) ?>
+      }];
+      var activityCategories = <?= json_encode($chartDays) ?>;
 
-      if (activityTarget && !activityTarget.dataset.rendered) {
-        activityTarget.dataset.rendered = 'true';
-        var activityChart = new ApexCharts(activityTarget, {
-          chart: {
-            type: 'area',
-            height: 300,
-            toolbar: { show: false },
-            zoom: { enabled: false },
-            fontFamily: 'inherit'
-          },
-          series: [{
-            name: 'Encounters',
-            data: <?= json_encode($chartSeries) ?>
-          }],
-          colors: [maroonColor],
-          stroke: { width: 3, curve: 'smooth' },
+      var triageData = [
+        <?= (int) $triageCounts['emergency'] ?>,
+        <?= (int) $triageCounts['urgent'] ?>,
+        <?= (int) $triageCounts['routine'] ?>
+      ];
+      var totalTriage = triageData.reduce(function(a, b) { return a + b; }, 0);
+      if (totalTriage === 0) triageData = [0, 0, 1];
+
+      ChartTheme.create(activityTarget, function(t) {
+        return ChartTheme.base(t, {
+          chart: { type: 'area', height: 300 },
+          series: activitySeries,
+          colors: [t['series-1']],
+          stroke: { width: 3 },
           fill: {
             type: 'gradient',
             gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] }
           },
-          dataLabels: { enabled: false },
-          xaxis: {
-            categories: <?= json_encode($chartDays) ?>,
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            labels: { style: { colors: mutedColor, fontSize: '11px' } }
-          },
-          yaxis: { labels: { style: { colors: mutedColor, fontSize: '11px' } }, min: 0, forceNiceScale: true },
-          grid: { borderColor: borderColor, strokeDashArray: 4 }
+          xaxis: { categories: activityCategories }
         });
-        activityChart.render();
-      }
+      });
 
-      if (triageTarget && !triageTarget.dataset.rendered) {
-        triageTarget.dataset.rendered = 'true';
-        var triageData = [
-          <?= (int) $triageCounts['emergency'] ?>,
-          <?= (int) $triageCounts['urgent'] ?>,
-
-          <?= (int) $triageCounts['routine'] ?>
-        ];
-        var totalTriage = triageData.reduce(function(a, b) { return a + b; }, 0);
-        if (totalTriage === 0) triageData = [0, 0, 1];
-
-        var triageChart = new ApexCharts(triageTarget, {
-          chart: { type: 'donut', height: 230, fontFamily: 'inherit' },
+      ChartTheme.create(triageTarget, function(t) {
+        return ChartTheme.donut(t, {
           series: triageData,
           labels: ['Emergency', 'Urgent', 'Routine'],
-          colors: ['#dc3545', '#ffc107', '#198754'],
-          legend: { show: false },
-          dataLabels: { enabled: false },
+          colors: ChartTheme.themedSlices(t, ChartTheme.statusPalette(t).slice(0, 3)),
           plotOptions: {
             pie: {
               donut: {
-                size: '72%',
                 labels: {
-                  show: true,
-                  name: { show: true, fontSize: '12px' },
-                  value: { show: true, fontSize: '18px', fontWeight: 700 },
                   total: { show: true, label: 'Total Queue', formatter: function() { return totalTriage; } }
                 }
               }
             }
           }
         });
-        triageChart.render();
-      }
+      });
+
+      ChartTheme.initialize();
     }
 
     if (document.readyState === 'loading') {

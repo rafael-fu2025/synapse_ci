@@ -13,12 +13,7 @@
 
 <?= $this->section('content') ?>
 <div class="card border-0 shadow-sm">
-  <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center py-3 gap-2">
-    <div>
-      <h5 class="fw-bold mb-0 text-dark">Counseling Cases <span class="badge bg-light text-muted border fw-normal fs-6 ms-1">Students & Employees</span></h5>
-      <span class="text-muted small">Student counseling cases, employee consultations, and confidential records</span>
-    </div>
-
+  <div class="card-header bg-transparent d-flex flex-wrap align-items-center py-3 gap-2">
     <!-- Filter form -->
     <form method="GET" class="d-flex align-items-center gap-2">
       <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">

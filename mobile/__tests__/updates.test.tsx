@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, Text } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { useIsFocused } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -300,8 +300,19 @@ describe('notification history, polling and read state', () => {
     expect(renderer!.root.findAllByType(Action).some(node => node.props.children === 'Mark all read')).toBe(false);
   });
 
-  it('distinguishes a history error from empty and retries the same source', async () => {
-    mockRequest.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(notificationPage(1, 1, [], 0));
+  it('spans the unread highlight across the full device width', async () => {
+    mockRequest.mockResolvedValue(notificationPage(1, 1, [notification], 1));
+    await render(<NotificationsScreen />);
+    // The list itself must cancel the Screen's 18px gutter; otherwise the unread
+    // tint and its divider stop short of the device edges.
+    const list = renderer!.root.findByType(FlatList);
+    expect(StyleSheet.flatten(list.props.style)).toMatchObject({ marginHorizontal: -18 });
+    const row = renderer!.root.findAll(node =>
+      node.props.accessibilityLabel?.startsWith(notification.title) && typeof node.props.onPress === 'function')[0];
+    expect(StyleSheet.flatten(row.props.style).backgroundColor).toBeTruthy();
+  });
+
+  it('distinguishes a history error from empty and retries the same source', async () => {    mockRequest.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(notificationPage(1, 1, [], 0));
     await render(<NotificationsScreen />);
     expect(text('Could not load notifications.')).toBe(true);
     expect(text('Nothing yet')).toBe(false);
@@ -392,5 +403,63 @@ describe('notification history, polling and read state', () => {
     expect(mockRequest).toHaveBeenCalledTimes(calls);
     await refocus(true);
     expect(mockRequest).toHaveBeenCalledTimes(calls + 1);
+  });
+});
+
+describe('notification deep links', () => {
+  const rowFor = (title: string) => renderer!.root.findAll(node =>
+    node.props.accessibilityLabel?.startsWith(title) && typeof node.props.onPress === 'function')[0];
+
+  it('opens the announcement, survey and appointment a notice is about', async () => {
+    const announcement = { ...notification, id: 82, title: 'New announcement', target: { kind: 'announcement', id: 41 } };
+    const survey = { ...notification, id: 83, title: 'New survey', target: { kind: 'survey', id: 7 } };
+    const appointment = { ...notification, id: 84, title: 'Appointment confirmed', target: { kind: 'appointment', id: 42 } };
+    mockRequest.mockImplementation((path: string) => {
+      if (path.endsWith('/read')) { return Promise.resolve(undefined); }
+      return Promise.resolve(notificationPage(1, 1, [announcement, survey, appointment], 3));
+    });
+    await render(<NotificationsScreen />);
+
+    act(() => { rowFor('New announcement').props.onPress(); });
+    await settle();
+    expect(mockNavigate).toHaveBeenCalledWith('AnnouncementDetail', { id: 41 });
+    expect(mockRequest).toHaveBeenCalledWith('api/v1/notifications/82/read', { method: 'POST' });
+
+    act(() => { rowFor('New survey').props.onPress(); });
+    await settle();
+    expect(mockNavigate).toHaveBeenCalledWith('SurveyForm', { id: 7 });
+    expect(mockRequest).toHaveBeenCalledWith('api/v1/notifications/83/read', { method: 'POST' });
+
+    act(() => { rowFor('Appointment confirmed').props.onPress(); });
+    await settle();
+    expect(mockNavigate).toHaveBeenCalledWith('AppTabs', {
+      screen: 'Visits',
+      params: { screen: 'AppointmentDetail', params: { id: 42 }, initial: false },
+    });
+    expect(mockRequest).toHaveBeenCalledWith('api/v1/notifications/84/read', { method: 'POST' });
+  });
+
+  it('keeps an already read notice openable without repeating the read mutation', async () => {
+    const read = { ...notification, id: 85, read_at: '2026-10-26T09:00:00Z', target: { kind: 'announcement', id: 41 } };
+    mockRequest.mockResolvedValue(notificationPage(1, 1, [read], 0));
+    await render(<NotificationsScreen />);
+    const row = rowFor(notification.title);
+    expect(row.props.disabled).toBe(false);
+    expect(row.props.accessibilityLabel).toContain('Opens the related item');
+    act(() => { row.props.onPress(); });
+    await settle();
+    expect(mockNavigate).toHaveBeenCalledWith('AnnouncementDetail', { id: 41 });
+    expect(mockRequest.mock.calls.some(([path]) => path.endsWith('/read'))).toBe(false);
+  });
+
+  it('never navigates for a notice without a mobile surface', async () => {
+    mockRequest.mockResolvedValue(notificationPage(1, 1));
+    await render(<NotificationsScreen />);
+    const row = rowFor(notification.title);
+    expect(row.props.accessibilityLabel).toContain('Mark as read');
+    act(() => { row.props.onPress(); });
+    await settle();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockRequest).toHaveBeenCalledWith('api/v1/notifications/81/read', { method: 'POST' });
   });
 });

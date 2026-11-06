@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Referrals;
 
+use App\Libraries\LikePattern;
 use App\Libraries\TablePage;
 use App\Models\PersonModel;
 use App\Services\Clinic\EncounterService;
@@ -15,10 +16,29 @@ use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\Guidance\GuidanceCaseService;
 use Config\Database;
+use InvalidArgumentException;
 use RuntimeException;
 
 final class ReferralService
 {
+    /** Referral lifecycle vocabulary for list filtering (never the medicine vocabulary). */
+    public const LIST_STATUSES = ['all', 'submitted', 'acknowledged', 'under_review', 'converted_to_case', 'closed'];
+    /** Receiving units a referral can be directed to. */
+    public const LIST_UNITS = ['all', 'clinic', 'guidance'];
+    /** How each referral status is worded, shared by the list badge and the filter control. */
+    public const LIST_STATUS_LABELS = [
+        'submitted' => 'Submitted',
+        'acknowledged' => 'Acknowledged',
+        'under_review' => 'Under review',
+        'converted_to_case' => 'Case linked',
+        'closed' => 'Closed',
+    ];
+    /** How each receiving unit is worded in the filter control. */
+    public const LIST_UNIT_LABELS = [
+        'clinic' => 'University Clinic',
+        'guidance' => 'Guidance & Counseling',
+    ];
+
     private ReferralModel $referralModel;
     private PersonModel $personModel;
     private GuidanceCaseService $caseService;
@@ -268,7 +288,8 @@ final class ReferralService
         if (!in_array($tab, ['incoming', 'sent', 'history'], true)) {
             throw new RuntimeException('Invalid referral tab.', 422);
         }
-        $page = TablePage::fromQuery($query);
+        $page = TablePage::fromQuery($query, self::LIST_STATUSES, 'referral');
+        $targetUnit = self::listUnit($query);
         $counts = [];
         foreach (['incoming', 'sent', 'history'] as $name) {
             $counts[$name] = $this->listBuilder($unit, $name)->countAllResults();
@@ -277,11 +298,17 @@ final class ReferralService
         if ($page->kind !== 'all') {
             $builder->where('p.kind', $page->kind);
         }
+        if ($page->status !== 'all') {
+            $builder->where('r.status', $page->status);
+        }
+        if ($targetUnit !== 'all') {
+            $builder->where('r.target_module', $targetUnit);
+        }
         if ($page->q !== '') {
-            $builder->groupStart()->like('r.referral_code', $page->q)->orLike('p.first_name', $page->q)
-                ->orLike('p.last_name', $page->q)->orLike('p.mis_id', $page->q)
-                ->orLike('u.username', $page->q)->orLike('ip.first_name', $page->q)
-                ->orLike('ip.last_name', $page->q)->groupEnd();
+            LikePattern::applyGroup($builder, [
+                'r.referral_code', 'p.first_name', 'p.last_name', 'p.mis_id',
+                'u.username', 'ip.first_name', 'ip.last_name',
+            ], $page->q);
         }
         $filtered = (clone $builder)->countAllResults();
         $pagination = $page->metadata($counts[$tab], $filtered);
@@ -291,7 +318,34 @@ final class ReferralService
         $rows = array_map(fn (array $row): array => $this->visibleReferral($row, $fresh), $rows);
         return ['referrals' => $rows, 'pagination' => $pagination, 'counts' => $counts,
             'filters' => ['unit' => $unit, 'tab' => $tab, 'q' => $page->q, 'kind' => $page->kind,
-                'per_page' => $page->perPage]];
+                'status' => $page->status, 'target_unit' => $targetUnit, 'per_page' => $page->perPage,
+                'status_options' => self::LIST_STATUSES, 'unit_options' => self::LIST_UNITS]];
+    }
+
+    /**
+     * The case-facing name is "unit"; the app's own vocabulary for the same column is
+     * "target_module". Both select the unit a referral is directed to.
+     */
+    private static function listUnit(array $query): string
+    {
+        foreach (['unit', 'target_module'] as $key) {
+            if (!array_key_exists($key, $query)) {
+                continue;
+            }
+            $value = $query[$key];
+            if (!is_string($value)) {
+                throw new InvalidArgumentException('Invalid referral unit.', 422);
+            }
+            $value = strtolower(trim($value));
+            if ($value === '') {
+                return 'all';
+            }
+            if (!in_array($value, self::LIST_UNITS, true)) {
+                throw new InvalidArgumentException('Invalid referral unit.', 422);
+            }
+            return $value;
+        }
+        return 'all';
     }
 
     /** Clinical identifiers are capabilities, not part of the shared referral summary. */

@@ -72,6 +72,11 @@ yarn-error.log
 # testing
 /coverage
 
+# Firebase project configuration. These identify the Firebase project and are
+# downloaded per machine; the service account key never belongs in the repository.
+google-services.json
+GoogleService-Info.plist
+
 # Yarn
 .yarn/*
 !.yarn/patches

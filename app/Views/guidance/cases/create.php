@@ -9,16 +9,21 @@
     <!-- 1. Client Selection (Student or Employee) -->
     <div class="mb-4">
       <label class="form-label fw-semibold">1. Client Identification (Student or Employee)</label>
-      <div class="input-group mb-2">
+      <div class="input-group mb-2" x-show="!selectedPerson">
         <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
         <input type="text"
                class="form-control"
-               placeholder="Search Student or Employee ID / Name..."
+               placeholder="Search Student or Employee ID / Name..." maxlength="150" autocomplete="off"
                x-model="searchTerm"
-               @input.debounce.300ms="searchPatient()">
+               @input="patientInput()" @input.debounce.300ms="searchPatient()">
       </div>
 
       <!-- Dropdown search results -->
+      <div role="status" aria-live="polite" class="small text-muted mb-2" x-show="!selectedPerson" x-cloak>
+        <span x-show="searching">Searching local directory...</span>
+        <span x-show="searchComplete && !searching && !searchError && results.length === 0">No matching local records.</span>
+        <span x-show="searchError" class="text-danger"><span x-text="searchError"></span> <button type="button" class="btn btn-link btn-sm p-0" @click="searchPatient()">Retry</button></span>
+      </div>
       <div x-show="results.length > 0 && !selectedPerson" class="list-group mb-2 shadow-sm border" style="max-height: 180px; overflow-y: auto;">
         <template x-for="p in results" :key="p.id">
           <button type="button"
@@ -39,7 +44,7 @@
       </div>
 
       <!-- Selected client card -->
-      <div x-show="selectedPerson" class="card border-primary-subtle bg-primary-subtle p-3 mb-2" style="display: none;">
+      <div x-show.important="selectedPerson" class="card border-primary-subtle bg-primary-subtle p-3 mb-2" style="display: none;">
         <div class="d-flex justify-content-between align-items-center">
           <div>
             <span class="badge text-uppercase"
@@ -48,7 +53,7 @@
             <strong class="d-block text-dark mt-1" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name + (selectedPerson.middle_name ? ' ' + selectedPerson.middle_name : '')) : ''"></strong>
             <small class="text-muted" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></small>
           </div>
-          <button type="button" class="btn btn-sm btn-link text-danger p-0" @click="selectedPerson = null">Change</button>
+          <button type="button" class="btn btn-sm btn-link text-danger p-0" @click="changePerson()">Change</button>
         </div>
       </div>
       <div class="form-text" x-show="!selectedPerson">Counseling is available to both Foundation University students and employees (faculty & staff).</div>

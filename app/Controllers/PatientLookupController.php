@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\LikePattern;
 use App\Models\PersonModel;
 use App\Services\AuthenticatedUser;
 
@@ -31,11 +32,10 @@ final class PatientLookupController extends BaseController
             return $this->response->setStatusCode(422)->setJSON(['message' => 'q must be a string of 2 to 150 characters.']);
         }
 
-        $results = (new PersonModel())->scoped((int) $actor['tenant_id'])
-            ->select('id, mis_id, kind, first_name, middle_name, last_name')
-            ->groupStart()->like('first_name', trim($query))->orLike('last_name', trim($query))
-            ->orLike('mis_id', trim($query))->groupEnd()
-            ->orderBy('last_name', 'ASC')->orderBy('first_name', 'ASC')->findAll(10);
+        $results = (new PersonModel())->allowCallbacks(false)->scoped((int) $actor['tenant_id'])
+            ->select('id, mis_id, kind, first_name, middle_name, last_name');
+        LikePattern::applyGroup($results->builder(), ['first_name', 'last_name', 'mis_id'], trim($query));
+        $results = $results->orderBy('last_name', 'ASC')->orderBy('first_name', 'ASC')->findAll(10);
 
         return $this->response->setJSON(['results' => $results]);
     }

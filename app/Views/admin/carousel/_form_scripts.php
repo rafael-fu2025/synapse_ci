@@ -21,12 +21,6 @@
     alertBox.classList.remove('d-none', 'alert-success', 'alert-danger');
     alertBox.classList.add(success ? 'alert-success' : 'alert-danger');
   }
-  function localPath(value) {
-    const path = value.trim().replace(/\\/g, '/');
-    const match = /^(assets\/img\/brand|uploads\/carousel)\/([A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*)$/.exec(path);
-    if (!match || path.length > 255 || (match[1] === 'uploads/carousel' && match[2].includes('/'))) return null;
-    return path;
-  }
   function setProgress(value) {
     const rounded = Math.min(100, Math.max(0, Math.round(value)));
     bar.style.width = rounded + '%';
@@ -34,27 +28,19 @@
     percent.textContent = rounded + '%';
   }
   function validateImages() {
-    let hasLight = false;
-    ['light', 'dark'].forEach(function(slot) {
-      const input = form.querySelector('#' + slot + '_file');
-      const pathField = form.querySelector('#' + slot + '_path');
-      const validPath = pathField && localPath(pathField.value);
-      const remove = slot === 'dark' && document.getElementById('remove_dark')?.checked;
-      if (slot === 'light' && (input.files.length > 0 || validPath)) hasLight = true;
-
-      if (pathField && pathField.value.trim() && !validPath) pathField.setCustomValidity('Choose a safe local image path from an approved directory.');
-      else if (pathField) pathField.setCustomValidity('');
-      if (remove && pathField) pathField.value = '';
-    });
     const light = form.querySelector('#light_file');
-    const lightPath = form.querySelector('#light_path');
     const editForm = <?= !empty($slide['id']) ? 'true' : 'false' ?>;
-    if (!editForm && !light.files.length && !localPath(lightPath.value)) light.setCustomValidity('Choose an image or enter an approved local image path.');
+    if (!editForm && !light.files.length) light.setCustomValidity('Choose a light mode image to upload.');
     else light.setCustomValidity('');
   }
-  form.querySelectorAll('#light_path, #dark_path, #remove_dark').forEach(control => {
-    control?.addEventListener('input', validateImages);
-    control?.addEventListener('change', validateImages);
+  const removeDark = form.querySelector('#remove_dark');
+  removeDark?.addEventListener('change', function() {
+    if (removeDark.checked) {
+      const dark = form.querySelector('#dark_file');
+      dark.value = '';
+      dark.dispatchEvent(new Event('carousel:restore-current'));
+    }
+    validateImages();
   });
   form.querySelectorAll('.upload-dropzone').forEach(function(zone) {
     const input = document.getElementById(zone.dataset.input);
@@ -145,6 +131,10 @@
       selectFile(files[0]);
     });
     input.addEventListener('change', () => { selectFile(input.files[0]); validateImages(); });
+    input.addEventListener('carousel:restore-current', function() {
+      release();
+      render(current, 'Current image', false);
+    });
     render(current, 'Current image', false);
   });
 

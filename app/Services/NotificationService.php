@@ -114,7 +114,7 @@ final class NotificationService
             throw new RuntimeException('Invalid referral notification.');
         }
         $table = $db->protectIdentifiers($db->prefixTable('referrals'));
-        $stored = $db->query("SELECT id, tenant_id, source_module, target_module, status FROM {$table} WHERE tenant_id=? AND id=? FOR UPDATE",
+        $stored = $db->query("SELECT id, tenant_id, patient_person_id, source_module, target_module, status FROM {$table} WHERE tenant_id=? AND id=? FOR UPDATE",
             [$referral['tenant_id'], $referral['id']])->getRowArray();
         if ($stored === null || $stored['status'] !== 'submitted' || ($referral['status'] ?? null) !== 'submitted'
             || !in_array($stored['target_module'], ['clinic', 'guidance'], true)
@@ -143,6 +143,27 @@ final class NotificationService
                 throw new RuntimeException('Unable to save referral notification.');
             }
             $inserted[] = (int) $db->insertID();
+        }
+        // Address the stored patient, never an identity supplied by the caller. No account
+        // or staff grant is required to own a personal notice.
+        $person = $db->table('people')->where('tenant_id', $stored['tenant_id'])
+            ->where('id', $stored['patient_person_id'])->where('deleted_at', null)->get()->getRowArray();
+        if ($person !== null && $person['kind'] === 'student') {
+            $key = ['tenant_id' => $stored['tenant_id'], 'referral_id' => $stored['id'], 'type' => 'student_referral'];
+            $existing = $db->table('notifications')->where($key)->get()->getRowArray();
+            if ($existing !== null) {
+                if ((int) $existing['recipient_person_id'] !== (int) $stored['patient_person_id']
+                    || $existing['recipient_user_id'] !== null || $existing['appointment_id'] !== null
+                    || $existing['appointment_version'] !== null) {
+                    throw new RuntimeException('Invalid student referral notification shape.');
+                }
+            } else {
+                if (!$db->table('notifications')->insert($key + ['recipient_person_id' => $stored['patient_person_id'],
+                    'recipient_user_id' => null, 'created_at' => gmdate('Y-m-d H:i:s'), 'read_at' => null])) {
+                    throw new RuntimeException('Unable to save student referral notification.');
+                }
+                $inserted[] = (int) $db->insertID();
+            }
         }
         return $inserted;
     }
@@ -206,7 +227,8 @@ final class NotificationService
         $workflowAvailable = WorkflowNotifications::available($db);
         $query = $this->inbox($scope);
         if ($unreadOnly) $query->where('read_at', null);
-        $rows = $query->select('id,type,created_at,read_at')
+        $targetColumns = $this->targetColumns();
+        $rows = $query->select('id,type,created_at,read_at' . ($targetColumns === [] ? '' : ',' . implode(',', $targetColumns)))
             ->select($workflowAvailable ? "(SELECT event_kind FROM {$workflow} WHERE tenant_id={$notifications}.tenant_id AND id={$notifications}.workflow_event_id) AS workflow_kind" : 'NULL AS workflow_kind', false)
             ->select($workflowAvailable ? "(SELECT unit FROM {$workflow} WHERE tenant_id={$notifications}.tenant_id AND id={$notifications}.workflow_event_id) AS workflow_unit" : 'NULL AS workflow_unit', false)
             ->select($this->teamsAvailable() ? 'team_unit' : 'NULL AS team_unit', false)
@@ -218,56 +240,76 @@ final class NotificationService
             ->orderBy('id', 'DESC')->limit($limit, $offset)->get()->getResultArray();
         $unread = $this->inbox($scope)->select('id')->where('read_at', null)->limit(100)->get()->getResultArray();
         $destinations = self::destinationUrls();
-        return ['items' => array_map(static function (array $row) use ($destinations): array {
-            $row['created_at'] = NotificationTime::forDisplay($row['created_at']);
-            $row['read_at'] = NotificationTime::forDisplay($row['read_at']);
-            if ($row['type'] === 'workflow_alert') {
-                $notice = WorkflowNotifications::presentation($row['workflow_kind'], $row['workflow_unit'], $destinations);
-                return ['id' => (int) $row['id'], 'title' => $notice['title'], 'message' => $notice['message'],
-                    'created_at' => $row['created_at'], 'read_at' => $row['read_at'], 'url' => $notice['url']];
-            }
-            return [
-            'id' => (int) $row['id'],
-            'title' => match ($row['type']) {
-                            'team_chat_mentioned' => 'Team chat mention',
-                            'referral_received' => 'Incoming referral',
-                            'announcement_published' => 'New announcement',
-                            'survey_published' => 'New survey',
-                            default => self::TEAM_EVENT_TITLES[$row['type']] ?? self::TEAM_TASK_TITLES[$row['type']] ?? 'Appointment confirmed',
-                        },
-            'message' => match ($row['type']) {
-                'team_chat_mentioned' => 'You were mentioned in your team chat. Open the conversation to view the message.',
-                'referral_received' => 'A new referral is available in your incoming referrals inbox.',
-                'announcement_published' => 'A campus announcement is available in your portal.',
-                'survey_published' => 'An identified Guidance survey is available in your portal.',
-                'team_event_added' => 'You have been included in a team event. Open the team calendar for details.',
-                'team_event_removed' => 'Your participation in a team event has been removed. Open the team calendar for details.',
-                'team_event_updated' => 'A team event has changed. Open the team calendar for details.',
-                'team_event_cancelled' => 'A team event has been cancelled. Open the team calendar for details.',
-                'team_task_assigned' => 'A team task has been assigned to you. Open Teams for details.',
-                'team_task_unassigned' => 'A team task is no longer assigned to you. Open Teams for details.',
-                'team_task_updated' => 'A team task has changed. Open Teams for details.',
-                'team_task_status' => 'A team task status has changed. Open Teams for details.',
-                'team_task_commented' => 'A comment was added to a team task. Open Teams for details.',
-                default => 'Your appointment has been confirmed. Open your portal to see details.',
-            },
-            'created_at' => $row['created_at'], 'read_at' => $row['read_at'],
-            'url' => match ($row['type']) {
-                'referral_received' => $destinations[$row['referral_status'] === 'closed'
-                                    ? ($row['target_module'] === 'clinic' ? 'clinicReferralHistory' : 'guidanceReferralHistory')
-                                    : ($row['target_module'] === 'clinic' ? 'clinicReferrals' : 'guidanceReferrals')],
-                'team_chat_mentioned' => $destinations[$row['chat_unit'] . 'TeamChat']
-                    . '?message=' . (int) $row['chat_message_id'] . '#chat-message-' . (int) $row['chat_message_id'],
-                'announcement_published' => $destinations['announcements'],
-                'survey_published' => $destinations['surveys'],
-                'team_event_added', 'team_event_removed', 'team_event_updated', 'team_event_cancelled'
-                    => $destinations[$row['team_unit'] . 'TeamCalendar'],
-                'team_task_assigned', 'team_task_unassigned', 'team_task_updated', 'team_task_status', 'team_task_commented'
-                    => $destinations[$row['team_unit'] . 'Teams'],
-                default => $destinations['portal'],
-            },
-            ];
-        }, $rows), 'unread_count' => count($unread)];
+        return ['items' => array_map(
+            static fn (array $row): array => self::project($row, $destinations),
+            $rows
+        ), 'unread_count' => count($unread)];
+    }
+
+    /**
+     * Project one inbox row into the client-facing notice.
+     *
+     * The projection carries no instance state on purpose: the mapper that
+     * calls it is a static closure, which has no `$this` to bind.
+     *
+     * @param array<string, mixed> $row
+     * @param array<string, string> $destinations
+     * @return array<string, mixed>
+     */
+    private static function project(array $row, array $destinations): array
+    {
+        $row['created_at'] = NotificationTime::forDisplay($row['created_at']);
+        $row['read_at'] = NotificationTime::forDisplay($row['read_at']);
+        if ($row['type'] === 'workflow_alert') {
+            $notice = WorkflowNotifications::presentation($row['workflow_kind'], $row['workflow_unit'], $destinations);
+            return ['id' => (int) $row['id'], 'title' => $notice['title'], 'message' => $notice['message'],
+                'created_at' => $row['created_at'], 'read_at' => $row['read_at'], 'url' => $notice['url'], 'target' => null];
+        }
+        return [
+        'id' => (int) $row['id'],
+        'title' => match ($row['type']) {
+                        'team_chat_mentioned' => 'Team chat mention',
+                        'referral_received' => 'Incoming referral',
+                        'student_referral' => 'Referral submitted',
+                        'announcement_published' => 'New announcement',
+                        'survey_published' => 'New survey',
+                        default => self::TEAM_EVENT_TITLES[$row['type']] ?? self::TEAM_TASK_TITLES[$row['type']] ?? 'Appointment confirmed',
+                    },
+        'message' => match ($row['type']) {
+            'team_chat_mentioned' => 'You were mentioned in your team chat. Open the conversation to view the message.',
+            'referral_received' => 'A new referral is available in your incoming referrals inbox.',
+            'student_referral' => 'A referral has been submitted for you. The receiving office will contact you about next steps.',
+            'announcement_published' => 'A campus announcement is available in your portal.',
+            'survey_published' => 'An identified Guidance survey is available in your portal.',
+            'team_event_added' => 'You have been included in a team event. Open the team calendar for details.',
+            'team_event_removed' => 'Your participation in a team event has been removed. Open the team calendar for details.',
+            'team_event_updated' => 'A team event has changed. Open the team calendar for details.',
+            'team_event_cancelled' => 'A team event has been cancelled. Open the team calendar for details.',
+            'team_task_assigned' => 'A team task has been assigned to you. Open Teams for details.',
+            'team_task_unassigned' => 'A team task is no longer assigned to you. Open Teams for details.',
+            'team_task_updated' => 'A team task has changed. Open Teams for details.',
+            'team_task_status' => 'A team task status has changed. Open Teams for details.',
+            'team_task_commented' => 'A comment was added to a team task. Open Teams for details.',
+            default => 'Your appointment has been confirmed. Open your portal to see details.',
+        },
+        'created_at' => $row['created_at'], 'read_at' => $row['read_at'],
+        'target' => self::target($row),
+        'url' => match ($row['type']) {
+            'student_referral' => null,
+            'referral_received' => $destinations[$row['referral_status'] === 'closed'
+                                ? ($row['target_module'] === 'clinic' ? 'clinicReferralHistory' : 'guidanceReferralHistory')
+                                : ($row['target_module'] === 'clinic' ? 'clinicReferrals' : 'guidanceReferrals')],
+            'team_chat_mentioned' => $destinations[$row['chat_unit'] . 'TeamChat']
+                . '?message=' . (int) $row['chat_message_id'] . '#chat-message-' . (int) $row['chat_message_id'],
+            'announcement_published' => $destinations['announcements'],
+            'survey_published' => $destinations['surveys'],
+            'team_event_added', 'team_event_removed', 'team_event_updated', 'team_event_cancelled'
+                => $destinations[$row['team_unit'] . 'TeamCalendar'],
+            'team_task_assigned', 'team_task_unassigned', 'team_task_updated', 'team_task_status', 'team_task_commented'
+                => $destinations[$row['team_unit'] . 'Teams'],
+            default => $destinations['portal'],
+        },
+        ];
     }
 
     public function markRead(int $id): void
@@ -373,6 +415,38 @@ final class NotificationService
         foreach (array_intersect($fields, $present) as $field) $query->where($field, null);
     }
 
+    /**
+     * Source columns for the mobile deep-link target. Engagement columns arrive with a
+     * later migration, so only select what this deployment actually has.
+     *
+     * @return list<string>
+     */
+    private function targetColumns(): array
+    {
+        $present = Database::connect()->getFieldNames('notifications');
+        return array_values(array_intersect(['appointment_id', 'announcement_id', 'survey_id'], $present));
+    }
+
+    /**
+     * The record a native client can open for this notice. Referrals, team events,
+     * team tasks, chat mentions and workflow alerts have no mobile surface yet and
+     * report a null target rather than a destination the client cannot honour.
+     */
+    private static function target(array $row): ?array
+    {
+        $kind = match ($row['type'] ?? '') {
+            'appointment_confirmed' => 'appointment',
+            'announcement_published' => 'announcement',
+            'survey_published' => 'survey',
+            default => null,
+        };
+        if ($kind === null) { return null; }
+        $column = $kind . '_id';
+        if (!array_key_exists($column, $row)) { return null; }
+        $id = filter_var($row[$column], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        return $id === false ? null : ['kind' => $kind, 'id' => $id];
+    }
+
     private function inbox(array $scope): BaseBuilder
     {
         $db = Database::connect();
@@ -397,6 +471,16 @@ final class NotificationService
                     ->groupStart()->where('r.target_module', 'clinic')->whereIn('u.role', self::departmentRoles('clinic'))->groupEnd()
                     ->orGroupStart()->where('r.target_module', 'guidance')->whereIn('u.role', self::departmentRoles('guidance'))->groupEnd()
                 ->groupEnd()->getCompiledSelect();
+            $ownedReferral = $db->table('referrals r')->select('1', false)
+                ->join('people p', 'p.tenant_id=r.tenant_id AND p.id=r.patient_person_id AND p.deleted_at IS NULL')
+                ->where('r.tenant_id', $scope['tenant_id'])->where('r.patient_person_id', $scope['recipient_person_id'])
+                ->where("r.id={$notifications}.referral_id", null, false)->getCompiledSelect();
+            $query->orGroupStart()->where('type', 'student_referral')
+                ->where('recipient_person_id', $scope['recipient_person_id'])->where('recipient_user_id', null)
+                ->where('referral_id >', 0)->where("EXISTS ({$ownedReferral})", null, false);
+            $this->nullReferences($query, ['appointment_id', 'appointment_version', 'announcement_id', 'survey_id',
+                'workflow_event_id', 'team_unit', 'team_event_id', 'team_task_id', 'team_version', 'team_comment_id']);
+            $query->groupEnd();
             $announcements = EngagementNotifications::visibleQuery($scope, 'announcement');
             $surveys = EngagementNotifications::visibleQuery($scope, 'survey');
             $query->orGroupStart()->where('type', 'appointment_confirmed')

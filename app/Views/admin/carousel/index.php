@@ -1,23 +1,22 @@
 <?= $this->extend('layouts/app') ?>
 
+<?= $this->section('page_actions') ?>
+<a href="<?= site_url('/admin/carousel/create') ?>"
+   class="btn btn-primary btn-sm" data-app-modal-open>
+  <i class="bi bi-plus-circle me-1"></i> Add Carousel Slide
+</a>
+<?= $this->endSection() ?>
+
 <?= $this->section('content') ?>
 
 <div class="row g-4 carousel-admin">
 
   <!-- Full-width: Slide List only. Add opens a modal. -->
   <div class="col-12">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <a href="<?= site_url('/admin/carousel/create') ?>"
-         class="btn btn-primary btn-sm" data-app-modal-open>
-        <i class="bi bi-plus-circle me-1"></i> Add Carousel Slide
-      </a>
-    </div>
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-transparent d-flex justify-content-between align-items-center gap-2 py-3">
         <div>
-          <h5 class="fw-bold mb-0 text-dark">Carousel Slides</h5>
           <span class="text-muted small">Drag rows or use Move up / Move down to reorder. Inactive slides are hidden from the login screen.</span>
-
         </div>
         <span class="badge bg-primary-subtle text-primary"><?= count($slides) ?> total</span>
       </div>
@@ -32,24 +31,24 @@
           <ul class="list-group list-group-flush" id="slideList">
             <?php foreach ($slides as $position => $slide): ?>
               <?php $slideTitle = $slide['title'] ?: 'Untitled Slide'; ?>
-              <li class="list-group-item d-flex align-items-center gap-3 py-3 slide-row" data-id="<?= esc($slide['id']) ?>" draggable="true">
-                <span class="drag-handle text-muted" style="cursor: grab;" title="Drag to reorder">
+              <?php $isProtected = $protectedSlides[(int) $slide['id']] ?? false; ?>
+              <li class="list-group-item d-flex align-items-center gap-3 py-3 slide-row<?= (int) $slide['is_active'] === 1 ? '' : ' slide-row-inactive' ?>" data-id="<?= esc($slide['id']) ?>" draggable="true">
+                <span class="drag-handle text-muted" style="cursor: grab;" data-bs-toggle="tooltip" data-bs-title="Drag to reorder">
                   <i class="bi bi-grip-vertical fs-5"></i>
                 </span>
 
-                <div class="d-flex gap-2 flex-shrink-0 slide-thumbnails">
-                  <!-- Light thumb -->
-                  <div class="slide-thumb" title="Light mode variant">
+                <?php $hasDarkVariant = ! empty($slide['dark_image']); ?>
+                <div class="d-flex flex-shrink-0 slide-thumbnails<?= $hasDarkVariant ? '' : ' slide-thumbnails-single' ?>">
+                  <!-- Light thumb: front card in light mode, peeks out behind in dark mode -->
+                  <div class="slide-thumb slide-thumb-light" data-bs-toggle="tooltip" data-bs-title="Light mode variant">
                     <img src="<?= base_url(esc($slide['light_image'])) ?>" alt="Light" onerror="this.src='<?= base_url('assets/img/favicon.png') ?>'">
                   </div>
-                  <!-- Dark thumb -->
-                  <div class="slide-thumb slide-thumb-dark" title="Dark mode variant">
-                    <?php if (! empty($slide['dark_image'])): ?>
+                  <!-- Dark thumb: front card in dark mode, peeks out behind in light mode -->
+                  <?php if ($hasDarkVariant): ?>
+                    <div class="slide-thumb slide-thumb-dark" data-bs-toggle="tooltip" data-bs-title="Dark mode variant">
                       <img src="<?= base_url(esc($slide['dark_image'])) ?>" alt="Dark" onerror="this.src='<?= base_url('assets/img/favicon.png') ?>'">
-                    <?php else: ?>
-                      <span class="text-muted small d-flex align-items-center justify-content-center h-100">none</span>
-                    <?php endif; ?>
-                  </div>
+                    </div>
+                  <?php endif; ?>
                 </div>
 
                 <div class="flex-grow-1 slide-copy">
@@ -58,48 +57,72 @@
                   <span class="badge <?= $slide['fit_mode'] === 'cover' ? 'bg-info-subtle text-info' : 'bg-warning-subtle text-warning' ?> mt-1">
                     <?= $slide['fit_mode'] === 'cover' ? 'Full Cover' : 'Contained + Blur' ?>
                   </span>
+                  <?php if ($isProtected): ?>
+                    <span class="badge bg-dark-subtle text-dark mt-1">Default image &middot; protected</span>
+                  <?php endif; ?>
                   <?php if ((int) $slide['is_active'] !== 1): ?>
                     <span class="badge bg-secondary-subtle text-secondary mt-1">Hidden</span>
                   <?php endif; ?>
                 </div>
 
-                <div class="d-flex align-items-center gap-2 flex-shrink-0 slide-actions">
+                <div class="d-flex align-items-center gap-1 flex-shrink-0 slide-actions">
                   <div class="d-flex gap-1 slide-reorder" role="group" aria-label="Reorder <?= esc($slideTitle, 'attr') ?>">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-slide-move="up"
-                            aria-label="Move up: <?= esc($slideTitle, 'attr') ?>" title="Move up" <?= $position === 0 ? 'disabled' : '' ?>>
+                    <button type="button" class="slide-btn" data-slide-move="up"
+                            aria-label="Move up: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Move up" <?= $position === 0 ? 'disabled' : '' ?>>
                       <i class="bi bi-arrow-up" aria-hidden="true"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-slide-move="down"
-                            aria-label="Move down: <?= esc($slideTitle, 'attr') ?>" title="Move down" <?= $position === count($slides) - 1 ? 'disabled' : '' ?>>
+                    <button type="button" class="slide-btn" data-slide-move="down"
+                            aria-label="Move down: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Move down" <?= $position === count($slides) - 1 ? 'disabled' : '' ?>>
                       <i class="bi bi-arrow-down" aria-hidden="true"></i>
                     </button>
                   </div>
-                  <a href="<?= site_url('/admin/carousel/' . $slide['id'] . '/edit') ?>"
-                     class="btn btn-sm btn-outline-primary"
-                     data-app-modal-open
-                     title="Edit slide" aria-label="Edit slide: <?= esc($slideTitle, 'attr') ?>">
-                                         <span class="d-none d-xl-inline">Edit</span>
-                    <i class="bi bi-pencil"></i>
-                  </a>
+                  <?php if ($isProtected): ?>
+                    <span class="slide-btn slide-btn-primary" aria-disabled="true"
+                          data-bs-toggle="tooltip" data-bs-title="The permanent default image cannot be edited">
+                      <i class="bi bi-lock" aria-hidden="true"></i>
+                    </span>
+                  <?php else: ?>
+                    <a href="<?= site_url('/admin/carousel/' . $slide['id'] . '/edit') ?>"
+                       class="slide-btn slide-btn-primary"
+                       data-app-modal-open
+                       aria-label="Edit slide: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Edit slide">
+                      <i class="bi bi-pencil" aria-hidden="true"></i>
+                    </a>
+                  <?php endif; ?>
 
-                  <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/toggle') ?>" method="POST" class="d-inline" data-background-submit>
-                    <?= csrf_field() ?>
-                    <button type="submit" class="btn btn-sm <?= (int) $slide['is_active'] === 1 ? 'btn-outline-success' : 'btn-outline-secondary' ?>" title="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>"
-                            aria-label="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>: <?= esc($slideTitle, 'attr') ?>">
-                      <i class="bi <?= (int) $slide['is_active'] === 1 ? 'bi-eye' : 'bi-eye-slash' ?>"></i>
-                    </button>
-                  </form>
+                  <?php
+                  // The default image stays visible; only the platform owner may hide it.
+                  $canToggle = !$isProtected || (int) $slide['is_active'] !== 1 || $isSuperadmin;
+                  ?>
+                  <?php if ($canToggle): ?>
+                    <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/toggle') ?>" method="POST" class="d-inline" data-background-submit>
+                      <?= csrf_field() ?>
+                      <button type="submit" class="slide-btn slide-btn-success"
+                              aria-label="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>: <?= esc($slideTitle, 'attr') ?>"
+                              data-bs-toggle="tooltip" data-bs-title="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>">
+                        <i class="bi <?= (int) $slide['is_active'] === 1 ? 'bi-eye' : 'bi-eye-slash' ?>" aria-hidden="true"></i>
+                      </button>
+                    </form>
+                  <?php endif; ?>
 
-                  <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/delete') ?>" method="POST" class="d-inline" data-background-submit
-                                            data-confirm="Delete this slide and its uploaded images? This cannot be undone."
-                                            data-confirm-title="Delete carousel slide"
-                                            data-confirm-label="Delete slide"
-                                            data-confirm-tone="danger">
-                    <?= csrf_field() ?>
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete slide" aria-label="Delete slide: <?= esc($slideTitle, 'attr') ?>">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
+                  <?php if (!$isProtected || $isSuperadmin): ?>
+                    <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/delete') ?>" method="POST" class="d-inline" data-background-submit
+                                              data-confirm="<?= $isProtected ? 'Delete the slide carrying the permanent default login image? This cannot be undone.' : 'Delete this slide and its uploaded images? This cannot be undone.' ?>"
+                                              data-confirm-title="Delete carousel slide"
+                                              data-confirm-label="Delete slide"
+                                              data-confirm-tone="danger">
+                      <?= csrf_field() ?>
+                      <button type="submit" class="slide-btn slide-btn-danger" aria-label="Delete slide: <?= esc($slideTitle, 'attr') ?>"
+                              data-bs-toggle="tooltip" data-bs-title="Delete slide">
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                      </button>
+                    </form>
+                  <?php else: ?>
+                    <span class="slide-btn slide-btn-danger" aria-disabled="true"
+                          data-bs-toggle="tooltip" data-bs-title="Only a superadmin may delete the permanent default image">
+                      <i class="bi bi-lock" aria-hidden="true"></i>
+                    </span>
+                  <?php endif; ?>
                 </div>
               </li>
             <?php endforeach; ?>
@@ -112,7 +135,17 @@
 
 <style>
 
+  .carousel-admin .slide-thumbnails {
+    position: relative;
+    width: 78px;
+    height: 58px;
+  }
+  /* Single-variant slides have no stack: one flat thumb, no reserved peek space. */
+  .carousel-admin .slide-thumbnails-single { width: 64px; height: 44px; }
   .carousel-admin .slide-thumb {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 64px;
     height: 44px;
     border-radius: 0.5rem;
@@ -122,12 +155,85 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.2s ease, opacity 0.2s ease;
   }
   .carousel-admin .slide-thumb img { width: 100%; height: 100%; object-fit: cover; }
   .carousel-admin .slide-thumb-dark { background: #2b2b2b; }
+  /* Card stack: the active theme's variant sits in front; the other variant
+     peeks out from behind, tilted, and the stack swaps live on theme toggle. */
+  .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single) .slide-thumb-light {
+    z-index: 2;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  }
+  .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single) .slide-thumb-dark {
+    z-index: 1;
+    transform: rotate(6deg) translate(9px, 5px);
+  }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single) .slide-thumb-dark {
+    z-index: 2;
+    transform: none;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single) .slide-thumb-light {
+    z-index: 1;
+    transform: rotate(6deg) translate(9px, 5px);
+    box-shadow: none;
+  }
+  /* Hover: the deck fans out a little further, front card lifts slightly. */
+  .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single):hover .slide-thumb-dark {
+    transform: rotate(11deg) translate(13px, 8px);
+  }
+  .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single):hover .slide-thumb-light {
+    transform: scale(1.03);
+  }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single):hover .slide-thumb-light {
+    transform: rotate(11deg) translate(13px, 8px);
+  }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-thumbnails:not(.slide-thumbnails-single):hover .slide-thumb-dark {
+    transform: scale(1.03);
+  }
+  /* Hidden slides ease the back card further out while fading it: the active
+     theme's variant remains alone until the slide is shown again. */
+  .carousel-admin .slide-row-inactive .slide-thumbnails:not(.slide-thumbnails-single) .slide-thumb-dark {
+    opacity: 0;
+    transform: rotate(6deg) translate(14px, 8px);
+  }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-row-inactive .slide-thumbnails:not(.slide-thumbnails-single) .slide-thumb-dark {
+    opacity: 1;
+    transform: none;
+  }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-row-inactive .slide-thumbnails:not(.slide-thumbnails-single) .slide-thumb-light {
+    opacity: 0;
+    transform: rotate(6deg) translate(14px, 8px);
+  }
   .carousel-admin .slide-row.dragging { opacity: 0.5; }
   .carousel-admin .slide-copy { min-width: 0; overflow-wrap: anywhere; }
-  .carousel-admin .slide-actions .btn { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+  /* Quiet ghost actions: neutral at rest, semantic tone on hover only. */
+  .carousel-admin .slide-btn {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0.5rem;
+    background: transparent;
+    color: #6b7280;
+    font-size: 1.05rem;
+    transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  }
+  .carousel-admin .slide-btn:hover { background: rgba(15, 15, 15, 0.07); color: #374151; }
+  .carousel-admin .slide-btn:focus-visible { outline: 2px solid var(--fu-brand, #800000); outline-offset: 2px; }
+  .carousel-admin .slide-btn[disabled], .carousel-admin .slide-btn[aria-disabled="true"] { opacity: 0.35; }
+  .carousel-admin .slide-btn-primary:hover { background: rgba(128, 0, 27, 0.10); color: var(--fu-brand, #800000); }
+  .carousel-admin .slide-btn-success:hover { background: rgba(46, 202, 106, 0.13); color: #1e9e58; }
+  .carousel-admin .slide-btn-danger:hover { background: rgba(255, 77, 77, 0.13); color: #d43a3a; }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-btn { color: #9ca3af; }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-btn:hover { background: rgba(255, 255, 255, 0.09); color: #e5e7eb; }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-btn-primary:hover { background: rgba(255, 138, 138, 0.12); color: #ff8a8a; }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-btn-success:hover { background: rgba(46, 202, 106, 0.14); color: #8bebb0; }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .carousel-admin .slide-btn-danger:hover { background: rgba(255, 77, 77, 0.14); color: #ff9999; }
   @media (max-width: 767.98px) {
     .carousel-admin .slide-row {
       display: grid !important;

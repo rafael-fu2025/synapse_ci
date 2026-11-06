@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CalendarDays, ChevronRight, Clock3, MessageSquareText, Stethoscope } from 'lucide-react-native';
 import { Appointment } from '../../../api/endpoints/appointments';
 import { StatusPill } from '../../../components/StatusPill';
+import { AppointmentArt } from './AppointmentArt';
 import { Theme, font, palette, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatDate, formatTime } from '../../../lib/format';
@@ -16,6 +17,7 @@ export function AppointmentCard({ appointment, onOpen }: { appointment: Appointm
 
   return (
     <Pressable accessibilityRole="button" onPress={() => onOpen(appointment.id)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      <AppointmentArt unit={appointment.unit} height={104} opacity={0.12} />
       <View style={styles.top}>
         <View style={styles.serviceIcon}>
           {isGuidance ? (
@@ -56,6 +58,8 @@ function createStyles(theme: Theme) {
       padding: 14,
       paddingBottom: 0,
       borderRadius: 15,
+      // Clip the decorative illustration to the rounded card corners.
+      overflow: 'hidden',
       marginBottom: 10,
       backgroundColor: theme.surface,
       borderWidth: 1,
@@ -89,8 +93,6 @@ function createStyles(theme: Theme) {
       marginTop: 2,
       paddingHorizontal: 14,
       paddingVertical: 9,
-      borderTopWidth: 1,
-      borderTopColor: theme.line,
     },
     footerText: { flex: 1, fontSize: 10, fontFamily: font.body, color: theme.ink500 },
 

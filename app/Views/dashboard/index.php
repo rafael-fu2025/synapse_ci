@@ -1,6 +1,7 @@
 <?= $this->extend('layouts/app') ?>
 <?php
 use App\Services\PortalContext;
+use App\Services\Scheduling\SchedulingClock;
 
 $canReadAudit = ($canReadAudit ?? false) === true;
 $dashboardRole = $user['role'] ?? 'guest';
@@ -39,12 +40,12 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
 <?= $this->section('content') ?>
 <div class="page-dashboard nd-dashboard">
   <!-- Welcome Banner -->
-  <div class="card border-0 shadow-sm text-white p-4 mb-4" style="background: linear-gradient(135deg, var(--fu-maroon, #800000) 0%, #5a0000 100%) !important;">
+  <div class="card border-0 shadow-sm text-white p-4 mb-4 nd-welcome-banner nd-welcome-banner--admin">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div>
         <h2 class="h4 fw-bold mb-1 text-white">Welcome back, <?= esc($user['name'] ?? 'Administrator') ?>!</h2>
         <p class="mb-0 opacity-75">
-          Foundation University <?= $canReadAudit ? 'Institutional Administration & Governance' : 'Operations Reports & Analytics' ?> · <?= date('l, F j, Y') ?>
+          Foundation University <?= $canReadAudit ? 'Institutional Administration & Governance' : 'Operations Reports & Analytics' ?> · <?= SchedulingClock::now()->format('l, F j, Y') ?>
         </p>
       </div>
       <div class="d-none d-md-block text-end">
@@ -164,7 +165,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
                       </td>
                       <td><?= esc($ae['entity_type']) ?> #<?= esc($ae['entity_id']) ?></td>
                       <td><?= esc($ae['actor_name'] ?? 'System') ?></td>
-                      <td class="text-muted small"><?= date('M j, Y · h:i A', strtotime($ae['occurred_at'])) ?></td>
+                      <td class="text-muted small"><?= SchedulingClock::formatManila($ae['occurred_at'], 'M j, Y · h:i A') ?></td>
                     </tr>
                   <?php endforeach; ?>
                 <?php endif; ?>
@@ -232,79 +233,54 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
     function initAdminDashboard() {
       var opsTarget = document.querySelector('#adminOpsChart');
       var popTarget = document.querySelector('#adminPopulationChart');
-      if (typeof ApexCharts === 'undefined') return;
+      if (typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
 
-      var maroonColor = getComputedStyle(document.documentElement).getPropertyValue('--fu-maroon-light').trim() || '#800000';
-      var guidanceColor = '#b06a6a';
-      var mutedColor = '#6c757d';
-      var borderColor = 'rgba(0,0,0,0.06)';
+      var opsSeries = [
+        { name: 'Clinic Visits', data: <?= json_encode($clinicSeries) ?> },
+        { name: 'Guidance Sessions', data: <?= json_encode($guidanceSeries) ?> }
+      ];
+      var opsCategories = <?= json_encode($chartDays) ?>;
 
-      if (opsTarget && !opsTarget.dataset.rendered) {
-        opsTarget.dataset.rendered = 'true';
-        var opsChart = new ApexCharts(opsTarget, {
-          chart: {
-            type: 'area',
-            height: 300,
-            toolbar: { show: false },
-            zoom: { enabled: false },
-            fontFamily: 'inherit'
-          },
-          series: [
-            { name: 'Clinic Visits', data: <?= json_encode($clinicSeries) ?> },
-            { name: 'Guidance Sessions', data: <?= json_encode($guidanceSeries) ?> }
-          ],
-          colors: [maroonColor, guidanceColor],
-          stroke: { width: [2.5, 2.5], curve: 'smooth' },
+      var popData = [
+        <?= (int) $studentsCount ?>,
+        <?= (int) $employeesCount ?>
+      ];
+      var totalPop = popData.reduce(function(a, b) { return a + b; }, 0);
+      if (totalPop === 0) popData = [1, 0];
+
+      ChartTheme.create(opsTarget, function(t) {
+        return ChartTheme.base(t, {
+          chart: { type: 'area', height: 300 },
+          series: opsSeries,
+          colors: [t['series-1'], t['series-2']],
+          stroke: { width: [2.5, 2.5] },
           fill: {
             type: 'gradient',
             gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] }
           },
-          dataLabels: { enabled: false },
-          xaxis: {
-            categories: <?= json_encode($chartDays) ?>,
-            axisBorder: { show: false },
-            axisTicks: { show: false },
-            labels: { style: { colors: mutedColor, fontSize: '11px' } }
-          },
-          yaxis: { labels: { style: { colors: mutedColor, fontSize: '11px' } }, min: 0, forceNiceScale: true },
-          grid: { borderColor: borderColor, strokeDashArray: 4 },
-          legend: { position: 'top', horizontalAlign: 'left', labels: { colors: mutedColor } }
+          xaxis: { categories: opsCategories },
+          legend: { position: 'top', horizontalAlign: 'left' }
         });
-        opsChart.render();
-      }
+      });
 
-      if (popTarget && !popTarget.dataset.rendered) {
-        popTarget.dataset.rendered = 'true';
-        var popData = [
-          <?= (int) $studentsCount ?>,
-          <?= (int) $employeesCount ?>
-        ];
-        var totalPop = popData.reduce(function(a, b) { return a + b; }, 0);
-        if (totalPop === 0) popData = [1, 0];
-
-        var popChart = new ApexCharts(popTarget, {
-          chart: { type: 'donut', height: 230, fontFamily: 'inherit' },
+      ChartTheme.create(popTarget, function(t) {
+        return ChartTheme.donut(t, {
           series: popData,
           labels: ['Students', 'Employees'],
-          colors: [maroonColor, guidanceColor],
-          legend: { show: false },
-          dataLabels: { enabled: false },
+          colors: [t['series-1'], t['series-2']],
           plotOptions: {
             pie: {
               donut: {
-                size: '72%',
                 labels: {
-                  show: true,
-                  name: { show: true, fontSize: '12px' },
-                  value: { show: true, fontSize: '18px', fontWeight: 700 },
                   total: { show: true, label: 'Population', formatter: function() { return totalPop; } }
                 }
               }
             }
           }
         });
-        popChart.render();
-      }
+      });
+
+      ChartTheme.initialize();
     }
 
     if (document.readyState === 'loading') {

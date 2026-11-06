@@ -9,6 +9,12 @@ use InvalidArgumentException;
 /** GET names are q/page/per_page; PHP consumers use q/page/perPage. */
 final class TablePage
 {
+    /**
+     * Status vocabularies belong to the list that owns them. The shared helper must not
+     * impose one list's vocabulary on another: a referral status is not a medicine status.
+     */
+    public const MEDICINE_STATUSES = ['all', 'active', 'archived', 'low_stock'];
+
     private function __construct(
         public readonly string $q,
         public readonly int $page,
@@ -19,7 +25,7 @@ final class TablePage
     ) {
     }
 
-    public static function fromQuery(array $query): self
+    public static function fromQuery(array $query, array $statusValues = self::MEDICINE_STATUSES, string $statusLabel = 'medicine'): self
     {
         $q = trim(self::string($query, 'q', ''));
         if (!mb_check_encoding($q, 'UTF-8')) {
@@ -41,8 +47,8 @@ final class TablePage
         if (!in_array($kind, ['all', 'student', 'employee', 'guest'], true)) {
             throw new InvalidArgumentException('Invalid patient kind.', 422);
         }
-        if (!in_array($status, ['all', 'active', 'archived', 'low_stock'], true)) {
-            throw new InvalidArgumentException('Invalid medicine status.', 422);
+        if (!in_array($status, $statusValues, true)) {
+            throw new InvalidArgumentException('Invalid ' . $statusLabel . ' status.', 422);
         }
         $fragment = self::string($query, 'fragment', '0');
         if (!in_array($fragment, ['0', '1'], true)) {

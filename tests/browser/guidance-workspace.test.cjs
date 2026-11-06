@@ -20,7 +20,10 @@ function render(url) {
     encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /Fatal error|Warning:|Parse error|"code": 500/);
-  const capture = `<script>window.fixtureSubmissions=[];document.addEventListener('submit',event=>{event.preventDefault();window.fixtureSubmissions.push({action:new URL(event.target.action).pathname,fields:Array.from(new FormData(event.target,event.submitter).entries())});});</script>`;
+  // Capture in the capture phase: the production background handler disables
+  // every control before its own submit handling, and disabled controls are
+  // omitted from FormData. A bubble-phase listener would see an incomplete form.
+  const capture = `<script>window.fixtureSubmissions=[];document.addEventListener('submit',event=>{event.preventDefault();window.fixtureSubmissions.push({action:new URL(event.target.action).pathname,fields:Array.from(new FormData(event.target,event.submitter).entries())});},true);</script>`;
   const html = result.stdout.replace('</body>', capture + '</body>');
   cache.set(key, html);
   return html;
@@ -126,7 +129,12 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     assert.equal(await page.evaluate(() => window.fixtureSubmissions[1].action), '/guidance/cases/10/monitor');
     assert.equal(await page.evaluate(() => window.fixtureSubmissions[1].fields.some(([key, value]) => key === 'confirmed' && value === '1')), true);
     const close = page.locator('form[action$="/cases/10/close"]');
+    // Closure now requires a disposition; native validation must block an empty form first.
     await close.getByRole('checkbox', { name: 'Confirm case closure', exact: true }).check();
+    await close.getByRole('button', { name: 'Close Case', exact: true }).click();
+    assert.equal(await page.locator('#synapseConfirmModal.show').count(), 0);
+    assert.equal(await close.locator('[name="closure_disposition"]').evaluate(el => el.checkValidity()), false);
+    await close.locator('[name="closure_disposition"]').fill('Synthetic closure disposition');
     await close.getByRole('button', { name: 'Close Case', exact: true }).click();
     await page.locator('#synapseConfirmModal.show').waitFor();
     await page.locator('[data-confirm-cancel]').click();

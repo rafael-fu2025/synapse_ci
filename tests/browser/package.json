@@ -1,0 +1,11 @@
+{
+  "name": "humus-ai-browser-tests",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test": "cd ../.. && node --test --test-concurrency=1 tests/browser/ai-insights.test.cjs tests/browser/ai-department-insights.test.cjs tests/browser/ai-settings.test.cjs tests/browser/ai-model-discovery.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2"
+  }
+}

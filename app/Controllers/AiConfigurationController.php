@@ -155,14 +155,21 @@ class AiConfigurationController extends BaseController
         try {
             $actor = $this->actor('ai.configuration.test');
             if (($denied = $this->verifyCsrf()) !== null) { return $denied; }
-            $input = $this->input(['version']);
-            $managed = array_key_exists('version', $input);
+            $input = $this->input(['version', 'confirm_pause']);
+            $settings = $this->settings();
+            $saved = $settings->summary((int) $actor['tenant_id']);
+            $managed = $saved['saved'];
             if ($managed) {
                 AiAccess::assertActor($actor, (int) $actor['tenant_id'], 'ai.configuration.write');
                 $version = $this->version($input);
-                $this->control()->pause();
-                $this->settings()->disable((int) $actor['tenant_id'], (int) $actor['id'], $version);
-                $profile = $this->settings()->testingProfile((int) $actor['tenant_id'], $version);
+                $control = $this->control();
+                if (!hash_equals($saved['version'], $version)) { throw new AiFailure('settings_conflict', 409); }
+                if ($saved['enabled'] && ($input['confirm_pause'] ?? null) !== '1') {
+                    throw new \RuntimeException('pause_confirmation_required', 422);
+                }
+                $control->pause();
+                $settings->disable((int) $actor['tenant_id'], (int) $actor['id'], $version);
+                $profile = $settings->testingProfile((int) $actor['tenant_id'], $version);
             } else { $profile = $this->profile(); }
             $revision = $profile->revision();
             $csrf = ['name' => csrf_token(), 'hash' => csrf_hash()];
@@ -261,12 +268,12 @@ class AiConfigurationController extends BaseController
                 $error->reason === 'access_denied' ? 'AI settings require platform administration access.' : AuthenticatedUser::AUTHENTICATION_MESSAGE,
                 site_url($error->reason === 'access_denied' ? 'dashboard' : 'auth/login'))->setHeader('Cache-Control', 'private, no-store');
         }
-        $catalogErrors = ['catalog_rate_limited', 'catalog_too_large', 'catalog_duplicate_id', 'catalog_invalid_selection',
+        $controlledErrors = ['pause_confirmation_required', 'catalog_rate_limited', 'catalog_too_large', 'catalog_duplicate_id', 'catalog_invalid_selection',
             'catalog_preview_invalid', 'catalog_preview_expired', 'catalog_invalid_models'];
         $reason = $error instanceof AiFailure ? $error->reason
-            : ($error instanceof \RuntimeException && in_array($error->getMessage(), $catalogErrors, true) ? $error->getMessage() : 'settings_unavailable');
+            : ($error instanceof \RuntimeException && in_array($error->getMessage(), $controlledErrors, true) ? $error->getMessage() : 'settings_unavailable');
         $status = $error instanceof AiFailure ? $error->getCode()
-            : (in_array($reason, $catalogErrors, true) ? (in_array($error->getCode(), [409, 422, 429], true) ? $error->getCode() : 422) : 503);
+            : (in_array($reason, $controlledErrors, true) ? (in_array($error->getCode(), [409, 422, 429], true) ? $error->getCode() : 422) : 503);
         $message = match ($reason) {
             'discovery_key_required' => 'Enter an API key to fetch models. A saved key can only be reused for the same endpoint and authentication mode.',
             'catalog_rate_limited' => 'Model discovery is limited to ten requests per minute for this tenant. Wait before fetching again.',
@@ -282,6 +289,7 @@ class AiConfigurationController extends BaseController
             'settings_not_saved' => 'Save the endpoint and model settings before testing or enabling analytics.',
             'compatibility_required' => 'Test this saved configuration successfully before enabling analytics.',
             'privacy_confirmation_required' => 'Confirm that the configured provider may process protected aggregate analytics before enabling it.',
+            'pause_confirmation_required' => 'Confirm that testing will pause aggregate analytics. Analytics stays paused after the test until you explicitly enable it again.',
             'invalid_settings', 'invalid_config', 'invalid_request' => 'Check the settings: base API URL, model, authentication, reasoning option, and token limits must be valid. A blank key keeps the saved key; clear it explicitly for no-auth mode.',
             'input_budget_exceeded' => 'The input budget is too small for this request. Increase the input allowance; no text was truncated or sent.',
             'settings_busy', 'worker_busy' => 'Another settings operation or connection test is running. Wait before trying again.',

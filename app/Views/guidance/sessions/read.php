@@ -16,9 +16,14 @@
       </div>
     </div>
     <div>
+      <?php if ($note !== null && !empty($noteReadAudited)): ?>
       <span class="badge bg-success-subtle text-success border border-success-subtle p-2">
-        <i class="bi bi-shield-lock-fill me-1"></i> AES-256-GCM Decrypted
+        <i class="bi bi-shield-lock-fill me-1"></i> AES-256-GCM Decrypted · This access has been audited
       </span>
+      <?php endif; ?>
+      <?php if (!empty($oversightMode)): ?>
+        <span class="badge bg-warning-subtle text-dark">Oversight mode · This access has been audited</span>
+      <?php endif; ?>
     </div>
   </div>
 

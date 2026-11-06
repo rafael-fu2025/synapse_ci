@@ -51,7 +51,7 @@ foreach (['submitted', 'acknowledged', 'under_review', 'converted_to_case', 'clo
         'target_case_id' => $status === 'converted_to_case' && $unit === 'guidance' ? 81 : null, 'can_open_target' => true];
     $referrals[array_key_last($referrals)]['id'] = $i + 1;
 }
-$filters = ['q' => $_GET['q'] ?? '', 'per_page' => (int) ($_GET['per_page'] ?? 25)];
+$filters = ['q' => $_GET['q'] ?? '', 'status' => $_GET['status'] ?? 'all', 'target_unit' => $_GET['unit'] ?? 'all', 'per_page' => (int) ($_GET['per_page'] ?? 25)];
 $page = max(1, min(3, (int) ($_GET['page'] ?? 1)));
 $data = ['title' => ucfirst($unit) . ' Referrals', 'unit' => $unit, 'actor' => $actor, 'tab' => $tab,
     'baseUrl' => $baseUrl, 'filters' => $filters, 'referrals' => $referrals,

@@ -1,11 +1,12 @@
 import React from 'react';
-import { BackHandler, Image, Text, TextInput } from 'react-native';
+import { AccessibilityInfo, Animated, BackHandler, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { act, create, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import { useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { ApiError } from '../src/api/client';
 import { Action } from '../src/components/Action';
 import { formatFullDate } from '../src/lib/format';
 import { PageHeader } from '../src/components/PageHeader';
+import { Screen } from '../src/components/Screen';
 import { Appointment } from '../src/api/endpoints/appointments';
 import { useAppointment, useAppointments, useCancelAppointment, useCreateAppointment } from '../src/features/appointments/hooks';
 import { BookingScreen } from '../src/features/appointments/screens/BookingScreen';
@@ -27,6 +28,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }),
 }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
+jest.mock('react-native-svg', () => ({ SvgXml: () => null }));
 jest.mock('lucide-react-native', () => ({
   ArrowLeft: () => null, CalendarDays: () => null, CalendarX2: () => null,
   Check: () => null, ChevronRight: () => null, CircleCheckBig: () => null,
@@ -76,7 +78,8 @@ function advanceToDateTime() {
 }
 function advanceToReview() {
   advanceToDateTime();
-  const date = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-10-31T00:00:00+08:00'))[0];
+  // A Monday: Saturdays are half-day, so no afternoon slot is offered there.
+  const date = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-11-02T00:00:00+08:00'))[0];
   act(() => date.props.onPress());
   pressText('1:30 PM');
   act(() => action('Review appointment').props.onPress());
@@ -113,7 +116,67 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+function expectPinnedAction(label: string) {
+  const button = action(label);
+  expect(button).toBeDefined();
+  let ancestor = button.parent;
+  let footer: ReactTestInstance | null = null;
+  while (ancestor && ancestor.type !== Screen) {
+    expect(ancestor.type).not.toBe(ScrollView);
+    if (StyleSheet.flatten(ancestor.props.style)?.flexShrink === 0) {
+      footer = ancestor;
+    }
+    ancestor = ancestor.parent;
+  }
+  expect(ancestor?.type).toBe(Screen);
+  expect(footer).not.toBeNull();
+  const scroll = renderer!.root.findAllByType(ScrollView).find(node => !node.props.horizontal)!;
+  expect(scroll.parent).toBe(footer!.parent);
+  expect(scroll.parent!.children.indexOf(scroll)).toBeLessThan(scroll.parent!.children.indexOf(footer!));
+}
+
+function expectFixedHeader() {
+  const screen = renderer!.root.findByType(Screen);
+  expect(screen.props.scroll).toBe(false);
+  const children = React.Children.toArray(screen.props.children) as React.ReactElement[];
+  expect(children[0].type).toBe(PageHeader);
+}
+
 describe('BookingScreen', () => {
+  it('keeps the header and step actions outside the vertical scroll with keyboard-aware layout', async () => {
+    render(<BookingScreen />);
+    expectFixedHeader();
+    expect(renderer!.root.findAllByType(Action)).toHaveLength(0);
+    const keyboard = renderer!.root.findByType(KeyboardAvoidingView);
+    expect(keyboard.props.behavior).toBe(Platform.OS === 'ios' ? 'padding' : undefined);
+    expect(StyleSheet.flatten(keyboard.props.style).flex).toBe(1);
+    const scroll = renderer!.root.findByType(ScrollView);
+    expect(scroll.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(StyleSheet.flatten(scroll.props.style).flex).toBe(1);
+    expect(StyleSheet.flatten(scroll.props.contentContainerStyle).paddingBottom).toBeGreaterThan(0);
+    pressText('University Clinic');
+    expectPinnedAction('Continue to date & time');
+    act(() => action('Continue to date & time').props.onPress());
+    expect(hasText('Choose a visit type to continue.')).toBe(true);
+    pressText('Routine consultation');
+    act(() => action('Continue to date & time').props.onPress());
+    expectPinnedAction('Review appointment');
+    act(() => action('Review appointment').props.onPress());
+    expect(hasText('Choose a preferred date and time to continue.')).toBe(true);
+    const monday = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-11-02T00:00:00+08:00'))[0];
+    act(() => monday.props.onPress());
+    pressText('1:30 PM');
+    act(() => action('Review appointment').props.onPress());
+    expectFixedHeader();
+    expectPinnedAction('Submit appointment request');
+    expect(action('Submit appointment request').props.disabled).toBe(true);
+    act(() => checkbox().props.onPress());
+    expect(action('Submit appointment request').props.disabled).toBe(false);
+    await act(async () => action('Submit appointment request').props.onPress());
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    expect(hasText('Request received')).toBe(true);
+  });
+
   it('shows the bundled web logos for both service choices without cropping', () => {
     render(<BookingScreen />);
     const logos = renderer!.root.findAllByType(Image);
@@ -127,6 +190,28 @@ describe('BookingScreen', () => {
     expect(hasText('GC')).toBe(false);
     pressText('Guidance Center');
     expect(hasText('Step 2 of 4')).toBe(true);
+  });
+
+  it('offers no afternoon preference on a Saturday and clears a stale afternoon pick', () => {
+    render(<BookingScreen />);
+    advanceToDateTime();
+    // 2026-10-31 is a Saturday: only the morning group is offered.
+    const saturday = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-10-31T00:00:00+08:00'))[0];
+    act(() => saturday.props.onPress());
+    expect(hasText('Morning')).toBe(true);
+    expect(hasText('Afternoon')).toBe(false);
+    expect(hasText('Saturdays are half-day: only morning times are available.')).toBe(true);
+
+    // Choosing an afternoon time on a weekday, then switching to Saturday, clears it.
+    const monday = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-11-02T00:00:00+08:00'))[0];
+    act(() => monday.props.onPress());
+    pressText('1:30 PM');
+    expect(renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === '1:30 PM').length).toBeGreaterThan(0);
+    act(() => saturday.props.onPress());
+    expect(renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === '1:30 PM')).toHaveLength(0);
+    // With no time selected, review is blocked.
+    act(() => action('Review appointment').props.onPress());
+    expect(hasText('Choose a preferred date and time to continue.')).toBe(true);
   });
 
   it('requires review consent and blocks duplicate same-tick and stale successful submits', async () => {
@@ -143,7 +228,7 @@ describe('BookingScreen', () => {
     const submit = action('Submit appointment request').props.onPress;
     act(() => { submit(); submit(); });
     expect(createRequest).toHaveBeenCalledTimes(1);
-    expect(createRequest).toHaveBeenCalledWith({ unit: 'clinic', date: '2026-10-31', preferred_time: '13:30', type: 'routine', reason: 'Headache' });
+    expect(createRequest).toHaveBeenCalledWith({ unit: 'clinic', date: '2026-11-02', preferred_time: '13:30', type: 'routine', reason: 'Headache' });
     act(() => { expect(hardwareBack!()).toBe(true); });
     expect(hasText('Step 4 of 4')).toBe(true);
     await act(async () => resolve({ data: appointment }));
@@ -205,6 +290,69 @@ describe('BookingScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('Visits', { screen: 'AppointmentDetail', params: { id: 1052 }, initial: false });
     act(() => action('View my visits').props.onPress());
     expect(navigation.navigate).toHaveBeenCalledWith('Visits', { screen: 'Appointments', initial: false });
+  });
+});
+
+describe('AppointmentDetailScreen layout', () => {
+  it.each([
+    ['requested', 1, 'Awaiting confirmation, step 1 of 4'],
+    ['scheduled', 2, 'Confirmed, step 2 of 4'],
+    ['confirmed', 2, 'Confirmed, step 2 of 4'],
+    ['checked_in', 3, 'Checked in, step 3 of 4'],
+    ['completed', 4, 'Completed, step 4 of 4'],
+    ['cancelled', 0, 'Cancelled'],
+    ['no_show', 0, 'Missed'],
+  ] as const)('keeps four caption-free segments with accessible %s progress', async (status, step, label) => {
+    jest.mocked(useAppointment).mockReturnValue({ data: { data: { ...appointment, status } }, isLoading: false, isError: false } as unknown as ReturnType<typeof useAppointment>);
+    await act(async () => { renderer = create(<AppointmentDetailScreen />); });
+    expectFixedHeader();
+    const screen = renderer!.root.findByType(Screen);
+    const children = React.Children.toArray(screen.props.children) as React.ReactElement[];
+    expect(children[1].type).toBe(ScrollView);
+    const scroll = renderer!.root.findByType(ScrollView);
+    expect(scroll.findAllByType(PageHeader)).toHaveLength(0);
+    const progress = renderer!.root.findAll(node => node.props.accessibilityRole === 'progressbar')[0];
+    expect(progress.props.accessible).toBe(true);
+    expect(progress.props.accessibilityLabel).toBe(label);
+    expect(progress.props.accessibilityValue).toEqual({ min: 0, max: 4, now: step });
+    expect(React.Children.toArray(progress.props.children)).toHaveLength(4);
+    expect(progress.findAllByType(Text)).toHaveLength(0);
+    const fills = progress.findAllByType(Animated.View);
+    expect(fills).toHaveLength(4);
+    fills.forEach((fill, index) => {
+      expect(StyleSheet.flatten(fill.props.style).opacity.__getValue()).toBe(index < step ? 1 : 0);
+    });
+    expect(hasText('Requested')).toBe(false);
+    expect(hasText('Done')).toBe(false);
+    expect(hasText('Checked in')).toBe(status === 'checked_in');
+    expect(renderer!.root.findAllByType(Text).filter(node => node.props.children === 'Confirmed')).toHaveLength(status === 'scheduled' || status === 'confirmed' ? 1 : 0);
+    if (['requested', 'scheduled', 'confirmed'].includes(status)) {
+      expectPinnedAction('Cancel this appointment');
+      act(() => action('Cancel this appointment').props.onPress());
+      expect(navigation.navigate).toHaveBeenCalledWith('CancelAppointment', { id: appointment.id });
+    } else {
+      expect(action('Cancel this appointment')).toBeUndefined();
+    }
+    act(() => renderer!.root.findByType(PageHeader).props.onBack());
+    expect(navigation.goBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('honours reduced motion and animates segments only when motion is enabled', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    let changeMotion!: (enabled: boolean) => void;
+    jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation((_event, listener) => {
+      changeMotion = listener;
+      return { remove: jest.fn() };
+    });
+    const timing = jest.spyOn(Animated, 'timing');
+    await act(async () => { renderer = create(<AppointmentDetailScreen />); });
+    expect(timing).not.toHaveBeenCalled();
+    act(() => changeMotion(false));
+    expect(timing).toHaveBeenCalledTimes(4);
+    expect(timing).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ useNativeDriver: true, duration: 280 }));
+    timing.mockClear();
+    act(() => changeMotion(true));
+    expect(timing).not.toHaveBeenCalled();
   });
 });
 

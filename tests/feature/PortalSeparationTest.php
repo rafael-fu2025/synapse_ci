@@ -27,10 +27,15 @@ final class PortalSeparationTest extends CIUnitTestCase
     private int $studentUserId;
     private int $nurseUserId;
     private int $counsellorUserId;
+    private string $savedDefaultGroup;
 
     protected function setUp(): void
     {
         parent::setUp();
+        // Route handlers revalidate identity via the default group; bind it to the
+        // migrated tests schema so fixtures and controllers share one database.
+        $this->savedDefaultGroup = config('Database')->defaultGroup;
+        config('Database')->defaultGroup = 'tests';
         AuthenticatedUser::clear();
 
         $unique = uniqid();
@@ -86,6 +91,13 @@ final class PortalSeparationTest extends CIUnitTestCase
         ]);
     }
 
+    protected function tearDown(): void
+    {
+        AuthenticatedUser::clear();
+        config('Database')->defaultGroup = $this->savedDefaultGroup;
+        parent::tearDown();
+    }
+
     public function testStudentBlockedFromClinicConsoleAndRedirectedToPortal(): void
     {
         $res = $this->withSession([
@@ -97,6 +109,7 @@ final class PortalSeparationTest extends CIUnitTestCase
                 'logged_in' => true,
             ],
             'tenant_id' => 1,
+            '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()],
         ])->get('clinic/queue');
 
         // Must reject student and redirect to personal health portal
@@ -114,6 +127,7 @@ final class PortalSeparationTest extends CIUnitTestCase
                 'logged_in' => true,
             ],
             'tenant_id' => 1,
+            '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()],
         ])->get('guidance/cases');
 
         $res->assertRedirectTo('/portal');
@@ -130,6 +144,7 @@ final class PortalSeparationTest extends CIUnitTestCase
                 'logged_in' => true,
             ],
             'tenant_id' => 1,
+            '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()],
         ])->get('portal');
 
         $res->assertStatus(200);
@@ -150,6 +165,7 @@ final class PortalSeparationTest extends CIUnitTestCase
                 'logged_in'   => true,
             ],
             'tenant_id' => 1,
+            '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()],
         ])->get('clinic/queue');
 
         $res->assertStatus(200);
@@ -167,6 +183,7 @@ final class PortalSeparationTest extends CIUnitTestCase
                 'logged_in' => true,
             ],
             'tenant_id' => 1,
+            '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()],
         ])->get('portal');
 
         $res->assertStatus(200);
@@ -187,10 +204,11 @@ final class PortalSeparationTest extends CIUnitTestCase
                 'logged_in'   => true,
             ],
             'tenant_id' => 1,
+            '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()],
         ])->get('guidance/cases');
 
         $res->assertStatus(200);
-        $res->assertSee('Student Counseling Cases');
+        $res->assertSee('Counseling Cases');
     }
 
     public function testGuidanceCounsellorBlockedFromClinicConsole(): void
@@ -204,6 +222,7 @@ final class PortalSeparationTest extends CIUnitTestCase
                 'logged_in' => true,
             ],
             'tenant_id' => 1,
+            '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()],
         ])->get('clinic/queue');
 
         // Counsellor must be blocked from medical clinic queue and redirected

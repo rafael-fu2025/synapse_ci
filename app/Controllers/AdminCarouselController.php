@@ -5,18 +5,24 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\CarouselSlideModel;
+use App\Services\AuthenticatedUser;
+use App\Services\Carousel\CarouselAccessPolicy;
 use App\Services\Carousel\CarouselService;
 use CodeIgniter\HTTP\ResponseInterface;
 use Exception;
+use RuntimeException;
 use Throwable;
 
 /**
  * Admin-only management of the login screen photo carousel.
  *
- * Slides are multi-tenant scoped. Images may be uploaded (no artificial
- * size cap) or referenced by relative path. Each slide carries an optional
- * dark-mode variant and a fit mode controlling whether the image is shown
+ * Slides are multi-tenant scoped. Images are uploaded into the managed private
+ * store. Each slide carries an optional dark-mode variant and a fit mode controlling whether the image is shown
  * crisp (cover) or letterboxed over a blurred copy of itself (contain_blur).
+ *
+ * The permanent default image is held in the managed store and is immutable:
+ * it may not be edited by anyone, and only the platform owner may delete or
+ * hide the slide that carries it.
  */
 final class AdminCarouselController extends BaseController
 {
@@ -34,12 +40,20 @@ final class AdminCarouselController extends BaseController
      */
     public function index()
     {
+        $slides = $this->slideModel->getAllSlides();
+        $protected = [];
+        foreach ($slides as $slide) {
+            $protected[(int) $slide['id']] = CarouselAccessPolicy::usesDefaultAsset($slide);
+        }
+
         return view('admin/carousel/index', [
             'title'       => 'Login Carousel',
             'formModalPage' => false,
             'pageTitle'   => 'Login Carousel Slides',
-            'slides'      => $this->slideModel->getAllSlides(),
+            'slides'      => $slides,
             'slide'       => null,
+            'protectedSlides' => $protected,
+            'isSuperadmin' => $this->isSuperadmin(),
             'breadcrumbs' => [
                 ['label' => 'Governance', 'url' => site_url('/admin/audit')],
                 ['label' => 'Login Carousel', 'url' => ''],
@@ -56,16 +70,16 @@ final class AdminCarouselController extends BaseController
             'title'    => $this->request->getPost('title'),
             'subtitle' => $this->request->getPost('subtitle'),
             'fit_mode' => (string) ($this->request->getPost('fit_mode') ?? 'cover'),
-            // A required upload may be omitted only when the user selected a local path.
-            'light_image' => $this->request->getPost('light_path'),
         ];
 
         $lightFile = $this->request->getFile('light_file');
         $darkFile  = $this->request->getFile('dark_file');
 
+        if ($lightFile === null || $lightFile->getError() === UPLOAD_ERR_NO_FILE) {
+            return $this->respond('A light mode image upload is required.', false);
+        }
+
         try {
-            // Uploads take precedence; the service validates files and local paths.
-            $this->applyPathFallbacks($data, $lightFile, $darkFile);
             $this->carousel->createSlide($data, $lightFile, $darkFile);
 
             return $this->respond('Carousel slide created successfully.');
@@ -100,6 +114,7 @@ final class AdminCarouselController extends BaseController
             'slide'       => $slide,
             'cancelUrl'   => $cancelUrl,
             'formModalPage' => true,
+            'lockedImage' => CarouselAccessPolicy::usesDefaultAsset($slide),
             'breadcrumbs' => [
                 ['label' => 'Governance', 'url' => site_url('/admin/audit')],
                 ['label' => 'Login Carousel', 'url' => site_url('/admin/carousel')],
@@ -118,6 +133,11 @@ final class AdminCarouselController extends BaseController
             return $this->respond('Slide not found.', false);
         }
 
+        $actor = $this->actor();
+        if (!CarouselAccessPolicy::canEdit($actor, $slide)) {
+            return $this->respond(CarouselAccessPolicy::EDIT_DENIED, false, 403);
+        }
+
         $data = [
             'title'       => $this->request->getPost('title'),
             'subtitle'    => $this->request->getPost('subtitle'),
@@ -132,14 +152,15 @@ final class AdminCarouselController extends BaseController
         try {
             $removeDark = $this->request->getPost('remove_dark') === '1';
             if ($removeDark) {
-                // Explicit removal wins over both a replacement upload and a path.
+                // Explicit removal wins over a replacement upload.
                 $data['dark_image'] = null;
                 $darkFile = null;
             }
-            $this->applyPathFallbacks($data, $lightFile, $darkFile, $removeDark);
-            $this->carousel->updateSlide($id, $data, $lightFile, $darkFile);
+            $this->carousel->updateSlide($id, $data, $lightFile, $darkFile, $actor);
 
             return $this->respond('Carousel slide updated successfully.');
+        } catch (RuntimeException $e) {
+            return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
         } catch (Exception $e) {
             return $this->respond('Unable to update slide: ' . $e->getMessage(), false);
         }
@@ -151,9 +172,11 @@ final class AdminCarouselController extends BaseController
     public function toggle(int $id)
     {
         try {
-            $slide = $this->carousel->toggleActive($id);
+            $slide = $this->carousel->toggleActive($id, $this->actor());
             $state = ((int) $slide['is_active'] === 1) ? 'Slide is now visible.' : 'Slide is now hidden.';
             return $this->respond($state);
+        } catch (RuntimeException $e) {
+            return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
         } catch (Throwable $e) {
             return $this->respond($e->getMessage(), false);
         }
@@ -164,11 +187,40 @@ final class AdminCarouselController extends BaseController
      */
     public function delete(int $id)
     {
-        if ($this->carousel->deleteSlide($id)) {
-            return $this->respond('Slide deleted.');
+        $slide = $this->slideModel->scoped()->find($id);
+        if ($slide === null) {
+            return $this->respond('Slide not found.', false);
+        }
+
+        $actor = $this->actor();
+        if (!CarouselAccessPolicy::canDelete($actor, $slide)) {
+            return $this->respond(CarouselAccessPolicy::DELETE_DENIED, false, 403);
+        }
+
+        try {
+            if ($this->carousel->deleteSlide($id, $actor)) {
+                return $this->respond('Slide deleted.');
+            }
+        } catch (RuntimeException $e) {
+            return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
         }
 
         return $this->respond('Slide not found.', false);
+    }
+
+    /**
+     * The acting identity, revalidated from the database-backed session.
+     *
+     * @return array<string, mixed>
+     */
+    private function actor(): array
+    {
+        return (new AuthenticatedUser())->current() ?? [];
+    }
+
+    private function isSuperadmin(): bool
+    {
+        return ($this->actor()['role'] ?? '') === 'superadmin';
     }
 
     /**
@@ -221,47 +273,6 @@ final class AdminCarouselController extends BaseController
     }
 
     /**
-     * Normalize separators, but reject unsafe paths rather than repairing traversal.
-     * The service also checks existence, realpath containment and raster MIME type.
-     */
-    private function sanitizePath(mixed $path): string
-    {
-        if (!is_string($path)) {
-            throw new \InvalidArgumentException('Carousel image path must be text.');
-        }
-        $path = str_replace('\\', '/', trim($path));
-        if ($path === '') { return ''; }
-        if (strlen($path) > 255
-            || !preg_match('#\A(assets/img/brand|uploads/carousel)/([A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*)\z#D', $path, $matches)
-            || ($matches[1] === 'uploads/carousel' && str_contains($matches[2], '/'))
-        ) {
-            throw new \InvalidArgumentException('Use a safe relative image path inside assets/img/brand/ or uploads/carousel/.');
-        }
-        return $path;
-    }
-
-    /**
-     * Applies library-path fallbacks when no file was uploaded for a slot.
-     *
-     * @param array<string, mixed> $data
-     */
-    private function applyPathFallbacks(array &$data, $lightFile, $darkFile, bool $removeDark = false): void
-    {
-        foreach (['light' => $lightFile, 'dark' => $darkFile] as $slot => $file) {
-            // Failed uploads must reach service validation, never silently become path saves.
-            if (($slot === 'dark' && $removeDark)
-                || ($file !== null && $file->getError() !== UPLOAD_ERR_NO_FILE)) {
-                continue;
-            }
-            $raw = $this->request->getPost($slot . '_path');
-            if ($raw === null) { continue; }
-            $path = $this->sanitizePath($raw);
-            // Blank edit fields retain existing images; only remove_dark clears the variant.
-            if ($path !== '') { $data[$slot . '_image'] = $path; }
-        }
-    }
-
-    /**
      * Returns JSON for XHR uploads, a redirect (with flash) otherwise.
      *
      * Both paths land on the slide manager: saving never navigates away to a
@@ -269,7 +280,7 @@ final class AdminCarouselController extends BaseController
      *
      * @return RedirectResponse|ResponseInterface
      */
-    private function respond(string $message, bool $success = true)
+    private function respond(string $message, bool $success = true, int $errorStatus = 422)
     {
         if ($this->request->isAJAX()) {
             // Legacy uploads navigate after saving; toast-owned requests refresh in place.
@@ -278,7 +289,7 @@ final class AdminCarouselController extends BaseController
             }
 
             return $this->response
-                ->setStatusCode($success ? 200 : 422)
+                ->setStatusCode($success ? 200 : $errorStatus)
                 ->setJSON([
                     'success'  => $success,
                     'message'  => $message,

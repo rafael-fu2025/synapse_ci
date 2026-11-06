@@ -5,6 +5,7 @@
   "scripts": {
     "android": "react-native run-android --port 8083 --no-packager",
     "android:usb": "node scripts/android-usb.js && react-native run-android --port 8083 --no-packager",
+    "coverage": "jest --coverage",
     "doctor": "node scripts/doctor.js",
     "ios": "react-native run-ios --port 8083 --no-packager",
     "lint": "eslint .",
@@ -14,6 +15,8 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.1.1",
     "@react-native-community/netinfo": "^12.0.1",
+    "@react-native-firebase/app": "^26.4.1",
+    "@react-native-firebase/messaging": "^26.4.1",
     "@react-native/new-app-screen": "0.88.0",
     "@react-navigation/bottom-tabs": "^7.21.0",
     "@react-navigation/native": "^7.5.1",
@@ -26,6 +29,7 @@
     "react-native-image-picker": "^8.3.0",
     "react-native-keychain": "^10.0.0",
     "react-native-linear-gradient": "^2.8.3",
+    "react-native-permissions": "^5.6.3",
     "react-native-safe-area-context": "^5.10.1",
     "react-native-screens": "^4.30.0",
     "react-native-svg": "^15.16.0"

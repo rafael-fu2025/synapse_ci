@@ -93,6 +93,8 @@ async function openNew(page) {
   await page.getByRole('button', { name: 'Add exception', exact: true }).click();
   const modal = page.locator('#availability-exception-new-modal');
   await modal.locator('form[data-availability-save]').waitFor({ state: 'visible' });
+  assert.equal(await modal.locator('.modal-body .av-form-footer').count(), 0, 'Exception actions must not scroll with the body');
+  assert.equal(await modal.locator('.modal-content > .modal-footer button[type="submit"]').count(), 1, 'Save belongs to a fixed sibling footer');
   await choose(page, 'exceptionNewProvider', 'Provider Fixture');
   const iso = await page.evaluate(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
   await page.locator('#exceptionNewDateDisplay').focus(); await page.keyboard.press('ArrowDown');
@@ -134,9 +136,10 @@ for (const unit of ['clinic', 'guidance']) for (const mobile of [false, true]) {
     await noOverflow(page);
     await choose(page, 'exceptionNewType', 'Leave / full day unavailable');
     await page.locator('[name="custom_start_time"]').waitFor({ state: 'detached' });
-    const form = modal.locator('form[data-availability-save]');
+    const form = modal.locator('#exceptionNewForm');
+    const actionButton = modal.getByRole('button', { name: 'Save exception', exact: true });
     const before = posts.length;
-    await form.getByRole('button', { name: 'Save exception', exact: true }).click();
+    await actionButton.click();
     await form.locator('[data-availability-feedback]:visible').waitFor();
     assert.equal(posts.length, before + 1);
     assert.equal(posts.at(-1).headers['x-requested-with'], 'XMLHttpRequest');
@@ -144,16 +147,17 @@ for (const unit of ['clinic', 'guidance']) for (const mobile of [false, true]) {
     assert.equal(posts.at(-1).fields.custom_start_time, undefined);
     assert.equal(await page.locator('#exceptionNewReason').inputValue(), 'Synthetic approved leave');
     assert.equal(await form.locator('[data-availability-feedback] img').count(), 0);
-    assert.equal(await form.getByRole('button', { name: 'Save exception', exact: true }).isEnabled(), true);
+    assert.equal(await actionButton.isEnabled(), true);
     await modal.getByRole('button', { name: 'Cancel', exact: true }).click();
     await modal.waitFor({ state: 'hidden' });
     await page.getByRole('button', { name: 'Edit exception', exact: true }).click();
     const edit = page.locator('#availability-exception-61-modal');
     const update = edit.locator('form[action$="/exceptions"]');
+    const updateAction = edit.getByRole('button', { name: 'Save exception', exact: true });
     const token = await update.locator('[name="token"]').inputValue();
     assert.match(token, /^[a-f0-9]{64}$/);
     mode = 'stale';
-    await update.getByRole('button', { name: 'Save exception', exact: true }).click();
+    await updateAction.click();
     await update.locator('[data-availability-feedback]:visible').waitFor();
     assert.match(await update.locator('[data-availability-feedback]').innerText(), /changed/);
     assert.equal(posts.at(-1).fields.token, token); assert.equal(posts.at(-1).fields.csrf_test_name, 'exception-refreshed-token');
@@ -193,13 +197,14 @@ test('Weekly review links open the focused editor with the selected provider and
 });
 
 test('Workspace rejects cross-department action and response redirect', { timeout: 25000 }, async t => {
-  const page = await open(t, 'clinic'); const modal = await openNew(page); const form = modal.locator('form');
+  const page = await open(t, 'clinic'); const modal = await openNew(page); const form = modal.locator('#exceptionNewForm');
+  const actionButton = modal.getByRole('button', { name: 'Save exception', exact: true });
   const original = await form.getAttribute('action'); const before = posts.length;
   await form.evaluate((el, origin) => { el.action = origin + '/guidance/appointments/availability/exceptions'; }, origin);
-  await form.getByRole('button', { name: 'Save exception', exact: true }).click();
+  await actionButton.click();
   await form.locator('[data-availability-feedback]:visible').waitFor(); assert.equal(posts.length, before);
   await form.evaluate((el, action) => { el.action = action; }, original);
-  mode = 'badredirect'; await form.getByRole('button', { name: 'Save exception', exact: true }).click();
+  mode = 'badredirect'; await actionButton.click();
   await form.locator('[data-availability-feedback]:visible').waitFor();
   assert.match(await form.locator('[data-availability-feedback]').innerText(), /return address was invalid/);
   assert.equal(new URL(page.url()).pathname, '/clinic/appointments/availability');

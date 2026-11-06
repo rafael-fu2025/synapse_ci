@@ -13,9 +13,24 @@ import { Theme, font, palette, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatDate, formatTime } from '../../../lib/format';
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotificationHistory } from '../hooks';
+import { notificationDestination, NotificationDestination } from '../targets';
 import { RootStackParamList } from '../../../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+/** The notice names a record; the client owns the screen that shows it. */
+function openDestination(navigation: Nav, destination: NotificationDestination): void {
+  if (destination.kind === 'announcement') {
+    navigation.navigate('AnnouncementDetail', { id: destination.id });
+  } else if (destination.kind === 'survey') {
+    navigation.navigate('SurveyForm', { id: destination.id });
+  } else {
+    navigation.navigate('AppTabs', {
+      screen: 'Visits',
+      params: { screen: 'AppointmentDetail', params: { id: destination.id }, initial: false },
+    });
+  }
+}
 
 export function NotificationsScreen() {
   const { theme } = useTheme();
@@ -94,9 +109,19 @@ export function NotificationsScreen() {
           key={`${filter}:${currentPage}`}
           data={items}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <NotificationRow item={item} disabled={busy} onRead={() => { markAll.reset(); markRead.mutate(item.id); }} />
-          )}
+          // Cancel the Screen's 18px gutter so rows and their dividers run edge to edge.
+          style={styles.listBleed}
+          renderItem={({ item }) => {
+            const destination = notificationDestination(item);
+            return (
+              <NotificationRow
+                item={item}
+                disabled={busy}
+                onRead={() => { markAll.reset(); markRead.mutate(item.id); }}
+                onOpen={destination ? () => openDestination(navigation, destination) : undefined}
+              />
+            );
+          }}
           contentContainerStyle={styles.list}
           refreshing={query.isRefetching}
           onRefresh={() => { query.refetch().catch(() => undefined); }}
@@ -114,19 +139,27 @@ export function NotificationsScreen() {
   );
 }
 
-function NotificationRow({ item, disabled, onRead }: { item: NotificationItem; disabled: boolean; onRead: () => void }) {
+function NotificationRow({ item, disabled, onRead, onOpen }: {
+  item: NotificationItem;
+  disabled: boolean;
+  onRead: () => void;
+  onOpen?: () => void;
+}) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const unread = item.read_at === null;
+  const openable = onOpen !== undefined;
   const visual: NotificationVisual = VISUALS[item.title] ?? { icon: Bell, color: palette.blue600 };
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}. ${item.message}${unread ? '. Mark as read' : '. Read'}`}
-      accessibilityState={{ disabled: disabled || !unread }}
-      disabled={disabled || !unread}
-      onPress={onRead}
+      accessibilityLabel={`${item.title}. ${item.message}. ${openable
+        ? (unread ? 'Opens the related item and marks it read' : 'Opens the related item')
+        : (unread ? 'Mark as read' : 'Read')}`}
+      accessibilityState={{ disabled: disabled || (!unread && !openable) }}
+      disabled={disabled || (!unread && !openable)}
+      onPress={() => { if (unread) { onRead(); } onOpen?.(); }}
       style={[styles.row, unread && styles.rowUnread]}>
       <View style={styles.rowIcon}>
         <visual.icon size={18} color={visual.color ?? theme.brandIcon} />
@@ -157,6 +190,7 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     loader: { marginTop: 30 },
     list: { paddingBottom: 10 },
+    listBleed: { marginHorizontal: -18 },
     filters: { flexDirection: 'row', gap: 7, marginBottom: 12 },
     filter: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.line },
     filterActive: { backgroundColor: theme.brand, borderColor: theme.brand },
@@ -166,8 +200,9 @@ function createStyles(theme: Theme) {
     feedbackText: { color: theme.ink700, fontFamily: font.body, fontSize: 11.5 },
     paging: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6, paddingTop: 10 },
     pageLabel: { color: theme.ink500, fontFamily: font.body, fontSize: 10 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme.line },
-    rowUnread: { backgroundColor: theme.brand50, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: 10 },
+    // Rows fill the list, which is itself bled past the Screen gutter.
+    row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: theme.line },
+    rowUnread: { backgroundColor: theme.brand50 },
     rowIcon: { width: 24, height: 28, alignItems: 'center', justifyContent: 'center' },
     rowCopy: { flex: 1, minWidth: 0 },
     rowTitle: { fontSize: 10.5, fontWeight: '700', fontFamily: font.body, color: theme.ink900 },

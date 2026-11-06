@@ -1,6 +1,6 @@
 <?php if ($configure): ?>
 <div class="modal fade" id="deviceModal" tabindex="-1" aria-labelledby="deviceModalTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
-  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 class="modal-title fs-5" id="deviceModalTitle"><?= $device === null ? 'Register device' : 'Rotate device credential' ?></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
     <form action="<?= esc(site_url($base . '/device')) ?>" method="POST" data-confirm="Issue a new credential for this device? Any existing credential will stop working. Store the new token securely when it is shown." data-confirm-title="Issue device credential" data-confirm-label="Issue credential" data-confirm-tone="warning">
       <?= csrf_field() ?>
@@ -15,7 +15,7 @@
 <?php if ($manage): ?>
 <?php if ($activeBatch === null && $unit['status'] === 'active'): ?>
 <div class="modal fade" id="startBatchModal" tabindex="-1" aria-labelledby="startBatchTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
-  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 id="startBatchTitle" class="modal-title fs-5">Start batch</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
     <form action="<?= esc(site_url($base . '/batch')) ?>" method="POST" data-bmg-submit>
       <?= csrf_field() ?>
@@ -26,7 +26,7 @@
 </div>
 <?php elseif ($activeBatch !== null): ?>
 <div class="modal fade" id="completeBatchModal" tabindex="-1" aria-labelledby="completeBatchTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
-  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 id="completeBatchTitle" class="modal-title fs-5">Complete batch</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
     <form action="<?= esc(site_url('/facilities/batch/' . (int) $activeBatch['id'] . '/release')) ?>" method="POST" data-bmg-submit data-confirm="Complete this batch record? This does not stop the motor or certify the material's quality or suitability for use." data-confirm-title="Complete batch" data-confirm-label="Complete batch" data-confirm-tone="warning">
       <?= csrf_field() ?>
@@ -36,7 +36,7 @@
   </div></div>
 </div>
 <div class="modal fade" id="cancelBatchModal" tabindex="-1" aria-labelledby="cancelBatchTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
-  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 id="cancelBatchTitle" class="modal-title fs-5">Cancel batch</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
     <form action="<?= esc(site_url('/facilities/batch/' . (int) $activeBatch['id'] . '/cancel')) ?>" method="POST" data-bmg-submit data-confirm="Cancel this batch record? History is retained. This does not stop the motor." data-confirm-title="Cancel batch" data-confirm-label="Cancel batch record" data-confirm-tone="danger">
       <?= csrf_field() ?>

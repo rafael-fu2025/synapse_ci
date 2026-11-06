@@ -19,9 +19,12 @@ use ReflectionProperty;
 /** Private SQLite only: real seeded grants, synthetic ciphertext, no application migrations. */
 final class GuidanceReadAuthorizationTest extends CIUnitTestCase
 {
+    use \CodeIgniter\Test\FeatureTestTrait;
+
     private ?BaseConnection $fixture = null;
     private array $savedConnections = [];
     private array $savedVersion = [];
+    private array $savedKey = [];
     private GuidanceCaseService $service;
 
     protected function setUp(): void
@@ -41,6 +44,7 @@ final class GuidanceReadAuthorizationTest extends CIUnitTestCase
         self::assertSame($this->fixture, Database::connect());
         AuthenticatedUser::clear();
         foreach ([
+            'audit_events' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, event_type TEXT, entity_type TEXT, entity_id TEXT, actor_user_id INTEGER, actor_role TEXT, actor_ip TEXT, action TEXT, payload_json TEXT, prev_hash TEXT, curr_hash TEXT, hash_version INTEGER, occurred_at TEXT',
             'tenants' => 'id INTEGER PRIMARY KEY, is_active INTEGER, deleted_at TEXT',
             'people' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, kind TEXT, mis_id TEXT, first_name TEXT, last_name TEXT, email TEXT, deleted_at TEXT',
             'users' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER, username TEXT, role TEXT, status TEXT, auth_version INTEGER DEFAULT 1, deleted_at TEXT',
@@ -48,9 +52,9 @@ final class GuidanceReadAuthorizationTest extends CIUnitTestCase
             'student_profiles' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER',
             'permissions' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, name TEXT, module TEXT',
             'role_permissions' => 'role TEXT, permission_id INTEGER',
-            'counselling_cases' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER, counsellor_user_id INTEGER, status TEXT, summary_notes TEXT, deleted_at TEXT',
-            'counselling_sessions' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, case_id INTEGER, counsellor_user_id INTEGER, session_number INTEGER, status TEXT, deleted_at TEXT',
-            'guidance_followups' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, case_id INTEGER, due_date TEXT',
+            'counselling_cases' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER, counsellor_user_id INTEGER, status TEXT, summary_notes TEXT, deleted_at TEXT, case_number TEXT DEFAULT "SYNTHETIC-CASE", title TEXT DEFAULT "Synthetic case", category TEXT DEFAULT "personal", opened_at TEXT DEFAULT "2026-01-01", closed_by INTEGER, closure_disposition_cipher BLOB, closure_disposition_nonce BLOB, closure_disposition_tag BLOB, closure_disposition_key_version INTEGER',
+            'counselling_sessions' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, case_id INTEGER, counsellor_user_id INTEGER, session_number INTEGER, status TEXT, deleted_at TEXT, session_type TEXT DEFAULT "regular", started_at TEXT DEFAULT "2026-01-01", ended_at TEXT',
+            'guidance_followups' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, case_id INTEGER, due_date TEXT DEFAULT "2026-01-01", status TEXT DEFAULT "pending", action_plan TEXT DEFAULT "Synthetic plan", completed_by INTEGER, completion_notes_cipher BLOB, completion_notes_nonce BLOB, completion_notes_tag BLOB, completion_notes_key_version INTEGER',
             'counselling_notes' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, session_id INTEGER, version INTEGER, is_draft INTEGER, notes_cipher BLOB, notes_nonce BLOB, notes_tag BLOB, notes_key_version INTEGER, created_at TEXT, created_by_user_id INTEGER',
         ] as $table => $columns) {
             $this->fixture->query('CREATE TABLE ' . $table . ' (' . $columns . ')');
@@ -73,11 +77,18 @@ final class GuidanceReadAuthorizationTest extends CIUnitTestCase
             $this->fixture->table('guidance_followups')->insert(['id' => $id, 'tenant_id' => $tenant, 'case_id' => $id]);
         }
         // Pin the version as well as the explicit key: never resolve a key from .env.
+        // The controller builds its own service, so the key itself must be pinned too,
+        // otherwise it decrypts the fixture with the deployment key and the GCM tag check fails.
         $this->savedVersion = [getenv('COUNSELLING_KEY_VERSION'), $_ENV['COUNSELLING_KEY_VERSION'] ?? null,
             $_SERVER['COUNSELLING_KEY_VERSION'] ?? null];
+        $this->savedKey = [getenv('COUNSELLING_KEY'), $_ENV['COUNSELLING_KEY'] ?? null,
+            $_SERVER['COUNSELLING_KEY'] ?? null];
         putenv('COUNSELLING_KEY_VERSION=1');
         $_ENV['COUNSELLING_KEY_VERSION'] = $_SERVER['COUNSELLING_KEY_VERSION'] = '1';
-        $crypto = new EncryptionService(str_repeat('ab', 32));
+        $syntheticKey = str_repeat('ab', 32);
+        putenv('COUNSELLING_KEY=' . $syntheticKey);
+        $_ENV['COUNSELLING_KEY'] = $_SERVER['COUNSELLING_KEY'] = $syntheticKey;
+        $crypto = new EncryptionService($syntheticKey);
         foreach ([[11, 1], [12, 1], [13, 2]] as [$id, $tenant]) {
             foreach ([0, 1] as $draft) {
                 $encrypted = $crypto->encrypt($draft ? 'Synthetic draft' : 'Synthetic final');
@@ -105,6 +116,13 @@ final class GuidanceReadAuthorizationTest extends CIUnitTestCase
             unset($_ENV['COUNSELLING_KEY_VERSION'], $_SERVER['COUNSELLING_KEY_VERSION']);
             if ($local !== null) $_ENV['COUNSELLING_KEY_VERSION'] = $local;
             if ($server !== null) $_SERVER['COUNSELLING_KEY_VERSION'] = $server;
+        }
+        if ($this->savedKey !== []) {
+            [$env, $local, $server] = $this->savedKey;
+            putenv($env === false ? 'COUNSELLING_KEY' : 'COUNSELLING_KEY=' . $env);
+            unset($_ENV['COUNSELLING_KEY'], $_SERVER['COUNSELLING_KEY']);
+            if ($local !== null) $_ENV['COUNSELLING_KEY'] = $local;
+            if ($server !== null) $_SERVER['COUNSELLING_KEY'] = $server;
         }
         if ($this->fixture !== null) {
             $this->fixture->close();
@@ -151,6 +169,195 @@ final class GuidanceReadAuthorizationTest extends CIUnitTestCase
                 }
             }
         }
+    }
+
+    public static function readRoutes(): iterable
+    {
+        yield 'dialog' => ['guidance/sessions/12/read?fragment=1', 'Synthetic draft'];
+        yield 'history' => ['guidance/sessions/12/history?fragment=1', 'Synthetic final'];
+        yield 'active case' => ['guidance/cases/12', 'Synthetic draft'];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('readRoutes')]
+    public function testHttpReadsRenderAuditedOversightOnlyAfterPersistence(string $route, string $plaintext): void
+    {
+        $this->signIn('guidance_supervisor');
+        $result = $this->withSession(session()->get())->get($route);
+        $result->assertStatus(200);
+        $result->assertSee($plaintext);
+        $result->assertSee('This access has been audited');
+        $result->assertSee('Oversight mode');
+        self::assertStringContainsString('no-store', $result->response()->getHeaderLine('Cache-Control'));
+        $events = $this->fixture->table('audit_events')->orderBy('id')->get()->getResultArray();
+        $expected = str_contains($route, '/history')
+            ? ['guidance.session.note_history_read']
+            : ['guidance.case.oversight_read', 'guidance.session.note_read'];
+        self::assertSame($expected, array_column($events, 'event_type'));
+        foreach ($events as $event) {
+            self::assertNull($event['payload_json']);
+            self::assertSame(1, (int) $event['actor_user_id']);
+            self::assertSame('guidance_supervisor', $event['actor_role']);
+        }
+    }
+
+    public static function httpAuditFailures(): iterable
+    {
+        foreach (self::readRoutes() as $name => [$route, $plaintext]) {
+            foreach (['counsellor', 'guidance_supervisor'] as $role) {
+                foreach (['missing_table', 'bad_head', 'append_failure'] as $failure) {
+                    yield $name . '-' . $role . '-' . $failure => [$route, $plaintext, $role, $failure];
+                }
+            }
+        }
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('httpAuditFailures')]
+    public function testHttpAuditAppendFailureReturnsNoPlaintextOrSuccessMarker(string $route, string $plaintext, string $role, string $failure): void
+    {
+        $this->signIn($role);
+        // Owner path proves the active-note audit fails closed independently of case oversight.
+        if ($role === 'counsellor') $route = str_replace('/12', '/11', $route);
+        $this->breakAudit($failure);
+        $result = $this->withSession(session()->get())->get($route);
+        $result->assertStatus(500);
+        $result->assertDontSee($plaintext);
+        $result->assertDontSee('This access has been audited');
+        self::assertStringContainsString('no-store', $result->response()->getHeaderLine('Cache-Control'));
+    }
+
+    public function testEmptyNoteDialogDoesNotClaimDecryptionOrNoteAuditSuccess(): void
+    {
+        $this->fixture->table('counselling_notes')->where('session_id', 11)->delete();
+        $result = $this->withSession(session()->get())->get('guidance/sessions/11/read?fragment=1');
+        $result->assertStatus(200);
+        $result->assertSee('No counseling notes');
+        $result->assertDontSee('AES-256-GCM Decrypted');
+        $result->assertDontSee('This access has been audited');
+        self::assertSame(0, $this->fixture->table('audit_events')->countAllResults());
+    }
+
+    public function testCurrentNoteReadPersistsMetadataOnlyOnSameConnection(): void
+    {
+        self::assertSame('Synthetic draft', $this->service->getDecryptedSessionNote(11)['text']);
+        $event = $this->fixture->table('audit_events')->get()->getRowArray();
+        self::assertNotNull($event, 'Plaintext must not be returned without a persisted audit event.');
+        self::assertSame('guidance.session.note_read', $event['event_type']);
+        self::assertSame('counselling_sessions', $event['entity_type']);
+        self::assertSame('11', $event['entity_id']);
+        self::assertSame(1, (int) $event['actor_user_id']);
+        self::assertSame('counsellor', $event['actor_role']);
+        self::assertNull($event['payload_json']);
+        self::assertTrue((new \App\Services\Audit\AuditService(null, $this->fixture))->verifyChain()['valid']);
+        $this->fixture->table('counselling_notes')->where('session_id', 11)->delete();
+        self::assertNull($this->service->getDecryptedSessionNote(11));
+        self::assertSame(1, $this->fixture->table('audit_events')->countAllResults());
+    }
+
+    public function testCrossOwnerCaseReadsAreAuditedWithoutNotesAndOwnerReadsAreNotOversight(): void
+    {
+        $this->service->getCaseDetails(11);
+        self::assertSame(0, $this->fixture->table('audit_events')->countAllResults());
+        foreach (['guidance_admin', 'guidance_supervisor', 'superadmin'] as $role) {
+            $this->signIn($role);
+            $this->service->getCaseDetails(14);
+            $event = $this->fixture->table('audit_events')->orderBy('id', 'DESC')->get()->getRowArray();
+            self::assertNotNull($event, 'Oversight without a note must still be audited.');
+            self::assertSame('guidance.case.oversight_read', $event['event_type']);
+            self::assertSame('counselling_cases', $event['entity_type']);
+            self::assertSame('14', $event['entity_id']);
+            self::assertSame($role, $event['actor_role']);
+            self::assertNull($event['payload_json']);
+        }
+        self::assertSame(3, $this->fixture->table('audit_events')->countAllResults());
+    }
+
+    public static function auditFailures(): iterable
+    {
+        foreach (['missing_table', 'bad_head', 'append_failure'] as $failure) {
+            foreach (['getDecryptedSessionNote', 'getDecryptedSessionNoteHistory', 'getCaseDetails'] as $method) {
+                yield $failure . '-' . $method => [$failure, $method];
+            }
+        }
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('auditFailures')]
+    public function testAuditFailureNeverReturnsSensitiveRead(string $failure, string $method): void
+    {
+        $this->signIn('guidance_supervisor');
+        $this->breakAudit($failure);
+        $result = null;
+        $failureThrown = null;
+        try {
+            $result = $this->service->{$method}(12);
+        } catch (\Throwable $exception) {
+            $failureThrown = $exception;
+        }
+        self::assertNotNull($failureThrown, 'Read must fail closed when audit append cannot persist.');
+        self::assertNull($result, 'No plaintext or case package may escape audit failure.');
+    }
+
+    private function breakAudit(string $failure): void
+    {
+        if ($failure === 'missing_table') {
+            $this->fixture->query('DROP TABLE audit_events');
+        } elseif ($failure === 'bad_head') {
+            (new \App\Services\Audit\AuditService(null, $this->fixture))->log('fixture', 'fixture', '1', 'fixture');
+            $this->fixture->table('audit_events')->update(['curr_hash' => str_repeat('f', 64)]);
+        } else {
+            $this->fixture->query("CREATE TRIGGER refuse_audit BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT, 'Synthetic append failure'); END");
+        }
+    }
+
+    public function testMutationAuthorizationDoesNotRecordOversightRead(): void
+    {
+        $this->signIn('guidance_admin');
+        $authorize = new ReflectionMethod(GuidanceCaseService::class, 'authorizedCase');
+        [$case] = $authorize->invoke($this->service, 12, 'guidance.cases.write');
+        self::assertSame(12, (int) $case['id']);
+        self::assertSame(0, $this->fixture->table('audit_events')->countAllResults());
+        foreach (['addFollowup', 'completeFollowup'] as $method) {
+            $reflection = new ReflectionMethod(\App\Controllers\GuidanceController::class, $method);
+            $source = implode('', array_slice(file($reflection->getFileName()), $reflection->getStartLine() - 1,
+                $reflection->getEndLine() - $reflection->getStartLine() + 1));
+            self::assertStringNotContainsString('getCaseDetails(', $source);
+        }
+    }
+
+    public function testFailedDecryptionDoesNotClaimSuccessfulNoteRead(): void
+    {
+        $this->fixture->table('counselling_notes')->where('session_id', 11)->where('is_draft', 1)
+            ->update(['notes_tag' => 'invalid']);
+        try {
+            $this->service->getDecryptedSessionNote(11);
+            self::fail('Invalid GCM tag must not decrypt.');
+        } catch (\CodeIgniter\Security\Exceptions\SecurityException $exception) {
+            self::assertSame(0, $this->fixture->table('audit_events')->countAllResults());
+        }
+    }
+
+    public function testEmptyOversightDialogAuditsOnlyCaseAccess(): void
+    {
+        $this->signIn('guidance_supervisor');
+        $result = $this->withSession(session()->get())->get('guidance/sessions/14/read?fragment=1');
+        $result->assertStatus(200);
+        $result->assertSee('No counseling notes');
+        $result->assertSee('Oversight mode');
+        $result->assertDontSee('AES-256-GCM Decrypted');
+        self::assertSame(['guidance.case.oversight_read'], array_column(
+            $this->fixture->table('audit_events')->get()->getResultArray(), 'event_type'));
+    }
+
+    public function testDeniedReadsNeverAppendAuditEvents(): void
+    {
+        $this->assertDenied('getDecryptedSessionNote', 12, 403);
+        $this->assertDenied('getCaseDetails', 12, 403);
+        $this->signIn('guidance_supervisor');
+        $this->assertDenied('getDecryptedSessionNote', 13, 404);
+        $this->assertDenied('getCaseDetails', 13, 404);
+        $this->revoke('guidance_supervisor', 'guidance.cases.read_any');
+        $this->assertDenied('getDecryptedSessionNote', 12, 403);
+        $this->assertDenied('getCaseDetails', 12, 403);
+        self::assertSame(0, $this->fixture->table('audit_events')->countAllResults());
     }
 
     public function testOwnerCanReadPackageDraftFinalAndEmptyNote(): void

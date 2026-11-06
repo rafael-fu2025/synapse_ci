@@ -19,7 +19,7 @@ final class AiSettingsFixtureView
     public function extend(string $layout): string { return ''; }
     public function section(string $section): string { return ''; }
     public function endSection(): string { return ''; }
-    public function render(array $settings, array $access): string
+    public function render(array $settings, array $access, array $catalog): string
     {
         ob_start();
         try {
@@ -37,4 +37,5 @@ $settings = array_replace([
     'allow_private_network' => false, 'connection_tested' => false, 'tested_at' => null,
     'enabled' => false, 'storage_key_ready' => false, 'approved_units' => ['clinic'],
 ], $options['settings'] ?? []);
-echo json_encode(['html' => (new AiSettingsFixtureView())->render($settings, $options['access'] ?? ['ready' => true, 'grants' => []]), 'settings' => $settings], JSON_THROW_ON_ERROR);
+$catalog = array_replace(['base_url' => '', 'models' => [], 'imported_at' => null], $options['catalog'] ?? []);
+echo json_encode(['html' => (new AiSettingsFixtureView())->render($settings, $options['access'] ?? ['ready' => true, 'grants' => []], $catalog), 'settings' => $settings], JSON_THROW_ON_ERROR);

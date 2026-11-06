@@ -187,7 +187,15 @@ The public login carousel uses the existing WebSocket transport for change hints
 HTTP reconciliation while visible/online. Authenticated resources still use their documented polling
 cadences; this change does not add private mobile subscriptions.
 
-Deliberately out of scope for v1: FCM push, offline write queue, biometric unlock, i18n, tablet layouts.
+Deliberately out of scope for v1: offline write queue, biometric unlock, i18n, tablet layouts.
+
+Device push is **in place on both sides**: the server registers a device token
+(`POST api/v1/push/token`) and delivers committed notices over Firebase Cloud Messaging, and the client
+registers the device when a session starts and withdraws it when that session ends. A foreground push
+raises no banner, so it only refreshes the in-app inbox; the banner comes from the operating system
+while the app is backgrounded or killed. `push.enabled` stays `false` until staging verification
+passes, so the in-app inbox, the realtime hint and the polling cadences remain the only live channels.
+See `docs/MOBILE_PUSH_OPTIONS.md` for the evaluation that produced this split.
 
 ### Public carousel realtime
 
@@ -216,7 +224,13 @@ cd mobile
 npx tsc --noEmit   # types
 npm run lint       # eslint (zero warnings)
 npm test -- --runInBand  # jest
+node --test scripts/dev-tooling.test.cjs  # developer tooling, no device or network
 ```
+
+`.github/workflows/mobile.yml` runs exactly these four gates on every push and pull request, so a
+regression in the client cannot reach `main` unverified. `npm run coverage` is available locally but
+must **not** be combined with `--runInBand`: coverage instrumentation slows the fake-timer suites
+enough to time them out.
 
 `mobileScreenReference/` is excluded from Metro, TypeScript, and ESLint — it is design reference only.
 

@@ -10,12 +10,8 @@ $localTime = static function (?string $value): string {
     return $date !== false && $date->format('Y-m-d H:i:s') === $value ? $date->format('M j, Y · g:i A') : 'Not recorded';
 };
 ?>
-<section data-live-filters data-filter-url="<?= esc($baseUrl, 'attr') ?>" data-filter-key="personal-visit-history" data-live-events="portal.queue.changed" aria-labelledby="visitHistoryTitle">
+<section data-live-filters data-filter-url="<?= esc($baseUrl, 'attr') ?>" data-filter-key="personal-visit-history" data-live-events="portal.queue.changed" aria-label="My Visit History">
   <div class="card border-0 shadow-sm">
-    <div class="card-header bg-transparent py-3">
-      <h2 class="h6 fw-bold mb-1" id="visitHistoryTitle"><i class="bi bi-clock-history me-2" aria-hidden="true"></i>My Visit History</h2>
-      <p class="small text-muted mb-0">Completed clinic visits and guidance sessions, including walk-ins. Dates and times are shown in Asia/Manila.</p>
-    </div>
     <div class="card-body p-3">
       <p class="small text-muted">This is an attendance history, not your clinical chart. Confidential medical and counseling notes are not displayed. Contact the department for records or follow-up instructions.</p>
       <form method="get" action="<?= esc($baseUrl) ?>" class="d-flex flex-wrap align-items-end gap-2 mb-3" data-filter-form aria-label="Filter visit history">

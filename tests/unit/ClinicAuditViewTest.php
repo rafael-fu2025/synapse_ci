@@ -97,7 +97,9 @@ namespace Tests\Unit {
             ]);
             $this->assertStringContainsString('Medicine inventory unavailable.', $html);
             $this->assertStringContainsString('Administrator must complete', $html);
-            $this->assertStringContainsString('3 waiting, 2 called', $html);
+            // The counters carry live-update hooks, so the label text is split around them.
+            $this->assertMatchesRegularExpression('/data-queue-count="queueWaiting"[^>]*>3<\/span>/', $html);
+            $this->assertMatchesRegularExpression('/data-queue-count="queueCalled"[^>]*>2<\/span>/', $html);
             $this->assertStringContainsString('Appointments Today', $html);
             $this->assertStringContainsString('Recent Clinical Encounters', $html);
             $this->assertStringNotContainsString('FEFO inventory active', $html);

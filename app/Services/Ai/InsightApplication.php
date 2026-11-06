@@ -32,7 +32,7 @@ final class InsightApplication
                 'guidance' => 'guidance/insights', 'bmg' => 'facilities/insights', default => 'clinic/insights',
             },
             'profile' => $this->profile->publicStatus(), 'ready' => false, 'reason' => null,
-            'jobs' => [], 'insights' => [], 'canGenerate' => false, 'canReview' => false, 'canApprove' => false];
+            'jobs' => [], 'insights' => [], 'recoverableSnapshots' => [], 'canGenerate' => false, 'canReview' => false, 'canApprove' => false];
         foreach (['canGenerate' => 'ai.insights.generate', 'canReview' => 'ai.insights.review', 'canApprove' => 'ai.insights.approve'] as $key => $permission) {
             try { $this->authorize($actor, $permission); $data[$key] = true; }
             catch (AiFailure) { /* A hidden action is not an authorization substitute. */ }
@@ -40,23 +40,34 @@ final class InsightApplication
         try {
             $this->assertAnalyticsAllowed((int) $actor['tenant_id']);
             if (!$this->store->ready()) { throw new AiFailure('store_unavailable'); }
-            $data['ready'] = true;
             $revision = $this->profile->revision();
             $data['jobs'] = $this->store->listJobs((int) $actor['tenant_id'], $this->unit);
-            // Old configuration output cannot be released or approved under a new policy.
-            $data['insights'] = array_values(array_filter($this->store->listInsights((int) $actor['tenant_id'], $this->unit),
-                static fn (array $row): bool => ($row['draft']['provenance']['profile_revision'] ?? null) === $revision));
+            if ($data['canGenerate'] && $this->store->supportsRecovery()) {
+                $data['recoverableSnapshots'] = $this->store->listRecoverableSnapshots((int) $actor['tenant_id'], $this->unit);
+            }
+            $data['insights'] = $this->store->listInsights((int) $actor['tenant_id'], $this->unit);
+            foreach ($data['insights'] as &$row) {
+                $row['current_policy'] = ($row['draft']['provenance']['profile_revision'] ?? null) === $revision
+                    && PipelineProvenance::matches($row['draft']['provenance']['pipeline_digest'] ?? null);
+            }
+            unset($row);
+            $data['ready'] = true;
             try {
                 $this->profile->assertDispatchAllowed((int) $actor['tenant_id'], $this->unit);
                 (new InsightGenerator($this->profile))->assertProfile($this->profile);
                 $this->control->assertAllowed($this->profile, (int) $actor['tenant_id'], $this->unit);
             } catch (AiFailure $error) { $data['reason'] = $error->reason; }
-        } catch (AiFailure $error) { $data['reason'] = $error->reason; }
+        } catch (AiFailure $error) { $data['ready'] = false; $data['reason'] = $error->reason; }
         return $data;
     }
 
     /** A local, explicit baseline action; never runs during dashboard reads or polling. */
     public function prepare(array $actor, ?string $analysis = null): array
+    {
+        return $this->prepareSnapshot($actor, $analysis)['payload'];
+    }
+
+    private function prepareSnapshot(array $actor, ?string $analysis): array
     {
         $this->authorize($actor, 'ai.insights.generate');
         $analysis = $this->analysis($analysis);
@@ -66,7 +77,7 @@ final class InsightApplication
         }
         $payload = $analysis === 'clinic.activity' ? $this->collector->build((int) $actor['tenant_id'])
             : $this->departmentCollector->build((int) $actor['tenant_id'], $analysis);
-        return $this->store->saveSnapshot((int) $actor['tenant_id'], $this->unit, $payload)['payload'];
+        return $this->store->saveSnapshot((int) $actor['tenant_id'], $this->unit, $payload);
     }
 
     public function generate(array $actor, ?string $analysis = null): array
@@ -76,8 +87,7 @@ final class InsightApplication
         $this->profile->assertDispatchAllowed((int) $actor['tenant_id'], $this->unit);
         (new InsightGenerator($this->profile))->assertProfile($this->profile);
         $this->control->assertAllowed($this->profile, (int) $actor['tenant_id'], $this->unit);
-        $payload = $this->prepare($actor, $analysis);
-        $snapshot = $this->store->saveSnapshot((int) $actor['tenant_id'], $this->unit, $payload);
+        $snapshot = $this->prepareSnapshot($actor, $analysis);
         return $this->store->enqueue((int) $actor['tenant_id'], $this->unit, $snapshot['id'], (int) $actor['id'],
             $this->profile->revision(), $this->profile->config->model, $this->profile->config->dailyRequestLimit);
     }
@@ -88,13 +98,40 @@ final class InsightApplication
         $this->authorize($actor, $permission);
         $this->assertAnalyticsAllowed((int) $actor['tenant_id']);
         $row = $this->store->getInsight((int) $actor['tenant_id'], $this->unit, $id);
-        if (($row['draft']['provenance']['profile_revision'] ?? null) !== $this->profile->revision()) {
-            throw new AiFailure('endpoint_changed', 409);
+        if ($decision !== 'reject') {
+            if (($row['draft']['provenance']['profile_revision'] ?? null) !== $this->profile->revision()) {
+                throw new AiFailure('endpoint_changed', 409);
+            }
+            if (!PipelineProvenance::matches($row['draft']['provenance']['pipeline_digest'] ?? null)) {
+                throw new AiFailure('pipeline_changed', 409);
+            }
         }
         if ($decision === 'approve' && ($row['draft']['programs'] ?? []) === []) {
             throw new AiFailure('invalid_review_transition', 409);
         }
         $this->store->review((int) $actor['tenant_id'], $this->unit, $id, (int) $actor['id'], $version, $decision);
+    }
+
+    /** Explicit recovery renews only identical current-window evidence, never changed releases. */
+    public function recover(array $actor, ?string $analysis = null): array
+    {
+        $this->authorize($actor, 'ai.insights.generate');
+        $analysis = $this->analysis($analysis);
+        $this->assertAnalyticsAllowed((int) $actor['tenant_id']);
+        $payload = $analysis === 'clinic.activity' ? $this->collector->build((int) $actor['tenant_id'])
+            : $this->departmentCollector->build((int) $actor['tenant_id'], $analysis);
+        return $this->store->recoverSnapshot((int) $actor['tenant_id'], $this->unit, $payload, (int) $actor['id'])['payload'];
+    }
+
+    public function retry(array $actor, int $id): array
+    {
+        $this->authorize($actor, 'ai.insights.generate');
+        $this->assertAnalyticsAllowed((int) $actor['tenant_id']);
+        $this->profile->assertDispatchAllowed((int) $actor['tenant_id'], $this->unit);
+        (new InsightGenerator($this->profile))->assertProfile($this->profile);
+        $this->control->assertAllowed($this->profile, (int) $actor['tenant_id'], $this->unit);
+        return $this->store->retry((int) $actor['tenant_id'], $this->unit, $id, (int) $actor['id'],
+            $this->profile->revision(), $this->profile->config->model, $this->profile->config->dailyRequestLimit);
     }
 
     public function cancel(array $actor, int $id): void

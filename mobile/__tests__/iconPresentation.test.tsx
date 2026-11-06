@@ -14,6 +14,12 @@ import { useTheme } from '../src/theme/ThemeProvider';
 import { darkTheme, lightTheme } from '../src/theme/tokens';
 
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: jest.fn() }));
+// Render the SVG as a plain View carrying its props, so the art's tint and size
+// can be asserted without pulling in the native SVG renderer.
+jest.mock('react-native-svg', () => ({
+  SvgXml: (props: { color?: string; xml?: string; width?: number; height?: number }) =>
+    require('react').createElement(require('react-native').View, props),
+}));
 jest.mock('lucide-react-native', () => ({
   CalendarDays: () => null, ChevronRight: () => null, Clock3: () => null,
   MessageSquareText: () => null, Stethoscope: () => null,
@@ -36,6 +42,12 @@ function expectPlainSlot(style: StyleProp<ViewStyle>) {
   expect(flattened.width).toBeGreaterThan(0);
   expect(flattened.backgroundColor).toBeUndefined();
   expect(flattened.borderRadius).toBeUndefined();
+}
+
+/** The colour the card's decorative SVG was tinted with. */
+function artTint(): string {
+  const art = renderer!.root.findAll(node => typeof node.props.xml === 'string')[0];
+  return art.props.color;
 }
 
 afterEach(() => {
@@ -95,6 +107,21 @@ describe.each([lightTheme, darkTheme])('plain icon presentation in $mode mode', 
     expect(renderer!.root.findByType(Clock3).props.color).toBe(expected);
     act(() => { renderer!.update(<AppointmentCard appointment={{ ...appointment, unit: 'guidance' }} onOpen={jest.fn()} />); });
     expect(renderer!.root.findByType(MessageSquareText).props.color).toBe('#7356a2');
+  });
+
+  it('tints each card illustration with its unit colour, turning white on dark surfaces', () => {
+    const expectedClinic = theme.mode === 'dark' ? '#ffffff' : '#800000';
+    const expectedGuidance = theme.mode === 'dark' ? '#ffffff' : '#7356a2';
+    render(<AppointmentCard appointment={appointment} onOpen={jest.fn()} />);
+    expect(artTint()).toBe(expectedClinic);
+    act(() => { renderer!.update(<AppointmentCard appointment={{ ...appointment, unit: 'guidance' }} onOpen={jest.fn()} />); });
+    expect(artTint()).toBe(expectedGuidance);
+
+    // Decorative only: it must never intercept taps.
+    const wrapper = renderer!.root.findAll(node =>
+      StyleSheet.flatten(node.props.style)?.position === 'absolute' && node.props.pointerEvents === 'none')[0];
+    expect(wrapper).toBeDefined();
+    expect(StyleSheet.flatten(wrapper.props.style).opacity).toBeLessThan(0.2);
   });
 
   it('keeps empty-state icons plain', () => {

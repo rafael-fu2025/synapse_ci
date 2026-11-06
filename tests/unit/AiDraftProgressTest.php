@@ -62,9 +62,10 @@ final class AiDraftProgressTest extends CIUnitTestCase
             self::assertStringNotContainsString('%', $html);
             self::assertStringNotContainsString('data-ai-stage-state="not-confirmed"', $html);
             if ($stage === 'ready') {
-                self::assertStringContainsString('&#10003;', $html);
+                self::assertStringContainsString('bi-check-circle', $html);
                 self::assertStringContainsString('Ready for review. Generation and checks finished.', $html);
                 self::assertStringContainsString('data-ai-pending="false"', $html);
+                self::assertStringContainsString('Request history', $html);
             }
         }
     }
@@ -74,9 +75,9 @@ final class AiDraftProgressTest extends CIUnitTestCase
         $html = $this->panel([$this->job('queued'), $this->job('running', ['id' => 32])]);
         self::assertSame(1, substr_count($html, 'data-ai-progress-help'));
         self::assertStringContainsString('Waiting for a worker; processing has not started.', $html);
-        self::assertStringContainsString('worker enabled by an administrator', $html);
-        self::assertStringContainsString('cannot confirm that one is scheduled', $html);
-        self::assertStringContainsString('Status updates automatically; the draft appears only after checks pass.', $html);
+        self::assertStringContainsString('A separate worker must be enabled', $html);
+        self::assertStringContainsString('cannot confirm one is scheduled', $html);
+        self::assertStringContainsString('Status updates automatically.', $html);
         self::assertStringContainsString('No partial draft is available.', $html);
     }
 
@@ -86,7 +87,7 @@ final class AiDraftProgressTest extends CIUnitTestCase
             $html = $this->panel([$this->job($status, ['reason' => 'private_provider_token'])]);
             $xpath = $this->xpath($html);
             self::assertStringContainsString('data-ai-progress="stopped"', $html);
-            self::assertStringContainsString('Stopped', $html);
+            self::assertStringContainsString('Request history', $html);
             self::assertSame(3, $xpath->query('//*[@data-ai-stage-state="not-confirmed"]')->length);
             self::assertSame(0, $xpath->query('//*[@aria-current or @data-ai-progress-spinner or @data-ai-progress-help]')->length);
             self::assertSame(0, $xpath->query('//form[contains(@action, "/jobs/31/cancel")]')->length);
@@ -120,7 +121,7 @@ final class AiDraftProgressTest extends CIUnitTestCase
         self::assertStringContainsString('data-ai-progress="queued"', $html);
     }
 
-    public function testNoPendingExplanationWithoutPendingRequestsAndFormOrderIsUnchanged(): void
+    public function testNoPendingExplanationWithoutPendingRequestsAndSelectorUsesOneActionPair(): void
     {
         $html = $this->panel([]);
         self::assertStringNotContainsString('data-ai-progress-help', $html);
@@ -129,9 +130,11 @@ final class AiDraftProgressTest extends CIUnitTestCase
         foreach ($xpath->query('//form[@data-ai-action]') as $form) {
             $actions[] = basename($form->getAttribute('action'));
         }
-        self::assertSame(['prepare', 'generate', 'prepare', 'generate'], $actions);
-        self::assertSame(4, $xpath->query('//form/input[@name="analysis_code"]')->length);
+        self::assertSame(['prepare', 'generate'], $actions);
+        self::assertSame(1, $xpath->query('//*[@data-ai-analysis-selector]')->length);
+        self::assertSame(2, $xpath->query('//*[@data-ai-analysis-selector]/option')->length);
+        self::assertSame(2, $xpath->query('//form/input[@name="analysis_code" and @data-ai-analysis-value]')->length);
         $html = $this->panel([], ['ready' => false, 'reason' => 'disabled']);
-        self::assertSame(4, $this->xpath($html)->query('//form/button[@disabled]')->length);
+        self::assertSame(2, $this->xpath($html)->query('//form/button[@disabled]')->length);
     }
 }

@@ -50,11 +50,55 @@ Vagrantfile
 #-------------------------
 # Temporary Files
 #-------------------------
+# writable/ is local scratch space: black-box run artefacts, captured pages,
+# isolated browser profiles, and one-off diagnostic scripts. None of it is
+# committed - the audit reports under papers/blackbox/results/ describe these
+# paths as "local, not committed".
+# The development scripts the team keeps under writable/ stay visible through
+# the negations below. Add a new negation line here when a new script family
+# is introduced under writable/, otherwise `git add writable/` will skip it.
+/writable/*
+!/writable/.htaccess
+!/writable/index.html
+!/writable/cache/
+!/writable/debugbar/
+!/writable/logs/
+!/writable/session/
+!/writable/uploads/
+!/writable/*-development-*.php
+!/writable/*-development-*.py
+
+# These development scripts do not own any DDL: each one preflights, backs up,
+# and then runs the already-versioned migrations under app/Database/Migrations/,
+# capturing evidence. The migrations own the schema, so the scripts are no longer
+# added to source control (they stay on the local working copy for attended
+# deployments). `php spark migrate --all` is the supported path.
+/writable/ai-development-migrate.php
+/writable/audience-development-migrate.php
+/writable/bmg-development-migrate.php
+/writable/chat-development-migrate.php
+/writable/engagement-development-migrate.php
+/writable/notification-development-migrate.php
+/writable/referral-development-migrate.php
+/writable/staff-assignment-development-migrate.php
+/writable/teams-development-migrate.php
+/writable/workflow-development-migrate.php
+!/writable/*-validation*.php
+!/writable/*-validation*.py
+!/writable/directory-import-*
+!/writable/isolated-inventory-*
+!/writable/ai-analysis-scope-upgrade.php
+!/writable/bmg-permissions-offline-test.php
+
 /writable/cache/*
 !/writable/cache/index.html
 
 /writable/logs/*
 !/writable/logs/index.html
+
+# Runtime carousel uploads; retain the repository placeholder.
+/public/uploads/carousel/*
+!/public/uploads/carousel/.gitkeep
 
 # PHPUnit output (cache and reports).
 /writable/build/
@@ -120,9 +164,39 @@ php_errors.log
 # Test Files
 #-------------------------
 /tests/coverage*
+/tests/browser/.bak.cjs
+
+# Generated Python bytecode.
+__pycache__/
+*.pyc
 
 # Don't save phpunit under version control.
 /phpunit
+
+#-------------------------
+# Local-Only Directories
+#-------------------------
+# Development documentation, the test suites and research papers stay on the
+# local working copy. Files already tracked in these directories keep their
+# history and remain tracked; these rules only stop new files from being
+# added to them.
+/docs/
+/tests/
+# AI CI fixtures must be available to clean checkouts; keep unrelated local tests ignored.
+!/tests/
+/tests/*
+!/tests/unit/
+/tests/unit/*
+!/tests/unit/MisPeopleSyncTest.php
+!/tests/unit/AiEnabledTestConfirmationTest.php
+!/tests/unit/AiPipelineProvenanceTest.php
+!/tests/unit/AiRecoveryAttemptsTest.php
+!/tests/unit/AiRecoveryMariaDbTest.php
+!/tests/browser/
+/tests/browser/*
+!/tests/browser/package.json
+!/tests/browser/package-lock.json
+/papers/
 
 #-------------------------
 # Composer
@@ -142,6 +216,7 @@ vendor/
 # Agent/tool session history and hook state (per-machine, per-session).
 .mimosa/
 .zcode/
+/.trae/
 
 #-------------------------
 # IDE / Development Files
@@ -187,3 +262,9 @@ node_modules/
 
 /results/
 /phpunit.xml
+
+# Firebase service account keys. The Admin SDK key grants full control of the
+# Firebase project and must never be committed.
+*service-account*.json
+*service_account*.json
+firebase-service-account*.json

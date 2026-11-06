@@ -8,12 +8,7 @@
 
 <?= $this->section('content') ?>
 <div class="card border-0 shadow-sm">
-  <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center py-3 gap-2">
-    <div>
-      <h5 class="fw-bold mb-0 text-dark">Patient Clinic Encounters</h5>
-      <span class="text-muted small">Clinical visits, medical charts, and consult outcomes</span>
-    </div>
-
+  <div class="card-header bg-transparent d-flex flex-wrap align-items-center py-3 gap-2">
     <!-- Filter form -->
     <form method="GET" class="d-flex align-items-center gap-2">
       <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">

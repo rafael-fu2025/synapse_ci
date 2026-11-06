@@ -27,6 +27,16 @@ final class DisabledMisClient implements MisClientInterface
         throw new MisUnavailableException();
     }
 
+    public function fetchStudentsPage(int $page = 1, int $limit = 25): array
+    {
+        throw new MisUnavailableException();
+    }
+
+    public function fetchEmployeesPage(int $page = 1, int $limit = 25): array
+    {
+        throw new MisUnavailableException();
+    }
+
     public function fetchDepartments(): array
     {
         throw new MisUnavailableException();

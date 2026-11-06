@@ -72,7 +72,7 @@
 
 <!-- Walk-In Patient Registration Modal -->
 <div class="modal fade" id="walkinModal" tabindex="-1" aria-labelledby="walkinModalLabel" aria-hidden="true" x-data="walkinSearch()">
-  <div class="modal-dialog modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
     <div class="modal-content border-0 shadow">
       <div class="modal-header border-bottom">
         <h5 class="modal-title fw-bold" id="walkinModalLabel">
@@ -96,16 +96,21 @@
                      class="form-control"
                      placeholder="Type Student ID, Employee ID, or Name..."
                      x-model="searchTerm"
+                     maxlength="150"
+                     @input="cancelSearch()"
                      @input.debounce.300ms="searchPatient()">
             </div>
             <div class="form-text small text-muted">Searches the local student and employee directory. No MIS connection is required.</div>
           </div>
 
           <!-- Loading state -->
-          <div x-show="loading" class="text-center py-3 text-muted small">
-            <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
-            Searching MIS directory...
+          <div x-show="loading" class="text-center py-3 text-muted small" role="status" x-cloak>
+            <div class="spinner-border spinner-border-sm text-primary me-2" aria-hidden="true"></div>
+            Searching local directory...
           </div>
+          <div x-show="searchError" x-text="searchError" class="alert alert-warning small" role="alert" x-cloak></div>
+          <div x-show="searchComplete && !loading && !searchError && !results.length && !selectedPerson"
+               class="text-muted small py-3" role="status" x-cloak>No matching students or employees found.</div>
 
           <!-- Results list -->
           <div x-show="results.length > 0 && !selectedPerson" class="list-group mb-3 shadow-sm border" style="max-height: 200px; overflow-y: auto;">
@@ -198,6 +203,8 @@
       results: [],
       selectedPerson: null,
       loading: false,
+      searchError: '',
+      searchComplete: false,
       submitting: false,
       committed: false,
       feedback: '',
@@ -205,7 +212,9 @@
       init() {
         events = new AbortController();
         this.$root.addEventListener('hide.bs.modal', event => {
-          if (event.target === this.$root && this.submitting) event.preventDefault();
+          if (event.target !== this.$root) return;
+          if (this.submitting) event.preventDefault();
+          else this.cancelSearch();
         }, { signal: events.signal });
         this.$root.addEventListener('hidden.bs.modal', event => {
           if (event.target === this.$root && !this.committed) this.discardDraft();
@@ -231,6 +240,9 @@
         request?.abort();
         request = null;
         this.loading = false;
+        this.results = [];
+        this.searchError = '';
+        this.searchComplete = false;
       },
 
       discardDraft() {
@@ -336,23 +348,26 @@
         this.cancelSearch();
         this.results = [];
         const term = this.searchTerm.trim();
-        if (term.length < 2 || this.selectedPerson || this.submitting || this.committed || !this.$root.classList.contains('show')) return;
+        if (term.length < 2 || term.length > 150 || this.selectedPerson || this.submitting || this.committed || !this.$root.classList.contains('show')) return;
 
         const current = sequence;
         const controller = new AbortController();
+        const isCurrent = () => current === sequence && !controller.signal.aborted
+          && this.searchTerm.trim() === term && !this.selectedPerson
+          && !this.submitting && !this.committed && this.$root.classList.contains('show');
         request = controller;
         this.loading = true;
         try {
           const res = await fetch(`<?= site_url('/api/patients/search?q=') ?>${encodeURIComponent(term)}`, { signal: controller.signal });
-          if (controller.signal.aborted || window.SynapseCsrf?.fromResponse(res)) return;
-          if (res.ok) {
-            const data = await res.json();
-            if (current === sequence && this.searchTerm.trim() === term) {
-              this.results = Array.isArray(data.results) ? data.results : [];
-            }
-          }
-        } catch (e) {
-          if (e.name !== 'AbortError' && current === sequence) console.error(e);
+          if (!isCurrent()) return;
+          if (window.SynapseCsrf?.fromResponse(res) || !res.ok) throw new Error();
+          const data = await res.json();
+          if (!isCurrent()) return;
+          if (!data || !Array.isArray(data.results)) throw new Error();
+          this.results = data.results;
+          this.searchComplete = true;
+        } catch (_) {
+          if (isCurrent()) this.searchError = 'Unable to search the local directory. Please try again.';
         } finally {
           if (current === sequence) {
             request = null;

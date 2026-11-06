@@ -8,6 +8,7 @@ use App\Models\CounsellingCaseModel;
 use App\Models\CounsellingSessionModel;
 
 use App\Models\UserModel;
+use App\Services\DashboardCache;
 use App\Services\Guidance\GuidanceCaseService;
 use App\Services\Scheduling\SchedulingClock;
 
@@ -37,78 +38,95 @@ final class GuidanceController extends BaseController
         $db = \Config\Database::connect();
         $today = SchedulingClock::today();
 
-        // Share the ownership and live-person boundary across every case-derived dataset.
-        $cases = $db->table('counselling_cases')
-            ->join('people', 'people.id = counselling_cases.person_id AND people.tenant_id = counselling_cases.tenant_id')
-            ->where('counselling_cases.tenant_id', $tenantId)
-            ->where('counselling_cases.deleted_at', null)->where('people.deleted_at', null);
-        if ($user['role'] !== 'superadmin' && !in_array('guidance.cases.read_any', $user['permissions'], true)) {
-            $cases->where('counselling_cases.counsellor_user_id', $user['id']);
-        }
-        $sessions = (clone $cases)
-            ->join('counselling_sessions', 'counselling_sessions.case_id = counselling_cases.id AND counselling_sessions.tenant_id = counselling_cases.tenant_id')
-            ->where('counselling_sessions.deleted_at', null);
+        // Case counts are scoped to the counsellor unless the actor holds oversight,
+        // so the cache key must carry that discriminator: one shared key would leak
+        // a caseload's numbers into another counsellor's dashboard.
+        $scope = 'guidance.dashboard.' . ($user['role'] === 'superadmin'
+            || in_array('guidance.cases.read_any', $user['permissions'], true) ? '0' : (string) $user['id']);
 
-        // 1. Case counts
-        $activeCases = (clone $cases)->whereIn('counselling_cases.status', ['open', 'active', 'monitoring'])->countAllResults();
-        $closedCases = (clone $cases)->where('counselling_cases.status', 'closed')->countAllResults();
+        $metrics = DashboardCache::remember($scope, DashboardCache::TTL, static function () use ($db, $tenantId, $today, $user): array {
+            // Share the ownership and live-person boundary across every case-derived dataset.
+            $cases = $db->table('counselling_cases')
+                ->join('people', 'people.id = counselling_cases.person_id AND people.tenant_id = counselling_cases.tenant_id')
+                ->where('counselling_cases.tenant_id', $tenantId)
+                ->where('counselling_cases.deleted_at', null)->where('people.deleted_at', null);
+            if ($user['role'] !== 'superadmin' && !in_array('guidance.cases.read_any', $user['permissions'], true)) {
+                $cases->where('counselling_cases.counsellor_user_id', $user['id']);
+            }
+            $sessions = (clone $cases)
+                ->join('counselling_sessions', 'counselling_sessions.case_id = counselling_cases.id AND counselling_sessions.tenant_id = counselling_cases.tenant_id')
+                ->where('counselling_sessions.deleted_at', null);
 
-        // 2. Queue today
-        $queueWaiting = $db->table('queue_entries')
-            ->where('tenant_id', $tenantId)->where('unit', 'guidance')->where('queue_date', $today)
-            ->where('status', 'waiting')->countAllResults();
-        $queueCalled = $db->table('queue_entries')
-            ->where('tenant_id', $tenantId)->where('unit', 'guidance')->where('queue_date', $today)
-            ->where('status', 'called')->countAllResults();
+            // 1. Case counts
+            $activeCases = (clone $cases)->whereIn('counselling_cases.status', ['open', 'active', 'monitoring'])->countAllResults();
+            $closedCases = (clone $cases)->where('counselling_cases.status', 'closed')->countAllResults();
 
-        // 3. Pending incoming referrals to guidance
-        $pendingReferrals = $db->table('referrals')
-            ->where('tenant_id', $tenantId)->where('target_module', 'guidance')
-            ->whereIn('status', ['submitted', 'acknowledged'])->countAllResults();
+            // 2. Queue today
+            $queueWaiting = $db->table('queue_entries')
+                ->where('tenant_id', $tenantId)->where('unit', 'guidance')->where('queue_date', $today)
+                ->where('status', 'waiting')->countAllResults();
+            $queueCalled = $db->table('queue_entries')
+                ->where('tenant_id', $tenantId)->where('unit', 'guidance')->where('queue_date', $today)
+                ->where('status', 'called')->countAllResults();
 
-        // 4. Completed sessions
-        $completedSessions = (clone $sessions)->where('counselling_sessions.status', 'completed')->countAllResults();
+            // 3. Pending incoming referrals to guidance
+            $pendingReferrals = $db->table('referrals')
+                ->where('tenant_id', $tenantId)->where('target_module', 'guidance')
+                ->whereIn('status', ['submitted', 'acknowledged'])->countAllResults();
 
-        // 5. Category breakdown
-        $categories = ['academic', 'personal', 'career', 'crisis', 'behavioral', 'family'];
-        $categoryCounts = [];
-        foreach ($categories as $cat) {
-            $categoryCounts[$cat] = (clone $cases)->where('counselling_cases.category', $cat)->countAllResults();
-        }
+            // 4. Completed sessions
+            $completedSessions = (clone $sessions)->where('counselling_sessions.status', 'completed')->countAllResults();
 
-        // 6. Recent cases
-        $recentCases = (clone $cases)
-            ->join('users', 'users.id = counselling_cases.counsellor_user_id AND users.tenant_id = counselling_cases.tenant_id')
-            ->select('counselling_cases.id, counselling_cases.case_number, counselling_cases.category, counselling_cases.status')
-            ->select('people.first_name, people.last_name, people.mis_id, users.username as counsellor_name')
-            ->orderBy('counselling_cases.opened_at', 'DESC')->limit(6)->get()->getResultArray();
+            // 5. Category breakdown
+            $categoryCounts = array_fill_keys(['academic', 'personal', 'career', 'crisis', 'behavioral', 'family'], 0);
+            foreach ((clone $cases)->select('counselling_cases.category, COUNT(*) AS total')
+                ->groupBy('counselling_cases.category')->get()->getResultArray() as $categoryRow) {
+                if (isset($categoryCounts[$categoryRow['category']])) {
+                    $categoryCounts[$categoryRow['category']] = (int) $categoryRow['total'];
+                }
+            }
 
-        // 7. Last 7 days session activity
-        $days = [];
-        $dailySessions = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $d = date('Y-m-d', strtotime("-{$i} days"));
-            $days[] = date('M j', strtotime($d));
-            $dailySessions[] = (clone $sessions)
-                ->where('counselling_sessions.started_at >=', $d . ' 00:00:00')
-                ->where('counselling_sessions.started_at <', date('Y-m-d', strtotime($d . ' +1 day')) . ' 00:00:00')
-                ->countAllResults();
-        }
+            // 6. Recent cases
+            $recentCases = (clone $cases)
+                ->join('users', 'users.id = counselling_cases.counsellor_user_id AND users.tenant_id = counselling_cases.tenant_id')
+                ->select('counselling_cases.id, counselling_cases.case_number, counselling_cases.category, counselling_cases.status')
+                ->select('people.first_name, people.last_name, people.mis_id, users.username as counsellor_name')
+                ->orderBy('counselling_cases.opened_at', 'DESC')->limit(6)->get()->getResultArray();
 
-        return view('guidance/dashboard', [
-            'title'             => 'Guidance Dashboard',
-            'pageTitle'         => 'Guidance Workstation Dashboard',
-            'user'              => $user,
-            'activeCases'       => $activeCases,
-            'closedCases'       => $closedCases,
-            'queueToday'        => $queueWaiting + $queueCalled,
-            'pendingReferrals'  => $pendingReferrals,
-            'completedSessions' => $completedSessions,
-            'categoryCounts'    => $categoryCounts,
-            'recentCases'       => $recentCases,
-            'chartDays'         => $days,
-            'chartSeries'       => $dailySessions,
-            'breadcrumbs'       => [
+            // 7. Last 7 days session activity
+            // One bounded range read, bucketed on the Manila business day in PHP:
+            // started_at is stored as a UTC instant, so the Manila day is a UTC range.
+            $ranges = SchedulingClock::businessDayRanges(7);
+            $days = array_map(static fn (string $businessDay): string => date('M j', strtotime($businessDay)), array_keys($ranges));
+            $dailySessions = array_fill(0, count($ranges), 0);
+            foreach ((clone $sessions)
+                ->where('counselling_sessions.started_at >=', $ranges[array_key_first($ranges)][0])
+                ->where('counselling_sessions.started_at <', $ranges[array_key_last($ranges)][1])
+                ->select('counselling_sessions.started_at')->get()->getResultArray() as $sessionRow) {
+                $bucket = SchedulingClock::businessDayIndex((string) $sessionRow['started_at'], $ranges);
+                if ($bucket !== null) {
+                    $dailySessions[$bucket]++;
+                }
+            }
+
+            return [
+                'activeCases'       => $activeCases,
+                'closedCases'       => $closedCases,
+                'queueToday'        => $queueWaiting + $queueCalled,
+                'pendingReferrals'  => $pendingReferrals,
+                'completedSessions' => $completedSessions,
+                'categoryCounts'    => $categoryCounts,
+                'recentCases'       => $recentCases,
+                'chartDays'         => $days,
+                'chartSeries'       => $dailySessions,
+            ];
+        });
+
+        return view('guidance/dashboard', $metrics + [
+            'title'       => 'Guidance Dashboard',
+            'pageTitle'   => 'Guidance Workstation Dashboard',
+            'user'        => $user,
+            'breadcrumbs' => [
                 ['label' => 'Guidance', 'url' => site_url('/guidance')],
                 ['label' => 'Dashboard', 'url' => ''],
             ],
@@ -150,32 +168,44 @@ final class GuidanceController extends BaseController
     public function caseView(int $id)
     {
         $this->response->setHeader('Cache-Control', 'private, no-store');
-        $package = $this->caseService->getCaseDetails($id);
+        try {
+            $package = $this->caseService->getCaseDetails($id);
 
-        // Find if there is an in_progress active session
-        $activeSession = $this->sessionModel->scoped()
-            ->where('case_id', $id)
-            ->where('status', 'in_progress')
-            ->orderBy('id', 'DESC')
-            ->first();
+            // Find if there is an in_progress active session
+            $activeSession = $this->sessionModel->scoped()
+                ->where('case_id', $id)
+                ->where('status', 'in_progress')
+                ->orderBy('id', 'DESC')
+                ->first();
 
-        $decryptedNote = null;
-        if ($activeSession !== null) {
-            $decryptedNote = $this->caseService->getDecryptedSessionNote((int) $activeSession['id']);
+            $decryptedNote = null;
+            if ($activeSession !== null) {
+                $decryptedNote = $this->caseService->getDecryptedSessionNote((int) $activeSession['id']);
+            }
+
+            // Outcome plaintext is fetched only through its fresh, audited read path.
+            $outcomes = $this->caseService->getDecryptedCaseOutcomes($id);
+
+            return view('guidance/cases/view', [
+                'title'         => 'Case: ' . $package['case']['case_number'],
+                'pageTitle'     => $package['case']['title'],
+                'case'          => $package['case'],
+                'package'       => $package,
+                'activeSession' => $activeSession,
+                'decryptedNote' => $decryptedNote,
+                'noteReadAudited' => $decryptedNote !== null,
+                'outcomes' => $outcomes,
+                'oversightMode' => $package['oversight_mode'],
+                'breadcrumbs'   => [
+                    ['label' => 'Guidance', 'url' => site_url('/guidance/cases')],
+                    ['label' => $package['case']['case_number'], 'url' => ''],
+                ],
+            ]);
+        } catch (\Throwable $error) {
+            [$status, $message] = $this->safeFailure($error, 'caseView', $id);
+            return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'private, no-store')
+                ->setContentType('text/html')->setBody('<div class="alert alert-danger">' . esc($message) . '</div>');
         }
-
-        return view('guidance/cases/view', [
-            'title'         => 'Case: ' . $package['case']['case_number'],
-            'pageTitle'     => $package['case']['title'],
-            'case'          => $package['case'],
-            'package'       => $package,
-            'activeSession' => $activeSession,
-            'decryptedNote' => $decryptedNote,
-            'breadcrumbs'   => [
-                ['label' => 'Guidance', 'url' => site_url('/guidance/cases')],
-                ['label' => $package['case']['case_number'], 'url' => ''],
-            ],
-        ]);
     }
 
     /** Case access filters protect the subject's private photo just like the workspace. */
@@ -269,6 +299,8 @@ final class GuidanceController extends BaseController
                 'student'       => $package['student'] ?? null,
                 'employee'      => $package['employee'] ?? null,
                 'note'          => $note,
+                'noteReadAudited' => $note !== null,
+                'oversightMode' => $package['oversight_mode'],
                 'author'        => $author,
                 'cancelUrl'     => site_url('/guidance/cases/' . $session['case_id']),
                 'formModalPage' => true,
@@ -293,7 +325,8 @@ final class GuidanceController extends BaseController
     {
         return $this->mutate(function (int $userId) use ($caseId): array {
             $this->requireConfirmation();
-            $this->caseService->closeCase($caseId, confirmed: true);
+            $this->caseService->closeCase($caseId, confirmed: true,
+                closureDisposition: $this->postedOutcome('closure_disposition'));
             return ['/guidance/cases/' . $caseId, 'Case closed.'];
         });
     }
@@ -313,8 +346,12 @@ final class GuidanceController extends BaseController
         try {
             $this->actorId();
             $history = $this->caseService->getDecryptedSessionNoteHistory($sessionId);
+            $session = $this->caseService->getSession($sessionId);
+            $case = $this->caseModel->scoped()->find((int) $session['case_id']);
             return view('guidance/sessions/history', [
                 'title' => 'Finalized Note Version History', 'history' => $history,
+                'historyReadAudited' => true,
+                'oversightMode' => (int) $case['counsellor_user_id'] !== $this->actorId(),
                 'cancelUrl' => site_url('/guidance/sessions/' . $sessionId . '/read'),
                 'formModalPage' => true,
             ]);
@@ -328,6 +365,25 @@ final class GuidanceController extends BaseController
         if ($this->request->getPost('confirmed') !== '1') {
             throw new \InvalidArgumentException('Explicit confirmation is required.', 422);
         }
+    }
+
+    /**
+     * Required, bounded outcome text for the web forms.
+     *
+     * Service callers may still omit these arguments for legacy internal use;
+     * the interactive workflow always records an explicit outcome.
+     */
+    private function postedOutcome(string $field): string
+    {
+        $value = $this->request->getPost($field);
+        if (!is_string($value)) {
+            throw new \InvalidArgumentException('Enter the required outcome notes.', 422);
+        }
+        $value = trim($value);
+        if ($value === '' || mb_strlen($value) > 2000) {
+            throw new \InvalidArgumentException('Outcome notes must be between 1 and 2000 characters.', 422);
+        }
+        return $value;
     }
 
     private function postedSessionType(): string
@@ -384,7 +440,9 @@ final class GuidanceController extends BaseController
             if ($dueDate === '' || trim($actionPlan) === '') {
                 throw new \InvalidArgumentException('Due date and action plan are required.', 422);
             }
-            $this->caseService->getCaseDetails($caseId);
+            // Restore the case-read authorization removed with the public read;
+            // this check intentionally emits no oversight-read audit event.
+            $this->caseService->assertCaseReadable($caseId);
             $this->caseService->addFollowup($caseId, null, $dueDate, $actionPlan);
             return ['/guidance/cases/' . $caseId, 'Action item assigned.'];
         });
@@ -400,8 +458,7 @@ final class GuidanceController extends BaseController
             if ($followup === null) {
                 throw new \RuntimeException('Action item not found.', 404);
             }
-            $this->caseService->getCaseDetails((int) $followup['case_id']);
-            $this->caseService->completeFollowup($followupId);
+            $this->caseService->completeFollowup($followupId, $this->postedOutcome('completion_notes'));
             return ['/guidance/cases/' . $followup['case_id'], 'Commitment marked as completed.'];
         });
     }

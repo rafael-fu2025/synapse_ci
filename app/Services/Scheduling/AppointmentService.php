@@ -861,7 +861,11 @@ final class AppointmentService
         try {
             if ($notifications !== []) {
                 $invalidation ??= new NotificationInvalidation($db);
-                foreach ($notifications as $tenant => $ids) $invalidation->publishCommitted((int) $tenant, $ids);
+                $push = new \App\Services\Push\PushPublisher($db);
+                foreach ($notifications as $tenant => $ids) {
+                    $invalidation->publishCommitted((int) $tenant, $ids);
+                    $push->publishCommitted((int) $tenant, $ids);
+                }
             }
         } catch (\Throwable) {
             // Optional realtime setup cannot fail or roll back a committed write.

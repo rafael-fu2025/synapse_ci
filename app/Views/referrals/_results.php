@@ -1,6 +1,6 @@
 <?php
 $can = static fn (string $permission): bool => ($actor['role'] ?? '') === 'superadmin' || in_array($permission, $actor['permissions'] ?? [], true);
-$labels = ['submitted' => 'Submitted', 'acknowledged' => 'Acknowledged', 'under_review' => 'Under review', 'converted_to_case' => 'Case linked', 'closed' => 'Closed'];
+$labels = \App\Services\Referrals\ReferralService::LIST_STATUS_LABELS;
 ?>
 <div data-table-content>
 <div class="card"><div class="table-responsive">

@@ -22,7 +22,12 @@ final class CounsellingCaseModel extends TenantModel
         'status',
         'opened_at',
         'closed_at',
+        'closed_by',
         'summary_notes',
+        'closure_disposition_cipher',
+        'closure_disposition_nonce',
+        'closure_disposition_tag',
+        'closure_disposition_key_version',
     ];
 
     protected $useTimestamps = true;

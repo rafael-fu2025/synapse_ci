@@ -97,9 +97,10 @@ $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
         <div class="col-md-6"><label for="availabilityDuration" class="form-label">Appointment duration</label><select name="slot_duration_minutes" id="availabilityDuration" class="form-select" required><?php foreach ([15, 30, 45, 60] as $minutes): ?><option value="<?= $minutes ?>" <?= $minutes === (int) ($selectedWindow['slot_duration_minutes'] ?? 30) ? 'selected' : '' ?>><?= $minutes ?> minutes</option><?php endforeach; ?></select></div>
         <div class="col-md-6"><label for="availabilityActive" class="form-label">Availability</label><select name="is_active" id="availabilityActive" class="form-select"><option value="1" <?= ($selectedWindow['is_active'] ?? 1) ? 'selected' : '' ?>>Active</option><option value="0" <?= !($selectedWindow['is_active'] ?? 1) ? 'selected' : '' ?>>Inactive</option></select></div>
       </div>
-      <div class="av-form-footer justify-content-end"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" <?= empty($providers) ? 'disabled' : '' ?>>Save Availability</button></div>
     </form>
-  </div></div></div></div>
+  </div>
+  <div class="modal-footer av-modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" form="individualAvailability" <?= empty($providers) ? 'disabled' : '' ?>>Save Availability</button></div>
+  </div></div></div>
   <?php else: ?>
   <section class="card" aria-labelledby="exception-list-title"><div class="card-body p-3 p-lg-4">
     <div class="av-section-heading"><div><h2 id="exception-list-title" class="h5">Leave, closed days and custom hours</h2><p class="small text-muted mb-0">Manage date-specific changes without altering recurring weekly hours.</p></div><button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#availability-exception-new-modal" <?= $providers === [] ? 'disabled' : '' ?>><i class="bi bi-plus-circle me-2" aria-hidden="true"></i>Add exception</button></div>
@@ -112,7 +113,8 @@ $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
     </div>
   </div></section>
   <?php foreach ([null, ...$visibleExceptions] as $exception): if ($exception !== null && ($exception['exception_date'] < \App\Services\Scheduling\SchedulingClock::today() || !in_array((int) $exception['staff_assignment_id'], array_map('intval', array_column($providers, 'id')), true))) continue; $modalId = $exception === null ? 'availability-exception-new-modal' : 'availability-exception-' . (int) $exception['id'] . '-modal'; ?>
-    <div class="modal fade" id="<?= $modalId ?>" tabindex="-1" aria-labelledby="<?= $modalId ?>-title" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5" id="<?= $modalId ?>-title"><?= $exception === null ? 'Add exception' : 'Edit exception' ?></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><?= view('appointments/exception_form', compact('unit', 'providers', 'exception', 'workspaceContext')) ?></div></div></div></div>
+    <?php $exceptionFormId = 'exception' . ($exception['id'] ?? 'New') . 'Form'; ?>
+    <div class="modal fade" id="<?= $modalId ?>" tabindex="-1" aria-labelledby="<?= $modalId ?>-title" aria-hidden="true"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 class="modal-title fs-5" id="<?= $modalId ?>-title"><?= $exception === null ? 'Add exception' : 'Edit exception' ?></h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><div class="modal-body"><?= view('appointments/exception_form', compact('unit', 'providers', 'exception', 'workspaceContext')) ?></div><div class="modal-footer av-modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary" form="<?= esc($exceptionFormId, 'attr') ?>">Save exception</button></div></div></div></div>
   <?php endforeach; ?>
   <?php endif; ?>
   </div>

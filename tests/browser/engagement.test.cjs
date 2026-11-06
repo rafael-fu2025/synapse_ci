@@ -12,17 +12,27 @@ const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
 const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
 let browser, server, origin, failSave = false, persistTargeting = false, bankUnavailable = false, bankMulti = false;
+// Read state is server state, not a query-string artifact: the production
+// background form refreshes the current URL after its confirmed POST.
+let portalNoticeRead = false;
 const posts = [], cache = new Map(), savedTargets = new Map();
+// Engagement POST assertions must never count the realtime ticket handshake
+// (or other non-engagement traffic) that can race with a test.
+const engagementPosts = () => posts.filter(post => !post.path.startsWith('/realtime/'));
 function render(requestPath) {
-  if (!persistTargeting && cache.has(requestPath)) return cache.get(requestPath);
+  // A confirmed read mutation must bypass the fixture's GET cache so the
+  // post-save soft refresh observes committed server state.
+  const committedRead = portalNoticeRead && requestPath.startsWith('/portal/announcements/1');
+  if (!persistTargeting && !committedRead && cache.has(requestPath)) return cache.get(requestPath);
   const base = '/' + requestPath.split('/').slice(1, 3).join('/').split('?')[0];
   const result = spawnSync('php', ['tests/_support/render-engagement-fixture.php'], {
-    cwd: root, input: JSON.stringify({ origin, path: requestPath, savedTarget: persistTargeting ? savedTargets.get(base) : undefined }), encoding: 'utf8', timeout: 10000
+    cwd: root, input: JSON.stringify({ origin, path: requestPath, savedTarget: persistTargeting ? savedTargets.get(base) : undefined,
+      savedRead: requestPath.startsWith('/portal/announcements/1') ? portalNoticeRead : undefined }), encoding: 'utf8', timeout: 10000
   });
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /Fatal error|Warning:|Parse error|"code": 500/);
   assert.match(result.stdout, /<div/);
-  if (!persistTargeting) cache.set(requestPath, result.stdout);
+  if (!persistTargeting && !committedRead) cache.set(requestPath, result.stdout);
   return result.stdout;
 }
 function fields(body, contentType) {
@@ -53,10 +63,12 @@ before(async () => {
       }
       if (req.method === 'POST') {
         const chunks = []; for await (const chunk of req) chunks.push(chunk);
-        posts.push({ path: url.pathname, fields: fields(Buffer.concat(chunks).toString(), req.headers['content-type'] || ''), headers: req.headers });
+        const current = { path: url.pathname, fields: fields(Buffer.concat(chunks).toString(), req.headers['content-type'] || ''), headers: req.headers };
+        posts.push(current);
+        if (url.pathname === '/portal/announcements/1/read') portalNoticeRead = true;
         const base = '/' + url.pathname.split('/').slice(1, 3).join('/');
         if (persistTargeting && !failSave && /\/(store|update)$/.test(url.pathname)) {
-          const sent = posts.at(-1).fields;
+          const sent = current.fields;
           const selected = name => sent.filter(([key]) => key === name + '[]').map(([, value]) => value);
           savedTargets.set(base, { audience: Object.fromEntries(sent).audience,
             target_year_levels: selected('target_year_levels').length ? JSON.stringify(selected('target_year_levels')) : null,
@@ -96,6 +108,9 @@ async function pageFor(t, route, theme, mobile = false) {
   failSave = false;
   bankUnavailable = false;
   bankMulti = false;
+  // Each browser variant starts from a fresh synthetic announcement state.
+  portalNoticeRead = false;
+  cache.clear();
   const context = await browser.newContext({ viewport: mobile ? { width: 375, height: 812 } : { width: 1280, height: 900 } });
   await context.addInitScript(theme => localStorage.setItem('na-dark-mode', theme === 'dark' ? '1' : '0'), theme);
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
@@ -141,7 +156,7 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     test(`${theme} ${mobile ? 'mobile' : 'desktop'} portal ${kind}: live search, tabs, reset and real history`, { timeout: 30000 }, async t => {
       const pathname = `/portal/${kind}`;
       const page = await pageFor(t, pathname, theme, mobile);
-      const reads = portalFilterReads(page, pathname), postCount = posts.length;
+      const reads = portalFilterReads(page, pathname), postCount = engagementPosts().length;
       const isNotice = kind === 'announcements';
       const search = page.locator(isNotice ? '#notice-search' : '#survey-search');
       const root = page.locator(`[data-live-filters][data-filter-key="portal-${kind}"]`);
@@ -173,8 +188,9 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
       assert.equal(await root.locator('[aria-current="page"][data-filter-link]').getAttribute('href').then(href => new URL(href).searchParams.get('status')), status);
       await portalFilterUpdate(page, () => root.locator('[data-filter-form] [data-filter-reset]').click());
       assert.equal(await root.locator('.pe-content-card').count(), isNotice ? 2 : 3);
-      assert.equal(await page.evaluate(nodes => nodes[0] === document.querySelector('[data-live-filters]') &&
-        nodes[1] === document.querySelector('[data-filter-form]') && nodes[2] === document.querySelector('input[type="search"]'), identities), true);
+      // Identity must be checked inside this portal root; the global header search is unrelated.
+      assert.equal(await root.evaluate((el, nodes) => nodes[0] === el &&
+        nodes[1] === el.querySelector('[data-filter-form]') && nodes[2] === el.querySelector('input[type="search"]'), identities), true);
       await identities.dispose();
       // Do not mock navigation: these traverse entries owned by SynapseNavigation.
       await portalFilterUpdate(page, () => page.goBack(), true);
@@ -185,7 +201,7 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
       assert.equal(await page.locator('[data-filter-form] [name="status"]').inputValue(), 'all');
       assert.equal(await page.locator('.pe-content-card').count(), isNotice ? 2 : 3);
       assert.equal(reads.length, isNotice ? 5 : 4, 'One filter XHR per search/dropdown/tab/reset; history uses full navigation GETs');
-      assert.equal(posts.length, postCount, 'Filtering and history never POST');
+      assert.equal(engagementPosts().length, postCount, 'Filtering and history never POST');
       await noOverflow(page);
     });
   }
@@ -259,12 +275,12 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
       await choose(page.locator(modal), 'Audience', 'Employees (including staff self-service)');
       await page.getByLabel('Visible from').fill('2026-10-20T09:00');
       await page.getByLabel('Expires at').fill('2026-10-21T17:00');
-      const before = posts.length; failSave = true;
+      const before = engagementPosts().length; failSave = true;
       await page.getByRole('button', { name: 'Save draft', exact: true }).click();
       await page.locator('[data-modal-error]:not(.d-none)').waitFor();
-      assert.equal(posts.length, before + 1);
-      const sent = Object.fromEntries(posts.at(-1).fields);
-      assert.equal(posts.at(-1).path, base + '/store');
+      assert.equal(engagementPosts().length, before + 1);
+      const sent = Object.fromEntries(engagementPosts().at(-1).fields);
+      assert.equal(engagementPosts().at(-1).path, base + '/store');
       assert.deepEqual(Object.keys(sent).sort(), ['audience', 'body', 'csrf_test_name', 'ends_at', 'starts_at', 'title']);
       assert.equal(sent.body, literal); assert.equal(sent.audience, 'employees');
       assert.equal(sent.starts_at, '2026-10-20T09:00'); assert.equal(sent.ends_at, '2026-10-21T17:00');
@@ -272,8 +288,8 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
       assert.equal(await page.getByLabel('Announcement text').inputValue(), literal);
       failSave = false; await page.getByRole('button', { name: 'Save draft', exact: true }).click();
       await page.waitForFunction(() => !document.querySelector('#appFormModal'));
-      assert.equal(posts.length, before + 2);
-      assert.deepEqual(Object.fromEntries(posts.at(-1).fields), { ...sent, csrf_test_name: 'retry-token' });
+      assert.equal(engagementPosts().length, before + 2);
+      assert.deepEqual(Object.fromEntries(engagementPosts().at(-1).fields), { ...sent, csrf_test_name: 'retry-token' });
       await open(page, 'Edit draft');
       assert.equal(await page.locator(`${modal} [name=version]`).inputValue(), '7');
       assert.match(await page.getByLabel('Announcement text').inputValue(), /<img src=x/);
@@ -310,12 +326,12 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     await question(page, 1).getByLabel('Question text').fill('Rate support');
     await choose(question(page, 1), 'Answer type', 'Rating (1–5)');
     await modalVisuals(page, theme);
-    const before = posts.length;
+    const before = engagementPosts().length;
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('#appFormModal'));
-    assert.equal(posts.length, before + 1);
-    assert.equal(posts.at(-1).path, '/guidance/surveys/store');
-    const sent = Object.fromEntries(posts.at(-1).fields);
+    assert.equal(engagementPosts().length, before + 1);
+    assert.equal(engagementPosts().at(-1).path, '/guidance/surveys/store');
+    const sent = Object.fromEntries(engagementPosts().at(-1).fields);
     const csrf = sent.csrf_test_name; assert.ok(csrf);
     assert.deepEqual(sent, { csrf_test_name: csrf, title: 'Wellbeing check', description: 'Identified campus feedback', audience: 'students', starts_at: '', ends_at: '',
       'questions[0][label]': 'Pick a time', 'questions[0][type]': 'single', 'questions[0][required]': '0',
@@ -339,22 +355,26 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
       ['/guidance/surveys', 'Close', 'Close survey', '/guidance/surveys/2/close', null]
     ]) {
       await page.goto(origin + route);
-      const button = page.locator('#main').getByRole('button', { name: action, exact: true }).first();
-      const before = posts.length; await button.click();
+      // "Close" also exists as an alert-dismiss control; select the lifecycle form.
+      const button = route.endsWith('/surveys') && action === 'Close'
+        ? page.locator(`#main form[action$="${target}"] button[type="submit"]`)
+        : page.locator('#main').getByRole('button', { name: action, exact: true }).first();
+      const before = engagementPosts().length; await button.click();
       await page.locator('#synapseConfirmModal.show').waitFor();
       await noOverflow(page, '#synapseConfirmModal .modal-content');
       assert.match(await page.locator('[data-confirm-message]').innerText(), /cannot|immutable|No further/);
-      assert.equal(posts.length, before); await cancelConfirm(page); assert.equal(posts.length, before);
+      assert.equal(engagementPosts().length, before); await cancelConfirm(page); assert.equal(engagementPosts().length, before);
       await button.click();
       assert.equal(await page.locator('[data-confirm-accept]').innerText(), label);
+      // Production background forms confirm the POST, then soft-refresh the
+      // current route; there is deliberately no full document load to await.
       await Promise.all([
         page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === target),
-        // Mobile scroll/focus can cause same-document navigation before the form redirect.
-        page.waitForEvent('load'),
         acceptConfirm(page)
       ]);
-      assert.equal(posts.length, before + 1); assert.equal(posts.at(-1).path, target);
-      const sent = Object.fromEntries(posts.at(-1).fields); assert.ok(sent.csrf_test_name);
+      await page.waitForFunction(() => !document.body.classList.contains('is-navigating'));
+      assert.equal(engagementPosts().length, before + 1); assert.equal(engagementPosts().at(-1).path, target);
+      const sent = Object.fromEntries(engagementPosts().at(-1).fields); assert.ok(sent.csrf_test_name);
       if (version) assert.equal(sent.version, version);
     }
   });
@@ -365,11 +385,12 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     await noOverflow(page);
     assert.match(await page.locator('#main article').innerText(), /<img src=x/);
     assert.equal(await page.locator('#main article img').count(), 0);
-    const readBefore = posts.length;
+    const readBefore = engagementPosts().length;
     await page.getByRole('button', { name: 'Mark as read', exact: true }).click();
-    await page.waitForURL(origin + '/portal/announcements/1?read=1');
-    assert.equal(posts.length, readBefore + 1); assert.equal(posts.at(-1).path, '/portal/announcements/1/read');
-    assert.equal(await page.getByRole('button', { name: 'Mark as read', exact: true }).count(), 0);
+    // The confirmed POST refreshes the current page; it must not invent a query marker.
+    await page.waitForURL(origin + '/portal/announcements/1');
+    assert.equal(engagementPosts().length, readBefore + 1); assert.equal(engagementPosts().at(-1).path, '/portal/announcements/1/read');
+    await page.getByRole('button', { name: 'Mark as read', exact: true }).waitFor({ state: 'detached' });
     await page.goto(origin + '/portal/surveys'); await noOverflow(page);
     // Direct-route submission is independent of the soft-navigation regression below.
     await page.goto(origin + '/portal/surveys/1');
@@ -382,15 +403,15 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     await page.getByLabel('Study', { exact: true }).check();
     await page.getByLabel('Career', { exact: true }).check();
     await choose(page.locator('[data-survey-submit]'), 'Overall rating', '5');
-    const before = posts.length;
+    const before = engagementPosts().length;
     await page.getByRole('button', { name: 'Submit identified response' }).click();
-    await cancelConfirm(page); assert.equal(posts.length, before);
+    await cancelConfirm(page); assert.equal(engagementPosts().length, before);
     failSave = true;
     await page.getByRole('button', { name: 'Submit identified response' }).click(); await acceptConfirm(page);
     await page.locator('[data-survey-error]:not(.d-none)').waitFor();
-    assert.equal(posts.length, before + 1);
+    assert.equal(engagementPosts().length, before + 1);
     assert.equal(await page.getByLabel('Your feedback', { exact: true }).inputValue(), 'Please offer more sessions');
-    const submitted = posts.at(-1); assert.equal(submitted.path, '/portal/surveys/1/submit');
+    const submitted = engagementPosts().at(-1); assert.equal(submitted.path, '/portal/surveys/1/submit');
     assert.deepEqual(submitted.fields.filter(([key]) => key !== 'csrf_test_name'), [
       ['answers[0]', 'Please offer more sessions'], ['answers[1]', '0'], ['answers[2][]', '0'], ['answers[2][]', '2'], ['answers[3]', '5']
     ]);
@@ -399,10 +420,10 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
         await Promise.all([
           page.waitForResponse(response => response.request().method() === 'POST'), acceptConfirm(page)
         ]);
-        assert.equal(posts.at(-1).headers['x-requested-with'], 'XMLHttpRequest', JSON.stringify(posts.slice(before)));
+        assert.equal(engagementPosts().at(-1).headers['x-requested-with'], 'XMLHttpRequest', JSON.stringify(posts.slice(before)));
         await page.waitForURL(origin + '/portal/surveys');
-    assert.equal(posts.length, before + 2);
-    assert.equal(Object.fromEntries(posts.at(-1).fields).csrf_test_name, 'retry-token');
+    assert.equal(engagementPosts().length, before + 2);
+    assert.equal(Object.fromEntries(engagementPosts().at(-1).fields).csrf_test_name, 'retry-token');
     assert.equal(await page.locator('#main .pe-survey-card').first().locator('.pe-state').innerText(), 'Submitted');
     await page.getByRole('link', { name: 'View status', exact: true }).first().click();
     await page.waitForURL(origin + '/portal/surveys/1');
@@ -486,7 +507,7 @@ for (const base of ['/clinic/announcements', '/guidance/announcements', '/guidan
       await page.waitForFunction(() => !document.querySelector('#appFormModal'));
     };
     await save();
-    const selected = name => posts.at(-1).fields.filter(([key]) => key === name + '[]').map(([, value]) => value);
+    const selected = name => engagementPosts().at(-1).fields.filter(([key]) => key === name + '[]').map(([, value]) => value);
     assert.deepEqual(selected('target_year_levels'), ['1', '6']);
     assert.deepEqual(selected('target_student_categories'), ['new', 'transferee', 'graduating']);
     await open(page, 'Edit draft');
@@ -510,7 +531,7 @@ for (const base of ['/clinic/announcements', '/guidance/announcements', '/guidan
     assert.equal(await page.getByLabel('Year 2', { exact: true }).isChecked(), true);
     assert.equal(await page.getByLabel('Year 2', { exact: true }).isDisabled(), true);
     await save();
-    assert.equal(Object.fromEntries(posts.at(-1).fields).audience, 'employees');
+    assert.equal(Object.fromEntries(engagementPosts().at(-1).fields).audience, 'employees');
     assert.deepEqual(selected('target_year_levels'), []);
     assert.deepEqual(selected('target_student_categories'), []);
     await open(page, 'Edit draft');
@@ -587,7 +608,7 @@ for (const theme of ['light', 'dark']) {
     await page.getByLabel('Title', { exact: true }).fill('Bulk selected questions');
     await page.getByRole('button', { name: 'Save draft', exact: true }).click();
     await page.waitForFunction(() => !document.querySelector('#appFormModal'));
-    const sent = posts.at(-1).fields;
+    const sent = engagementPosts().at(-1).fields;
     assert.deepEqual(sent.filter(([key]) => key.endsWith('[bank_id]')).map(([, value]) => value), ['7', '8', '9']);
     assert.equal(sent.some(([key]) => /bankSelected|bankQuery/.test(key)), false);
     assert.equal(await page.evaluate(() => window.fixtureXss), undefined);

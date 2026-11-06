@@ -150,8 +150,7 @@ export function ProfilePhotoScreen() {
   }
 
   return (
-    <Screen>
-      <PageHeader title="Profile photo" onBack={navigation.goBack} />
+    <Screen header={<PageHeader edgeToEdge title="Profile photo" onBack={navigation.goBack} />}>
       <View style={styles.previewRing}>
         {!user || !token || failedUri === photoUri || removedSession === previewSession.nonce ? (
           <Text style={styles.initials}>{user?.avatar_initials ?? '··'}</Text>

@@ -10,17 +10,21 @@ use App\Services\Realtime\Channel;
 use App\Services\Realtime\Publisher;
 use Closure;
 use CodeIgniter\HTTP\Files\UploadedFile;
+use RuntimeException;
 
 final class CarouselService
 {
     private CarouselSlideModel $slideModel;
-    private string $uploadPath;
+    private CarouselAssetStore $assets;
     private ?Closure $publisher;
 
-    public function __construct(?CarouselSlideModel $slideModel = null, ?callable $publisher = null)
-    {
+    public function __construct(
+        ?CarouselSlideModel $slideModel = null,
+        ?callable $publisher = null,
+        ?CarouselAssetStore $assets = null
+    ) {
         $this->slideModel = $slideModel ?? new CarouselSlideModel();
-        $this->uploadPath = FCPATH . 'uploads/carousel/';
+        $this->assets = $assets ?? new CarouselAssetStore();
         $this->publisher = $publisher === null ? null : Closure::fromCallable($publisher);
     }
 
@@ -45,7 +49,8 @@ final class CarouselService
 
     /**
      * Get slides for rendering on the login screen.
-     * Falls back to Foundation University when no active slides are available.
+     * Falls back to the permanent Foundation University artwork when no
+     * active slides are available.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -57,16 +62,34 @@ final class CarouselService
         }
 
         // Safe fallback list so login screen never breaks
-        return [
-            [
-                'id'          => 1,
-                'title'       => 'Foundation University',
-                'subtitle'    => 'Health & Guidance Services Portal',
-                'light_image' => 'assets/img/brand/fuel-bg.jpg',
-                'dark_image'  => 'assets/img/brand/FoundationU-Dark.png',
-                'fit_mode'    => 'cover',
-            ],
+        return [$this->defaultSlide()];
+    }
 
+    /**
+     * The permanent default slide, carried by the managed Foundation University
+     * light and dark artwork.
+     *
+     * @return array<string, mixed>
+     */
+    public function defaultSlide(): array
+    {
+        $defaults = $this->assets->defaultAssets();
+        if (!$this->assets->exists($defaults['light']) || !$this->assets->exists($defaults['dark'])) {
+            $this->assets->ensureDefaultAssets();
+        }
+
+        // The private store may be unavailable; the committed public sources
+        // are then served instead so the login screen still has a hero.
+        $light = $this->assets->exists($defaults['light']) ? $defaults['light'] : CarouselAssetStore::DEFAULT_LIGHT_SOURCE;
+        $dark = $this->assets->exists($defaults['dark']) ? $defaults['dark'] : CarouselAssetStore::DEFAULT_DARK_SOURCE;
+
+        return [
+            'id'          => 1,
+            'title'       => 'Foundation University',
+            'subtitle'    => 'Health & Guidance Services Portal',
+            'light_image' => $light,
+            'dark_image'  => $dark,
+            'fit_mode'    => 'cover',
         ];
     }
 
@@ -94,10 +117,25 @@ final class CarouselService
      *
      * @param array<string, mixed>|null $slide
      * @param array<string, mixed> $data
+     * @param array<string, mixed>|null $actor
      * @return array<string, mixed>
      */
-    private function saveSlide(?array $slide, array $data, ?UploadedFile $lightFile, ?UploadedFile $darkFile): array
-    {
+    private function saveSlide(
+        ?array $slide,
+        array $data,
+        ?UploadedFile $lightFile,
+        ?UploadedFile $darkFile,
+        ?array $actor = null
+    ): array {
+        // The permanent default image is immutable for every role.
+        if ($slide !== null) {
+            CarouselAccessPolicy::assertEditable($actor ?? [], $slide);
+        }
+
+        $tenantId = $slide !== null
+            ? (int) ($slide['tenant_id'] ?? CurrentTenant::id())
+            : CurrentTenant::id();
+
         $values = [
             'title'    => $this->validateText($data['title'] ?? null, 'Title', 150),
             'subtitle' => $this->validateText($data['subtitle'] ?? null, 'Subtitle', 255),
@@ -121,7 +159,7 @@ final class CarouselService
             if ($field === 'dark_image' && ($path === null || $path === '')) {
                 $values[$field] = null;
             } else {
-                $values[$field] = $this->validateImagePath($path);
+                $values[$field] = $this->validateImagePath($path, $tenantId);
             }
         }
 
@@ -133,15 +171,9 @@ final class CarouselService
                     continue;
                 }
                 $variant = $field === 'light_image' ? 'light' : 'dark';
-                do {
-                    $name = 'slide_' . $variant . '_' . bin2hex(random_bytes(16)) . '.' . $extensions[$field];
-                } while (file_exists($this->uploadPath . $name));
-                $path = 'uploads/carousel/' . $name;
                 // Track before moving so a partially failed move can also be cleaned up.
+                $path = $this->assets->store($file, $variant, $tenantId);
                 $newPaths[] = $path;
-                if (!$file->move($this->uploadPath, $name)) {
-                    throw new \RuntimeException('Unable to move carousel image upload.');
-                }
                 $values[$field] = $path;
             }
 
@@ -227,42 +259,42 @@ final class CarouselService
         return $extensions[$mime];
     }
 
-    private function validateImagePath(mixed $path): string
+    /**
+     * Resolve a slide image reference onto the managed store.
+     *
+     * A path that already addresses a managed asset is kept as it is. A
+     * committed public asset is duplicated into the managed store first, so
+     * every published image lives in one governed location.
+     */
+    private function validateImagePath(mixed $path, int $tenantId): string
     {
-        if (!is_string($path) || strlen($path) > 255
-            || !preg_match('#\A(assets/img/brand|uploads/carousel)/([A-Za-z0-9_-][A-Za-z0-9._-]*(?:/[A-Za-z0-9_-][A-Za-z0-9._-]*)*)\z#D', $path, $matches)
-        ) {
+        if (!is_string($path) || $path === '' || strlen($path) > 255) {
             throw new \InvalidArgumentException('A safe local carousel image path is required.');
         }
-        $root = realpath(FCPATH . $matches[1]);
-        $fullPath = realpath(FCPATH . $path);
-        if ($root === false || $fullPath === false || !is_file($fullPath)
-            || !str_starts_with($fullPath, $root . DIRECTORY_SEPARATOR)
-            || ($matches[1] === 'uploads/carousel' && str_contains($matches[2], '/'))
-        ) {
+
+        if ($this->assets->isManaged($path)) {
+            if (!$this->assets->exists($path)) {
+                throw new \InvalidArgumentException('Carousel image must exist inside the managed image store.');
+            }
+
+            return $path;
+        }
+
+        if (!$this->assets->isAllowed($path)) {
+            throw new \InvalidArgumentException('Use a safe relative image path inside assets/img/brand/ or uploads/carousel/.');
+        }
+
+        $imported = $this->assets->import($path, $tenantId);
+        if ($imported === null) {
             throw new \InvalidArgumentException('Carousel image must exist inside its local image directory.');
         }
-        $extension = $this->rasterExtension($fullPath);
-        $pathExtension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        if ($pathExtension !== $extension && !($extension === 'jpg' && $pathExtension === 'jpeg')) {
-            throw new \InvalidArgumentException('Carousel image extension must match its raster MIME type.');
-        }
-        return $path;
+
+        return $imported;
     }
 
     private function cleanupUpload(mixed $path): void
     {
-        if (!is_string($path)
-            || !preg_match('#\Auploads/carousel/[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:png|jpe?g|webp|gif)\z#D', $path)
-        ) {
-            return;
-        }
-        $fullPath = FCPATH . $path;
-        $root = realpath($this->uploadPath);
-        $resolved = realpath($fullPath);
-        if ($root === false || $resolved === false || is_link($fullPath) || !is_file($fullPath)
-            || dirname($resolved) !== $root
-        ) {
+        if (!is_string($path) || !$this->assets->isManaged($path) || $this->assets->isDefault($path)) {
             return;
         }
         try {
@@ -275,7 +307,7 @@ final class CarouselService
                 ->groupEnd()
                 ->countAllResults();
             if ($references === 0) {
-                @unlink($fullPath);
+                $this->assets->remove($path);
             }
         } catch (\Throwable $e) {
             // If reference safety cannot be established, retain the file.
@@ -292,25 +324,42 @@ final class CarouselService
      * @param array<string, mixed> $data
      * @param UploadedFile|null $lightFile
      * @param UploadedFile|null $darkFile
+     * @param array<string, mixed>|null $actor The acting identity, for the default asset rules.
      * @return array<string, mixed>|null The updated slide, or null if not found.
      */
-    public function updateSlide(int $id, array $data, ?UploadedFile $lightFile = null, ?UploadedFile $darkFile = null): ?array
-    {
+    public function updateSlide(
+        int $id,
+        array $data,
+        ?UploadedFile $lightFile = null,
+        ?UploadedFile $darkFile = null,
+        ?array $actor = null
+    ): ?array {
         $slide = $this->slideModel->scoped()->find($id);
         if ($slide === null) {
             return null;
         }
 
-        return $this->saveSlide($slide, $data, $lightFile, $darkFile);
+        return $this->saveSlide($slide, $data, $lightFile, $darkFile, $actor);
     }
 
     /**
      * Delete a slide and clean up any uploaded files.
+     *
+     * The slide carrying the permanent default image may only be removed by
+     * the platform owner.
+     *
+     * @param array<string, mixed>|null $actor The acting identity, for the default asset rules.
      */
-    public function deleteSlide(int $id): bool
+    public function deleteSlide(int $id, ?array $actor = null): bool
     {
         $slide = $this->slideModel->scoped()->find($id);
-        if ($slide === null || !$this->slideModel->scoped()->delete($id)) {
+        if ($slide === null) {
+            return false;
+        }
+
+        CarouselAccessPolicy::assertDeletable($actor ?? [], $slide);
+
+        if (!$this->slideModel->scoped()->delete($id)) {
             return false;
         }
 
@@ -324,12 +373,21 @@ final class CarouselService
 
     /**
      * Toggle active status.
+     *
+     * The slide that carries the permanent default image stays visible unless
+     * the platform owner hides it.
+     *
+     * @param array<string, mixed>|null $actor The acting identity, for the default asset rules.
      */
-    public function toggleActive(int $id): array
+    public function toggleActive(int $id, ?array $actor = null): array
     {
         $slide = $this->slideModel->scoped()->find($id);
         if ($slide === null) {
             throw new \InvalidArgumentException("Slide ID {$id} not found.");
+        }
+
+        if (!CarouselAccessPolicy::canToggleAsset($actor ?? [], $slide)) {
+            throw new RuntimeException(CarouselAccessPolicy::HIDE_DENIED, 403);
         }
 
         $nextStatus = ((int) $slide['is_active'] === 1) ? 0 : 1;

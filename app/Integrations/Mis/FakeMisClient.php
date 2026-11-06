@@ -146,6 +146,26 @@ final class FakeMisClient implements MisClientInterface
         ];
     }
 
+    public function fetchStudentsPage(int $page = 1, int $limit = 25): array
+    {
+        return $this->directoryPage($this->students, $page, $limit);
+    }
+
+    public function fetchEmployeesPage(int $page = 1, int $limit = 25): array
+    {
+        return $this->directoryPage($this->employees, $page, $limit);
+    }
+
+    private function directoryPage(array $rows, int $page, int $limit): array
+    {
+        if ($page < 1 || $page > 400 || $limit !== 25) {
+            throw new MisUnavailableException();
+        }
+        $total = count($rows);
+        return ['data' => array_slice(array_values($rows), ($page - 1) * $limit, $limit),
+            'current_page' => $page, 'limit' => $limit, 'max_page' => max(1, (int) ceil($total / $limit)), 'total' => $total];
+    }
+
     public function fetchDepartments(): array
     {
         return [

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Libraries\LikePattern;
 use App\Services\Audit\AuditService;
 use Config\Database;
 use RuntimeException;
@@ -24,6 +25,15 @@ final class EmployeeAccessService
         'audit_reader' => 'Audit reader — audit ledger and reports',
         'report_viewer' => 'Report viewer — operational reports and exports',
         'superadmin' => 'Superadmin — platform-wide administrative authority',
+    ];
+
+    /**
+     * Scope descriptions for roles that hold database grants but are not assignable on this
+     * screen. The permissions panel presents itself as the catalogue of current database grants,
+     * so every granted role must be listable even when it is not offered as a choice.
+     */
+    public const CATALOGUE_LABELS = [
+        'student' => 'Student — personal portal only',
     ];
 
     public function actor(): array
@@ -79,12 +89,9 @@ final class EmployeeAccessService
         if ($search !== '') {
             $terms = preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY);
             if ($terms === false) throw new RuntimeException('Search must contain valid text.', 422);
-            $escape = Database::connect()->likeEscapeChar;
             foreach ($terms as $term) {
                 // Bindings quote SQL values; separately escape LIKE pattern metacharacters.
-                $term = strtr($term, [$escape => $escape . $escape, '%' => $escape . '%', '_' => $escape . '_']);
-                $query->groupStart()->like('p.first_name', $term)->orLike('p.last_name', $term)
-                    ->orLike('p.mis_id', $term)->orLike('u.username', $term)->groupEnd();
+                LikePattern::applyGroup($query, ['p.first_name', 'p.last_name', 'p.mis_id', 'u.username'], $term);
             }
         }
         $total = $query->countAllResults(false);
@@ -107,7 +114,9 @@ final class EmployeeAccessService
         $options = self::options($actor['role']);
         $permissions = [];
         $db = Database::connect();
-        foreach (array_unique(array_merge(array_keys($options), [$employee['role']])) as $role) {
+        // Every role that holds grants belongs in the catalogue, not only the assignable ones.
+        $granted = array_column($db->table('role_permissions')->select('role')->distinct()->get()->getResultArray(), 'role');
+        foreach (array_unique(array_merge(array_keys($options), [$employee['role']], $granted)) as $role) {
             $permissions[$role] = $db->table('role_permissions rp')->select('p.code, p.name')
                 ->join('permissions p', 'p.id = rp.permission_id')->where('rp.role', $role)
                 ->orderBy('p.code')->get()->getResultArray();

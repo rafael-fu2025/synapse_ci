@@ -56,9 +56,45 @@ react {
 }
 
 /**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * Release identity and signing never come from the repository.
+ * Set them as Gradle properties (gradle.properties, not committed) or as
+ * environment variables in CI:
+ *   SYNAPSE_VERSION_CODE, SYNAPSE_VERSION_NAME
+ *   SYNAPSE_UPLOAD_STORE_FILE, SYNAPSE_UPLOAD_STORE_PASSWORD,
+ *   SYNAPSE_UPLOAD_KEY_ALIAS, SYNAPSE_UPLOAD_KEY_PASSWORD
  */
-def enableProguardInReleaseBuilds = false
+def releaseValue = { String property, String variable ->
+    def fromProperty = findProperty(property)
+    def fromEnvironment = System.getenv(variable)
+    def value = fromProperty != null ? fromProperty : fromEnvironment
+    return value == null || value.toString().trim().isEmpty() ? null : value.toString().trim()
+}
+
+def appVersionCode = (releaseValue('SYNAPSE_VERSION_CODE', 'SYNAPSE_VERSION_CODE') ?: '1').toInteger()
+def appVersionName = releaseValue('SYNAPSE_VERSION_NAME', 'SYNAPSE_VERSION_NAME') ?: '1.0.0'
+def uploadStoreFile = releaseValue('SYNAPSE_UPLOAD_STORE_FILE', 'SYNAPSE_UPLOAD_STORE_FILE')
+def uploadStorePassword = releaseValue('SYNAPSE_UPLOAD_STORE_PASSWORD', 'SYNAPSE_UPLOAD_STORE_PASSWORD')
+def uploadKeyAlias = releaseValue('SYNAPSE_UPLOAD_KEY_ALIAS', 'SYNAPSE_UPLOAD_KEY_ALIAS')
+def uploadKeyPassword = releaseValue('SYNAPSE_UPLOAD_KEY_PASSWORD', 'SYNAPSE_UPLOAD_KEY_PASSWORD')
+def hasReleaseSigning = uploadStoreFile != null && uploadStorePassword != null
+        && uploadKeyAlias != null && uploadKeyPassword != null
+// A release artifact must never be signed with the public debug key.
+def allowDebugSigning = (releaseValue('SYNAPSE_ALLOW_DEBUG_SIGNING', 'SYNAPSE_ALLOW_DEBUG_SIGNING') ?: 'false').toBoolean()
+def releaseRequested = gradle.startParameter.taskNames.any { task ->
+    def name = task.toLowerCase(Locale.ROOT)
+    name.contains('release') || name == 'assemble' || name == 'build'
+}
+if (releaseRequested && !hasReleaseSigning && !allowDebugSigning) {
+    throw new GradleException(
+            "Release signing is not configured. Provide SYNAPSE_UPLOAD_STORE_FILE, SYNAPSE_UPLOAD_STORE_PASSWORD, "
+            + "SYNAPSE_UPLOAD_KEY_ALIAS and SYNAPSE_UPLOAD_KEY_PASSWORD as Gradle properties or environment variables. "
+            + "Set SYNAPSE_ALLOW_DEBUG_SIGNING=true only for a local smoke build that will never be distributed.")
+}
+
+/**
+ * Set to true to run ProGuard on Release builds to minify the Java bytecode.
+ */
+def enableProguardInReleaseBuilds = (releaseValue('SYNAPSE_ENABLE_MINIFICATION', 'SYNAPSE_ENABLE_MINIFICATION') ?: 'true').toBoolean()
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -83,8 +119,8 @@ android {
         applicationId "com.humus.synapse"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
     }
     signingConfigs {
         debug {
@@ -92,6 +128,16 @@ android {
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
+        }
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(uploadStoreFile)
+                storePassword uploadStorePassword
+                keyAlias uploadKeyAlias
+                keyPassword uploadKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+            }
         }
     }
     buildTypes {
@@ -101,10 +147,11 @@ android {
         }
         release {
             manifestPlaceholders = [usesCleartextTraffic: "false"]
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Never fall back to the public debug key silently: the release guard above
+            // stops the build unless real signing is configured or explicitly waived.
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
@@ -119,4 +166,12 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+}
+
+// Firebase is applied only when the project configuration is present. The plugin
+// fails the build without google-services.json, and the app must stay buildable
+// for anyone who has not created a Firebase project yet. Without the file the
+// client reports "push unavailable" and no device is ever registered.
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
 }

@@ -129,6 +129,25 @@ final class LookupReferralSecurityTest extends CIUnitTestCase
         $this->assertSame(['results' => []], json_decode($response->getBody(), true));
     }
 
+    public function testLookupIncludesEmployeesButExcludesDeletedMatches(): void
+    {
+        $employee = (int) (new PersonModel())->insert([
+            'tenant_id' => 1, 'kind' => 'employee', 'mis_id' => $this->term . '_employee',
+            'first_name' => 'Local', 'last_name' => 'Employee',
+        ]);
+        $deleted = (int) (new PersonModel())->insert([
+            'tenant_id' => 1, 'kind' => 'student', 'mis_id' => $this->term . '_deleted',
+            'first_name' => 'Deleted', 'last_name' => 'Match',
+        ]);
+        (new PersonModel())->delete($deleted);
+        $response = $this->invoke(PatientLookupController::class, 'search', $this->clinic, ['q' => $this->term]);
+        $this->assertSame(200, $response->getStatusCode());
+        $rows = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR)['results'];
+        $this->assertSame([$employee, $this->patient], array_map('intval', array_column($rows, 'id')));
+        $this->assertSame('employee', $rows[0]['kind']);
+        $this->assertArrayNotHasKey('email', $rows[0]);
+    }
+
     public function testLookupRejectsBadQueriesAndNonstaffDespiteForgedSession(): void
     {
         foreach ([null, [], 'x', str_repeat('a', 151)] as $q) {

@@ -13,10 +13,6 @@ $patientFilters = ($filters ?? []) + ['q' => $searchQuery ?? '', 'kind' => 'all'
 <?= $this->section('content') ?>
 <section data-live-table data-endpoint="<?= esc($patientBaseUrl) ?>">
   <div class="card border-0 shadow-sm mb-3">
-    <div class="card-header bg-transparent py-3">
-      <h2 class="h5 fw-bold mb-0">Patient Registry Directory</h2>
-      <span class="text-muted small">Registered students, faculty, university employees, and guests</span>
-    </div>
     <div class="card-body pt-3">
       <form data-table-filters method="GET" action="<?= esc($patientBaseUrl) ?>" class="row g-3 align-items-end" role="search">
         <div class="col-md-5">

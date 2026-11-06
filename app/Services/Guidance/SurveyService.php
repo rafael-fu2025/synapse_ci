@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Guidance;
 
+use App\Libraries\LikePattern;
 use App\Services\Audit\AuditService;
 use App\Services\EngagementAccess;
 use App\Services\EngagementAudience;
@@ -156,7 +157,7 @@ final class SurveyService
             ->where('s.published_at IS NOT NULL', null, false), $actor, 's');
         // Closed history still obeys today's profile targeting; drafts and future starts stay private.
         $builder->groupStart()->where('s.starts_at', null)->orWhere('s.starts_at <=', $now)->groupEnd();
-        if ($filters['q'] !== '') $builder->groupStart()->like('s.title', $filters['q'])->orLike('s.description', $filters['q'])->groupEnd();
+        if ($filters['q'] !== '') LikePattern::applyGroup($builder, ['s.title', 's.description'], $filters['q']);
         $table = $db->protectIdentifiers($db->prefixTable('survey_responses'));
         $person = (int) $actor['person_id'];
         $submitted = "EXISTS(SELECT 1 FROM {$table} r WHERE r.tenant_id=s.tenant_id AND r.survey_id=s.id AND r.person_id={$person})";

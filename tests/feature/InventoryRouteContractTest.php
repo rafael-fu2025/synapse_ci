@@ -188,8 +188,16 @@ final class InventoryRouteContractTest extends CIUnitTestCase
         $rows->method('getRowArray')->willReturn(['id' => 7, 'status' => 'active', 'role' => $role]);
         $actor->method('where')->willReturnSelf();
         $actor->method('get')->willReturn($rows);
-        $db->expects($this->once())->method('table')->with('users')->willReturn($actor);
-        $db->expects($role === 'superadmin' ? $this->once() : $this->never())->method('tableExists')->willReturn(false);
+        // Readiness decides on the migration marker first: a zero count means the
+        // inventory migration has not run, so no column metadata is consulted.
+        $history = $this->createMock(\CodeIgniter\Database\BaseBuilder::class);
+        $history->method('where')->willReturnSelf();
+        $history->method('countAllResults')->willReturn(0);
+        $db->method('table')->willReturnCallback(function (string $table) use ($actor, $history) {
+            $this->assertContains($table, ['users', config('Migrations')->table]);
+            return $table === 'users' ? $actor : $history;
+        });
+        $db->expects($this->never())->method('tableExists');
         $db->expects($this->never())->method('query');
         $db->expects($this->never())->method('transBegin');
         $request = $this->createMock(IncomingRequest::class);

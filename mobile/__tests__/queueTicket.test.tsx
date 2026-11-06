@@ -12,6 +12,13 @@ import {
 
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: jest.fn() }));
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
+jest.mock('react-native-svg', () => {
+  const { View } = jest.requireActual('react-native');
+  return {
+    __esModule: true, default: View, Svg: View, Defs: View, Rect: View,
+    LinearGradient: View, Stop: View,
+  };
+});
 jest.mock('lucide-react-native', () => ({ ListChecks: () => null }));
 
 const ticket: QueueTicket = {
@@ -25,6 +32,10 @@ function render(element: React.ReactElement) {
 }
 function texts() {
   return renderer!.root.findAllByType(Text).map(node => React.Children.toArray(node.props.children).join(''));
+}
+/** Host nodes only: the composite CardOutline forwards the same testID. */
+function outlineHosts() {
+  return renderer!.root.findAll(node => typeof node.type === 'string' && node.props.testID === 'queueTicketOutline');
 }
 
 beforeEach(() => {
@@ -88,7 +99,7 @@ describe('QueueTicketCard', () => {
   ] as const)('renders the real $unit ticket and an accessible summary', ({ unit, code, label }) => {
     render(<QueueTicketCard ticket={{ ...ticket, unit, ticket_code: code, priority: 'urgent' }} />);
     expect(texts()).toEqual(expect.arrayContaining([
-      'Live waiting room ticket', code, `${label} · Waiting`, 'Urgent',
+      'Live waiting ticket', code, `${label} · Waiting`, 'Urgent',
       '#4', '3', '~20 min', 'Place in line', 'People ahead', 'Est. wait',
     ]));
     expect(renderer!.root.findAll(node => node.props.accessible && node.props.accessibilityLabel ===
@@ -99,17 +110,48 @@ describe('QueueTicketCard', () => {
   it.each([lightTheme, darkTheme])('keeps the clinic pill readable in $mode mode', theme => {
     jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference: jest.fn() });
     render(<QueueTicketCard ticket={ticket} />);
-    const label = renderer!.root.findAllByType(Text).find(node => node.props.children === 'Live waiting room ticket')!;
-    expect(StyleSheet.flatten(label.props.style).color).toBe(theme.mode === 'dark' ? '#ffffff' : '#800000');
-    expect(StyleSheet.flatten(label.parent!.props.style).backgroundColor).toBe(theme.mode === 'dark' ? theme.surface : '#ffffff');
+    const label = renderer!.root.findAllByType(Text).find(node => node.props.children === 'Live waiting ticket')!;
+    const dark = theme.mode === 'dark';
+    // Light: white pill with maroon label. Dark: the Home card's on-brand
+    // treatment (translucent white + white label) on the black surface.
+    const labelStyle = StyleSheet.flatten(label.props.style);
+    expect(labelStyle.fontSize).toBe(9.5);
+    expect(labelStyle.fontFamily).toBe('Nunito Sans');
+    expect(labelStyle.color).toBe(dark ? '#ffffff' : '#800000');
+    expect(StyleSheet.flatten(label.parent!.props.style).backgroundColor).toBe(dark ? 'rgba(255,255,255,0.18)' : '#ffffff');
   });
 
-  it('preserves the contrasting guidance pill in dark mode', () => {
+  it('uses the same black branded surface and fading outline as the Home appointment card in dark mode', () => {
+    jest.mocked(useTheme).mockReturnValue({ theme: darkTheme, mode: 'dark', preference: 'dark', setPreference: jest.fn() });
+    render(<QueueTicketCard ticket={ticket} />);
+    const gradient = renderer!.root.findAll(node => Array.isArray(node.props.colors) && node.props.colors.length === 2)[0];
+    expect(gradient.props.colors).toEqual(['#1c1c1c', '#0f0f0f']);
+    // The composite CardOutline and its host nodes all carry the testID; take the host.
+    const outline = outlineHosts()[0];
+    expect(outline.props.pointerEvents).toBe('none');
+    const stroke = renderer!.root.findAll(node => typeof node.props.stroke === 'string' && node.props.stroke.startsWith('url('))[0];
+    expect(stroke.props.strokeWidth).toBe(2);
+    expect(stroke.props.fill).toBe('none');
+    expect(stroke.props).toEqual(expect.objectContaining({ x: 1, y: 1, width: '99%', height: '99%' }));
+  });
+
+  it('keeps the maroon and violet gradients and no outline in light mode', () => {
+    render(<QueueTicketCard ticket={ticket} />);
+    const gradient = () => renderer!.root.findAll(node => Array.isArray(node.props.colors) && node.props.colors.length === 2)[0];
+    expect(gradient().props.colors).toEqual(['#520000', '#800000']);
+    expect(outlineHosts()).toHaveLength(0);
+
+    act(() => { renderer!.update(<QueueTicketCard ticket={{ ...ticket, unit: 'guidance' }} />); });
+    expect(gradient().props.colors).toEqual(['#4f3974', '#7356a2']);
+    expect(outlineHosts()).toHaveLength(0);
+  });
+
+  it('drops the unit gradients in dark mode so both units match the appointment cards', () => {
     jest.mocked(useTheme).mockReturnValue({ theme: darkTheme, mode: 'dark', preference: 'dark', setPreference: jest.fn() });
     render(<QueueTicketCard ticket={{ ...ticket, unit: 'guidance' }} />);
-    const label = renderer!.root.findAllByType(Text).find(node => node.props.children === 'Live waiting room ticket')!;
-    expect(StyleSheet.flatten(label.props.style).color).toBe('#7356a2');
-    expect(StyleSheet.flatten(label.parent!.props.style).backgroundColor).toBe('#ffffff');
+    const gradient = renderer!.root.findAll(node => Array.isArray(node.props.colors) && node.props.colors.length === 2)[0];
+    expect(gradient.props.colors).toEqual(['#1c1c1c', '#0f0f0f']);
+    expect(outlineHosts()).toHaveLength(1);
   });
 
   it('uses normal priority when the API has no priority text', () => {

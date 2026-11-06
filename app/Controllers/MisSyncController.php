@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Filters\WebCsrfFilter;
 use App\Services\Directory\MisSyncService;
+use App\Services\Directory\MisPeopleSyncService;
 use App\Services\Realtime\Channel;
 use App\Services\Realtime\Publisher;
 use Config\Realtime;
@@ -23,16 +24,33 @@ final class MisSyncController extends BaseController
                 return $this->response->setJSON(['catalogs' => $status['catalogs'],
                     'lastSync' => $status['lastSync'] === null ? null : ['occurred_at' => $status['lastSync']['occurred_at']]]);
             }
-            return view('admin/mis_sync', $status + ['title' => 'MIS reference synchronization']);
+            return view('admin/mis_sync', $status + ['title' => 'MIS synchronization',
+                'peopleStatus' => (new MisPeopleSyncService())->status()]);
         });
+    }
+
+    public function peopleStatus()
+    {
+        if (strtoupper($this->request->getMethod()) !== 'GET') { return $this->methodNotAllowed('GET'); }
+        return $this->respond(fn () => $this->response->setJSON((new MisPeopleSyncService())->status()));
+    }
+
+    public function people()
+    {
+        return $this->runSync(true);
     }
 
     public function sync()
     {
+        return $this->runSync(false);
+    }
+
+    private function runSync(bool $people)
+    {
         if (strtoupper($this->request->getMethod()) !== 'POST') { return $this->methodNotAllowed('POST'); }
         // Reuses the request-scoped verification marker when the parent web_csrf filter already ran.
         if (($denied = (new WebCsrfFilter())->before($this->request)) !== null) { return $denied; }
-        return $this->respond(function () {
+        return $this->respond(function () use ($people) {
             $progressId = $this->request->getPost('progress_id');
             if ($progressId !== null && $progressId !== ''
                 && (!is_string($progressId) || preg_match('/\A[A-Za-z0-9_-]{16,64}\z/D', $progressId) !== 1)) {
@@ -40,7 +58,8 @@ final class MisSyncController extends BaseController
                     'message' => 'Invalid synchronization progress ID.',
                     'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
             }
-            $service = new MisSyncService();
+            $service = $people ? new MisPeopleSyncService() : new MisSyncService();
+            $action = $people ? 'people' : 'references';
             $progress = null;
             if (is_string($progressId) && $progressId !== '') {
                 $actor = $service->actor();
@@ -51,11 +70,11 @@ final class MisSyncController extends BaseController
                     $config->publishTimeout = min($config->publishTimeout, 0.25);
                     $publisher = new Publisher($config);
                     $failed = false;
-                    $progress = static function (array $stage) use ($publisher, $channel, $progressId, &$failed): void {
+                    $progress = static function (array $stage) use ($publisher, $channel, $progressId, $action, &$failed): void {
                         if ($failed) { return; }
                         try {
                             $failed = !$publisher->publish($channel, 'mis.sync.progress', ['progress_id' => $progressId,
-                                'percent' => $stage['percent'], 'message' => $stage['message']]);
+                                'action' => $action, 'percent' => $stage['percent'], 'message' => $stage['message']]);
                         } catch (Throwable) {
                             $failed = true;
                         }
@@ -65,11 +84,12 @@ final class MisSyncController extends BaseController
                 }
             }
             $result = $service->sync($progress);
+            $message = $people ? 'MIS people directory synchronized. No accounts, roles or clinical records were changed.' : 'MIS reference catalogs synchronized.';
             if ($this->json()) {
-                return $this->response->setJSON(['success' => true, 'message' => 'MIS reference catalogs synchronized.',
+                return $this->response->setJSON(['success' => true, 'message' => $message,
                     'result' => $result, 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
             }
-            session()->setFlashdata('success', 'MIS reference catalogs synchronized. No directory or account records were changed.');
+            session()->setFlashdata('success', $message);
             return redirect()->to(site_url('admin/mis-sync'))->setHeader('Cache-Control', 'private, no-store');
         });
     }

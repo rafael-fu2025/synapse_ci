@@ -62,13 +62,15 @@ final class InsightWorker
             ++$claimed;
             $started = false;
             try {
+                $pipeline = PipelineProvenance::digest();
+                $this->assertPipeline($job, $pipeline);
                 $analysis = $this->assertSnapshot($job['payload'], $selected, $job['analysis_code'] ?? null);
                 $this->assertAuthority($job['actor_id'], $tenantId, $selected, $analysis);
                 if ($job['model'] !== $config->model || $job['profile_revision'] !== $this->profile->revision()) {
                     throw new AiFailure('revision_not_approved');
                 }
                 $this->assertTimeRemaining($deadline, $config->requestTimeoutSeconds);
-                $draft = $this->generator->generate($job['payload'], function () use ($tenantId, $selected, $analysis, $job, $config, $deadline, &$started): void {
+                $draft = $this->generator->generate($job['payload'], function () use ($tenantId, $selected, $analysis, $job, $config, $deadline, $pipeline, &$started): void {
                     if ($started) {
                         throw new AiFailure('invalid_job', 409);
                     }
@@ -90,11 +92,16 @@ final class InsightWorker
                     // Authority/lease reads may wait too; revocation during those reads still blocks the POST.
                     $this->assertReady($tenantId, $selected);
                     $this->assertTimeRemaining($deadline, $config->requestTimeoutSeconds);
+                    $this->assertPipeline($job, $pipeline);
                     $started = true;
                 });
                 $this->assertAuthority($job['actor_id'], $tenantId, $selected, $analysis);
                 $this->assertSnapshot($job['payload'], $selected, $analysis);
                 $this->assertReady($tenantId, $selected);
+                $this->assertPipeline($job, $pipeline);
+                if (!PipelineProvenance::matches($draft['provenance']['pipeline_digest'] ?? null)) {
+                    throw new AiFailure('pipeline_changed', 409);
+                }
                 $this->store->complete($tenantId, $selected, $job['id'], $draft, $job['lease_token']);
                 ++$result['processed'];
             } catch (Throwable $error) {
@@ -112,6 +119,15 @@ final class InsightWorker
         }
 
         return $result;
+    }
+
+    private function assertPipeline(array $job, string $expected): void
+    {
+        // Upgraded storage returns the bound digest, including null on legacy jobs.
+        if ((array_key_exists('pipeline_digest', $job) && $job['pipeline_digest'] !== $expected)
+            || !hash_equals($expected, PipelineProvenance::digest())) {
+            throw new AiFailure('pipeline_changed', 409);
+        }
     }
 
     private function assertReady(int $tenantId, string $unit): void
@@ -174,12 +190,14 @@ final class InsightWorker
         return match ($error->reason) {
             'authentication_required', 'access_denied' => 'authorization_revoked',
             'disabled', 'dispatch_paused' => 'ai_disabled',
-            'invalid_config', 'revision_not_approved', 'compatibility_required', 'library_not_approved' => 'profile_changed',
+            'invalid_config', 'revision_not_approved', 'compatibility_required', 'library_not_approved',
+            'pipeline_changed', 'pipeline_unavailable' => 'profile_changed',
             'governance_required', 'tenant_not_approved', 'unit_not_approved', 'http_dispatch_not_approved',
             'endpoint_not_allowed', 'address_not_allowed', 'invalid_snapshot', 'invalid_request', 'invalid_scope' => 'policy_blocked',
             'snapshot_expired', 'job_expired' => 'snapshot_expired',
             'output_rejected', 'invalid_response', 'completion_rejected', 'structured_output_invalid' => 'invalid_output',
             'provider_unavailable' => 'provider_unavailable',
+            'provider_auth_failed', 'provider_rate_limited', 'provider_rejected' => $error->reason,
             'daily_budget_exceeded', 'dispatch_budget_exceeded' => 'budget_exceeded',
             default => 'generation_failed',
         };

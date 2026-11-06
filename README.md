@@ -117,6 +117,14 @@ Client (Browser) ──POST /auth/login──▶ Synapse Backend (cURL) ──PO
    - Grouped year levels use qualified codes such as `College:1` and group-prefixed names, preserving distinct school levels rather than merging repeated numeric codes. Existing references missing from a successful response are retained.
    - The sync page shows actual stage progress through private Workerman events correlated to that submission. Only a confirmed database commit reaches completion; without realtime, it shows a waiting indicator until the POST response arrives. In-flight navigation and duplicate submits are blocked; uncertain outcomes require checking local status before retrying.
 
+### Separate people directory synchronization
+
+The same `/admin/mis-sync` administration page has an independent CSRF-protected `POST /admin/mis-sync/people` action. It imports only `people`, `student_profiles`, and `employee_profiles`, keyed by tenant, kind and official MIS ID. It never creates accounts or changes passwords, roles, scheduling assignments, or clinical records. Later MIS login retains the existing JIT account-linking behavior. Missing records are retained and soft-deleted identities are skipped, never restored.
+
+**Live people sync is enabled when `FUMIS_ENABLED=true`.** The HTTP adapter uses the service-token lifecycle and the unfiltered `GET /api/v1/students` and `GET /api/v1/employees` listings documented in `docs/mis-api`, with only `limit=25&page=N`. Configure `FUMIS_BASE_URL`, `FUMIS_API_KEY` and optionally `FUMIS_TIMEOUT_SECONDS` through deployment configuration; credentials are never included in directory/audit output. Explicit development/testing fake mode supports offline fixtures only; production never enables it. No network verification was performed for this implementation. The service account must be authorized for the complete unfiltered directory; MIS does not document a stable-snapshot guarantee, so unchanged page metadata cannot prove snapshot consistency during concurrent upstream edits.
+
+Bulk pages use dedicated adapter methods, normalized top-level or `data`-wrapped pagination, strict bounded integers (canonical numeric strings are normalized), 25-row pages and at most 400 pages/10,000 records per kind. `total` is optional and checked when present; page counts must remain consistent, non-final pages must be full, and duplicate IDs are rejected. Empty directories may report zero or one maximum page. Bulk identities require canonical string `student_id`/`employee_id`, preserve leading zeros and reject alias-only, conflicting or malformed IDs. Both kinds are fetched/validated before a single tenant-locked transaction with fresh authority checks and count-only chained audit. Required names/schema values are checked; omitted optional fields preserve known values, while explicit unknown student audience classifications revoke eligibility. Unknown new employee status defaults inactive, not active. All GET status reads are local only. Multiple forms have independent progress/results, submission correlation, shared CSRF refresh and no automatic write retry; an unconfirmed outcome requires checking local status before retrying.
+
 ### Login compatibility port from the legacy MIS integration
 
 The rebuild retains PHP sessions and the existing login UI; it does **not** copy legacy React/JWT authentication or its database design. The legacy `backend/app/Services/FuMis/` source was used to verify the request contract and supported profile aliases/envelopes:
@@ -714,7 +722,14 @@ This stage enforces strict key configuration without changing the ciphertext for
 php spark migrate --all
 php spark db:seed App\\Database\\Seeds\\PermissionsAndRolesSeeder
 php spark db:seed App\\Database\\Seeds\\MedicinesSeeder
+
+# Strict SQL mode is on (app/Config/Database.php). Verify existing rows are conforming.
+php spark synapse:strict-mode-audit
 ```
+
+`synapse:strict-mode-audit` is read-only: it reports the over-length strings, out-of-range
+dates and NULLs in NOT NULL columns that a strict session would reject, and exits non-zero
+when it finds any. Run it after every restore or import, before the first write.
 
 ### 4. Mint Platform Owner (Break-Glass Superadmin)
 ```bash

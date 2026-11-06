@@ -1,5 +1,14 @@
-import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  Animated,
+  Easing,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarDays, ChevronRight, Clock3, Stethoscope, UserRound } from 'lucide-react-native';
@@ -18,7 +27,84 @@ import { AppointmentLoadError } from '../components/AppointmentLoadError';
 
 type Props = NativeStackScreenProps<VisitsStackParamList, 'AppointmentDetail'>;
 
-const STEPS = ['Requested', 'Confirmed', 'Checked in', 'Done'];
+const STEP_COUNT = 4;
+
+const STEP_ANIMATION_MS = 280;
+
+/**
+ * Honour the OS "remove animations" setting: motion is off until the preference
+ * resolves, matching LoginCarousel and the tab transitions.
+ */
+function useReduceMotion(): boolean {
+  const [reduceMotion, setReduceMotion] = useState(true);
+  useEffect(() => {
+    let mounted = true;
+    let changed = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(value => { if (mounted && !changed) { setReduceMotion(value); } })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', value => {
+      changed = true;
+      setReduceMotion(value);
+    });
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, []);
+  return reduceMotion;
+}
+
+/**
+ * One progress segment: a static track with a maroon fill that animates in.
+ *
+ * The fill scales vertically rather than animating width, because width cannot
+ * run on the native driver.
+ */
+function StepBar({
+  done,
+  reduceMotion,
+  styles,
+}: {
+  done: boolean;
+  reduceMotion: boolean;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const [progress] = useState(() => new Animated.Value(done ? 1 : 0));
+
+  useEffect(() => {
+    const toValue = done ? 1 : 0;
+    if (reduceMotion) {
+      progress.setValue(toValue);
+      return undefined;
+    }
+    const transition = Animated.timing(progress, {
+      toValue,
+      duration: STEP_ANIMATION_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    transition.start();
+    return () => transition.stop();
+  }, [done, progress, reduceMotion]);
+
+  return (
+    <View style={styles.stepColumn}>
+      <View style={styles.stepTrack}>
+        <Animated.View
+          style={[
+            styles.stepFill,
+            {
+              opacity: progress,
+              transform: [{ scaleY: progress.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] }) }],
+            },
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
 
 export function AppointmentDetailScreen() {
   const { theme } = useTheme();
@@ -27,6 +113,8 @@ export function AppointmentDetailScreen() {
   const route = useRoute<Props['route']>();
   const query = useAppointment(route.params.id);
   const appointment = query.data?.data;
+  // Hooks must run before the early returns below.
+  const reduceMotion = useReduceMotion();
 
   if (query.isLoading) {
     return (
@@ -54,19 +142,27 @@ export function AppointmentDetailScreen() {
   const cancellable = ['requested', 'scheduled', 'confirmed'].includes(appointment.status);
 
   return (
-    <Screen>
+    <Screen scroll={false}>
       <PageHeader title="Appointment details" onBack={navigation.goBack} />
-      {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
-      <View style={styles.progress}>
-        {STEPS.map((label, index) => (
-          <View key={label} style={styles.stepColumn}>
-            <View style={[styles.stepBar, index < step && styles.stepBarDone]} />
-            <Text style={[styles.stepLabel, index < step && styles.stepLabelDone]}>{label}</Text>
-          </View>
-        ))}
-      </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
+        <View
+          style={styles.progress}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel={step > 0 ? `${status.label}, step ${step} of ${STEP_COUNT}` : status.label}
+          accessibilityValue={{ min: 0, max: STEP_COUNT, now: step }}>
+          {Array.from({ length: STEP_COUNT }, (_, index) => (
+            <StepBar
+              key={index}
+              done={index < step}
+              reduceMotion={reduceMotion}
+              styles={styles}
+            />
+          ))}
+        </View>
 
-      <View style={styles.hero}>
+        <View style={styles.hero}>
         <Text style={styles.heroTitle}>{unitLabel(appointment.unit)} visit</Text>
         <Text style={styles.heroSubtitle}>{appointment.type.replace(/_/g, ' ')} · Reference #{appointment.id}</Text>
         <StatusPill tone={status.tone}>{status.label}</StatusPill>
@@ -114,7 +210,10 @@ export function AppointmentDetailScreen() {
           <Text style={styles.cancelNoteLabel}>Cancellation reason</Text>
           <Text style={styles.cancelNoteText}>{appointment.cancellation_reason}</Text>
         </View>
-      ) : cancellable ? (
+      ) : null}
+      </ScrollView>
+
+      {!appointment.cancellation_reason && cancellable ? (
         <View style={styles.actions}>
           <Action variant="danger" full onPress={() => navigation.navigate('CancelAppointment', { id: appointment.id })}>
             Cancel this appointment
@@ -129,12 +228,13 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     loader: { marginTop: 30 },
     missing: { color: theme.ink500, fontFamily: font.body, fontSize: 11.5 },
+    // The ScrollView owns the free space; the action bar below it stays pinned.
+    scroll: { flex: 1 },
+    scrollContent: { flexGrow: 1, paddingBottom: 12 },
     progress: { flexDirection: 'row', gap: 6, marginBottom: 22, marginTop: -6 },
     stepColumn: { flex: 1 },
-    stepBar: { height: 4, borderRadius: 4, backgroundColor: theme.line },
-    stepBarDone: { backgroundColor: theme.brand },
-    stepLabel: { marginTop: 5, fontSize: 8, fontWeight: '700', fontFamily: font.body, color: theme.ink400 },
-    stepLabelDone: { color: theme.brandText },
+    stepTrack: { height: 4, borderRadius: 4, backgroundColor: theme.line, overflow: 'hidden' },
+    stepFill: { height: 4, borderRadius: 4, backgroundColor: theme.brand },
     hero: { alignItems: 'center', paddingBottom: 19 },
     heroTitle: { ...type.hero, fontSize: 19, color: theme.ink900, marginTop: 6 },
     heroSubtitle: {
@@ -154,7 +254,8 @@ function createStyles(theme: Theme) {
     },
     cancelNoteLabel: { fontSize: 9, fontWeight: '800', fontFamily: font.body, color: theme.ink500, letterSpacing: 1 },
     cancelNoteText: { marginTop: 4, fontSize: 10.5, fontFamily: font.body, color: theme.ink700 },
-    actions: { marginTop: 'auto', paddingTop: 24 },
+    // Sibling of the ScrollView: flexShrink 0 keeps it pinned above the tab bar.
+    actions: { flexShrink: 0, paddingTop: 24 },
   });
 }
 

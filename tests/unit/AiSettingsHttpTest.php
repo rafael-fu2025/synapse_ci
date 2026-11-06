@@ -287,7 +287,7 @@ final class AiSettingsHttpTest extends CIUnitTestCase
         self::assertTrue($data['settings']['connection_tested']);
         self::assertSame($saved['version'], $data['settings']['version']);
         self::assertFalse($data['settings']['enabled']);
-        self::assertSame(['ai.configuration.test', 'control', 'settings', 'settings', 'release', 'probe', 'fresh', 'settings'], $controller->events);
+        self::assertSame(['ai.configuration.test', 'settings', 'control', 'release', 'probe', 'fresh', 'settings'], $controller->events);
         self::assertSame([[23, 17]], $controller->freshCalls);
         self::assertCount(1, $controller->wire);
         $wire = $controller->wire[0];

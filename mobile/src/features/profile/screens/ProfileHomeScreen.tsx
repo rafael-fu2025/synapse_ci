@@ -54,17 +54,20 @@ export function ProfileHomeScreen() {
       };
 
   return (
-    <Screen>
-      <PageHeader
-        title="Profile"
-        action={
-          <IconAction
-            label="Settings"
-            onPress={() => navigation.navigate('Settings')}
-            icon={<Settings size={20} color={theme.ink700} />}
-          />
-        }
-      />
+    <Screen
+      header={
+        <PageHeader
+          edgeToEdge
+          title="Profile"
+          action={
+            <IconAction
+              label="Settings"
+              onPress={() => navigation.navigate('Settings')}
+              icon={<Settings size={20} color={theme.ink700} />}
+            />
+          }
+        />
+      }>
 
       <View style={styles.hero}>
         <Pressable

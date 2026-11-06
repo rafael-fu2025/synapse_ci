@@ -20,9 +20,16 @@ $employee = $package['employee'] ?? null;
 $patient = $package['patient'];
 $sessions = $package['sessions'] ?? [];
 $followups = $package['followups'] ?? [];
+// Outcome plaintext is optional: only the authorized, audited read supplies it.
+$outcomes = $outcomes ?? ['closure_disposition' => null, 'completion_notes' => []];
 ?>
 
 <div class="guidance-case-workspace" data-guidance-case="<?= (int) $case['id'] ?>">
+<?php if (!empty($oversightMode)): ?>
+  <div class="alert alert-info">Oversight mode · This access has been audited.</div>
+<?php elseif ($decryptedNote !== null && !empty($noteReadAudited)): ?>
+  <div class="alert alert-info">This access has been audited.</div>
+<?php endif; ?>
 <!-- Case identity stays separate from session and lifecycle actions. -->
 <div class="card border-0 shadow-sm mb-3">
   <div class="card-body p-3">
@@ -97,13 +104,25 @@ $followups = $package['followups'] ?? [];
               data-confirm="Close this counseling case? No new sessions can be opened after closure."
               data-confirm-title="Close case" data-confirm-label="Close case" data-confirm-tone="warning">
           <?= csrf_field() ?>
-          <div><h3 class="h6 mb-1">Close this case</h3><p class="small text-muted mb-2">No new sessions can be opened after closure.</p><label class="gc-confirm-label small"><input type="checkbox" name="confirmed" value="1" required> Confirm case closure</label></div>
+          <div><h3 class="h6 mb-1">Close this case</h3><p class="small text-muted mb-2">No new sessions can be opened after closure.</p>
+            <label class="form-label small fw-semibold" for="closure-disposition">Closure disposition</label>
+            <textarea id="closure-disposition" name="closure_disposition" class="form-control form-control-sm mb-2"
+                      rows="2" maxlength="2000" required placeholder="Record the case outcome and closure reason"></textarea>
+            <label class="gc-confirm-label small"><input type="checkbox" name="confirmed" value="1" required> Confirm case closure</label></div>
           <button type="submit" class="btn btn-outline-danger"><i class="bi bi-folder-x me-2" aria-hidden="true"></i>Close Case</button>
         </form>
       </div>
     </div>
     <?php endif; ?>
-    <?php else: ?><p class="text-muted mb-0"><i class="bi bi-lock me-2" aria-hidden="true"></i>This case is closed. Review its sessions, notes, and follow-up history below.</p><?php endif; ?>
+    <?php else: ?>
+      <p class="text-muted mb-0"><i class="bi bi-lock me-2" aria-hidden="true"></i>This case is closed. Review its sessions, notes, and follow-up history below.</p>
+      <?php if (isset($outcomes['closure_disposition'])): ?>
+        <div class="gc-outcome-note mt-3">
+          <span class="small fw-semibold">Closure disposition</span>
+          <p class="small mb-0"><?= esc($outcomes['closure_disposition']) ?></p>
+        </div>
+      <?php endif; ?>
+    <?php endif; ?>
   </div>
 </section>
 
@@ -169,7 +188,7 @@ $followups = $package['followups'] ?? [];
                       placeholder="Type counselor observations, client reflection, discussion points..."
                       required><?= esc($decryptedNote['text'] ?? '') ?></textarea>
             <div class="form-text small text-muted">
-              Notes are encrypted with AES-256-GCM before database write. Only authenticated counsellors with oversight permissions can decrypt.
+              Notes are encrypted with AES-256-GCM before database write. Assigned counselors and authorized oversight staff can decrypt.
             </div>
           </div>
 
@@ -283,6 +302,12 @@ $followups = $package['followups'] ?? [];
                   <?= esc($f['action_plan']) ?>
                 </span>
                 <div class="text-muted small mt-1">Due: <?= date('M j, Y', strtotime($f['due_date'])) ?></div>
+                <?php if (isset($outcomes['completion_notes'][(int) $f['id']])): ?>
+                  <div class="gc-outcome-note mt-2">
+                    <span class="small fw-semibold">Completion notes</span>
+                    <p class="small mb-0"><?= esc($outcomes['completion_notes'][(int) $f['id']]) ?></p>
+                  </div>
+                <?php endif; ?>
               </div>
 
               <?php if ($f['status'] === 'pending'): ?>
@@ -294,8 +319,11 @@ $followups = $package['followups'] ?? [];
                   <label class="small gc-confirm-label"><input type="checkbox" name="confirmed" value="1" required> Confirm missed</label>
                   <button type="submit" class="btn btn-outline-warning btn-sm">Mark Missed</button>
                 </form>
-                <form action="<?= site_url('/guidance/followups/' . $f['id'] . '/complete') ?>" method="POST" data-background-submit>
+                <form action="<?= site_url('/guidance/followups/' . $f['id'] . '/complete') ?>" method="POST" data-background-submit class="gc-outcome-form">
                   <?= csrf_field() ?>
+                  <label class="form-label small fw-semibold" for="completion-notes-<?= (int) $f['id'] ?>">Completion notes</label>
+                  <textarea id="completion-notes-<?= (int) $f['id'] ?>" name="completion_notes" class="form-control form-control-sm mb-2"
+                            rows="2" maxlength="2000" required placeholder="Record what was completed"></textarea>
                   <button type="submit" class="btn btn-outline-success btn-sm">
                     <i class="bi bi-check2 me-1"></i> Mark Done
                   </button>

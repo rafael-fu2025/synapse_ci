@@ -29,6 +29,7 @@ final class AiFailure extends RuntimeException
         'dispatch_paused', 'dispatch_budget_exceeded', 'input_budget_exceeded',
         'invalid_settings', 'settings_unavailable', 'settings_busy', 'settings_conflict',
         'settings_not_saved', 'https_required', 'privacy_confirmation_required', 'discovery_key_required',
+        'pipeline_unavailable', 'pipeline_changed', 'recovery_unavailable', 'retry_not_allowed',
     ];
 
     public readonly string $reason;

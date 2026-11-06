@@ -9,7 +9,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
-const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
+const { chromium } = require('playwright');
 const origin = 'http://127.0.0.1:47991';
 const sources = Object.fromEntries(['ai-insights', 'toast'].map(name =>
   [`/assets/js/${name}.js`, fs.readFileSync(path.join(root, `public/assets/js/${name}.js`), 'utf8')]));
@@ -27,13 +27,13 @@ function render(options) {
 }
 before(async () => {
   let executablePath = chromium.executablePath();
-  if (!fs.existsSync(executablePath)) {
+  if (!fs.existsSync(executablePath) && process.platform === 'win32') {
     const dir = path.join(os.homedir(), 'AppData/Local/ms-playwright');
-    executablePath = fs.readdirSync(dir).filter(name => /^chromium-\d+$/.test(name))
+    executablePath = (fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter(name => /^chromium-\d+$/.test(name))
       .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))
       .map(name => path.join(dir, name, 'chrome-win64/chrome.exe')).find(file => fs.existsSync(file));
   }
-  assert.ok(executablePath, 'A locally installed Chromium is required');
+  assert.ok(executablePath && fs.existsSync(executablePath), 'Run npm exec --prefix tests/browser -- playwright install chromium');
   browser = await chromium.launch({ headless: true, executablePath, timeout: 20000 });
 }, { timeout: 30000 });
 after(async () => { await browser?.close(); });
@@ -94,6 +94,13 @@ async function notice(h, type, message) {
   assert.equal(await h.page.locator('[data-ai-feedback]').isVisible(), false);
   assert.match(await h.page.locator('[data-ai-feedback]').textContent(), message);
 }
+async function openReview(h) {
+  const modal = h.page.locator('[data-ai-review-modal]');
+  await h.page.getByRole('button', { name: 'Open draft', exact: true }).click();
+  await h.page.clock.runFor(500);
+  assert.match(await modal.getAttribute('class'), /\bshow\b/);
+}
+
 async function submit(h, selector) {
   const before = h.requests.filter(r => r.method === 'POST').length;
   // aria-busy clears before the completion refresh starts; wait for the actual status response too.
@@ -111,32 +118,41 @@ for (const [unit, analysis] of [['clinic', 'clinic.complaints'], ['guidance', 'g
   test(unit + ': fixed analyses and all actions stay on the workstation', { timeout: 30000 }, async t => {
     const h = await open(t, { unit, analysis });
     assert.equal(h.requests.length, 0, 'Reads never prepare or dispatch automatically');
-    const forms = await h.page.locator('form').evaluateAll(forms => forms.map(form => ({
+    const forms = await h.page.locator('[data-ai-panel] form').evaluateAll(forms => forms.map(form => ({
       path: new URL(form.action).pathname,
       fields: [...new FormData(form).keys()],
       analysis: new FormData(form).get('analysis_code'),
     })));
     const codes = unit === 'clinic' ? ['clinic.activity', 'clinic.complaints']
       : unit === 'guidance' ? ['guidance.activity', 'guidance.themes'] : ['bmg.batches', 'bmg.rotations'];
+    const selector = h.page.locator('[data-ai-analysis-selector]');
+    assert.deepEqual(await selector.locator('option').evaluateAll(options => options.map(option => option.value)), codes);
+    assert.equal(await selector.evaluate(element => element.hasAttribute('data-native-select')), true);
     for (const form of forms) {
       assert.ok(form.path.startsWith(h.base + '/'));
       assert.ok(!form.fields.some(key => ['unit', 'department', 'tenant_id', 'tenant'].includes(key)));
     }
-    assert.deepEqual(forms.filter(f => f.path.endsWith('/prepare')).map(f => f.analysis), codes);
+    assert.equal(forms.filter(form => form.path.endsWith('/prepare')).length, 1);
+    assert.equal(forms.filter(form => form.path.endsWith('/generate')).length, 1);
+    await selector.selectOption(analysis);
+    assert.deepEqual(await h.page.locator('[data-ai-analysis-value]').evaluateAll(inputs => inputs.map(input => input.value)), [analysis, analysis]);
     for (const action of ['prepare', 'generate']) {
-      const form = `form[action$="/${action}"]:has(input[value="${analysis}"])`;
-      await submit(h, form);
+      await submit(h, `form[action$="/${action}"]`);
       await notice(h, action === 'prepare' ? 'success' : 'info', /Synthetic action saved/);
       assert.equal(await h.page.locator('[data-ai-baseline]').isVisible(), true);
       const request = h.requests.filter(r => r.method === 'POST').at(-1);
       assert.equal(request.path, h.base + '/' + action);
       assert.deepEqual(Object.fromEntries(new URLSearchParams(request.body)), { csrf_fixture: 'initial-token', analysis_code: analysis });
     }
-    await submit(h, 'form[action$="/47/review"]:has(input[value="accept"])');
+    await openReview(h);
+    await submit(h, '[data-ai-review-modal] form[action$="/47/review"]:has(input[value="accept"])');
+    await h.page.locator('[data-ai-review-modal] [data-bs-dismiss="modal"]').last().click();
+    await h.page.clock.runFor(500);
+    assert.doesNotMatch(await h.page.locator('[data-ai-review-modal]').getAttribute('class'), /\bshow\b/);
     await submit(h, 'form[action$="/jobs/31/cancel"]');
     assert.ok(h.requests.every(r => r.path.startsWith(h.base + '/')));
-    assert.equal(await h.page.locator('[data-ai-baseline] h4').count(), h.fixture.evidence.metrics.length);
-    assert.match(await h.page.locator('[data-ai-baseline]').innerText(), /Hidden or missing values are not zero/);
+    assert.equal(await h.page.locator('[data-ai-baseline] [data-ai-evidence-metric]').count(), h.fixture.evidence.metrics.length);
+    assert.match(await h.page.locator('[data-ai-baseline]').innerText(), /Hidden or unavailable values are not zero/);
     assert.equal(h.page.url(), origin + h.base);
   });
 }
@@ -196,7 +212,7 @@ for (const unit of ['clinic', 'guidance', 'bmg']) {
     const records = unit === 'bmg' ? 'batch records or accepted rotation reports' : 'eligible visits or sessions recorded as completed';
     const message = `No comparison is available yet. Both completed months need eligible records. Check ${records}. Unavailable values are not zero. This is not an AI connection error.`;
     h.rejection = { success: false, reason: 'insufficient_data', feedback_type: 'warning', message };
-    await submit(h, 'form[action$="/prepare"]:has(input[value="' + (unit === 'clinic' ? 'clinic.activity' : unit === 'guidance' ? 'guidance.activity' : 'bmg.batches') + '"])');
+    await submit(h, 'form[action$="/prepare"]');
     await notice(h, 'warning', /Check .*not an AI connection error/);
     assert.equal(await h.page.locator('.synapse-toast-message').textContent(), message);
     assert.doesNotMatch(await h.page.locator('.synapse-toast-message').textContent(), /could not confirm|automatic retry|Refresh status/);
@@ -207,29 +223,31 @@ for (const unit of ['clinic', 'guidance', 'bmg']) {
   });
 }
 
-test('v2 evidence shows released category counts, denominators and shares without inventing suppressed cells', { timeout: 30000 }, async t => {
+test('v2 evidence table shows released category counts, denominators and shares without inventing suppressed cells', { timeout: 30000 }, async t => {
   const h = await open(t, { unit: 'guidance', analysis: 'guidance.themes' });
-  await h.page.locator('details').evaluateAll(details => details.forEach(detail => { detail.open = true; }));
-  const text = await h.page.locator('[data-ai-panel]').innerText();
-  assert.equal(await h.page.locator('section[aria-label="Academic"]').count(), 1);
-  assert.equal(await h.page.locator('section[aria-label="Career"]').count(), 0, 'Suppressed category is not rendered as zero');
+  await openReview(h);
+  await h.page.locator('[data-ai-review-modal] details').evaluateAll(details => details.forEach(detail => { detail.open = true; }));
+  const text = await h.page.locator('[data-ai-review-modal]').innerText();
+  assert.equal(await h.page.locator('[data-ai-review-modal] [data-ai-evidence-metric="category_academic"]').count(), 1);
+  assert.equal(await h.page.locator('[data-ai-review-modal] [data-ai-evidence-metric="category_career"]').count(), 0, 'Suppressed category is not rendered as zero');
   assert.match(text, /Completed sessions/);
-  assert.match(text, /denominator/);
+  assert.match(text, /share of 40 Completed sessions/);
   assert.match(text, /50\.00%/);
-  assert.match(text, /percentage points/);
+  assert.match(text, /percentage-point share change/);
   assert.match(text, /not diagnoses, severity, outcomes/);
   assert.match(text, /AI can make mistakes.*not a clinical finding/);
 });
 
-test('zero denominators remain undefined and all BMG metrics render', { timeout: 30000 }, async t => {
+test('zero denominators remain Not defined and all BMG metrics render in semantic rows', { timeout: 30000 }, async t => {
   const h = await open(t, { unit: 'bmg', analysis: 'bmg.rotations' });
-  assert.equal(await h.page.locator('[data-ai-panel] section[aria-label="Reported failures"]').count(), 1);
-  assert.equal(await h.page.locator('[data-ai-panel] section[aria-label="Reported interruptions"]').count(), 1);
-  const text = await h.page.locator('section[aria-label="Reported failures"]').innerText();
+  await openReview(h);
+  assert.equal(await h.page.locator('[data-ai-review-modal] [data-ai-evidence-metric="rotation_failed"]').count(), 1);
+  assert.equal(await h.page.locator('[data-ai-review-modal] [data-ai-evidence-metric="rotation_interrupted"]').count(), 1);
+  const text = await h.page.locator('[data-ai-evidence-metric="rotation_failed"]').innerText();
   assert.match(text, /20\.00%/);
   assert.match(text, /Not defined/);
-  assert.match(text, /2026-08 · total for share\s+0/);
-  assert.doesNotMatch(text, /2026-08 · share\s+0\.00%/);
+  assert.match(text, /Not defined share of 0 Reported rotation events/);
+  assert.doesNotMatch(text, /0\.00% share of 0/);
 });
 
 test('same-origin cross-unit, wrong-action, malformed and external endpoints are blocked without POST replay', { timeout: 30000 }, async t => {
@@ -256,7 +274,7 @@ test('same-origin cross-unit, wrong-action, malformed and external endpoints are
 test('an uncertain departmental mutation is never automatically retried', { timeout: 30000 }, async t => {
   const h = await open(t, { unit: 'bmg' });
   h.fail = true;
-  await submit(h, 'form[action$="/generate"]:has(input[value="bmg.batches"])');
+  await submit(h, 'form[action$="/generate"]');
   await h.page.clock.runFor(16000);
   assert.equal(h.requests.filter(r => r.method === 'POST').length, 1);
   await notice(h, 'warning', /Check Refresh status.*No automatic retry/);

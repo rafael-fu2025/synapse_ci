@@ -162,7 +162,8 @@ final class DashboardAuditAccessTest extends CIUnitTestCase
         $this->assertStringNotContainsString("->table('audit_events",
             substr($source, 0, strpos($source, 'private function auditSummary(')));
         $this->assertStringContainsString('$audit = $this->auditSummary($db, $user, $tenantId);', $source);
-        $this->assertStringContainsString("'canReadAudit'           => \$audit['canReadAudit']", $source);
+        $this->assertStringContainsString('$canReadAudit = $this->canRead($user, \'audit.read\');', $source);
+        $this->assertStringContainsString("'canReadAudit'           => \$canReadAudit,", $source);
         $this->assertStringContainsString(": 'Reports Dashboard'", $source);
         $this->assertStringContainsString("['label' => 'Reports', 'url' => site_url('/dashboard')]", $source);
     }

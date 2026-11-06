@@ -6,6 +6,8 @@ import { User } from '../api/types';
 import { clearRefreshToken, getRefreshToken, setRefreshToken } from '../lib/keychain';
 import { queryClient } from '../lib/queryClient';
 import { queryKeys } from '../api/queryKeys';
+import { usePushSession } from '../lib/push/session';
+import { revokeDevice } from '../lib/push/registration';
 
 type AuthStatus = 'restoring' | 'signedOut' | 'signedIn' | 'expired';
 
@@ -25,8 +27,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const operation = useRef(0);
 
+  // The device is registered while a session is live and withdrawn when it ends.
+  usePushSession(status);
+
   const expire = useCallback(() => {
     operation.current += 1;
+    // Withdraw the device token while the credential is still held.
+    revokeDevice().catch(() => undefined);
     setAccessToken(null);
     queryClient.clear();
     clearRefreshToken().catch(() => undefined);
@@ -101,14 +108,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     operation.current += 1;
-    // Revoke on the server with the token we still hold, but never make the user wait for it.
+    // The device token is withdrawn while the session is still valid; the request
+    // leaves before the logout revokes the credential.
+    const pushRevoked = revokeDevice();
     const revoked = authApi.logout();
     setAccessToken(null);
     queryClient.clear();
     setUser(null);
     setStatus('signedOut');
     await clearRefreshToken();
-    await revoked;
+    await Promise.all([revoked, pushRevoked]);
   }, []);
 
   const acknowledgeExpired = useCallback(() => setStatus('signedOut'), []);

@@ -10,22 +10,18 @@ const os = require('node:os');
 const { spawnSync } = require('node:child_process');
 const { setTimeout: delay } = require('node:timers/promises');
 const root = path.resolve(__dirname, '../..');
-const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
+const { chromium } = require('playwright');
 const origin = 'http://127.0.0.1:47991';
 const baseURL = 'https://gateway.example.test/team/v1';
 const secret = 'synthetic-discovery-secret';
 const token = 'c'.repeat(64);
 const version = 'a'.repeat(32);
-const sources = Object.fromEntries(['ai-settings', 'csrf', 'auth-session'].map(name =>
+const sources = Object.fromEntries(['ai-settings', 'csrf', 'auth-session', 'loading'].map(name =>
   [`/assets/js/${name}.js`, fs.readFileSync(path.join(root, `public/assets/js/${name}.js`), 'utf8')]));
-// Extend only the CLI fixture's local scope, leaving the shared fixture/backend untouched.
-const renderer = fs.readFileSync(path.join(root, 'tests/_support/render-ai-settings-fixture.php'), 'utf8')
-  .replace(/^<\?php/, '')
-  .replaceAll("dirname(__DIR__, 2)", "getcwd()")
-  .replace('ob_start();', "$catalog = $GLOBALS['options']['catalog'] ?? null; ob_start();");
+// The shared fixture accepts settings, access, and catalog without booting the app.
 function render(settings = {}, catalog) {
-  const result = spawnSync('php', ['-r', renderer], { cwd: root, input: JSON.stringify({ settings, catalog }),
-    encoding: 'utf8', timeout: 10000, maxBuffer: 2 * 1024 * 1024 });
+  const result = spawnSync('php', ['tests/_support/render-ai-settings-fixture.php'], { cwd: root,
+    input: JSON.stringify({ settings, catalog }), encoding: 'utf8', timeout: 10000, maxBuffer: 2 * 1024 * 1024 });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(result.stderr, '');
@@ -47,13 +43,13 @@ const ok = payload => json({ success: true, csrf: { name: 'csrf_fixture', hash: 
 let browser;
 before(async () => {
   let executablePath = chromium.executablePath();
-  if (!fs.existsSync(executablePath)) {
+  if (!fs.existsSync(executablePath) && process.platform === 'win32') {
     const dir = path.join(os.homedir(), 'AppData/Local/ms-playwright');
-    executablePath = fs.readdirSync(dir).filter(name => /^chromium-\d+$/.test(name))
+    executablePath = (fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter(name => /^chromium-\d+$/.test(name))
       .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]))
       .map(name => path.join(dir, name, 'chrome-win64/chrome.exe')).find(file => fs.existsSync(file));
   }
-  assert.ok(executablePath, 'A locally installed Chromium is required');
+  assert.ok(executablePath && fs.existsSync(executablePath), 'Run npm exec --prefix tests/browser -- playwright install chromium');
   browser = await chromium.launch({ headless: true, executablePath, timeout: 20000 });
 }, { timeout: 30000 });
 after(async () => { await browser?.close(); });
@@ -77,6 +73,7 @@ async function open(t, settings = {}, initialCatalog) {
       return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8">
         <meta name="csrf-name" content="csrf_fixture"><meta name="csrf-token" content="initial-token">
         <meta name="csrf-header" content="X-CSRF-TOKEN"><meta name="synapse-login-url" content="/auth/login">
+        <script src="/assets/js/loading.js"></script>
         <script src="/assets/js/auth-session.js"></script><script src="/assets/js/csrf.js"></script>
         </head><body>${h.fixture.html}</body></html>` });
     }
@@ -97,7 +94,8 @@ async function open(t, settings = {}, initialCatalog) {
   await page.clock.install({ time: new Date('2026-10-01T00:00:00Z') });
   await page.clock.pauseAt(new Date('2026-10-01T00:00:01Z'));
   await page.addInitScript(() => {
-    window.calls = []; window.storageWrites = [];
+    window.calls = []; window.storageWrites = []; window.markedSaved = [];
+    window.SynapseNavigation = { markSaved(form) { window.markedSaved.push(form?.id || ''); } };
     document.addEventListener('synapse:auth-required', event => {
       queueMicrotask(() => window.fixtureAuth({ reason: event.detail.reason,
         key: document.querySelector('[name="api_key"]').value,
@@ -115,7 +113,7 @@ async function open(t, settings = {}, initialCatalog) {
     };
   });
   await page.goto(origin + '/admin/ai');
-  await page.waitForFunction(() => window.SynapseAiSettings && document.querySelector('[data-ai-settings]').getAttribute('aria-busy') === 'false');
+  await page.waitForFunction(() => window.SynapseAiSettings && !document.querySelector('[data-ai-settings] [aria-busy="true"]'));
   return h;
 }
 async function waitForRequests(h, count) {
@@ -124,7 +122,7 @@ async function waitForRequests(h, count) {
   assert.equal(h.requests.length, count, 'Expected routed request count before cancellation');
 }
 async function idle(h) {
-  await h.page.waitForFunction(() => document.querySelector('[data-ai-settings]').getAttribute('aria-busy') === 'false' && window.calls.every(c => c.finished));
+  await h.page.waitForFunction(() => !document.querySelector('[data-ai-settings] [aria-busy="true"]') && window.calls.every(c => c.finished));
 }
 async function click(h, selector) { await h.page.locator(selector).click(); await idle(h); }
 async function fetchModels(h) { await click(h, '[data-ai-model-fetch]'); }
@@ -151,6 +149,7 @@ test('fetch with no model uses only unsaved connection and CSRF; selected import
   h.respond = r => r.path.endsWith('/preview') ? ok({ preview: preview([row(), row('org/other')]) }) : ok({ catalog: catalog() });
   await fetchModels(h);
   assert.equal(h.requests.length, 1);
+  assert.equal(await h.page.evaluate(() => window.markedSaved.length), 1, 'Fetch preview does not replace the provider baseline');
   assert.deepEqual(Object.fromEntries(new URLSearchParams(h.requests[0].body)), { csrf_fixture: 'initial-token', version: '',
     base_url: baseURL, api_key: secret, remove_api_key: '0', auth_mode: 'bearer', allow_private_network: '0' });
   assert.equal(h.requests[0].headers['x-csrf-token'], 'initial-token');
@@ -161,7 +160,9 @@ test('fetch with no model uses only unsaved connection and CSRF; selected import
   assert.equal(await h.page.locator('[name="model"]').inputValue(), '');
   assert.equal(await h.page.locator('[name="api_key"]').inputValue(), secret);
   assert.equal(await h.page.locator('[data-ai-model-select] option').count(), 2);
+  assert.equal(await h.page.evaluate(() => window.markedSaved.length), 1, 'Catalog-only import does not clear or replace the provider baseline');
   await h.page.locator('[data-ai-model-select]').selectOption('org/model');
+  assert.equal(await h.page.evaluate(() => window.markedSaved.length), 1, 'Applying a recommendation remains dirty');
   for (const [key, value] of Object.entries({ model: 'org/model', ...row().defaults })) assert.equal(await h.page.locator(`[name="${key}"]`).inputValue(), String(value));
   assert.equal(await h.page.locator('[data-ai-settings-test]').isDisabled(), true);
   assert.equal(await h.page.locator('[data-ai-settings-enable]').isDisabled(), true);
@@ -173,7 +174,33 @@ test('fetch with no model uses only unsaved connection and CSRF; selected import
   await secure(h);
 });
 
-test('selecting recommendations is dirty until normal Save and Test; neither import nor selection activates', async t => {
+test('fetch loading is scoped, keeps provider fields and drawer controls usable, and sends only one request', async t => {
+  const h = await open(t, { base_url: baseURL });
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  h.respond = async () => { await gate; return ok({ preview: preview() }); };
+  await h.page.locator('[data-ai-model-drawer-open]').click();
+  await h.page.locator('[name="api_key"]').fill(secret);
+  await h.page.locator('[data-ai-model-fetch]').click();
+  await waitForRequests(h, 1);
+  assert.equal(await h.page.locator('[data-ai-settings]').getAttribute('aria-busy'), null);
+  assert.equal(await h.page.locator('.ai-settings-drawer-actions').getAttribute('aria-busy'), 'true');
+  assert.equal(await h.page.locator('[data-ai-model-fetch] .app-loading-spinner').count(), 1);
+  assert.equal(await h.page.locator('[name="base_url"]').isEnabled(), true);
+  assert.equal(await h.page.locator('[name="api_key"]').isEnabled(), true);
+  assert.equal(await h.page.locator('[data-ai-model-drawer-close]').isEnabled(), true);
+  assert.equal(await h.page.locator('[data-ai-model-catalog-search]').isEnabled(), true);
+  await h.page.locator('[data-ai-model-drawer-close]').click();
+  assert.equal(await h.page.locator('[data-ai-model-drawer]').getAttribute('aria-hidden'), 'true');
+  await h.page.locator('[data-ai-model-fetch]').dispatchEvent('click');
+  assert.equal(h.requests.length, 1);
+  release();
+  await idle(h);
+  assert.equal(await h.page.locator('.ai-settings-drawer-actions').getAttribute('aria-busy'), null);
+  assert.equal(await h.page.locator('[data-ai-model-fetch] .app-loading-spinner').count(), 0);
+});
+test('selecting recommendations remains unsaved until Save and Test complete', async t => {
   const h = await open(t, { saved: true, version, base_url: baseURL, model: 'old/model', has_api_key: true,
     connection_tested: true }, catalog());
   await h.page.locator('[data-ai-model-select]').selectOption('org/model');
@@ -218,9 +245,9 @@ test('import all sends empty IDs; status and SSR hydrate persisted catalogs with
   await h.page.locator('[data-ai-model-preview-search]').fill('org/other');
   assert.equal(await h.page.locator('[data-ai-model-preview-list] > div:visible').count(), 1);
   const help = await h.page.locator('[data-ai-model-import-all]').locator('..').textContent();
-  assert.match(help, /Import all replaces the imported catalog with this preview; removes retired entries/);
-  assert.match(help, /Import selected adds to the existing catalog/);
-  assert.match(help, /Import all includes every model in this preview, not just matches/);
+  assert.match(help, /Import all replaces it with the full preview/);
+  assert.match(help, /Selected adds to the catalog/);
+  assert.match(help, /including filtered-out rows/);
   await click(h, '[data-ai-model-import-all]');
   assert.deepEqual(await h.page.locator('[data-ai-model-select] option').evaluateAll(options => options.map(option => option.value)), ['', 'org/model', 'org/other']);
   const body = Object.fromEntries(new URLSearchParams(h.requests[1].body));
@@ -245,7 +272,7 @@ test('empty compatible-model preview explains minimum budget, disables imports a
   h.respond = () => ok({ preview: preview([]) });
   await fetchModels(h);
   assert.equal(await h.page.locator('[data-ai-model-preview]').isVisible(), true);
-  assert.match(await h.page.locator('[data-ai-model-preview]').textContent(), /Only models compatible with minimum app budget are listed; manual ID remains available/);
+  assert.match(await h.page.locator('[data-ai-model-preview]').textContent(), /Enter a manual exact model ID/);
   assert.match(await h.page.locator('[data-ai-model-preview-state]').textContent(), /No models compatible with the minimum app budget were returned/);
   assert.match(await h.page.locator('[data-ai-settings-feedback]').textContent(), /Enter a manual exact model ID/);
   assert.equal(await h.page.locator('[data-ai-model-import-selected]').isDisabled(), true);
@@ -260,7 +287,9 @@ test('unknown capabilities stay unknown; manual overrides survive import and pre
   const unknown = row('unknown', { context_window: null, max_output_tokens: null, supports_thinking: null, sources: { context_window: 'unknown', max_output_tokens: 'unknown', supports_thinking: 'unknown' }, warnings: ['Verify with your provider.'] });
   const h = await open(t, { base_url: baseURL + '/' }, catalog([unknown]));
   await h.page.locator('[data-ai-model-select]').selectOption('unknown');
-  assert.match(await h.page.locator('[data-ai-model-details]').textContent(), /Context window: Unknown.*Thinking support: Unknown/s);
+  const detailText = await h.page.locator('[data-ai-model-details]').textContent();
+  assert.match(detailText, /Context windowUnknown.*Thinking supportUnknown/s);
+  await h.page.locator('.ai-settings-advanced > summary').click();
   await h.page.locator('[name="max_output_tokens"]').fill('777');
   await h.page.locator('[name="model"]').fill('manual/exact');
   await h.page.locator('[name="base_url"]').fill('https://gateway.example.test/other/v1');
@@ -321,6 +350,25 @@ test('stale connection aborts in-flight fetch; busy/reentrant actions and SPA te
   assert.equal(h.requests.length, 2, 'Neither cancelled request is replayed');
 });
 
+test('identical model name and ID render once and configuration details are grouped without horizontal overflow', async t => {
+  const longId = 'provider/' + 'long-model-id-'.repeat(12) + 'identifier';
+  const model = row(longId, { name: longId, warnings: ['Synthetic conservative tokenizer warning.'] });
+  const h = await open(t, { base_url: baseURL }, catalog([model]));
+  const selectedText = await h.page.locator('[data-ai-model-select] option').last().textContent();
+  assert.equal(selectedText, longId);
+  assert.equal(selectedText.includes(' — '), false);
+  await h.page.locator('[data-ai-model-select]').selectOption(longId);
+  const details = h.page.locator('[data-ai-model-details]');
+  assert.equal(await details.locator('.ai-settings-model-facts').count(), 2);
+  assert.deepEqual(await details.locator('.ai-settings-model-fact dt').allTextContents(), [
+    'Context window', 'Maximum output', 'Thinking support',
+    'Input budget', 'Output limit', 'Thinking mode', 'Reasoning effort', 'Output token field', 'Structured output',
+  ]);
+  assert.equal(await details.getByText('Recommended configuration', { exact: true }).count(), 1);
+  assert.equal(await h.page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true);
+  assert.equal(await h.page.locator('[data-ai-model-drawer]').evaluate(el => el.scrollWidth <= el.clientWidth), true);
+});
+
 test('hostile metadata is inert in SSR and preview; bounded 200-row metadata responses exceed old 32KB limit safely', async t => {
   const attack = '<img src="https://evil.test/x" onerror="window.pwned=1">';
   const hostile = row('hostile', { name: attack, warnings: [attack] });
@@ -329,8 +377,8 @@ test('hostile metadata is inert in SSR and preview; bounded 200-row metadata res
   h.respond = () => ok({ preview: preview([hostile]) }); await fetchModels(h);
   assert.equal(await h.page.locator('[data-ai-model-preview-list] img').count(), 0);
   await h.page.locator('[data-ai-model-preview-list] summary').click();
-  await h.page.waitForFunction(() => document.querySelector('[data-ai-model-preview-list] details p'));
-  assert.ok((await h.page.locator('[data-ai-model-preview-list] details').textContent()).includes(attack));
+  await h.page.waitForFunction(() => document.querySelector('[data-ai-model-preview-list] .ai-settings-model-facts'));
+  assert.ok((await h.page.locator('[data-ai-model-preview-list] details').first().textContent()).includes(attack));
   assert.equal(await h.page.locator('[data-ai-model-preview-list] img').count(), 0);
   assert.equal(await h.page.evaluate(() => window.pwned), undefined);
   const rows = Array.from({ length: 200 }, (_, i) => row('model-' + i));
@@ -423,13 +471,13 @@ test('173-model catalogs have lazy collapsed metadata and local filters that pre
   h.respond = () => payload;
   await fetchModels(h);
   assert.equal(await h.page.locator('[data-ai-model-preview-list] details:not([open])').count(), 173);
-  assert.equal(await h.page.locator('[data-ai-model-preview-list] p').count(), 0, 'Metadata is not built until expanded');
+  assert.equal(await h.page.locator('[data-ai-model-preview-list] .ai-settings-model-facts').count(), 0, 'Metadata is not built until expanded');
   await h.page.locator('[data-ai-model-preview-list] summary').first().click();
-  await h.page.waitForFunction(() => document.querySelector('[data-ai-model-preview-list] details p'));
-  const count = await h.page.locator('[data-ai-model-preview-list] p').count();
+  await h.page.waitForFunction(() => document.querySelector('[data-ai-model-preview-list] .ai-settings-model-facts'));
+  const count = await h.page.locator('[data-ai-model-preview-list] .ai-settings-model-facts').count();
   await h.page.locator('[data-ai-model-preview-list] summary').first().click();
   await h.page.locator('[data-ai-model-preview-list] summary').first().click();
-  assert.equal(await h.page.locator('[data-ai-model-preview-list] p').count(), count);
+  assert.equal(await h.page.locator('[data-ai-model-preview-list] .ai-settings-model-facts').count(), count);
   await h.page.locator('[data-ai-model-preview-list] input').first().check();
   await h.page.locator('[data-ai-model-preview-search]').fill('MODEL-172');
   assert.equal(await h.page.locator('[data-ai-model-preview-list] > div:visible').count(), 1);
@@ -476,10 +524,7 @@ test('missing initial catalog and legacy discovery markup leave original setting
   await idle(h);
   assert.equal(await h.page.locator('[data-ai-model-select]').isDisabled(), true);
   assert.equal(await h.page.locator('[data-ai-settings-test]').isEnabled(), true);
-  const start = h.fixture.html.indexOf('<div class="col-12" data-ai-model-discovery>');
-  const end = h.fixture.html.indexOf('<div class="col-md-6"><label class="form-label" for="ai-model">');
-  assert.ok(start >= 0 && end > start);
-  h.fixture.html = h.fixture.html.slice(0, start) + h.fixture.html.slice(end);
+  h.fixture.html = h.fixture.html.replace(/<div class="offcanvas offcanvas-end ai-settings-model-drawer"[\s\S]*?<\/div>\s*<section class="card ai-settings-section" id="ai-section-access"/, '<section class="card ai-settings-section" id="ai-section-access"');
   await h.page.reload();
   await idle(h);
   assert.equal(await h.page.locator('[data-ai-model-select]').count(), 0);

@@ -50,6 +50,31 @@ class AiInsightsController extends BaseController
         }, 202);
     }
 
+    public function recover()
+    {
+        return $this->mutation(function (array $actor): array {
+            $input = $this->input(['analysis_code', 'confirm_recovery']);
+            if (($input['confirm_recovery'] ?? null) !== '1') { throw new AiFailure('invalid_request', 422); }
+            $analysis = $input['analysis_code'] ?? null;
+            if (!is_string($analysis)) { throw new AiFailure('invalid_request', 422); }
+            $payload = $this->application()->recover($actor, $analysis);
+            return ['message' => 'Identical evidence recovered with a new retention interval. Old requests and approvals were not renewed. No AI service was contacted.',
+                'baseline' => view('ai/evidence', ['evidence' => $payload])];
+        });
+    }
+
+    public function retry(int $id)
+    {
+        return $this->mutation(function (array $actor) use ($id): array {
+            $input = $this->input(['confirm_retry']);
+            if ($id < 1 || ($input['confirm_retry'] ?? null) !== '1') { throw new AiFailure('invalid_request', 422); }
+            $job = $this->application()->retry($actor, $id);
+            return ['job_id' => $job['id'], 'status' => $job['status'], 'reused' => $job['reused'],
+                'message' => $job['reused'] ? 'An existing safe successor was found. No duplicate was created.'
+                    : 'A new safe attempt was queued. It uses the normal request budget. No AI service was contacted by this action.'];
+        }, 202);
+    }
+
     public function review(int $id)
     {
         return $this->mutation(function (array $actor) use ($id): array {
@@ -155,7 +180,10 @@ class AiInsightsController extends BaseController
             'disabled' => 'AI requests are turned off. Local summaries still require separate approval and privacy checks.',
             'dispatch_paused' => 'AI requests are paused. Ask an administrator to review the setup and resume requests. This action sent no AI request.',
             'store_unavailable', 'encryption_unavailable' => 'Secure storage for insights is not ready. Ask an administrator to check storage and encryption.',
-            'snapshot_expired' => 'This summary has expired. An administrator must review previously shared summaries before another can be shared.',
+            'snapshot_expired' => 'This summary has expired. Use explicit recovery only for identical current-period evidence; changed evidence remains blocked.',
+            'recovery_unavailable' => 'Identical-evidence recovery is unavailable. Check the reporting period and recovery schema with an administrator.',
+            'retry_not_allowed' => 'A new attempt is not safe for this request. Possible dispatches are never replayed; check the latest request status.',
+            'pipeline_changed', 'pipeline_unavailable' => 'This draft or request belongs to a different pipeline policy. It cannot be accepted, approved, or dispatched under the current policy.',
             'library_not_approved', 'compatibility_required', 'revision_not_approved', 'governance_required', 'tenant_not_approved', 'unit_not_approved', 'endpoint_changed' => 'The current setup still needs technical or privacy approval. Ask an administrator for help.',
             default => 'This action is unavailable. It was not retried automatically.',
         };

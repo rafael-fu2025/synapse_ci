@@ -13,6 +13,12 @@ $routes->get('auth/logout', static function () {
     return service('response')->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Use the Sign Out confirmation to end your session.');
 });
 
+// Managed login carousel artwork. The files live outside the web root in the
+// private store, so this controller is the only way to publish them.
+$routes->addPlaceholder('carouselscope', '(?:[1-9][0-9]{0,9}|default)');
+$routes->addPlaceholder('carouselfile', '(?:[A-Za-z0-9_-][A-Za-z0-9._-]*\.[A-Za-z0-9]{2,5})');
+$routes->get('uploads/carousel/(:carouselscope)/(:carouselfile)', 'CarouselAssetController::show/$1/$2');
+
 // ESP32-S3 Hardware IoT API (authenticated via X-Device-Token header)
 $routes->group('api/v1/devices/bmg', static function (RouteCollection $routes): void {
     $routes->get('schedule', 'Api\BmgDeviceApiController::schedule');
@@ -32,6 +38,7 @@ $routes->group('api/v1', static function (RouteCollection $routes): void {
         $routes->post('auth/logout', 'Api\V1\MobileAuthController::logout');
         $routes->get('me', 'Api\V1\MeController::show');
         $routes->get('me/health-summary', 'Api\V1\MeController::healthSummary');
+        $routes->get('realtime/grant', 'Api\V1\RealtimeGrantController::show');
         $routes->get('me/photo', 'Api\V1\MeController::photo');
         $routes->post('me/photo', 'Api\V1\MeController::uploadPhoto');
         $routes->delete('me/photo', 'Api\V1\MeController::deletePhoto');
@@ -52,6 +59,10 @@ $routes->group('api/v1', static function (RouteCollection $routes): void {
         $routes->get('notifications/history', 'Api\V1\NotificationsApiController::history');
         $routes->post('notifications/read-all', 'Api\V1\NotificationsApiController::readAll');
         $routes->post('notifications/(:num)/read', 'Api\V1\NotificationsApiController::read/$1');
+
+        // Device token registration for push delivery. The token is never returned.
+        $routes->post('push/token', 'Api\V1\PushController::register');
+        $routes->delete('push/token', 'Api\V1\PushController::revoke');
 
         // Staff monitoring only; no staff action endpoint exists on the mobile API.
         $routes->get('staff/queue-summary', 'Api\V1\StaffQueueApiController::index');
@@ -82,6 +93,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
             $routes->get('panel', 'AiInsightsController::panel');
             $routes->post('prepare', 'AiInsightsController::prepare');
             $routes->post('generate', 'AiInsightsController::generate');
+            $routes->post('recover', 'AiInsightsController::recover');
+            $routes->post('jobs/(:num)/retry', 'AiInsightsController::retry/$1');
             $routes->post('(:num)/review', 'AiInsightsController::review/$1');
             $routes->post('jobs/(:num)/cancel', 'AiInsightsController::cancel/$1');
         });
@@ -89,6 +102,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->group('admin/mis-sync', ['filter' => 'auth:mis.sync'], static function (RouteCollection $routes): void {
         $routes->get('', 'MisSyncController::index');
         $routes->post('run', 'MisSyncController::sync');
+        $routes->post('people', 'MisSyncController::people');
+        $routes->get('people/status', 'MisSyncController::peopleStatus');
     });
 
     // Short-lived, server-authorized WebSocket grants; no client-selected channels.
@@ -128,7 +143,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
             $routes->get('', 'TeamsController::index/' . $unit);
             $routes->get('chat', 'TeamChatController::index/' . $unit);
             $routes->get('chat/history', 'TeamChatController::history/' . $unit);
-                        $routes->get('chat/tasks', 'TeamChatController::tasks/' . $unit);
+            $routes->get('chat/tasks', 'TeamChatController::tasks/' . $unit);
             $routes->post('chat/send', 'TeamChatController::send/' . $unit);
             $routes->post('chat/read', 'TeamChatController::read/' . $unit);
             $routes->get('calendar', 'TeamCalendarController::index/' . $unit);

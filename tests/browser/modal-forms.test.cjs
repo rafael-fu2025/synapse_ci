@@ -437,8 +437,27 @@ for (const theme of ['light','dark']) {
         exists: !!bootstrap.Modal.getInstance(root), backdrop: bootstrap.Modal.getInstance(root)._config.backdrop,
         keyboard: bootstrap.Modal.getInstance(root)._config.keyboard,
         preserved: document.querySelector('#main') === window.originalMain,
-        forms: root.querySelectorAll('form').length
-      })),{exists:true,backdrop:'static',keyboard:false,preserved:true,forms:1});
+        forms: root.querySelectorAll('form').length,
+        footerActions: root.querySelectorAll('.modal-content > .modal-footer .form-actions').length,
+        bodyActions: root.querySelectorAll('.modal-body .form-actions').length
+      })),{exists:true,backdrop:'static',keyboard:false,preserved:true,forms:1,footerActions:1,bodyActions:0});
+      const geometry = await page.locator('#appFormModal').evaluate(root => {
+        const body = root.querySelector('.modal-body');
+        const footer = root.querySelector('.modal-content > .modal-footer');
+        const spacer = document.createElement('div');
+        spacer.style.height = '1800px';
+        body.prepend(spacer);
+        body.scrollTop = 0;
+        const before = footer.getBoundingClientRect().top;
+        body.scrollTop = body.scrollHeight;
+        const after = footer.getBoundingClientRect();
+        const result = { scroll: body.scrollTop, delta: Math.abs(after.top - before), visible: after.bottom <= innerHeight };
+        spacer.remove();
+        body.scrollTop = 0;
+        return result;
+      });
+      assert.ok(geometry.scroll > 0, 'Long modal content actually scrolls');
+      assert.ok(geometry.delta < 1 && geometry.visible, 'Footer remains visible and stationary while the body scrolls');
       if (item.kind === 'edit') assert.equal(await page.locator('#slideForm input[name="title"]').inputValue(),'Existing Slide');
       await page.keyboard.press('Escape');
       await page.mouse.click(5,5);
@@ -747,7 +766,7 @@ for (const unit of ['clinic', 'guidance']) {
     assert.equal(await form.evaluate(form => form.checkValidity()), true);
     const before = posts.length;
     failSave = true;
-    await form.locator('button[type="submit"]').click();
+    await modal.getByRole('button', {name:'Save Availability', exact:true}).click();
     await availabilityFailure(form);
     assert.equal(posts.length, before + 1);
     const submitted = posts.at(-1);
@@ -760,7 +779,7 @@ for (const unit of ['clinic', 'guidance']) {
     }
     assert.equal(await modal.isVisible(), true);
     failSave = false;
-    await availabilityReload(page, () => form.locator('button[type="submit"]').click(), item, 'weekly', '7', '2', 'Provider');
+    await availabilityReload(page, () => modal.getByRole('button', {name:'Save Availability', exact:true}).click(), item, 'weekly', '7', '2', 'Provider');
     assert.equal(posts.length, before + 2);
     assert.deepEqual(posts.at(-1).fields, {...submitted.fields, csrf_test_name: 'refreshed-token'});
   });
@@ -955,6 +974,7 @@ for (const unit of ['clinic', 'guidance']) {
       const before = posts.length;
       const modal = await openException(page, 'availability-exception-new-modal');
       const form = modal.locator('form[data-availability-save]');
+      const actionButton = modal.getByRole('button', {name:'Save exception', exact:true});
       await assertAvailabilityContext(form, 'exception', 'exceptions');
       assert.equal(await form.locator('[data-datepicker]').count(), 1);
       assert.equal(await form.locator('#exceptionNewDateDisplay').getAttribute('data-target'), '#exceptionNewDate');
@@ -979,7 +999,7 @@ for (const unit of ['clinic', 'guidance']) {
       assert.equal(await form.evaluate(form => form.checkValidity()), true);
       assert.equal(posts.length, before, 'Opening a dialog and changing fields must not auto-submit');
       failSave = true;
-      await form.getByRole('button', {name:'Save exception', exact:true}).click();
+      await actionButton.click();
       await availabilityFailure(form);
       assert.equal(posts.length, before + 1);
       assert.equal(posts.at(-1).path, item.url + '/exceptions');
@@ -1004,6 +1024,7 @@ for (const unit of ['clinic', 'guidance']) {
     const modal = await openException(page, 'availability-exception-61-modal');
     const form = modal.locator('form').first();
     const remove = modal.locator('form').last();
+    const actionButton = modal.getByRole('button', {name:'Save exception', exact:true});
     await assertAvailabilityContext(form, 'exception', 'exceptions', 'Provider', '7', '3');
     const snapshot = await exceptionSnapshot(form);
     assert.deepEqual(await exceptionSnapshot(remove), snapshot);
@@ -1011,7 +1032,7 @@ for (const unit of ['clinic', 'guidance']) {
     await form.locator('[name="reason"]').fill('Retain edited leave reason');
     const before = posts.length;
     exceptionConflict = true;
-    await form.getByRole('button', {name:'Save exception', exact:true}).click();
+    await actionButton.click();
     const feedback = form.locator('[data-availability-feedback][role="alert"]');
     await feedback.waitFor({state:'visible'});
     assert.match(await feedback.innerText(), /This exception changed/);
@@ -1025,7 +1046,7 @@ for (const unit of ['clinic', 'guidance']) {
     assert.equal(await remove.locator('[data-availability-feedback]').count(), 0);
     assert.equal(await form.locator('[name="csrf_test_name"]').inputValue(), 'refreshed-token');
     exceptionConflict = false;
-    await availabilityReload(page, () => form.getByRole('button', {name:'Save exception', exact:true}).click(),
+    await availabilityReload(page, () => actionButton.click(),
       item, 'exceptions', '7', '3', 'Provider');
     assert.equal(posts.length, before + 2);
     assert.deepEqual(posts.at(-1).fields, {...submitted.fields, csrf_test_name:'refreshed-token'});

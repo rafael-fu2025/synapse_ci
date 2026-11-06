@@ -25,7 +25,7 @@ final class AiFixtureView
     public function endSection(): string { return ''; }
     public function render(string $name, array $data): string
     {
-        if (!in_array($name, ['ai/index', 'ai/panel', 'ai/evidence'], true)) {
+        if (!in_array($name, ['ai/index', 'ai/panel', 'ai/evidence', 'ai/_request', 'ai/_review'], true)) {
             throw new InvalidArgumentException('Only AI presentation views may be rendered.');
         }
         extract($data, EXTR_SKIP);
@@ -41,9 +41,13 @@ final class AiFixtureView
 $attack = '\"><img src="/xss-probe" onerror="window.aiFixtureXss=1"><script>window.aiFixtureXss=1</script>&';
 $text = static fn (string $label): string => $label . (!empty($fixture['hostile']) ? ' ' . $attack : ' (synthetic aggregate fixture)');
 $evidence = [
+    'analysis_code' => 'clinic.activity',
     'period' => ['label' => $text('Current complete month')],
     'comparison_period' => ['label' => $text('Previous complete month')],
-    'metrics' => [['current_value' => 40, 'previous_value' => 32, 'absolute_change' => 8, 'relative_change_percent' => 25]],
+    'metrics' => [['metric_code' => 'completed_encounters', 'unit_of_analysis' => 'encounter',
+        'current_value' => 40, 'previous_value' => 32, 'absolute_change' => 8, 'relative_change_percent' => 25,
+        'current_denominator' => null, 'previous_denominator' => null,
+        'current_share_percent' => null, 'previous_share_percent' => null, 'share_change_points' => null]],
     'limitations' => [$text('Aggregate limitations')],
 ];
 $program = [
@@ -54,15 +58,27 @@ $program = [
     'references' => [['url' => 'https://example.invalid/reference?label=" onmouseover="window.aiFixtureXss=1', 'title' => $text('Reference title')]],
 ];
 $status = $fixture['jobStatus'] ?? null;
-$jobs = $status === null ? [] : [[
-    'id' => 31, 'status' => $status, 'profile_revision' => $fixture['jobRevision'] ?? 'fixture-r1',
-    'created_at' => '2026-09-01 00:00:00', 'reason' => !empty($fixture['hostile']) ? $attack : null,
-]];
+$jobs = [];
+if ($status !== null) {
+    $jobs[] = [
+        'id' => 31, 'status' => $status, 'profile_revision' => $fixture['jobRevision'] ?? 'fixture-r1',
+        'created_at' => '2026-09-01 00:00:00', 'reason' => !empty($fixture['hostile']) ? $attack : ($fixture['jobReason'] ?? null),
+        'can_retry' => $fixture['canRetry'] ?? false,
+    ];
+}
+foreach ($fixture['extraJobs'] ?? [] as $extraJob) {
+    if (is_array($extraJob)) {
+        $jobs[] = $extraJob + ['id' => 32 + count($jobs), 'status' => 'failed', 'profile_revision' => 'fixture-r1',
+            'created_at' => '2026-08-01 00:00:00', 'reason' => null, 'can_retry' => false];
+    }
+}
 $insights = empty($fixture['insight']) ? [] : [[
     'id' => 47, 'version' => $fixture['version'] ?? 7, 'status' => $fixture['insightStatus'] ?? 'draft',
     'created_at' => '2026-09-01 00:00:00',
     'draft' => [
-        'provenance' => ['model' => $text('Fixture model'), 'prompt_version' => $text('Fixture prompt')],
+        'provenance' => ['model' => $text('Fixture model'), 'prompt_version' => $text('Fixture prompt'),
+            'pipeline_digest' => empty($fixture['legacyPolicy']) ? \App\Services\Ai\PipelineProvenance::digest() : null,
+            'library_version' => $text('Fixture library')],
         'narrative' => ['summary' => $text('Summary'), 'interpretation' => $text('Interpretation'),
             'abstained' => false, 'alternative_explanations' => [$text('Alternative explanation')]],
         'evidence' => $evidence, 'programs' => [$program],
@@ -70,7 +86,7 @@ $insights = empty($fixture['insight']) ? [] : [[
 ]];
 $data = [
     'profile' => ['revision' => 'fixture-r1'], 'ready' => $fixture['ready'] ?? true, 'reason' => $fixture['reason'] ?? null,
-    'jobs' => $jobs, 'insights' => $insights,
+    'jobs' => $jobs, 'insights' => $insights, 'recoverableSnapshots' => $fixture['recoverableSnapshots'] ?? [],
     'canGenerate' => $fixture['canGenerate'] ?? true, 'canReview' => $fixture['canReview'] ?? true,
     'canApprove' => $fixture['canApprove'] ?? true,
 ];

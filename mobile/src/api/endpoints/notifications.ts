@@ -1,11 +1,19 @@
 import { request } from '../client';
 
+/** The record a native client can open for this notice. */
+export type NotificationTarget =
+  | { kind: 'appointment'; id: number }
+  | { kind: 'announcement'; id: number }
+  | { kind: 'survey'; id: number };
+
 export interface NotificationItem {
   id: number;
   title: string;
   message: string;
   created_at: string | null;
   read_at: string | null;
+  /** Null for notices that have no mobile surface (referrals, teams, workflow alerts). */
+  target?: NotificationTarget | null;
 }
 
 export interface NotificationInbox {

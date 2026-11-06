@@ -103,6 +103,45 @@
   --na-header-bg: #ffffff;
   --na-header-border: #eef0f4;
 
+  /* Charts (light). Read by assets/js/chart-theme.js; ApexCharts cannot
+     consume CSS variables directly, so these are resolved at runtime. */
+  --chart-series-1: var(--na-primary);
+  --chart-series-2: #b06a6a;
+  --chart-grid: #e5e7ef;
+  --chart-axis-label: var(--na-text-muted);
+  --chart-legend-label: var(--na-text-muted);
+  --chart-tooltip-bg: #ffffff;
+  --chart-tooltip-text: #1f2937;
+  --chart-tooltip-muted: #6c757d;
+  --chart-tooltip-border: #e5e7ef;
+  --chart-donut-gap: #ffffff;
+
+  /* Categorical palette for multi-slice donuts. These are identity colours,
+     not theme surfaces: each slice must stay a distinct hue in both themes,
+     so they are intentionally NOT overridden in the dark block. */
+  --chart-cat-1: var(--na-primary);
+  --chart-cat-2: #6610f2;
+  --chart-cat-3: #0dcaf0;
+  --chart-cat-4: #dc3545;
+  --chart-cat-5: #fd7e14;
+  --chart-cat-6: #198754;
+
+  /* Status palette: hue carries meaning (emergency/urgent/routine). */
+  --chart-status-danger: #dc3545;
+  --chart-status-warning: #ffc107;
+  --chart-status-success: #198754;
+  --chart-status-idle: #6c757d;
+
+  /* Neutral multi-slice ramp. Light mode does not use it (light keeps the
+     brand/status hues); it is defined here so the token always resolves and
+     is only swapped in for dark mode. */
+  --chart-neutral-1: #800000;
+  --chart-neutral-2: #a83232;
+  --chart-neutral-3: #b06a6a;
+  --chart-neutral-4: #8a8a8a;
+  --chart-neutral-5: #6e6e6e;
+  --chart-neutral-6: #545454;
+
   /* Misc */
   --na-shadow-sm: 0 1px 2px rgba(16,24,40,.04);
   --na-shadow: 0 2px 8px rgba(16,24,40,.06);
@@ -254,5 +293,45 @@ html:not([data-theme="light"]) body.dark-mode {
   --bs-tertiary-bg: #282828;
   --bs-border-color: var(--border-color);
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+  /* Charts (dark). Series step down to greys that stay distinguishable on
+     --surface-color, matching the neutral KPI rail and welcome banner. */
+  --chart-series-1: #e5e5e5;
+  --chart-series-2: #8f8f8f;
+  --chart-grid: #383838;
+  --chart-axis-label: var(--muted-color);
+  --chart-legend-label: var(--muted-color);
+  --chart-tooltip-bg: var(--surface-color);
+  --chart-tooltip-text: var(--default-color);
+  --chart-tooltip-muted: var(--muted-color);
+  --chart-tooltip-border: var(--border-color);
+  --chart-donut-gap: var(--surface-color);
+
+  /* Categorical hues keep their identity but are lifted in lightness: the
+     light-mode maroon (#800000) and purple (#6610f2) fall to ~1.7:1 and
+     ~2.6:1 on this surface, which makes those slices disappear. Same hue
+     families, readable on dark. */
+  --chart-cat-1: #e08a8a;
+  --chart-cat-2: #a98bff;
+  --chart-cat-3: #0dcaf0;
+  --chart-cat-4: #dc3545;
+  --chart-cat-5: #fd7e14;
+  --chart-cat-6: #198754;
+
+  /* Neutral multi-slice ramp for dark mode, matching the admin dashboard's
+     population donut. Slices are told apart by lightness, not hue, so the
+     whole dashboard reads as one calm surface.
+     The ramp is compressed so the darkest step still clears 3:1 against the
+     card (#686868 = 3.06:1); adjacent steps stay 1.28-1.45:1 apart so six
+     slices remain distinguishable. Ordered light -> dark. */
+  --chart-neutral-1: #ebebeb;
+  --chart-neutral-2: #d1d1d1;
+  --chart-neutral-3: #b7b7b7;
+  --chart-neutral-4: #9c9c9c;
+  --chart-neutral-5: #828282;
+  --chart-neutral-6: #686868;
+
+  /* Status tokens (--chart-status-*) are intentionally not redefined here:
+     their hues stay legible on this surface and carry fixed meaning. */
 }
 

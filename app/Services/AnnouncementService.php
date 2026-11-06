@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Libraries\LikePattern;
 use App\Services\Audit\AuditService;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\BaseConnection;
@@ -140,7 +141,7 @@ final class AnnouncementService
             ->select('SUBSTR(a.body, 1, 400) AS excerpt', false);
         $this->withRead($builder, $actor);
         if ($filters['unit'] !== 'all') $builder->where('a.unit', $filters['unit']);
-        if ($filters['q'] !== '') $builder->groupStart()->like('a.title', $filters['q'])->orLike('a.body', $filters['q'])->groupEnd();
+        if ($filters['q'] !== '') LikePattern::applyGroup($builder, ['a.title', 'a.body'], $filters['q']);
         $counts = ['all' => (clone $builder)->countAllResults(),
             'unread' => (clone $builder)->where('r.read_at', null)->countAllResults(),
             'read' => (clone $builder)->where('r.read_at IS NOT NULL', null, false)->countAllResults()];
@@ -312,7 +313,11 @@ final class AnnouncementService
         try {
             if ($notifications !== []) {
                 $invalidation ??= new NotificationInvalidation($this->db);
-                foreach ($notifications as $tenant => $ids) $invalidation->publishCommitted((int) $tenant, $ids);
+                $push = new \App\Services\Push\PushPublisher($this->db);
+                foreach ($notifications as $tenant => $ids) {
+                    $invalidation->publishCommitted((int) $tenant, $ids);
+                    $push->publishCommitted((int) $tenant, $ids);
+                }
             }
         } catch (Throwable) {
             // Optional realtime setup cannot fail or roll back a committed write.

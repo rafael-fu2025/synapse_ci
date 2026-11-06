@@ -53,10 +53,11 @@ final class AnnouncementRoutesTest extends CIUnitTestCase
     protected function tearDown(): void
     {
         if (isset($this->tenant)) {
-            foreach (['notifications', 'announcements_reads', 'announcements', 'audit_events', 'student_profiles', 'employee_profiles', 'users', 'people'] as $table) {
+            // audit_events is an append-only ledger; its tenant FK means the fixture
+            // tenant row is retained with it, matching the deliberate history retention.
+            foreach (['notifications', 'announcements_reads', 'announcements', 'student_profiles', 'employee_profiles', 'users', 'people'] as $table) {
                 $this->db->table($table)->where('tenant_id', $this->tenant)->delete();
             }
-            $this->db->table('tenants')->where('id', $this->tenant)->delete();
         }
         foreach (['renderer', 'security'] as $service) { Services::resetSingle($service); }
         service('superglobals')->setCookieArray([]);
@@ -81,7 +82,7 @@ final class AnnouncementRoutesTest extends CIUnitTestCase
     {
         AuthenticatedUser::clear();
         Services::resetSingle('renderer');
-        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant])->withHeaders([])->get($route);
+        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant, '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()]])->withHeaders([])->get($route);
     }
 
     private function postAs(array $actor, string $route, array $payload = [], bool $validCsrf = true)
@@ -91,7 +92,7 @@ final class AnnouncementRoutesTest extends CIUnitTestCase
         service('superglobals')->setCookie(config('Cookie')->prefix . config('Security')->cookieName, $hash);
         Services::resetSingle('security');
         if ($validCsrf) { $payload[config('Security')->tokenName] = $hash; }
-        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant])
+        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant, '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()]])
             ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])->post($route, $payload);
     }
 
@@ -102,7 +103,7 @@ final class AnnouncementRoutesTest extends CIUnitTestCase
 
     private function published(string $unit = 'clinic'): array
     {
-        session()->set(['user' => $this->admin, 'tenant_id' => $this->tenant]);
+        session()->set(['user' => $this->admin, 'tenant_id' => $this->tenant, '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()]]);
         $service = new AnnouncementService();
         $row = $service->create($unit, $this->payload());
         return $service->publish((int) $row['id'], $unit, $row['version']);
@@ -176,12 +177,13 @@ final class AnnouncementRoutesTest extends CIUnitTestCase
             ->update(['starts_at' => null, 'published_at' => '2020-01-01 23:30:00']);
         $list = $this->getAs($this->student, 'portal/announcements');
         $list->assertStatus(200);
-        $this->assertStringContainsString('Published at (Asia/Manila)', $list->getBody());
-        $this->assertStringContainsString('2020-01-02 07:30', $list->getBody());
+        // The list shows the Manila-shifted date; the datetime attribute keeps the instant.
+        $this->assertStringContainsString('02 Jan 2020', $list->getBody());
+        $this->assertStringContainsString('2020-01-02T07:30:00+08:00', $list->getBody());
         $show = $this->getAs($this->student, 'portal/announcements/' . $row['id']);
         $show->assertStatus(200);
-        $this->assertStringContainsString('Published 2020-01-02 07:30 (Asia/Manila)', $show->getBody());
-        $this->assertStringContainsString('Available until 2099-01-02 01:15 (Asia/Manila)', $show->getBody());
+        $this->assertStringContainsString('<time datetime="2020-01-02T07:30:00+08:00">02 Jan 2020, 7:30 AM</time> (Asia/Manila)', $show->getBody());
+        $this->assertStringContainsString('Available until 02 Jan 2099, 1:15 AM (Asia/Manila)', $show->getBody());
     }
 
     public function testPortalNeverDisclosesOtherReadersAndIgnoresForgedReadOwnership(): void
@@ -212,7 +214,7 @@ final class AnnouncementRoutesTest extends CIUnitTestCase
 
     public function testPortalAudienceFilteringAndDirectLinksRejectHiddenNotices(): void
     {
-        session()->set(['user' => $this->admin, 'tenant_id' => $this->tenant]);
+        session()->set(['user' => $this->admin, 'tenant_id' => $this->tenant, '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()]]);
         $service = new AnnouncementService();
         $row = $service->create('clinic', [
             'title' => 'PRIVATE EMPLOYEE NOTICE', 'body' => 'PRIVATE EMPLOYEE BODY', 'audience' => 'employees',

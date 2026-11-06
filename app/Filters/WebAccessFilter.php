@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filters;
 
 use App\Services\AuthenticatedUser;
+use App\Services\DashboardAccess;
 use App\Services\PortalContext;
 use App\Services\Scheduling\SchedulingClock;
 use CodeIgniter\Filters\FilterInterface;
@@ -67,10 +68,7 @@ final class WebAccessFilter implements FilterInterface
                 if (!PortalContext::isRolePermitted($actor['role'], $unit)) throw new RuntimeException('Department access forbidden.', 403);
                 if ($area === 'dashboard' || $path === $unit) {
                     // These legacy dashboards query each dataset before rendering it.
-                    $permissions = $unit === 'clinic'
-                        ? ['clinic.queue.read', 'clinic.encounters.read', 'clinic.appointments.read', 'clinic.inventory.read']
-                        : ['guidance.cases.read', 'guidance.queue.read', 'referrals.read'];
-                    foreach ($permissions as $permission) $this->permit($permission);
+                    foreach (DashboardAccess::permissions($unit) as $permission) $this->permit($permission);
                 } elseif ($area !== null) {
                     $permission = match ($area) {
                         'queue' => $unit . '.queue.' . ($write ? 'manage' : 'read'),
@@ -87,7 +85,7 @@ final class WebAccessFilter implements FilterInterface
                 if (!PortalContext::isRolePermitted($actor['role'], 'bmg')) throw new RuntimeException('Facilities access forbidden.', 403);
                 // AI POST actions own their scoped capabilities; generation also checks source read.
                 $aiAction = strtoupper($request->getMethod()) === 'POST'
-                    && preg_match('~^facilities/insights/(?:prepare|generate|[0-9]+/review|jobs/[0-9]+/cancel)$~D', $path);
+                    && preg_match('~^facilities/insights/(?:prepare|generate|recover|[0-9]+/review|jobs/[0-9]+/(?:cancel|retry))$~D', $path);
                 if (!preg_match('~^facilities/teams(?:/|$)~', $path) && !$aiAction) {
                     $this->permit($write ? 'facilities.manage' : 'facilities.read');
                 }

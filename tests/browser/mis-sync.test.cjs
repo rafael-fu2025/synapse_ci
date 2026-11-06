@@ -25,6 +25,8 @@ function element() {
       return !event.defaultPrevented;
     },
     querySelector: selector => children.get(selector) || null,
+    querySelectorAll: selector => children.has(selector) ? [children.get(selector)] : [],
+    hasAttribute: name => attributes.has(name),
     setAttribute: (name, value) => attributes.set(name, value),
     removeAttribute: name => attributes.delete(name),
     getAttribute: name => attributes.get(name) ?? null,
