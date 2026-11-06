@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Database;
 
+use App\Database\Migrations\AddTeamApiIdempotencyKeys;
 use App\Database\Migrations\CreateTeamEvents;
 use App\Database\Migrations\CreateTeamTasks;
 use App\Services\AuthenticatedUser;
@@ -53,8 +54,10 @@ final class TeamCalendarServiceIntegrationTest extends CIUnitTestCase
         }
         require_once APPPATH . 'Database/Migrations/2026-10-18-000002_CreateTeamTasks.php';
         require_once APPPATH . 'Database/Migrations/2026-10-19-000001_CreateTeamEvents.php';
+        require_once APPPATH . 'Database/Migrations/2026-11-06-001000_AddTeamApiIdempotencyKeys.php';
         (new CreateTeamTasks())->up();
         (new CreateTeamEvents())->up();
+        (new AddTeamApiIdempotencyKeys())->up();
         $this->calendar = new TeamCalendarService();
         $this->tasks = new TeamTaskService();
         $this->signIn(1);
@@ -96,6 +99,101 @@ final class TeamCalendarServiceIntegrationTest extends CIUnitTestCase
     {
         return array_map(static fn (array $row): array => [(int) $row['recipient_user_id'], $row['type']],
             $this->db->table('notifications')->orderBy('id')->get()->getResultArray());
+    }
+
+    public function testTaskAndCalendarHintsPublishOnlyAfterCommitAndSkipReplaysOrUnchangedWrites(): void
+    {
+        $hints = [];
+        $capture = function (int $tenant, string $unit, string $event) use (&$hints): void {
+            $this->assertSame(0, $this->db->transDepth, 'Hints must publish only after commit.');
+            $hints[] = [$tenant, $unit, $event];
+        };
+        $tasks = new TeamTaskService(null, $this->db, $capture);
+        $calendar = new TeamCalendarService(null, $this->db, $capture);
+
+        $taskNonce = '44444444-4444-4444-8444-444444444444';
+        $task = $tasks->create('clinic', ['title' => 'Hint task'], $taskNonce);
+        $this->assertSame([[1, 'clinic', \App\Services\TeamWorkspaceInvalidation::TASKS]], $hints);
+        $hints = [];
+        $tasks->create('clinic', ['title' => 'Hint task'], $taskNonce);
+        $this->assertSame([], $hints, 'Exact task replay emits no hint.');
+        $tasks->update('clinic', $task['id'], $this->fullTask($task));
+        $this->assertSame([], $hints, 'Unchanged task update emits no hint.');
+        $commentNonce = '55555555-5555-4555-8555-555555555555';
+        $tasks->comment('clinic', $task['id'], ['body' => 'Hint comment'], $commentNonce);
+        $this->assertSame([[1, 'clinic', \App\Services\TeamWorkspaceInvalidation::TASKS]], $hints);
+        $hints = [];
+        $tasks->comment('clinic', $task['id'], ['body' => 'Hint comment'], $commentNonce);
+        $this->assertSame([], $hints, 'Exact comment replay emits no hint.');
+        $task = $tasks->move('clinic', $task['id'], ['status' => 'done', 'version' => $task['version']]);
+        $this->assertSame([[1, 'clinic', \App\Services\TeamWorkspaceInvalidation::TASKS]], $hints);
+
+        $hints = [];
+        $eventNonce = '66666666-6666-4666-8666-666666666666';
+        $event = $calendar->create('clinic', $this->input(), $eventNonce);
+        $this->assertSame([[1, 'clinic', \App\Services\TeamWorkspaceInvalidation::CALENDAR]], $hints);
+        $hints = [];
+        $calendar->create('clinic', $this->input(), $eventNonce);
+        $this->assertSame([], $hints, 'Exact event replay emits no hint.');
+        $calendar->update('clinic', $event['id'], $this->eventFull($event));
+        $this->assertSame([], $hints, 'Unchanged event update emits no hint.');
+        $event = $calendar->update('clinic', $event['id'], array_replace($this->eventFull($event), ['title' => 'Changed']));
+        $this->assertSame([[1, 'clinic', \App\Services\TeamWorkspaceInvalidation::CALENDAR]], $hints);
+        $hints = [];
+        $calendar->cancel('clinic', $event['id'], ['version' => $event['version']]);
+        $this->assertSame([[1, 'clinic', \App\Services\TeamWorkspaceInvalidation::CALENDAR]], $hints);
+    }
+
+    private function fullTask(array $task): array
+    {
+        return array_intersect_key($task, array_flip(['title', 'description', 'status', 'priority', 'assignee_user_id', 'due_date', 'version']));
+    }
+
+    private function eventFull(array $event): array
+    {
+        $local = static fn (string $utc): string => (new \DateTimeImmutable($utc, new \DateTimeZone('UTC')))
+            ->setTimezone(new \DateTimeZone('Asia/Manila'))->format('Y-m-d\TH:i');
+        return [
+            'title' => $event['title'], 'description' => $event['description'], 'location' => $event['location'],
+            'starts_at' => $local($event['starts_at']), 'ends_at' => $local($event['ends_at']),
+            'participant_ids' => $event['participant_ids'], 'version' => $event['version'],
+        ];
+    }
+
+    public function testAtomicApiIdempotencyReplaysTaskCommentAndEventWithoutDuplicateEffects(): void
+    {
+        $taskNonce = '11111111-1111-4111-8111-111111111111';
+        $task = $this->tasks->create('clinic', ['title' => 'Idempotent task'], $taskNonce);
+        $again = $this->tasks->create('clinic', ['title' => 'Idempotent task'], strtoupper($taskNonce));
+        $this->assertSame($task['id'], $again['id']);
+        $this->assertSame(1, $this->db->table('team_tasks')->where('title', 'Idempotent task')->countAllResults());
+        $this->assertSame(1, $this->db->table('team_task_activity')->where('task_id', $task['id'])->countAllResults());
+        $this->fails(409, fn () => $this->tasks->create('clinic', ['title' => 'Changed'], $taskNonce));
+
+        $commentNonce = '22222222-2222-4222-8222-222222222222';
+        $commentId = $this->tasks->comment('clinic', $task['id'], ['body' => 'Idempotent comment'], $commentNonce);
+        $this->assertSame($commentId, $this->tasks->comment('clinic', $task['id'], ['body' => 'Idempotent comment'], $commentNonce));
+        $this->assertSame(1, $this->db->table('team_task_comments')->where('task_id', $task['id'])->countAllResults());
+        $this->assertSame(2, $this->db->table('team_task_activity')->where('task_id', $task['id'])->countAllResults());
+        $this->fails(409, fn () => $this->tasks->comment('clinic', $task['id'], ['body' => 'Changed'], $commentNonce));
+
+        $eventNonce = '33333333-3333-4333-8333-333333333333';
+        $event = $this->calendar->create('clinic', $this->input(), $eventNonce);
+        $eventAgain = $this->calendar->create('clinic', $this->input(), $eventNonce);
+        $this->assertSame($event['id'], $eventAgain['id']);
+        $this->assertSame(1, $this->db->table('team_events')->countAllResults());
+        $this->fails(409, fn () => $this->calendar->create('clinic', $this->input(['title' => 'Changed']), $eventNonce));
+    }
+
+    public function testIdempotencyMigrationIsRerunnableAndForwardOnly(): void
+    {
+        (new AddTeamApiIdempotencyKeys())->up();
+        foreach (['team_tasks', 'team_task_comments', 'team_events'] as $table) {
+            $this->assertTrue($this->db->fieldExists('api_client_nonce', $table));
+            $this->assertTrue($this->db->fieldExists('api_request_hash', $table));
+        }
+        $this->expectException(RuntimeException::class);
+        (new AddTeamApiIdempotencyKeys())->down();
     }
 
     public function testNotificationMatrixAcrossAllUnits(): void

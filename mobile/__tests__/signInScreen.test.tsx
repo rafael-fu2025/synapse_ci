@@ -14,7 +14,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }),
 }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
-jest.mock('lucide-react-native', () => ({ Eye: () => null, EyeOff: () => null, ShieldCheck: () => null, TriangleAlert: () => null }));
+jest.mock('lucide-react-native', () => ({ Eye: () => null, EyeOff: () => null, ShieldCheck: () => null, TriangleAlert: () => null, Moon: () => null, Sun: () => null }));
 jest.mock('../src/features/auth/components/LoginCarousel', () => ({ LoginCarousel: () => null }));
 
 let renderer: ReactTestRenderer | undefined;
@@ -64,7 +64,9 @@ beforeEach(() => {
   jest.mocked(useAuth).mockReturnValue({
     status: 'signedOut',
     user: null,
+    profile: null,
     signIn,
+    retryBootstrap: jest.fn(),
     signOut: jest.fn(),
     acknowledgeExpired: jest.fn(),
   });

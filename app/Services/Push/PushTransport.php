@@ -28,6 +28,16 @@ final class PushTransport
         return $this->tokens ?? new PushTokenService();
     }
 
+    public function sendTeam(int $tenant, int $user, array $message): bool
+    {
+        return $this->sendToDevices($tenant, $this->tokens()->activeTokens($tenant, $user, true), $message);
+    }
+
+    public function teamCapable(int $tenant, int $user): bool
+    {
+        return $this->tokens()->hasTeamCapableToken($tenant, $user);
+    }
+
     /**
      * @param array{title: string, body: string, data?: array<string, string>} $message
      *
@@ -35,7 +45,12 @@ final class PushTransport
      */
     public function send(int $tenant, int $user, array $message): bool
     {
-        $devices = $this->tokens()->activeTokens($tenant, $user);
+        return $this->sendToDevices($tenant, $this->tokens()->activeTokens($tenant, $user), $message);
+    }
+
+    /** @param list<array{token:string,platform:string}> $devices */
+    private function sendToDevices(int $tenant, array $devices, array $message): bool
+    {
         if ($devices === []) {
             // Nobody registered a device: there is nothing to deliver to.
             return true;
@@ -44,7 +59,7 @@ final class PushTransport
         foreach ($devices as $device) {
             $result = $this->client()->send($device['token'], $message);
             if ($result === FcmClient::UNREGISTERED) {
-                $this->tokens()->forget($device['token']);
+                $this->tokens()->forget($tenant, $device['token']);
                 continue;
             }
             if ($result !== FcmClient::SENT) {

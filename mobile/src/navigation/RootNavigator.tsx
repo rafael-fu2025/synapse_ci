@@ -10,6 +10,7 @@ import { AnnouncementDetailScreen } from '../features/announcements/screens/Anno
 import { NotificationsScreen } from '../features/notifications/screens/NotificationsScreen';
 import { SurveyFormScreen } from '../features/surveys/screens/SurveyFormScreen';
 import { SurveysScreen } from '../features/surveys/screens/SurveysScreen';
+import { BootstrapErrorScreen } from '../features/auth/screens/BootstrapErrorScreen';
 import { SessionExpiredScreen } from '../features/auth/screens/SessionExpiredScreen';
 import { SignInScreen } from '../features/auth/screens/SignInScreen';
 import { SplashScreen } from '../features/auth/screens/SplashScreen';
@@ -17,9 +18,10 @@ import { OfflineBanner } from '../components/OfflineBanner';
 import { PushBanner } from '../components/PushBanner';
 import { useAuth } from '../store/auth';
 import { useTheme } from '../theme/ThemeProvider';
+import { NavigationIntentGate } from '../features/workspace/NavigationIntentGate';
 import { UserRealtimeGate } from '../features/realtime/UserRealtimeGate';
 import { navigationRef } from './navigationRef';
-import { AppTabs } from './AppTabs';
+import { ContextTabs } from './ContextTabs';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -56,6 +58,8 @@ export function RootNavigator() {
     <NavigationContainer theme={navigationTheme} ref={navigationRef}>
       {status === 'restoring' ? (
         <SplashScreen />
+      ) : status === 'bootstrapError' ? (
+        <BootstrapErrorScreen />
       ) : status === 'signedOut' ? (
         <SignInScreen />
       ) : status === 'expired' ? (
@@ -63,10 +67,11 @@ export function RootNavigator() {
       ) : (
         <View style={styles.flex}>
           <UserRealtimeGate />
+          <NavigationIntentGate />
           {offline ? <OfflineBanner /> : null}
           <PushBanner />
           <Stack.Navigator screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="AppTabs" component={AppTabs} />
+            <Stack.Screen name="AppTabs" component={ContextTabs} />
             <Stack.Screen
               name="Announcements"
               component={AnnouncementsScreen}

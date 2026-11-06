@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
+import { pushNavigationIntent } from '../../features/workspace/navigationIntent';
 import { queryKeys } from '../../api/queryKeys';
 import { queryClient } from '../queryClient';
 import { initialPushMessage, onPushMessage, onPushOpened } from './fcm';
 import { registerDevice, revokeDevice, watchPushToken } from './registration';
 import { routePushTap } from './router';
 
-export type PushSessionStatus = 'restoring' | 'signedOut' | 'signedIn' | 'expired';
+export type PushSessionStatus = 'restoring' | 'signedOut' | 'signedIn' | 'bootstrapError' | 'expired';
 
 /**
  * Keep the server's record of this device in step with the session.
@@ -31,8 +32,12 @@ export function usePushSession(status: PushSessionStatus): void {
   useEffect(() => {
     // A foreground push is a hint that something changed. The server stays the
     // source of truth; the realtime channel says the same thing when it is up.
-    return onPushMessage(() => {
+    return onPushMessage((message) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications, exact: false }).catch(() => undefined);
+      const intent = pushNavigationIntent(message);
+      if (!intent || !('unit' in intent)) { return; }
+      const resource = intent.kind === 'team_task' ? 'team' : intent.kind === 'team_event' ? 'team-calendar' : 'team-chat';
+      queryClient.invalidateQueries({ queryKey: [resource], exact: false }).catch(() => undefined);
     });
   }, []);
 

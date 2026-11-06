@@ -120,7 +120,8 @@ final class TeamChatMentionInboxTest extends CIUnitTestCase
             $this->assertSame($id, $item['id']);
             $this->assertSame('Team chat mention', $item['title']);
             $this->assertSame('You were mentioned in your team chat. Open the conversation to view the message.', $item['message']);
-            $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'url'], array_keys($item));
+            $this->assertSame(['kind' => 'team_chat_message', 'unit' => $unit, 'id' => $index + 1], $item['target']);
+            $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'target', 'url'], array_keys($item));
             $this->assertStringNotContainsString('PRIVATE', json_encode($item, JSON_THROW_ON_ERROR));
             $this->assertStringNotContainsString('SECRET', json_encode($item, JSON_THROW_ON_ERROR));
             $this->assertTrue($this->bell->canReceiveInvalidation(1, 1, [$id]));

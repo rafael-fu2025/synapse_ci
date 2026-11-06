@@ -43,6 +43,28 @@ $routes->group('api/v1', static function (RouteCollection $routes): void {
         $routes->post('me/photo', 'Api\V1\MeController::uploadPhoto');
         $routes->delete('me/photo', 'Api\V1\MeController::deletePhoto');
 
+        // Bearer-only Team Workspace. Unit is an exact server route segment; tenant/actor/role are never accepted.
+        foreach (['clinic', 'guidance', 'facilities'] as $unit) {
+            $prefix = 'team/' . $unit;
+            $routes->get($prefix, 'Api\V1\Team\ContextController::show/' . $unit);
+            $routes->get($prefix . '/members', 'Api\V1\Team\ContextController::members/' . $unit);
+            $routes->get($prefix . '/tasks', 'Api\V1\Team\TasksController::index/' . $unit);
+            $routes->post($prefix . '/tasks', 'Api\V1\Team\TasksController::create/' . $unit);
+            $routes->get($prefix . '/tasks/(:num)', 'Api\V1\Team\TasksController::show/' . $unit . '/$1');
+            $routes->post($prefix . '/tasks/(:num)/update', 'Api\V1\Team\TasksController::update/' . $unit . '/$1');
+            $routes->post($prefix . '/tasks/(:num)/status', 'Api\V1\Team\TasksController::status/' . $unit . '/$1');
+            $routes->post($prefix . '/tasks/(:num)/comments', 'Api\V1\Team\TasksController::comment/' . $unit . '/$1');
+            $routes->get($prefix . '/calendar', 'Api\V1\Team\CalendarController::index/' . $unit);
+            $routes->post($prefix . '/calendar/events', 'Api\V1\Team\CalendarController::create/' . $unit);
+            $routes->get($prefix . '/calendar/events/(:num)', 'Api\V1\Team\CalendarController::show/' . $unit . '/$1');
+            $routes->post($prefix . '/calendar/events/(:num)/update', 'Api\V1\Team\CalendarController::update/' . $unit . '/$1');
+            $routes->post($prefix . '/calendar/events/(:num)/cancel', 'Api\V1\Team\CalendarController::cancel/' . $unit . '/$1');
+            $routes->get($prefix . '/chat/messages', 'Api\V1\Team\ChatController::history/' . $unit);
+            $routes->get($prefix . '/chat/tasks', 'Api\V1\Team\ChatController::tasks/' . $unit);
+            $routes->post($prefix . '/chat/messages', 'Api\V1\Team\ChatController::send/' . $unit);
+            $routes->post($prefix . '/chat/read', 'Api\V1\Team\ChatController::read/' . $unit);
+        }
+
         // Personal portal resources.
         $routes->get('appointments', 'Api\V1\AppointmentsApiController::index');
         $routes->post('appointments', 'Api\V1\AppointmentsApiController::create');

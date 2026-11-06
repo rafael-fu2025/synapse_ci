@@ -89,6 +89,7 @@ final class TeamChatMentionNotifications
         try {
             foreach ($pending as $tenant => $ids) {
                 (new NotificationInvalidation($this->db))->publishCommitted((int) $tenant, $ids);
+                (new \App\Services\Push\PushPublisher($this->db))->publishCommitted((int) $tenant, $ids);
             }
         } catch (Throwable) {
             // Reconciliation polling covers transport outages after durable delivery.

@@ -26,6 +26,7 @@ class Filters extends BaseFilters
      */
     public array $aliases = [
         'audit_maintenance' => \App\Filters\AuditMaintenanceFilter::class,
+        'request_context' => \App\Filters\RequestContextFilter::class,
         'csrf'          => CSRF::class,
         'login_throttle' => \App\Filters\LoginThrottleFilter::class,
         'web_secureheaders' => \App\Filters\WebSecurityHeaders::class,
@@ -62,6 +63,7 @@ class Filters extends BaseFilters
      */
     public array $required = [
         'before' => [
+            'request_context', // Clear process-static request state before every route, including public/404 paths
             'audit_maintenance',
             'forcehttps', // Force Global Secure Requests
             'pagecache',  // Web Page Caching
@@ -71,6 +73,7 @@ class Filters extends BaseFilters
             'performance', // Performance Metrics
             'toolbar',     // Debug Toolbar
             'web_secureheaders', // Also protects early rejections and 404 responses
+            'request_context', // Clear process-static state at the final application boundary
         ],
     ];
 

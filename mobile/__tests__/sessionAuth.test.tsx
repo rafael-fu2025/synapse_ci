@@ -6,7 +6,7 @@ import {
   request,
   SessionChangedError,
 } from '../src/api/client';
-import { LoginResponse } from '../src/api/types';
+import { LoginResponse, MeResponse } from '../src/api/types';
 import { clearRefreshToken, getRefreshToken, setRefreshToken } from '../src/lib/keychain';
 import { queryClient } from '../src/lib/queryClient';
 import { AuthProvider, useAuth } from '../src/store/auth';
@@ -50,6 +50,19 @@ function credentials(id = 1): LoginResponse {
   };
 }
 
+function profile(id = 1): MeResponse {
+  return {
+    user: credentials(id).user,
+    entitlements: {
+      portal: true,
+      staff_queue_units: [],
+      personal: { enabled: true },
+      work: { enabled: false, units: [] },
+    },
+    photo_url: '/api/v1/me/photo',
+  };
+}
+
 let auth: ReturnType<typeof useAuth>;
 let renderer: ReactTestRenderer | undefined;
 let fetchMock: jest.Mock<Promise<Response>, [RequestInfo | URL, RequestInit?]>;
@@ -65,7 +78,9 @@ async function mount() {
 }
 
 async function signIn(id = 1) {
-  fetchMock.mockResolvedValueOnce(json(200, credentials(id)));
+  fetchMock
+    .mockResolvedValueOnce(json(200, credentials(id)))
+    .mockResolvedValueOnce(json(200, profile(id)));
   await act(async () => { await auth.signIn(`user-${id}`, 'password'); });
   expect(auth.status).toBe('signedIn');
   expect(auth.user?.id).toBe(id);
@@ -102,11 +117,11 @@ it('clears cached private data and leaves signedIn immediately, before a stalled
   expect(getAccessToken()).toBeNull();
   expect(queryClient.clear).toHaveBeenCalledTimes(1);
   expect(clearRefreshToken).toHaveBeenCalledTimes(1);
-  expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('Authorization')).toBe('Bearer access-1');
+  expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('Authorization')).toBe('Bearer access-1');
   revoke.resolve(json(401));
   await act(async () => { await pending; });
   expect(auth.status).toBe('signedOut');
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
   expect(setRefreshToken).toHaveBeenCalledTimes(1);
 });
 
@@ -237,7 +252,7 @@ it('keeps the stored refresh credential on a transient cold-start outage', async
   fetchMock.mockRejectedValueOnce(new Error('offline'));
   await mount();
 
-  expect(auth.status).toBe('signedOut');
+  expect(auth.status).toBe('bootstrapError');
   expect(auth.user).toBeNull();
   expect(getAccessToken()).toBeNull();
   expect(clearRefreshToken).not.toHaveBeenCalled();

@@ -12,8 +12,13 @@ jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test'
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 jest.mock('../src/store/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/features/auth/components/LoginCarousel', () => ({ LoginCarousel: jest.fn(() => null) }));
+let mockDarkTheme = false;
+const mockSetPreference = jest.fn();
 jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }),
+  useTheme: () => ({
+    theme: mockDarkTheme ? jest.requireActual('../src/theme/tokens').darkTheme : jest.requireActual('../src/theme/tokens').lightTheme,
+    setPreference: mockSetPreference,
+  }),
 }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
 jest.mock('react-native/Libraries/Components/Keyboard/KeyboardAvoidingView', () => ({
@@ -25,6 +30,8 @@ jest.mock('lucide-react-native', () => ({
   EyeOff: () => null,
   ShieldCheck: () => null,
   TriangleAlert: () => null,
+  Moon: () => null,
+  Sun: () => null,
 }));
 
 const destinations = [
@@ -42,6 +49,22 @@ function renderSignIn() {
     renderer = create(<SignInScreen />);
   });
 }
+
+it('toggles the persisted app theme without resetting entered credentials', () => {
+  renderSignIn();
+  fillCredentials();
+  const toggle = (label: string) => renderer!.root.findAll(node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function')[0];
+  const darkButton = toggle('Switch to dark mode');
+  expect(StyleSheet.flatten(darkButton.props.style({ pressed: false })).width).toBe(44);
+  act(() => darkButton.props.onPress());
+  expect(mockSetPreference).toHaveBeenLastCalledWith('dark');
+  mockDarkTheme = true;
+  act(() => { renderer!.update(<SignInScreen />); });
+  expect(fields()[0].props.value).toBe(' student@foundationu.com ');
+  expect(fields()[1].props.value).toBe(' private password ');
+  act(() => toggle('Switch to light mode').props.onPress());
+  expect(mockSetPreference).toHaveBeenLastCalledWith('light');
+});
 
 function fields() {
   return renderer!.root.findAllByType(TextInput);
@@ -71,6 +94,8 @@ function hasText(text: string) {
 }
 
 beforeEach(() => {
+  mockDarkTheme = false;
+  mockSetPreference.mockClear();
   jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
   keyboardListeners.clear();
   focusPassword.mockClear();
@@ -88,7 +113,9 @@ beforeEach(() => {
   jest.mocked(useAuth).mockReturnValue({
     status: 'signedOut',
     user: null,
+    profile: null,
     signIn,
+    retryBootstrap: jest.fn(),
     signOut: jest.fn(),
     acknowledgeExpired: jest.fn(),
   });

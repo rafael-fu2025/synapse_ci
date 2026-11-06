@@ -211,8 +211,8 @@ describe('useProfilePhoto shared session cache', () => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     fetchPhoto = jest.spyOn(health, 'profilePhoto');
     jest.mocked(useAuth).mockImplementation(() => ({
-      user: currentUser, status: currentUser ? 'signedIn' : 'signedOut',
-      signIn: jest.fn(), signOut: jest.fn(), acknowledgeExpired: jest.fn(),
+      user: currentUser, profile: null, status: currentUser ? 'signedIn' : 'signedOut',
+      signIn: jest.fn(), retryBootstrap: jest.fn(), signOut: jest.fn(), acknowledgeExpired: jest.fn(),
     }));
   });
 

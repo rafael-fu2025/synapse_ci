@@ -26,12 +26,37 @@ export interface LoginResponse {
   token: TokenPayload;
 }
 
+export type TeamUnit = 'clinic' | 'guidance' | 'facilities';
+
+export interface WorkFeatures {
+  team_board: boolean;
+  my_tasks: boolean;
+  team_chat: boolean;
+  team_calendar: boolean;
+}
+
+export interface WorkUnitEntitlement {
+  unit: TeamUnit;
+  label: string;
+  can_manage: boolean;
+  features: WorkFeatures;
+}
+
+export interface MeEntitlements {
+  portal: boolean;
+  staff_queue_units: string[];
+  personal: {
+    enabled: boolean;
+  };
+  work: {
+    enabled: boolean;
+    units: WorkUnitEntitlement[];
+  };
+}
+
 export interface MeResponse {
   user: User;
-  entitlements: {
-    portal: boolean;
-    staff_queue_units: string[];
-  };
+  entitlements: MeEntitlements;
   photo_url: string;
 }
 

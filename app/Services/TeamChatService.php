@@ -20,19 +20,21 @@ final class TeamChatService
 {
     public const PAGE_LIMIT = 40;
     private BaseConnection $db;
+    private TeamAccess $access;
 
     private readonly ?\Closure $invalidate;
 
-    public function __construct(?BaseConnection $db = null, ?callable $invalidate = null)
+    public function __construct(?BaseConnection $db = null, ?callable $invalidate = null, ?TeamAccess $access = null)
     {
         $this->db = $db ?? Database::connect();
+        $this->access = $access ?? new TeamAccess(null, $this->db);
         $this->invalidate = $invalidate === null ? null : \Closure::fromCallable($invalidate);
     }
 
     /** Same actor, members and canManage contract as TeamTaskService. */
     public function context(string $unit): array
     {
-        $context = (new TeamTaskService())->context($unit);
+        $context = $this->access->context($unit);
         $this->ready();
         return $context;
     }
@@ -82,7 +84,12 @@ final class TeamChatService
             $duplicate = false;
             $notifications = new TeamChatMentionNotifications($this->db);
             try {
-                foreach ($data['task_ids'] as $taskId) {
+                // Every write locks the authoritative actor before channel resources.
+                $context = $this->access->context($unit, true);
+                $actor = $context['actor'];
+                $taskIdsToLock = $data['task_ids'];
+                sort($taskIdsToLock, SORT_NUMERIC);
+                foreach ($taskIdsToLock as $taskId) {
                     $query = $this->scope('team_tasks', $unit, $actor)->where('id', $taskId)
                         ->whereIn('status', ['todo', 'in_progress', 'blocked']);
                     $task = $this->db->DBDriver === 'MySQLi'
@@ -90,13 +97,11 @@ final class TeamChatService
                         : $query->get()->getRowArray();
                     if ($task === null) { throw new RuntimeException('Task must be active in this department.', 422); }
                 }
-                $fresh = $this->context($unit);
-                $this->validateMentions($data, $fresh['members']);
+                $this->validateMentions($data, $context['members']);
                 if ($data['reply_to_id'] !== null && $this->scope('team_chat_messages', $unit, $actor)
                     ->where('id', $data['reply_to_id'])->countAllResults() !== 1) {
                     throw new RuntimeException('Reply must exist in this department.', 422);
                 }
-                $context = $fresh;
                 $taskIds = json_encode($data['task_ids'], JSON_THROW_ON_ERROR);
                 $mentions = json_encode($data['mentions'], JSON_THROW_ON_ERROR);
                 // Bind text separately so driver SQL error strings do not contain the body.
@@ -173,30 +178,41 @@ final class TeamChatService
     /** Explicit visible-message acknowledgement; history never advances this cursor. */
     public function markRead(string $unit, array $input): array
     {
-        $actor = $this->context($unit)['actor'];
+        $this->context($unit);
         $this->keys($input, ['last_read_id']);
         $id = $this->integer($input['last_read_id'] ?? null, true);
-        return $this->storage(function () use ($unit, $actor, $id): array {
+        return $this->storage(function () use ($unit, $id): array {
             $this->independent();
-            if ($id !== 0 && $this->scope('team_chat_messages', $unit, $actor)->where('id', $id)->countAllResults() !== 1) {
-                throw new RuntimeException('Read message must exist in this department.', 422);
+            $this->db->resetTransStatus();
+            if (!$this->db->transBegin()) { throw new RuntimeException('Team chat unavailable.', 503); }
+            try {
+                $actor = $this->access->context($unit, true)['actor'];
+                if ($id !== 0 && $this->scope('team_chat_messages', $unit, $actor)->where('id', $id)->countAllResults() !== 1) {
+                    throw new RuntimeException('Read message must exist in this department.', 422);
+                }
+                $sql = $this->db->table('team_chat_reads')->set([
+                    'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'user_id' => $actor['id'], 'last_read_message_id' => 0,
+                ])->getCompiledInsert();
+                // Do not reset an existing cursor, including concurrent first acknowledgements.
+                $sql .= $this->db->DBDriver === 'MySQLi'
+                    ? ' ON DUPLICATE KEY UPDATE last_read_message_id = last_read_message_id'
+                    : ' ON CONFLICT (tenant_id, unit, user_id) DO NOTHING';
+                if ($this->db->query($sql) === false
+                    || !$this->scope('team_chat_reads', $unit, $actor)->where('user_id', $actor['id'])
+                        ->where('last_read_message_id <', $id)->update(['last_read_message_id' => $id])) {
+                    throw new RuntimeException('Team chat unavailable.', 503);
+                }
+                $changed = $this->db->affectedRows() > 0;
+                $summary = $this->summary($unit, $actor);
+                if (!$this->db->transStatus() || !$this->db->transCommit()) {
+                    throw new RuntimeException('Team chat unavailable.', 503);
+                }
+            } catch (Throwable $error) {
+                $this->db->transRollback();
+                $this->db->resetTransStatus();
+                throw $error;
             }
-            $sql = $this->db->table('team_chat_reads')->set([
-                'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'user_id' => $actor['id'], 'last_read_message_id' => 0,
-            ])->getCompiledInsert();
-            // Do not reset an existing cursor, including concurrent first acknowledgements.
-            $sql .= $this->db->DBDriver === 'MySQLi'
-                ? ' ON DUPLICATE KEY UPDATE last_read_message_id = last_read_message_id'
-                : ' ON CONFLICT (tenant_id, unit, user_id) DO NOTHING';
-            if ($this->db->query($sql) === false
-                || !$this->scope('team_chat_reads', $unit, $actor)->where('user_id', $actor['id'])
-                    ->where('last_read_message_id <', $id)->update(['last_read_message_id' => $id])) {
-                throw new RuntimeException('Team chat unavailable.', 503);
-            }
-            $changed = $this->db->affectedRows() > 0;
-            $summary = $this->summary($unit, $actor);
-            // These independent statements have autocommitted; notify only this user's tabs.
-            if ($changed) $this->changed($actor, $unit, (int) $actor['id']);
+            if ($changed) { $this->changed($actor, $unit, (int) $actor['id']); }
             return $summary;
         });
     }
@@ -265,7 +281,7 @@ final class TeamChatService
         if ($row['body'] !== $data['body'] || ($row['task_id'] === null ? null : (int) $row['task_id']) !== $data['task_id']
             || $this->taskIds($row) !== $data['task_ids'] || $this->storedMentions($row) !== $data['mentions']
             || (($row['reply_to_id'] ?? null) === null ? null : (int) $row['reply_to_id']) !== $data['reply_to_id']) {
-            throw new RuntimeException('Client nonce already used for different contents.', 409);
+            throw TeamConflictException::idempotency();
         }
         return $this->message($row, $context);
     }
@@ -390,6 +406,7 @@ final class TeamChatService
 
     private function ready(): void
     {
+        $this->db->resetDataCache();
         $this->storage(function (): array {
             foreach (['team_chat_messages' => ['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'task_ids', 'mentions', 'reply_to_id', 'created_at'],
                 'team_chat_reads' => ['tenant_id', 'unit', 'user_id', 'last_read_message_id'],

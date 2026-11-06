@@ -23,6 +23,7 @@ final class TeamsNotifications
         try {
             foreach ($pending as $tenant => $ids) {
                 (new NotificationInvalidation($this->db))->publishCommitted((int) $tenant, $ids);
+                (new \App\Services\Push\PushPublisher($this->db))->publishCommitted((int) $tenant, $ids);
             }
         } catch (\Throwable) {
             // Durable inbox rows remain available through reconciliation polling.

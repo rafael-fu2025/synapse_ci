@@ -21,6 +21,19 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
+jest.mock('../src/features/workspace/WorkspaceContext', () => ({ useWorkspace: () => ({ openAuthorizedUnit: jest.fn() }) }));
+jest.mock('../src/store/auth', () => ({ useAuth: () => ({ profile: null }) }));
+jest.mock('../src/features/workspace/NavigationIntentGate', () => ({
+  navigateAuthorizedIntent: (destination: { kind: string; id: number }) => {
+    if (destination.kind === 'announcement') mockNavigate('AnnouncementDetail', { id: destination.id });
+    else if (destination.kind === 'survey') mockNavigate('SurveyForm', { id: destination.id });
+    else if (destination.kind === 'appointment') mockNavigate('AppTabs', {
+      screen: 'PersonalContext',
+      params: { screen: 'Visits', params: { screen: 'AppointmentDetail', params: { id: destination.id }, initial: false }, initial: false },
+    });
+    return true;
+  },
+}));
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
   useRoute: () => ({ params: { id: 41 } }),
@@ -433,8 +446,12 @@ describe('notification deep links', () => {
     act(() => { rowFor('Appointment confirmed').props.onPress(); });
     await settle();
     expect(mockNavigate).toHaveBeenCalledWith('AppTabs', {
-      screen: 'Visits',
-      params: { screen: 'AppointmentDetail', params: { id: 42 }, initial: false },
+      screen: 'PersonalContext',
+      params: {
+        screen: 'Visits',
+        params: { screen: 'AppointmentDetail', params: { id: 42 }, initial: false },
+        initial: false,
+      },
     });
     expect(mockRequest).toHaveBeenCalledWith('api/v1/notifications/84/read', { method: 'POST' });
   });

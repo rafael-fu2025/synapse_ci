@@ -118,12 +118,14 @@ final class MobileAuthApiTest extends CIUnitTestCase
         $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/', (string) ($token['refresh_token'] ?? ''));
         $this->assertSame($account['id'], $payload['user']['id'] ?? null);
         $this->assertSame('student', $payload['user']['role'] ?? null);
+        $this->assertArrayNotHasKey('auth_version', $payload['user'] ?? []);
         $this->assertArrayNotHasKey('logged_in', $payload['user'] ?? []);
 
         $me = $this->withHeaders($this->bearer((string) $token['access_token']))->get('api/v1/me');
         $me->assertStatus(200);
         $identity = $this->json($me);
         $this->assertSame($account['id'], $identity['user']['id'] ?? null);
+        $this->assertArrayNotHasKey('auth_version', $identity['user'] ?? []);
         $this->assertTrue($identity['entitlements']['portal'] ?? false);
         $this->assertSame([], $identity['entitlements']['staff_queue_units'] ?? null);
     }
@@ -214,6 +216,11 @@ final class MobileAuthApiTest extends CIUnitTestCase
             ->withBody((string) json_encode(['refresh_token' => $first['refresh_token']]))
             ->post('api/v1/auth/refresh');
         $replay->assertStatus(401);
+        $rows = Database::connect()->table('api_tokens')->where('user_id', $account['id'])->orderBy('id')->get()->getResultArray();
+        $this->assertCount(2, $rows, 'A replay must not create another successor.');
+        $this->assertNotNull($rows[0]['rotated_at']);
+        $this->assertNotNull($rows[0]['revoked_at']);
+        $this->assertNotNull($rows[1]['revoked_at'], 'Replay must revoke the committed successor family.');
 
         // Replay is a compromise signal: the successor family dies with it.
         $this->withHeaders(['Content-Type' => 'application/json'])

@@ -116,7 +116,7 @@ final class TeamsNotificationInboxTest extends FreshDatabaseTestCase
         $this->assertSame($unread, $inbox['unread_count']);
         $this->assertSame($title, $inbox['items'][0]['title']);
         $this->assertSame(NotificationService::destinationUrls()[$destination], $inbox['items'][0]['url']);
-        $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'url'], array_keys($inbox['items'][0]));
+        $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'target', 'url'], array_keys($inbox['items'][0]));
         $this->assertStringNotContainsString('SECRET', json_encode($inbox));
         $this->assertStringNotContainsString('PRIVATE', json_encode($inbox));
         return $inbox;
@@ -228,6 +228,7 @@ final class TeamsNotificationInboxTest extends FreshDatabaseTestCase
         $this->assertSame([], $this->notices($owner['id']));
         $this->login($member);
         $inbox = $this->latest('Team event invitation', $unit . 'TeamCalendar', 1);
+        $this->assertSame(['kind' => 'team_event', 'unit' => $unit, 'id' => $event['id']], $inbox['items'][0]['target']);
         $id = $inbox['items'][0]['id'];
         $this->assertTrue($this->bell->canReceiveInvalidation($this->tenant, $member['id'], [$id]));
         $this->assertFalse($this->bell->canReceiveInvalidation($this->tenant, $spectator['id'], [$id]));
@@ -289,7 +290,8 @@ final class TeamsNotificationInboxTest extends FreshDatabaseTestCase
         $task = $tasks->create($unit, ['title' => 'SECRET task title', 'description' => 'SECRET description', 'assignee_user_id' => $member['id']]);
         $this->assertSame([], $this->notices($owner['id']));
         $this->login($member);
-        $this->latest('Team task assigned', $unit . 'Teams', 1);
+        $assigned = $this->latest('Team task assigned', $unit . 'Teams', 1);
+        $this->assertSame(['kind' => 'team_task', 'unit' => $unit, 'id' => $task['id']], $assigned['items'][0]['target']);
         $this->login($owner);
         $this->assertSame(1, $tasks->update($unit, $task['id'], $this->taskInput($task))['version']);
         $task = $tasks->update($unit, $task['id'], array_replace($this->taskInput($task), ['assignee_user_id' => $replacement['id']]));
@@ -513,7 +515,8 @@ final class TeamsNotificationInboxTest extends FreshDatabaseTestCase
     {
         $destinations = NotificationService::destinationUrls();
         $this->assertSame(['portal', 'clinicReferrals', 'guidanceReferrals', 'clinicReferralHistory', 'guidanceReferralHistory', 'announcements', 'surveys',
-            'clinicTeams', 'clinicTeamCalendar', 'guidanceTeams', 'guidanceTeamCalendar', 'facilitiesTeams', 'facilitiesTeamCalendar',
+            'clinicTeams', 'clinicTeamCalendar', 'clinicTeamChat', 'guidanceTeams', 'guidanceTeamCalendar', 'guidanceTeamChat',
+            'facilitiesTeams', 'facilitiesTeamCalendar', 'facilitiesTeamChat',
             'clinicAppointments', 'guidanceAppointments', 'clinicReferralSent', 'guidanceReferralSent', 'guidanceCases', 'clinicInventory', 'facilitiesOperations'], array_keys($destinations));
         foreach (['clinic', 'guidance'] as $unit) {
             $this->assertSame(PortalContext::urlFor($unit, $unit . '/referrals?tab=history'), $destinations[$unit . 'ReferralHistory']);

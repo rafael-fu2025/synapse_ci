@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * One-time department events and live task due dates, never appointments/availability.
- * All operations refresh identity/membership through TeamTaskService::context().
+ * All operations refresh identity/membership through injected TeamAccess.
  * Text is plain text; callers must escape it. Stored event timestamps are raw UTC.
  *
  * listing filters: date (Manila YYYY-MM-DD; default today), view (month/week/agenda;
@@ -45,16 +45,23 @@ final class TeamCalendarService
     public const LIST_LIMIT = 250;
     public const PARTICIPANT_LIMIT = 100;
     private BaseConnection $db;
+    private TeamAccess $access;
     private TeamsNotifications $notifications;
+    private bool $changed = false;
+    private int $changedTenant = 0;
+    private string $changedUnit = '';
+    private readonly ?\Closure $invalidate;
 
-    public function __construct()
+    public function __construct(?TeamAccess $access = null, ?BaseConnection $db = null, ?callable $invalidate = null)
     {
-        $this->db = Database::connect();
+        $this->db = $db ?? Database::connect();
+        $this->access = $access ?? new TeamAccess(null, $this->db);
+        $this->invalidate = $invalidate === null ? null : \Closure::fromCallable($invalidate);
     }
 
     public function context(string $unit): array
     {
-        return $this->guard(fn (): array => (new TeamTaskService())->context($unit));
+        return $this->guard(fn (): array => $this->access->context($unit));
     }
 
     public function listing(string $unit, array $filters = []): array
@@ -105,27 +112,49 @@ final class TeamCalendarService
         });
     }
 
-    public function create(string $unit, array $input): array
+    public function create(string $unit, array $input, ?string $clientNonce = null): array
     {
-        return $this->transaction(function () use ($unit, $input): array {
-            $context = $this->context($unit);
-            $this->ready();
-            $data = $this->editable($input, false);
-            $ids = $data['participant_ids'];
-            unset($data['participant_ids']);
-            $this->validateParticipants($ids, $context);
-            $now = gmdate('Y-m-d H:i:s');
-            $this->must($this->db->table('team_events')->insert($data + [
-                'tenant_id' => $context['actor']['tenant_id'], 'unit' => $unit,
-                'created_by_user_id' => $context['actor']['id'], 'status' => 'scheduled',
-                'version' => 1, 'created_at' => $now, 'updated_at' => $now,
-            ]));
-            $id = (int) $this->db->insertID();
-            $this->replaceParticipants($unit, $id, $ids, $context['actor']);
-            $event = $this->event($unit, $id, $context);
-            $this->notifications->enqueue($event, $context['actor'], TeamsNotifications::eventPlan(null, $event));
-            return $event;
-        });
+        $key = TeamIdempotencyKey::optional($clientNonce, $input);
+        try {
+            return $this->transaction(function () use ($unit, $input, $key): array {
+                $context = $this->access->context($unit, true);
+                $this->ready();
+                $extra = [];
+                if ($key['nonce'] !== null) {
+                    $this->idempotencyReady();
+                    $existing = $this->idempotentEvent($unit, $context['actor'], $key['nonce'], true);
+                    if ($existing !== null) {
+                        TeamIdempotencyKey::assertSame($existing['api_request_hash'] ?? null, $key['hash']);
+                        return $this->event($unit, (int) $existing['id'], $context);
+                    }
+                    $extra = ['api_client_nonce' => $key['nonce'], 'api_request_hash' => $key['hash']];
+                }
+                $data = $this->editable($input, false);
+                $ids = $data['participant_ids'];
+                unset($data['participant_ids']);
+                $this->validateParticipants($ids, $context);
+                $now = gmdate('Y-m-d H:i:s');
+                $this->must($this->db->table('team_events')->insert($data + $extra + [
+                    'tenant_id' => $context['actor']['tenant_id'], 'unit' => $unit,
+                    'created_by_user_id' => $context['actor']['id'], 'status' => 'scheduled',
+                    'version' => 1, 'created_at' => $now, 'updated_at' => $now,
+                ]));
+                $id = (int) $this->db->insertID();
+                $this->replaceParticipants($unit, $id, $ids, $context['actor']);
+                $event = $this->event($unit, $id, $context);
+                $this->notifications->enqueue($event, $context['actor'], TeamsNotifications::eventPlan(null, $event));
+                $this->changed = true;
+                $this->changedTenant = (int) $event['tenant_id'];
+                $this->changedUnit = (string) $event['unit'];
+                return $event;
+            });
+        } catch (Throwable $error) {
+            $winner = $key['nonce'] === null ? null : $this->replayEvent($unit, $key['nonce'], $key['hash']);
+            if ($winner !== null) {
+                return $winner;
+            }
+            throw $error;
+        }
     }
 
     public function update(string $unit, int $id, array $input): array
@@ -141,12 +170,12 @@ final class TeamCalendarService
     private function change(string $unit, int $id, array $input, bool $cancel): array
     {
         return $this->transaction(function () use ($unit, $id, $input, $cancel): array {
-            $context = $this->context($unit);
+            $context = $this->access->context($unit, true);
             $this->ready();
             $event = $this->event($unit, $id, $context);
             if (!$event['canEdit']) { throw new RuntimeException('You cannot edit this event.', 403); }
             $version = $this->positive($input['version'] ?? null, 'version');
-            if ($version !== $event['version']) { throw new RuntimeException('Event changed. Reload before saving.', 409); }
+            if ($version !== $event['version']) { throw TeamConflictException::stale('Event changed. Reload before saving.'); }
             if (!$cancel && $event['status'] === 'cancelled') { throw new RuntimeException('Cancelled events cannot be edited.', 409); }
             $data = $cancel ? ['status' => 'cancelled'] : $this->editable($input, true);
             $ids = $cancel ? [] : $data['participant_ids'];
@@ -160,10 +189,13 @@ final class TeamCalendarService
             if ($unchanged) { return $event; }
             $this->must($this->scope('team_events', $unit, $context['actor'])->where('id', $id)->where('version', $version)
                 ->update($data + ['version' => $version + 1, 'updated_at' => gmdate('Y-m-d H:i:s')]));
-            if ($this->db->affectedRows() !== 1) { throw new RuntimeException('Event changed. Reload before saving.', 409); }
+            if ($this->db->affectedRows() !== 1) { throw TeamConflictException::stale('Event changed. Reload before saving.'); }
             if (!$cancel) { $this->replaceParticipants($unit, $id, $ids, $context['actor']); }
             $updated = $this->event($unit, $id, $context);
             $this->notifications->enqueue($updated, $context['actor'], TeamsNotifications::eventPlan($event, $updated));
+            $this->changed = true;
+            $this->changedTenant = (int) $updated['tenant_id'];
+            $this->changedUnit = (string) $updated['unit'];
             return $updated;
         });
     }
@@ -192,6 +224,7 @@ final class TeamCalendarService
         foreach ($rows as &$row) {
             foreach (['id', 'tenant_id', 'created_by_user_id', 'version'] as $key) { $row[$key] = (int) $row[$key]; }
             $row['participants'] = $participants[$row['id']] ?? [];
+            unset($row['api_client_nonce'], $row['api_request_hash']);
         }
         unset($row);
         return $rows;
@@ -333,8 +366,47 @@ final class TeamCalendarService
         return $this->db->table($table)->where('tenant_id', $actor['tenant_id'])->where('unit', $unit);
     }
 
+    private function idempotencyReady(): void
+    {
+        foreach (['api_client_nonce', 'api_request_hash'] as $field) {
+            if (!$this->db->fieldExists($field, 'team_events')) {
+                throw new RuntimeException('Team API idempotency is unavailable; run the Team API migration.', 503);
+            }
+        }
+    }
+
+    private function idempotentEvent(string $unit, array $actor, string $nonce, bool $lock): ?array
+    {
+        $builder = $this->scope('team_events', $unit, $actor)->where('created_by_user_id', $actor['id'])
+            ->where('api_client_nonce', $nonce);
+        return $lock && $this->db->DBDriver === 'MySQLi'
+            ? $this->db->query($builder->getCompiledSelect() . ' FOR UPDATE')->getRowArray()
+            : $builder->get()->getRowArray();
+    }
+
+    private function replayEvent(string $unit, string $nonce, string $hash): ?array
+    {
+        try {
+            $context = $this->access->context($unit);
+            $this->idempotencyReady();
+            $row = $this->idempotentEvent($unit, $context['actor'], $nonce, false);
+            if ($row === null) {
+                return null;
+            }
+            TeamIdempotencyKey::assertSame($row['api_request_hash'] ?? null, $hash);
+            return $this->event($unit, (int) $row['id'], $context);
+        } catch (TeamConflictException $error) {
+            throw $error;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     private function ready(bool $tasks = false): void
     {
+        // Detect a partially deployed or externally removed schema even if the
+        // long-running worker previously cached table metadata.
+        $this->db->resetDataCache();
         foreach (array_merge(['team_events', 'team_event_participants'], $tasks ? ['team_tasks'] : []) as $table) {
             if (!$this->db->tableExists($table)) { throw new RuntimeException('Team calendar is unavailable; run the team migrations.', 503); }
         }
@@ -359,6 +431,9 @@ final class TeamCalendarService
         return $this->guard(function () use ($operation): array {
             if ($this->db->transDepth !== 0) { throw new RuntimeException('An independent team calendar transaction is required.', 409); }
             $this->notifications = new TeamsNotifications($this->db);
+            $this->changed = false;
+            $this->changedTenant = 0;
+            $this->changedUnit = '';
             $this->db->resetTransStatus();
             $this->must($this->db->transBegin());
             try {
@@ -366,6 +441,21 @@ final class TeamCalendarService
                 if (!$this->db->transStatus()) { throw new RuntimeException('Team calendar transaction failed.', 503); }
                 $this->must($this->db->transCommit());
                 $this->notifications->publishCommitted();
+                if ($this->changed) {
+                    try {
+                        if ($this->invalidate !== null) {
+                            ($this->invalidate)($this->changedTenant, $this->changedUnit, TeamWorkspaceInvalidation::CALENDAR);
+                        } else {
+                            (new TeamWorkspaceInvalidation())->publish(
+                                $this->changedTenant,
+                                $this->changedUnit,
+                                TeamWorkspaceInvalidation::CALENDAR
+                            );
+                        }
+                    } catch (Throwable) {
+                        // Committed writes are authoritative; clients reconcile missed hints over HTTP.
+                    }
+                }
                 return $result;
             } catch (Throwable $e) {
                 try { $this->db->transRollback(); }

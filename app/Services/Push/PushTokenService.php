@@ -37,7 +37,16 @@ final class PushTokenService
      * A device token follows the account that last used the installation, so a
      * shared phone cannot keep delivering another account's notices.
      */
-    public function register(array $identity, string $token, string $platform, ?string $deviceLabel, ?string $ip): void
+    public function register(
+        array $identity,
+        string $token,
+        string $platform,
+        ?string $deviceLabel,
+        ?string $ip,
+        ?string $installationId = null,
+        ?string $apiFamilyId = null,
+        bool $teamWorkspaceCapable = false,
+    ): void
     {
         $token = trim($token);
         if (preg_match(self::TOKEN_PATTERN, $token) !== 1) {
@@ -47,12 +56,19 @@ final class PushTokenService
         if (!in_array($platform, ['android', 'ios'], true)) {
             throw new InvalidArgumentException('Invalid device platform.', 422);
         }
+        if ($installationId !== null && preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i', $installationId) !== 1) {
+            throw new InvalidArgumentException('Invalid installation identifier.', 422);
+        }
+        if ($apiFamilyId !== null && preg_match('/\A[0-9a-f]{32}\z/i', $apiFamilyId) !== 1) {
+            throw new InvalidArgumentException('Invalid API token family.', 422);
+        }
+        $capabilityFields = $this->capabilityFields();
         [$tenant, $user] = $this->identity($identity);
         $now = gmdate('Y-m-d H:i:s');
         $db = $this->db();
         $existing = $db->table('push_tokens')->where('token', $token)->get()->getRowArray();
         if ($existing !== null) {
-            $db->table('push_tokens')->where('id', (int) $existing['id'])->update([
+            $update = [
                 'tenant_id' => $tenant,
                 'user_id' => $user,
                 'platform' => $platform,
@@ -61,10 +77,18 @@ final class PushTokenService
                 'last_used_at' => $now,
                 'revoked_at' => null,
                 'updated_at' => $now,
-            ]);
+            ];
+            if ($capabilityFields) {
+                $update += [
+                    'installation_id' => $installationId,
+                    'api_family_id' => $apiFamilyId,
+                    'team_workspace_capable' => $teamWorkspaceCapable ? 1 : 0,
+                ];
+            }
+            $db->table('push_tokens')->where('id', (int) $existing['id'])->update($update);
             return;
         }
-        if (!$db->table('push_tokens')->insert([
+        $insert = [
             'tenant_id' => $tenant,
             'user_id' => $user,
             'token' => $token,
@@ -75,7 +99,15 @@ final class PushTokenService
             'revoked_at' => null,
             'created_at' => $now,
             'updated_at' => $now,
-        ])) {
+        ];
+        if ($capabilityFields) {
+            $insert += [
+                'installation_id' => $installationId,
+                'api_family_id' => $apiFamilyId,
+                'team_workspace_capable' => $teamWorkspaceCapable ? 1 : 0,
+            ];
+        }
+        if (!$db->table('push_tokens')->insert($insert)) {
             throw new RuntimeException('Unable to save device token.', 503);
         }
         $this->enforceCap($tenant, $user);
@@ -97,9 +129,11 @@ final class PushTokenService
     }
 
     /** Drop a token the delivery service reported as no longer usable. */
-    public function forget(string $token): void
+    public function forget(int $tenant, string $token): void
     {
+        if ($tenant < 1) { return; }
         $this->db()->table('push_tokens')
+            ->where('tenant_id', $tenant)
             ->where('token', $token)
             ->update(['revoked_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')]);
     }
@@ -109,23 +143,51 @@ final class PushTokenService
      *
      * @return list<array{token: string, platform: string}>
      */
-    public function activeTokens(int $tenant, int $user): array
+    public function activeTokens(int $tenant, int $user, bool $requireTeamCapability = false): array
     {
-        if ($tenant < 1 || $user < 1) {
+        if ($tenant < 1 || $user < 1 || ($requireTeamCapability && !$this->capabilityFields())) {
             return [];
         }
-        $rows = $this->db()->table('push_tokens')
+        $query = $this->db()->table('push_tokens')
             ->select('token,platform')
             ->where('tenant_id', $tenant)
             ->where('user_id', $user)
-            ->where('revoked_at', null)
-            ->orderBy('last_used_at', 'DESC')
-            ->get()->getResultArray();
+            ->where('revoked_at', null);
+        if ($requireTeamCapability) {
+            $query->where('team_workspace_capable', 1);
+        }
+        $rows = $query->orderBy('last_used_at', 'DESC')->get()->getResultArray();
         $tokens = [];
         foreach ($rows as $row) {
             $tokens[] = ['token' => (string) $row['token'], 'platform' => (string) $row['platform']];
         }
         return $tokens;
+    }
+
+    public function revokeFamily(int $tenant, string $familyId): void
+    {
+        if ($tenant < 1 || preg_match('/\A[0-9a-f]{32}\z/i', $familyId) !== 1 || !$this->capabilityFields()) { return; }
+        $now = gmdate('Y-m-d H:i:s');
+        $this->db()->table('push_tokens')->where('tenant_id', $tenant)
+            ->where('api_family_id', strtolower($familyId))->where('revoked_at', null)
+            ->update(['revoked_at' => $now, 'updated_at' => $now]);
+    }
+
+    public function hasTeamCapableToken(int $tenant, int $user): bool
+    {
+        if ($tenant < 1 || $user < 1 || !$this->capabilityFields()) { return false; }
+        return $this->db()->table('push_tokens')->where('tenant_id', $tenant)->where('user_id', $user)
+            ->where('team_workspace_capable', 1)->where('revoked_at', null)->countAllResults() > 0;
+    }
+
+    private function capabilityFields(): bool
+    {
+        $db = $this->db();
+        $db->resetDataCache();
+        return $db->tableExists('push_tokens')
+            && $db->fieldExists('installation_id', 'push_tokens')
+            && $db->fieldExists('api_family_id', 'push_tokens')
+            && $db->fieldExists('team_workspace_capable', 'push_tokens');
     }
 
     /** Keep the number of live tokens per user bounded, as the API token families are. */
@@ -145,7 +207,7 @@ final class PushTokenService
         }
         $stale = array_map(static fn (array $row): int => (int) $row['id'], array_slice($ids, $cap));
         if ($stale !== []) {
-            $db->table('push_tokens')->whereIn('id', $stale)
+            $db->table('push_tokens')->where('tenant_id', $tenant)->where('user_id', $user)->whereIn('id', $stale)
                 ->update(['revoked_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')]);
         }
     }

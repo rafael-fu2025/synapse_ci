@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers\Api\V1;
 
+use App\Services\Api\ApiContext;
 use App\Services\Push\PushTokenService;
 use CodeIgniter\HTTP\ResponseInterface;
 use InvalidArgumentException;
@@ -34,12 +35,31 @@ final class PushController extends ApiV1Controller
                     $label = null;
                 }
             }
+            $installationId = $body['installation_id'] ?? null;
+            $capabilities = $body['capabilities'] ?? [];
+            if (($installationId !== null && !is_string($installationId))
+                || !is_array($capabilities) || !array_is_list($capabilities)
+                || array_diff($capabilities, ['team_workspace']) !== []
+                || ($installationId === null && $capabilities !== [])) {
+                throw new InvalidArgumentException('A valid installation and capabilities list are required.', 422);
+            }
+            $familyId = null;
+            if ($installationId !== null) {
+                $familyId = (new \App\Models\ApiTokenModel())->where('token_hash', ApiContext::tokenHash())
+                    ->select('family_id')->first()['family_id'] ?? null;
+                if (!is_string($familyId)) {
+                    throw new InvalidArgumentException('The API token family is unavailable.', 401);
+                }
+            }
             (new PushTokenService())->register(
                 $this->identity(),
                 $token,
                 $platform,
                 $label,
                 $this->request->getIPAddress(),
+                $installationId,
+                $familyId,
+                in_array('team_workspace', $capabilities, true),
             );
             return $this->ok(['data' => ['registered' => true]]);
         });

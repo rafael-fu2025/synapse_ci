@@ -1,0 +1,160 @@
+import { ApiError, NetworkError, __resetClientForTests, setAccessToken } from '../src/api/client';
+import * as teamChatApi from '../src/api/endpoints/teamChat';
+import type { TeamChatMessage } from '../src/api/endpoints/teamChat';
+import {
+  buildChatRows,
+  insertMention,
+  isAmbiguousSendFailure,
+  mentionQueryAt,
+  mergeChatMessages,
+  messageValidation,
+  teamChatErrorKind,
+  updateMentionRanges,
+} from '../src/features/team-chat/model';
+import { teamChatKeys } from '../src/features/team-chat/hooks';
+
+jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
+jest.mock('../src/lib/keychain', () => ({
+  getRefreshToken: async () => null,
+  setRefreshToken: async () => undefined,
+  clearRefreshToken: async () => undefined,
+}));
+jest.mock('../src/store/auth', () => ({ useAuth: jest.fn() }));
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
+
+function response(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+function message(id: number, changes: Partial<TeamChatMessage> = {}): TeamChatMessage {
+  return {
+    id,
+    body: `Message ${id}`,
+    sender: { id: 2, name: 'Person 2' },
+    created_at: `2026-11-${id < 3 ? '06' : '07'}T00:00:00+00:00`,
+    client_nonce: null,
+    tasks: [],
+    mentions: [],
+    reply_to: null,
+    ...changes,
+  };
+}
+
+describe('Team Chat API contract', () => {
+  beforeEach(() => {
+    __resetClientForTests();
+    setAccessToken('a'.repeat(64));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('uses the corrected messages route and strict cursor query', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(response(200, { data: {
+      messages: [], has_more: false, next_before: null,
+      last_read_id: 0, unread_count: 0, latest_id: 0,
+    } }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    await teamChatApi.history('clinic', { around: 27 });
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://api.test/api/v1/team/clinic/chat/messages?around=27');
+  });
+
+  it('sends immutable retry fields and reads through the current backend routes', async () => {
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(response(201, { data: message(8) }))
+      .mockResolvedValueOnce(response(200, { data: { last_read_id: 8, unread_count: 0, latest_id: 8 } }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const input: teamChatApi.TeamChatSendInput = {
+      body: '😀 @Person 2',
+      client_nonce: '12345678-1234-4234-8234-123456789abc',
+      task_ids: [4, 5],
+      mentions: [{ user_id: 2, start: 3, length: 9 }],
+      reply_to_id: 3,
+    };
+
+    await teamChatApi.send('guidance', input);
+    await teamChatApi.markRead('guidance', 8);
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://api.test/api/v1/team/guidance/chat/messages');
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual(input);
+    expect(String(fetchMock.mock.calls[1][0])).toBe('http://api.test/api/v1/team/guidance/chat/read');
+  });
+
+  it('bounds member suggestions at 20 and task search server-side', async () => {
+    globalThis.fetch = jest.fn()
+      .mockResolvedValueOnce(response(200, { data: [], meta: {} }))
+      .mockResolvedValueOnce(response(200, { data: [], meta: {} })) as unknown as typeof fetch;
+
+    await teamChatApi.members('facilities', 'ann');
+    await teamChatApi.tasks('facilities', 'active');
+
+    expect(String(jest.mocked(globalThis.fetch).mock.calls[0][0])).toContain('/members?q=ann&page=1&limit=20');
+    expect(String(jest.mocked(globalThis.fetch).mock.calls[1][0])).toContain('/chat/tasks?q=active');
+  });
+});
+
+describe('Team Chat cursor and display helpers', () => {
+  it('merges immutable ids in ascending order and caps the correct side', () => {
+    const current = [message(3), message(4), message(5)];
+    expect(mergeChatMessages(current, [message(1), message(2)], 'older', 4).map(item => item.id)).toEqual([1, 2, 3, 4]);
+    expect(mergeChatMessages(current, [message(6), message(7)], 'newer', 4).map(item => item.id)).toEqual([4, 5, 6, 7]);
+  });
+
+  it('adds Manila day separators and one unread divider before the first other-user message', () => {
+    const rows = buildChatRows([
+      message(1, { sender: { id: 1, name: 'Me' } }),
+      message(2),
+      message(3),
+    ], 1, 1);
+    expect(rows.map(row => row.kind)).toEqual(['day', 'message', 'unread', 'message', 'day', 'message']);
+  });
+
+  it('uses the exact local realtime invalidation root', () => {
+    expect(teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic')).toEqual(['team-chat', 9, 12, 'clinic']);
+  });
+});
+
+describe('Team Chat UTF-16 mentions and send retries', () => {
+  it('finds and inserts a member after an emoji using JavaScript UTF-16 offsets', () => {
+    const body = '😀 hello @Per';
+    const match = mentionQueryAt(body, body.length)!;
+    const inserted = insertMention(body, match, body.length, { id: 2, name: 'Person 2' });
+
+    expect(match).toEqual({ start: 9, query: 'Per' });
+    expect(inserted.text).toBe('😀 hello @Person 2 ');
+    expect(inserted.mention).toEqual({ user_id: 2, start: 9, length: 9 });
+  });
+
+  it('shifts later mentions and removes a binding edited through', () => {
+    const ranges = [
+      { user_id: 2, start: 3, length: 9 },
+      { user_id: 3, start: 13, length: 9 },
+    ];
+    expect(updateMentionRanges('😀 @Person 2 @Person 3', 'x😀 @Person 2 @Person 3', ranges)).toEqual([
+      { user_id: 2, start: 4, length: 9 },
+      { user_id: 3, start: 14, length: 9 },
+    ]);
+    expect(updateMentionRanges('😀 @Person 2 @Person 3', '😀 @X 2 @Person 3', ranges)).toEqual([
+      { user_id: 3, start: 8, length: 9 },
+    ]);
+  });
+
+  it('keeps ambiguous failures retryable but unlocks validation/conflict edits', () => {
+    expect(isAmbiguousSendFailure(new NetworkError())).toBe(true);
+    expect(isAmbiguousSendFailure(new ApiError(503, { code: 'service_unavailable', message: 'retry' }))).toBe(true);
+    expect(isAmbiguousSendFailure(new ApiError(422, { code: 'validation_failed', message: 'fix' }))).toBe(false);
+    expect(teamChatErrorKind(new ApiError(409, { code: 'idempotency_conflict', message: 'different' }))).toBe('idempotency');
+  });
+
+  it('validates visible composer limits without trimming immutable content', () => {
+    expect(messageValidation('   ', 0)).toBe('Enter a message.');
+    expect(messageValidation('hello', 21)).toContain('20');
+    expect(messageValidation('  hello\n', 2)).toBeNull();
+  });
+});

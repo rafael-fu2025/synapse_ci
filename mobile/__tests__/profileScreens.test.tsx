@@ -102,7 +102,7 @@ beforeEach(() => {
   jest.mocked(removePhoto).mockResolvedValue(undefined);
   jest.mocked(launchImageLibrary).mockResolvedValue({ assets: [pickerAsset()] });
   jest.mocked(useAuth).mockReturnValue({
-    status: 'signedIn', user, signIn: jest.fn(), signOut, acknowledgeExpired: jest.fn(),
+    status: 'signedIn', user, profile: null, signIn: jest.fn(), retryBootstrap: jest.fn(), signOut, acknowledgeExpired: jest.fn(),
   });
   jest.mocked(useTheme).mockReturnValue({ theme: lightTheme, mode: 'light', preference: 'system', setPreference });
   jest.mocked(useQueryClient).mockReturnValue({ invalidateQueries } as unknown as ReturnType<typeof useQueryClient>);

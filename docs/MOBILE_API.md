@@ -94,7 +94,7 @@ with `Retry-After: 60`.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET me` | Identity, permissions, entitlement flags (`staff_queue_units`) |
+| `GET me` | Identity, permissions, Personal entitlement, authorized Team Workspace units/features, and `staff_queue_units` |
 | `GET me/health-summary` | Lean health card: person + blood type/allergies/conditions/emergency contact. **No clinical encounter data.** |
 | `GET me/photo` | WebP bytes or initials SVG fallback |
 | `POST me/photo` | Multipart `photo` (JPEG/PNG/WebP ≤10 MB) |
@@ -114,8 +114,14 @@ with `Retry-After: 60`.
 | `GET notifications/history?page&filter` | Paginated inbox |
 | `POST notifications/{id}/read`, `POST notifications/read-all` | Mark read → 204 |
 | `GET realtime/grant` | Bearer-authenticated WebSocket grant for the caller's own private channel |
-| `POST push/token` | Register the device's push token `{token, platform, device_label?}` |
+| `POST push/token` | Register `{token, platform, installation_id, capabilities:["team_workspace"], device_label?}`; installation is bound to the current API family |
 | `DELETE push/token` | Withdraw a device push token `{token}` → 204 |
+| `GET team/{unit}` / `GET team/{unit}/members?q&page&limit` | Authorized Clinic/Guidance/Facilities context and bounded member picker |
+| `GET/POST team/{unit}/tasks`, `GET team/{unit}/tasks/{id}` | Team Board/My Tasks list, idempotent create, and detail |
+| `POST team/{unit}/tasks/{id}/update`, `/status`, `/comments` | Versioned task updates/status and idempotent comments |
+| `GET team/{unit}/calendar?date&view&mine&status` | Typed `event`/`task_deadline` range plus totals/truncation |
+| `GET/POST team/{unit}/calendar/events...` | Event detail, idempotent create, versioned update/cancel |
+| `GET/POST team/{unit}/chat/messages`, `GET chat/tasks`, `POST chat/read` | Cursor chat, UUID send replay, task references, mentions, replies, monotonic reads |
 
 ### Staff queue snapshot
 
@@ -179,19 +185,23 @@ Every notification item carries `id`, `title`, `message`, `created_at`, `read_at
 }
 ```
 
-`target.kind` is one of `appointment`, `announcement`, `survey`, and `target.id` is the numeric record
-identifier. Notices that have no mobile surface — incoming referrals, team events, team tasks, chat
-mentions, workflow alerts — report `target: null`; the client marks them read and opens nothing rather
-than navigating to a record it cannot show. `url` remains the **web** workstation destination.
+`target.kind` is one of `appointment`, `announcement`, `survey`, `team_task`, `team_event`, or
+`team_chat_message`. Personal targets carry `{kind,id}`; Team targets carry `{kind,unit,id}` where
+`unit` is exactly `clinic`, `guidance`, or `facilities`. The server derives all targets from validated
+source columns and current inbox membership; the client never converts the web `url` into native
+navigation. Referrals and workflow alerts still report `target: null`. `url` remains the web destination.
 
 ### Device push tokens
 
-`POST api/v1/push/token` accepts `{token, platform, device_label?}` where `platform` is `android` or
-`ios`. The token is a routable address, not a credential: it is stored against the signed-in identity,
-is never returned by any endpoint, and is never logged. A device token follows the account that last
-used the installation, so a shared phone cannot keep delivering another account's notices.
-`DELETE api/v1/push/token` accepts `{token}` and revokes it → 204. Both endpoints reuse the bearer
-identity; a client cannot register a token for another account.
+`POST api/v1/push/token` accepts `{token, platform, installation_id, capabilities, device_label?}`.
+`platform` is `android` or `ios`, `installation_id` is a device-only UUID v4, and the recognized
+capability is `team_workspace`. The registration is bound server-side to the current API token family.
+The token is a routable address, not a credential: it is never returned or logged. A shared phone's token
+follows the account that last registered it. `DELETE api/v1/push/token` accepts `{token}` and revokes it.
+Bearer logout also revokes every push registration bound to that API family. Personal pushes may use
+all active installations; Team pushes are delivered only to installations that explicitly registered the
+Team Workspace capability. Older schemas/clients fail closed for Team push while inbox/realtime/polling
+remain authoritative fallbacks.
 
 Delivery is opt-in on the server (`push.enabled`) and additionally requires a Firebase project and a
 service account key. While push is disabled, registering a token succeeds but nothing is delivered and

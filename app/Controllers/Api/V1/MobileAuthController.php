@@ -9,6 +9,7 @@ use App\Services\Api\TokenService;
 use App\Services\AuthService;
 use App\Services\LoginRateLimiter;
 use CodeIgniter\HTTP\ResponseInterface;
+use Config\Database;
 use RuntimeException;
 use Throwable;
 
@@ -72,7 +73,12 @@ final class MobileAuthController extends ApiV1Controller
     {
         return $this->run(function (): ResponseInterface {
             $this->identity();
-            (new TokenService())->revokeByHash(ApiContext::tokenHash());
+            $hash = ApiContext::tokenHash();
+            $row = Database::connect()->table('api_tokens')->select('family_id')->where('token_hash', $hash)->get()->getRowArray();
+            if (is_string($row['family_id'] ?? null)) {
+                (new \App\Services\Push\PushTokenService())->revokeFamily((int) $this->identity()['tenant_id'], $row['family_id']);
+            }
+            (new TokenService())->revokeByHash($hash);
             return $this->noContent();
         });
     }

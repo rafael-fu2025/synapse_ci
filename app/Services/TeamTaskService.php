@@ -38,19 +38,24 @@ final class TeamTaskService
     private const STATUSES = ['todo', 'in_progress', 'blocked', 'done'];
     private const PRIORITIES = ['low', 'normal', 'high'];
     private BaseConnection $db;
+    private TeamAccess $access;
     private TeamsNotifications $notifications;
+    private bool $changed = false;
+    private int $changedTenant = 0;
+    private string $changedUnit = '';
+    private readonly ?\Closure $invalidate;
 
-    public function __construct()
+    public function __construct(?TeamAccess $access = null, ?BaseConnection $db = null, ?callable $invalidate = null)
     {
-        $this->db = Database::connect();
+        $this->db = $db ?? Database::connect();
+        $this->access = $access ?? new TeamAccess(null, $this->db);
+        $this->invalidate = $invalidate === null ? null : \Closure::fromCallable($invalidate);
     }
 
-    /** actor is the refreshed AuthenticatedUser identity; members expose only id/name/role. */
+    /** actor is the refreshed transport identity; members expose only id/name/role. */
     public function context(string $unit): array
     {
-        $actor = $this->actor($unit);
-        return ['actor' => $actor, 'members' => $this->members($unit, $actor),
-            'canManage' => $this->manages($unit, $actor['role'])];
+        return $this->access->context($unit);
     }
 
     /** Fixed 100/page. Counts apply mine/q/priority, but not status, for status-tab summaries. */
@@ -100,7 +105,7 @@ final class TeamTaskService
      */
     public function detail(string $unit, int $id): array
     {
-        $actor = $this->actor($unit);
+        $actor = $this->access->actor($unit);
         $this->ready();
         $task = $this->record($unit, $id, $actor);
         $task['canEdit'] = $this->canEdit($task, $actor);
@@ -111,6 +116,7 @@ final class TeamTaskService
             $task[$kind] = $builder->orderBy('id', 'DESC')->limit($limit)->get()->getResultArray();
             foreach ($task[$kind] as &$entry) {
                 foreach (['id', 'tenant_id', 'task_id', 'actor_user_id'] as $field) { $entry[$field] = (int) $entry[$field]; }
+                unset($entry['api_client_nonce'], $entry['api_request_hash']);
             }
             unset($entry);
         }
@@ -118,23 +124,47 @@ final class TeamTaskService
     }
 
     /** Defaults: description='', checklist=[], status=todo, priority=normal, assignee/due_date=null. */
-    public function create(string $unit, array $input): array
+    public function create(string $unit, array $input, ?string $clientNonce = null): array
     {
-        return $this->transaction(function () use ($unit, $input): array {
-            $actor = $this->actor($unit);
-            $this->ready();
-            $data = $this->editable($input, false);
-            $this->assignee($unit, $data['assignee_user_id'], $actor);
-            $now = gmdate('Y-m-d H:i:s');
-            $this->must($this->db->table('team_tasks')->insert($data + [
-                'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'created_by_user_id' => $actor['id'],
-                'version' => 1, 'created_at' => $now, 'updated_at' => $now,
-            ]));
-            $task = $this->record($unit, (int) $this->db->insertID(), $actor);
-            $this->activity($task, $actor, 'created');
-            $this->notifications->enqueue($task, $actor, TeamsNotifications::taskPlan(null, $task));
-            return $task;
-        });
+        $key = TeamIdempotencyKey::optional($clientNonce, $input);
+        try {
+            return $this->transaction(function () use ($unit, $input, $key): array {
+                $actor = $this->access->actor($unit, true);
+                $this->ready();
+                $extra = [];
+                if ($key['nonce'] !== null) {
+                    $this->idempotencyReady('team_tasks');
+                    $existing = $this->idempotentRow('team_tasks', $unit, $actor, 'created_by_user_id', $key['nonce']);
+                    if ($existing !== null) {
+                        TeamIdempotencyKey::assertSame($existing['api_request_hash'] ?? null, $key['hash']);
+                        return $this->task($existing);
+                    }
+                    $extra = ['api_client_nonce' => $key['nonce'], 'api_request_hash' => $key['hash']];
+                }
+                $data = $this->editable($input, false);
+                $this->assignee($unit, $data['assignee_user_id'], $actor);
+                $now = gmdate('Y-m-d H:i:s');
+                $this->must($this->db->table('team_tasks')->insert($data + $extra + [
+                    'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'created_by_user_id' => $actor['id'],
+                    'version' => 1, 'created_at' => $now, 'updated_at' => $now,
+                ]));
+                $task = $this->record($unit, (int) $this->db->insertID(), $actor);
+                $this->activity($task, $actor, 'created');
+                $this->notifications->enqueue($task, $actor, TeamsNotifications::taskPlan(null, $task));
+                $this->changed = true;
+                $this->changedTenant = (int) $task['tenant_id'];
+                $this->changedUnit = (string) $task['unit'];
+                return $task;
+            });
+        } catch (Throwable $error) {
+            $winner = $key['nonce'] === null ? null : $this->replayRow(
+                'team_tasks', $unit, 'created_by_user_id', $key['nonce'], $key['hash']
+            );
+            if ($winner !== null) {
+                return $this->task($winner);
+            }
+            throw $error;
+        }
     }
 
     /** Replace the original six editable fields + version; optional checklist, omitted = preserve. */
@@ -149,24 +179,51 @@ final class TeamTaskService
         return $this->change($unit, $id, $input, true);
     }
 
-    /** Input: body (1..2000 characters). Does not change the task's edit version. */
-    public function comment(string $unit, int $id, array $input): void
+    /** Input: body (1..2000 characters). Does not change the task's edit version. Returns the comment ID. */
+    public function comment(string $unit, int $id, array $input, ?string $clientNonce = null): int
     {
-        $this->transaction(function () use ($unit, $id, $input): array {
-            $actor = $this->actor($unit);
-            $this->ready();
-            $task = $this->record($unit, $id, $actor, true);
-            $body = $this->text($input['body'] ?? null, 'body', 2000);
-            $this->assignee($unit, $task['assignee_user_id'], $actor);
-            $this->must($this->db->table('team_task_comments')->insert([
-                'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'task_id' => $id,
-                'actor_user_id' => $actor['id'], 'body' => $body, 'created_at' => gmdate('Y-m-d H:i:s'),
-            ]));
-            $commentId = (int) $this->db->insertID();
-            $this->activity($task, $actor, 'commented');
-            $this->notifications->enqueue($task, $actor, TeamsNotifications::taskPlan($task, $task, true), $commentId);
-            return [];
-        });
+        $key = TeamIdempotencyKey::optional($clientNonce, ['task_id' => $id] + $input);
+        try {
+            return $this->transaction(function () use ($unit, $id, $input, $key): int {
+                $actor = $this->access->actor($unit, true);
+                $this->ready();
+                $task = $this->record($unit, $id, $actor, true);
+                $extra = [];
+                if ($key['nonce'] !== null) {
+                    $this->idempotencyReady('team_task_comments');
+                    $existing = $this->idempotentRow('team_task_comments', $unit, $actor, 'actor_user_id', $key['nonce']);
+                    if ($existing !== null) {
+                        TeamIdempotencyKey::assertSame($existing['api_request_hash'] ?? null, $key['hash']);
+                        return (int) $existing['id'];
+                    }
+                    $extra = ['api_client_nonce' => $key['nonce'], 'api_request_hash' => $key['hash']];
+                }
+                $body = $this->text($input['body'] ?? null, 'body', 2000);
+                $this->assignee($unit, $task['assignee_user_id'], $actor);
+                $this->must($this->db->table('team_task_comments')->insert($extra + [
+                    'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'task_id' => $id,
+                    'actor_user_id' => $actor['id'], 'body' => $body, 'created_at' => gmdate('Y-m-d H:i:s'),
+                ]));
+                $commentId = (int) $this->db->insertID();
+                $this->activity($task, $actor, 'commented');
+                $this->notifications->enqueue($task, $actor, TeamsNotifications::taskPlan($task, $task, true), $commentId);
+                $this->changed = true;
+                $this->changedTenant = (int) $task['tenant_id'];
+                $this->changedUnit = (string) $task['unit'];
+                return $commentId;
+            });
+        } catch (Throwable $error) {
+            $winner = $key['nonce'] === null ? null : $this->replayRow(
+                'team_task_comments', $unit, 'actor_user_id', $key['nonce'], $key['hash']
+            );
+            if ($winner !== null && (int) $winner['task_id'] === $id) {
+                return (int) $winner['id'];
+            }
+            if ($winner !== null) {
+                throw TeamConflictException::idempotency();
+            }
+            throw $error;
+        }
     }
 
     /** UI helper only: mutations always obtain their own authoritative actor and scoped task. */
@@ -177,10 +234,10 @@ final class TeamTaskService
             || (int) ($task['tenant_id'] ?? 0) <= 0
             || (int) ($task['tenant_id'] ?? 0) !== (int) ($actor['tenant_id'] ?? 0)
             || (int) ($actor['id'] ?? 0) <= 0
-            || !in_array($actor['role'] ?? '', $this->roles($unit), true)) {
+            || !in_array($actor['role'] ?? '', TeamAccess::rolesFor($unit), true)) {
             return false;
         }
-        return $this->manages($unit, $actor['role'])
+        return TeamAccess::managesRole($unit, (string) $actor['role'])
             || (int) ($task['created_by_user_id'] ?? 0) === (int) $actor['id']
             || (int) ($task['assignee_user_id'] ?? 0) === (int) $actor['id'];
     }
@@ -188,12 +245,12 @@ final class TeamTaskService
     private function change(string $unit, int $id, array $input, bool $move): array
     {
         return $this->transaction(function () use ($unit, $id, $input, $move): array {
-            $actor = $this->actor($unit);
+            $actor = $this->access->actor($unit, true);
             $this->ready();
             $task = $this->record($unit, $id, $actor, true);
             if (!$this->canEdit($task, $actor)) { throw new RuntimeException('You cannot edit this task.', 403); }
             $version = $this->positive($input['version'] ?? null, 'version');
-            if ($version !== $task['version']) { throw new RuntimeException('Task changed. Reload before saving.', 409); }
+            if ($version !== $task['version']) { throw TeamConflictException::stale('Task changed. Reload before saving.'); }
             $data = $move ? ['status' => $this->choice($input['status'] ?? null, self::STATUSES, 'status')]
                 : $this->editable($input, true);
             $this->assignee($unit, $move ? $task['assignee_user_id'] : $data['assignee_user_id'], $actor);
@@ -206,57 +263,15 @@ final class TeamTaskService
             if ($unchanged) { return $task; }
             $this->must($this->scope('team_tasks', $unit, $actor)->where('id', $id)->where('version', $version)
                 ->update($data + ['version' => $version + 1, 'updated_at' => gmdate('Y-m-d H:i:s')]));
-            if ($this->db->affectedRows() !== 1) { throw new RuntimeException('Task changed. Reload before saving.', 409); }
+            if ($this->db->affectedRows() !== 1) { throw TeamConflictException::stale('Task changed. Reload before saving.'); }
             $updated = $this->record($unit, $id, $actor);
             $this->activity($updated, $actor, $move ? 'moved' : 'updated', $task['status'], $updated['status']);
             $this->notifications->enqueue($updated, $actor, TeamsNotifications::taskPlan($task, $updated));
+            $this->changed = true;
+            $this->changedTenant = (int) $updated['tenant_id'];
+            $this->changedUnit = (string) $updated['unit'];
             return $updated;
         });
-    }
-
-    private function actor(string $unit): array
-    {
-        $roles = $this->roles($unit);
-        $actor = (new AuthenticatedUser())->current();
-        if ($actor === null) { throw new RuntimeException('Authentication required.', 401); }
-        if (!in_array($actor['role'], $roles, true)) { throw new RuntimeException('Department membership required.', 403); }
-        return $actor;
-    }
-
-    private function roles(string $unit): array
-    {
-        if (!in_array($unit, ['clinic', 'guidance', 'facilities'], true)) {
-            throw new RuntimeException('Invalid task department.', 422);
-        }
-        return PortalContext::allowedRoles($unit === 'facilities' ? PortalContext::PORTAL_BMG : $unit);
-    }
-
-    private function manages(string $unit, string $role): bool
-    {
-        return $role === 'superadmin' || in_array($role, match ($unit) {
-            'clinic' => ['clinic_admin'], 'guidance' => ['guidance_admin', 'guidance_supervisor'],
-            'facilities' => ['bmg_admin'], default => [],
-        }, true);
-    }
-
-    private function members(string $unit, array $actor): array
-    {
-        $builder = $this->db->table('users u')->select('u.id,u.username,u.role')
-            ->where('u.tenant_id', $actor['tenant_id'])->where('u.status', 'active')->where('u.deleted_at', null)
-            ->whereIn('u.role', $this->roles($unit));
-        $names = $this->db->tableExists('people')
-            && array_diff(['id', 'tenant_id', 'first_name', 'last_name', 'deleted_at'], $this->db->getFieldNames('people')) === []
-            && $this->db->fieldExists('person_id', 'users');
-        if ($names) {
-            $builder->select('p.first_name,p.last_name')->join('people p',
-                'p.id = u.person_id AND p.tenant_id = u.tenant_id AND p.deleted_at IS NULL', 'left');
-        }
-        $members = [];
-        foreach ($builder->orderBy('u.id', 'ASC')->get()->getResultArray() as $row) {
-            $name = trim(($row['first_name'] ?? '') . ' ' . ($row['last_name'] ?? ''));
-            $members[] = ['id' => (int) $row['id'], 'name' => $name !== '' ? $name : $row['username'], 'role' => $row['role']];
-        }
-        return $members;
     }
 
     private function scope(string $table, string $unit, array $actor): BaseBuilder
@@ -284,7 +299,7 @@ final class TeamTaskService
     {
         if ($id === null) { return; }
         $row = $this->row($this->db->table('users')->where('id', $id)->where('tenant_id', $actor['tenant_id'])
-            ->where('status', 'active')->where('deleted_at', null)->whereIn('role', $this->roles($unit)), true);
+            ->where('status', 'active')->where('deleted_at', null)->whereIn('role', TeamAccess::rolesFor($unit)), true);
         if ($row === null) { throw new RuntimeException('Assignee must be an active member of this department and tenant.', 422); }
     }
 
@@ -294,6 +309,7 @@ final class TeamTaskService
         $row['assignee_user_id'] = $row['assignee_user_id'] === null ? null : (int) $row['assignee_user_id'];
         try { $row['checklist'] = $this->checklist($row['checklist']); }
         catch (RuntimeException $e) { throw new RuntimeException('Stored task checklist is invalid.', 503, $e); }
+        unset($row['api_client_nonce'], $row['api_request_hash']);
         return $row;
     }
 
@@ -394,8 +410,52 @@ final class TeamTaskService
         ]));
     }
 
+    private function idempotencyReady(string $table): void
+    {
+        foreach (['api_client_nonce', 'api_request_hash'] as $field) {
+            if (!$this->db->fieldExists($field, $table)) {
+                throw new RuntimeException('Team API idempotency is unavailable; run the Team API migration.', 503);
+            }
+        }
+    }
+
+    private function idempotentRow(
+        string $table,
+        string $unit,
+        array $actor,
+        string $actorField,
+        string $nonce
+    ): ?array {
+        return $this->row($this->scope($table, $unit, $actor)->where($actorField, $actor['id'])
+            ->where('api_client_nonce', $nonce), true);
+    }
+
+    private function replayRow(
+        string $table,
+        string $unit,
+        string $actorField,
+        string $nonce,
+        string $hash
+    ): ?array {
+        try {
+            $actor = $this->access->actor($unit);
+            $this->idempotencyReady($table);
+            $row = $this->scope($table, $unit, $actor)->where($actorField, $actor['id'])
+                ->where('api_client_nonce', $nonce)->get()->getRowArray();
+            if ($row !== null) {
+                TeamIdempotencyKey::assertSame($row['api_request_hash'] ?? null, $hash);
+            }
+            return $row;
+        } catch (TeamConflictException $error) {
+            throw $error;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     private function ready(): void
     {
+        $this->db->resetDataCache();
         foreach (['team_tasks', 'team_task_comments', 'team_task_activity'] as $table) {
             if (!$this->db->tableExists($table)) { throw new RuntimeException('Team tasks are unavailable; run the team task migration.', 503); }
         }
@@ -406,10 +466,13 @@ final class TeamTaskService
         if (!$success) { throw new RuntimeException('Team task write failed.', 503); }
     }
 
-    private function transaction(callable $operation): array
+    private function transaction(callable $operation): mixed
     {
         if ($this->db->transDepth !== 0) { throw new RuntimeException('An independent team task transaction is required.', 409); }
         $this->notifications = new TeamsNotifications($this->db);
+        $this->changed = false;
+        $this->changedTenant = 0;
+        $this->changedUnit = '';
         $this->db->resetTransStatus();
         $this->must($this->db->transBegin());
         try {
@@ -417,6 +480,21 @@ final class TeamTaskService
             if (!$this->db->transStatus()) { throw new RuntimeException('Team task transaction failed.', 503); }
             $this->must($this->db->transCommit());
             $this->notifications->publishCommitted();
+            if ($this->changed) {
+                try {
+                    if ($this->invalidate !== null) {
+                        ($this->invalidate)($this->changedTenant, $this->changedUnit, TeamWorkspaceInvalidation::TASKS);
+                    } else {
+                        (new TeamWorkspaceInvalidation())->publish(
+                            $this->changedTenant,
+                            $this->changedUnit,
+                            TeamWorkspaceInvalidation::TASKS
+                        );
+                    }
+                } catch (Throwable) {
+                    // Committed writes are authoritative; clients reconcile missed hints over HTTP.
+                }
+            }
             return $result;
         } catch (Throwable $e) {
             try { $this->db->transRollback(); }

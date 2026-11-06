@@ -1,10 +1,14 @@
 import { request } from '../client';
+import type { TeamUnit } from '../types';
 
-/** The record a native client can open for this notice. */
+/** The record a native client can open. Team targets remain server-authoritative. */
 export type NotificationTarget =
   | { kind: 'appointment'; id: number }
   | { kind: 'announcement'; id: number }
-  | { kind: 'survey'; id: number };
+  | { kind: 'survey'; id: number }
+  | { kind: 'team_task'; unit: TeamUnit; id: number }
+  | { kind: 'team_event'; unit: TeamUnit; id: number }
+  | { kind: 'team_chat_message'; unit: TeamUnit; id: number };
 
 export interface NotificationItem {
   id: number;
@@ -12,7 +16,7 @@ export interface NotificationItem {
   message: string;
   created_at: string | null;
   read_at: string | null;
-  /** Null for notices that have no mobile surface (referrals, teams, workflow alerts). */
+  /** Null for notices that have no mobile surface (referrals and workflow alerts). */
   target?: NotificationTarget | null;
 }
 

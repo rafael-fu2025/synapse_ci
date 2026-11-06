@@ -6,6 +6,7 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { queryClient } from './src/lib/queryClient';
 import { QueryLifecycle } from './src/lib/QueryLifecycle';
 import { AuthProvider } from './src/store/auth';
+import { WorkspaceProvider } from './src/features/workspace/WorkspaceContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 
 function ThemedStatusBar() {
@@ -20,8 +21,10 @@ export default function App(): React.JSX.Element {
         <QueryClientProvider client={queryClient}>
           <QueryLifecycle />
           <AuthProvider>
-            <ThemedStatusBar />
-            <RootNavigator />
+            <WorkspaceProvider>
+              <ThemedStatusBar />
+              <RootNavigator />
+            </WorkspaceProvider>
           </AuthProvider>
         </QueryClientProvider>
       </ThemeProvider>

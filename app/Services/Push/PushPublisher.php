@@ -6,8 +6,8 @@ namespace App\Services\Push;
 
 use App\Services\NotificationService;
 use CodeIgniter\Database\BaseConnection;
+use Config\Database;
 use Config\Push;
-use Database;
 use Throwable;
 
 /**
@@ -38,11 +38,23 @@ final class PushPublisher
             'title' => 'New survey',
             'body' => 'An identified Guidance survey is available in your portal.',
         ],
+        'team_task_assigned' => ['title' => 'Team task update', 'body' => 'A team task needs your attention. Open Team Workspace for details.'],
+        'team_task_unassigned' => ['title' => 'Team task update', 'body' => 'A team task assignment changed. Open Team Workspace for details.'],
+        'team_task_updated' => ['title' => 'Team task update', 'body' => 'A team task changed. Open Team Workspace for details.'],
+        'team_task_status' => ['title' => 'Team task update', 'body' => 'A team task status changed. Open Team Workspace for details.'],
+        'team_task_commented' => ['title' => 'Team task update', 'body' => 'A team task has a new comment. Open Team Workspace for details.'],
+        'team_event_added' => ['title' => 'Team calendar update', 'body' => 'A team calendar event changed. Open Team Workspace for details.'],
+        'team_event_removed' => ['title' => 'Team calendar update', 'body' => 'A team calendar event changed. Open Team Workspace for details.'],
+        'team_event_updated' => ['title' => 'Team calendar update', 'body' => 'A team calendar event changed. Open Team Workspace for details.'],
+        'team_event_cancelled' => ['title' => 'Team calendar update', 'body' => 'A team calendar event changed. Open Team Workspace for details.'],
+        'team_chat_mentioned' => ['title' => 'Team chat mention', 'body' => 'You were mentioned in Team Workspace chat. Open the app for details.'],
     ];
 
     private readonly \Closure $recipients;
     private readonly \Closure $permitted;
     private readonly \Closure $send;
+    private readonly \Closure $sendTeam;
+    private readonly \Closure $teamCapable;
     private readonly bool $enabled;
     private readonly \Closure $clock;
     private ?float $deadline = null;
@@ -56,17 +68,31 @@ final class PushPublisher
         ?callable $send = null,
         ?bool $enabled = null,
         ?callable $clock = null,
+        ?callable $teamCapable = null,
+        ?callable $sendTeam = null,
     ) {
         $this->enabled = $enabled ?? config(Push::class)->isConfigured();
         $this->recipients = \Closure::fromCallable($recipients ?? function (int $tenant, array $ids): array {
-            return ($this->db ?? Database::connect())->table('notifications')
-                ->select('id,tenant_id,recipient_user_id,type,appointment_id,announcement_id,survey_id')
-                ->where('tenant_id', $tenant)
-                ->whereIn('id', $ids)
-                ->get()->getResultArray();
+            $db = $this->db ?? Database::connect();
+            $present = $db->getFieldNames('notifications');
+            $optional = array_values(array_intersect([
+                'appointment_id', 'announcement_id', 'survey_id',
+                'team_unit', 'team_event_id', 'team_task_id', 'chat_unit', 'chat_message_id',
+            ], $present));
+            $select = ['n.id', 'n.tenant_id', 'COALESCE(n.recipient_user_id,u.id) AS recipient_user_id', 'n.type'];
+            foreach ($optional as $field) {
+                $select[] = 'n.' . $field;
+            }
+            return $db->table('notifications n')->distinct()->select(implode(',', $select), false)
+                ->join('users u', 'u.tenant_id=n.tenant_id AND u.person_id=n.recipient_person_id AND u.status=\'active\' AND u.deleted_at IS NULL', 'left')
+                ->where('n.tenant_id', $tenant)->whereIn('n.id', $ids)->get()->getResultArray();
         });
         $this->permitted = \Closure::fromCallable($permitted ?? [new NotificationService(), 'canReceiveInvalidation']);
-        $this->send = \Closure::fromCallable($send ?? [new PushTransport(), 'send']);
+        $transport = new PushTransport();
+        $this->send = \Closure::fromCallable($send ?? [$transport, 'send']);
+        $this->sendTeam = \Closure::fromCallable($sendTeam ?? ($send !== null ? $send : [$transport, 'sendTeam']));
+        // Older schemas have no capability columns, so PushTokenService fails closed.
+        $this->teamCapable = \Closure::fromCallable($teamCapable ?? [$transport, 'teamCapable']);
         $this->clock = \Closure::fromCallable($clock ?? static fn (): float => hrtime(true) / 1e9);
     }
 
@@ -112,12 +138,23 @@ final class PushPublisher
                 if (!$permitted) {
                     continue;
                 }
+                $team = $this->teamType((string) ($recipient['type'] ?? ''));
+                if ($team) {
+                    try {
+                        if (!(bool) ($this->teamCapable)($tenant, $user)) {
+                            continue;
+                        }
+                    } catch (Throwable) {
+                        continue;
+                    }
+                }
                 if (!$this->hasBudget()) {
                     return;
                 }
                 ++$this->attempts;
                 try {
-                    if (($this->send)($tenant, $user, $message) !== false) {
+                    $sender = $team ? $this->sendTeam : $this->send;
+                    if ($sender($tenant, $user, $message) !== false) {
                         continue;
                     }
                 } catch (Throwable) {
@@ -148,15 +185,31 @@ final class PushPublisher
         if ($id === null) {
             return null;
         }
-        return $template + ['data' => ['type' => $type, 'id' => (string) $id]];
+        $data = ['type' => $type, 'id' => (string) $id];
+        if ($this->teamType($type)) {
+            $unit = $type === 'team_chat_mentioned' ? ($recipient['chat_unit'] ?? null) : ($recipient['team_unit'] ?? null);
+            if (!in_array($unit, ['clinic', 'guidance', 'facilities'], true)) {
+                return null;
+            }
+            $data['type'] = match (true) {
+                str_starts_with($type, 'team_task_') => 'team_task',
+                str_starts_with($type, 'team_event_') => 'team_event',
+                default => 'team_chat_message',
+            };
+            $data['unit'] = $unit;
+        }
+        return $template + ['data' => $data];
     }
 
     private function targetId(string $type, array $recipient): ?int
     {
-        $column = match ($type) {
-            'appointment_confirmed' => 'appointment_id',
-            'announcement_published' => 'announcement_id',
-            'survey_published' => 'survey_id',
+        $column = match (true) {
+            $type === 'appointment_confirmed' => 'appointment_id',
+            $type === 'announcement_published' => 'announcement_id',
+            $type === 'survey_published' => 'survey_id',
+            str_starts_with($type, 'team_task_') => 'team_task_id',
+            str_starts_with($type, 'team_event_') => 'team_event_id',
+            $type === 'team_chat_mentioned' => 'chat_message_id',
             default => null,
         };
         if ($column === null || !array_key_exists($column, $recipient)) {
@@ -164,6 +217,12 @@ final class PushPublisher
         }
         $id = filter_var($recipient[$column], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         return $id === false ? null : $id;
+    }
+
+    private function teamType(string $type): bool
+    {
+        return str_starts_with($type, 'team_task_') || str_starts_with($type, 'team_event_')
+            || $type === 'team_chat_mentioned';
     }
 
     private function hasBudget(): bool

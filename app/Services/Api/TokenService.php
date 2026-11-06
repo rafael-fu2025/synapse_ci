@@ -9,7 +9,9 @@ use App\Models\UserModel;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use Closure;
+use CodeIgniter\Database\BaseConnection;
 use Config\ApiTokens;
+use Config\Database;
 use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;
@@ -25,6 +27,7 @@ final class TokenService
     private ApiTokenModel $tokens;
     private UserModel $users;
     private AuthenticatedUser $authority;
+    private BaseConnection $db;
     private Closure $clock;
 
     public function __construct(
@@ -32,11 +35,13 @@ final class TokenService
         ?ApiTokenModel $tokens = null,
         ?UserModel $users = null,
         ?AuthenticatedUser $authority = null,
-        ?Closure $clock = null
+        ?Closure $clock = null,
+        ?BaseConnection $db = null
     ) {
         $this->config = $config ?? new ApiTokens();
-        $this->tokens = $tokens ?? new ApiTokenModel();
-        $this->users = $users ?? new UserModel();
+        $this->db = $db ?? Database::connect();
+        $this->tokens = $tokens ?? new ApiTokenModel($this->db);
+        $this->users = $users ?? new UserModel($this->db);
         $this->authority = $authority ?? new AuthenticatedUser();
         $this->clock = $clock ?? static fn (): int => time();
     }
@@ -124,48 +129,84 @@ final class TokenService
         if (preg_match('/^[0-9a-f]{64}$/', $refreshToken) !== 1) {
             return null;
         }
-        $row = $this->tokens->where('refresh_hash', self::hash($refreshToken))->first();
-        if ($row === null) {
-            return null;
-        }
-        $now = $this->now();
-        if ($row['rotated_at'] !== null || $row['revoked_at'] !== null
-            || strtotime((string) $row['refresh_expires_at']) < $now) {
-            // Replay or staleness is a family-wide compromise signal.
-            $this->revokeFamily((string) $row['family_id'], $now);
-            return null;
+
+        $db = $this->db;
+        if (!$db->transBegin()) {
+            throw new RuntimeException('Refresh transaction could not be started.');
         }
 
-        $identity = $this->authority->forIdentity((int) $row['user_id'], (int) $row['tenant_id']);
-        if ($identity === null || (int) $identity['auth_version'] !== (int) $row['auth_version']) {
-            $this->revokeAllForUser((int) $row['user_id'], (int) $row['tenant_id'], $now);
-            return null;
+        try {
+            $table = $db->protectIdentifiers($db->prefixTable('api_tokens'));
+            $lock = $db->DBDriver === 'MySQLi' ? ' FOR UPDATE' : '';
+            $query = $db->query("SELECT * FROM {$table} WHERE refresh_hash = ?{$lock}", [self::hash($refreshToken)]);
+            if ($query === false) {
+                throw new RuntimeException('Refresh token could not be locked.');
+            }
+            $row = $query->getRowArray();
+            if ($row === null) {
+                if (!$db->transCommit()) {
+                    throw new RuntimeException('Refresh transaction could not be committed.');
+                }
+                return null;
+            }
+
+            $now = $this->now();
+            if ($row['rotated_at'] !== null || $row['revoked_at'] !== null
+                || strtotime((string) $row['refresh_expires_at']) < $now) {
+                // The row lock serializes replay detection with successor creation. A losing
+                // concurrent request therefore revokes the successor before returning failure.
+                $this->revokeFamily((string) $row['family_id'], $now);
+                if (!$db->transCommit()) {
+                    throw new RuntimeException('Refresh compromise revocation could not be committed.');
+                }
+                return null;
+            }
+
+            $identity = $this->authority->forIdentity((int) $row['user_id'], (int) $row['tenant_id']);
+            if ($identity === null || (int) $identity['auth_version'] !== (int) $row['auth_version']) {
+                $this->revokeAllForUser((int) $row['user_id'], (int) $row['tenant_id'], $now);
+                if (!$db->transCommit()) {
+                    throw new RuntimeException('Refresh identity revocation could not be committed.');
+                }
+                return null;
+            }
+
+            $accessToken = bin2hex(random_bytes(32));
+            $nextRefresh = bin2hex(random_bytes(32));
+            $retired = $this->dateTime($now);
+            if (!$this->tokens->update($row['id'], ['rotated_at' => $retired, 'revoked_at' => $retired])) {
+                throw new RuntimeException('Refresh token could not be retired.');
+            }
+            if ($this->tokens->insert([
+                'tenant_id' => (int) $row['tenant_id'],
+                'user_id' => (int) $row['user_id'],
+                'auth_version' => (int) $identity['auth_version'],
+                'token_hash' => self::hash($accessToken),
+                'refresh_hash' => self::hash($nextRefresh),
+                'family_id' => (string) $row['family_id'],
+                'device_label' => $row['device_label'],
+                'created_ip' => $row['created_ip'],
+                'access_expires_at' => $this->dateTime($now + $this->config->accessTtl),
+                'refresh_expires_at' => $this->dateTime($now + $this->config->refreshTtl),
+            ]) === false) {
+                throw new RuntimeException('Refresh successor could not be issued.');
+            }
+            if (!$db->transCommit()) {
+                throw new RuntimeException('Refresh transaction could not be committed.');
+            }
+            CurrentTenant::set((int) $identity['tenant_id']);
+
+            return ['identity' => $identity, 'token' => [
+                'token_type' => 'Bearer',
+                'access_token' => $accessToken,
+                'refresh_token' => $nextRefresh,
+                'access_expires_at' => $this->iso($now + $this->config->accessTtl),
+            ]];
+        } catch (\Throwable $error) {
+            $db->transRollback();
+            $db->resetTransStatus();
+            throw $error;
         }
-
-        $accessToken = bin2hex(random_bytes(32));
-        $nextRefresh = bin2hex(random_bytes(32));
-        $this->tokens->insert([
-            'tenant_id' => (int) $row['tenant_id'],
-            'user_id' => (int) $row['user_id'],
-            'auth_version' => (int) $identity['auth_version'],
-            'token_hash' => self::hash($accessToken),
-            'refresh_hash' => self::hash($nextRefresh),
-            'family_id' => (string) $row['family_id'],
-            'device_label' => $row['device_label'],
-            'created_ip' => $row['created_ip'],
-            'access_expires_at' => $this->dateTime($now + $this->config->accessTtl),
-            'refresh_expires_at' => $this->dateTime($now + $this->config->refreshTtl),
-        ]);
-        $retired = $this->dateTime($now);
-        $this->tokens->update($row['id'], ['rotated_at' => $retired, 'revoked_at' => $retired]);
-        CurrentTenant::set((int) $identity['tenant_id']);
-
-        return ['identity' => $identity, 'token' => [
-            'token_type' => 'Bearer',
-            'access_token' => $accessToken,
-            'refresh_token' => $nextRefresh,
-            'access_expires_at' => $this->iso($now + $this->config->accessTtl),
-        ]];
     }
 
     /** End the session family that the presented access token belongs to. */

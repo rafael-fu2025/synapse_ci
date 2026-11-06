@@ -150,7 +150,8 @@ final class NotificationService
             ->where('id', $stored['patient_person_id'])->where('deleted_at', null)->get()->getRowArray();
         if ($person !== null && $person['kind'] === 'student') {
             $key = ['tenant_id' => $stored['tenant_id'], 'referral_id' => $stored['id'], 'type' => 'student_referral'];
-            $existing = $db->table('notifications')->where($key)->get()->getRowArray();
+            $existing = $db->table('notifications')->where('tenant_id', $stored['tenant_id'])
+                ->where('referral_id', $stored['id'])->where('type', 'student_referral')->get()->getRowArray();
             if ($existing !== null) {
                 if ((int) $existing['recipient_person_id'] !== (int) $stored['patient_person_id']
                     || $existing['recipient_user_id'] !== null || $existing['appointment_id'] !== null
@@ -158,7 +159,8 @@ final class NotificationService
                     throw new RuntimeException('Invalid student referral notification shape.');
                 }
             } else {
-                if (!$db->table('notifications')->insert($key + ['recipient_person_id' => $stored['patient_person_id'],
+                if (!$db->table('notifications')->insert(['tenant_id' => $stored['tenant_id'], 'referral_id' => $stored['id'],
+                    'type' => 'student_referral', 'recipient_person_id' => $stored['patient_person_id'],
                     'recipient_user_id' => null, 'created_at' => gmdate('Y-m-d H:i:s'), 'read_at' => null])) {
                     throw new RuntimeException('Unable to save student referral notification.');
                 }
@@ -424,17 +426,27 @@ final class NotificationService
     private function targetColumns(): array
     {
         $present = Database::connect()->getFieldNames('notifications');
-        return array_values(array_intersect(['appointment_id', 'announcement_id', 'survey_id'], $present));
+        return array_values(array_intersect([
+            'appointment_id', 'announcement_id', 'survey_id',
+            'team_unit', 'team_event_id', 'team_task_id', 'team_comment_id',
+            'chat_unit', 'chat_message_id',
+        ], $present));
     }
 
-    /**
-     * The record a native client can open for this notice. Referrals, team events,
-     * team tasks, chat mentions and workflow alerts have no mobile surface yet and
-     * report a null target rather than a destination the client cannot honour.
-     */
+    /** The exact record a native client can open for this currently authorized notice. */
     private static function target(array $row): ?array
     {
-        $kind = match ($row['type'] ?? '') {
+        $type = (string) ($row['type'] ?? '');
+        if (array_key_exists($type, self::TEAM_TASK_TITLES)) {
+            return self::teamTarget('team_task', $row['team_unit'] ?? null, $row['team_task_id'] ?? null);
+        }
+        if (array_key_exists($type, self::TEAM_EVENT_TITLES)) {
+            return self::teamTarget('team_event', $row['team_unit'] ?? null, $row['team_event_id'] ?? null);
+        }
+        if ($type === 'team_chat_mentioned') {
+            return self::teamTarget('team_chat_message', $row['chat_unit'] ?? null, $row['chat_message_id'] ?? null);
+        }
+        $kind = match ($type) {
             'appointment_confirmed' => 'appointment',
             'announcement_published' => 'announcement',
             'survey_published' => 'survey',
@@ -445,6 +457,15 @@ final class NotificationService
         if (!array_key_exists($column, $row)) { return null; }
         $id = filter_var($row[$column], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         return $id === false ? null : ['kind' => $kind, 'id' => $id];
+    }
+
+    private static function teamTarget(string $kind, mixed $unit, mixed $id): ?array
+    {
+        $id = filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if (!in_array($unit, TeamAccess::UNITS, true) || $id === false) {
+            return null;
+        }
+        return ['kind' => $kind, 'unit' => $unit, 'id' => $id];
     }
 
     private function inbox(array $scope): BaseBuilder

@@ -11,11 +11,13 @@ export type PushPlatform = 'android' | 'ios';
 export function registerDeviceToken(
   token: string,
   platform: PushPlatform,
+  installationId: string,
+  capabilities: string[],
   deviceLabel?: string,
 ): Promise<{ data: { registered: boolean } }> {
   return request('api/v1/push/token', {
     method: 'POST',
-    body: { token, platform, device_label: deviceLabel },
+    body: { token, platform, installation_id: installationId, capabilities, device_label: deviceLabel },
   });
 }
 

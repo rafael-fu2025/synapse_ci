@@ -8,6 +8,8 @@ const mockOnMessage = jest.fn();
 const mockCheck = jest.fn();
 const mockRequestPermission = jest.fn();
 
+jest.mock('../src/lib/secureNonce', () => ({ secureClientNonce: () => '11111111-1111-4111-8111-111111111111' }));
+jest.mock('../src/lib/keychain', () => ({ getOrCreateInstallationId: (create: () => string) => Promise.resolve(create()) }));
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
 jest.mock('../src/api/client', () => ({ ...jest.requireActual('../src/api/client'), request: jest.fn() }));
 // The v26 messaging API is modular: `getMessaging()` returns the instance and the
@@ -43,7 +45,13 @@ describe('device registration', () => {
     await registerDevice();
     expect(mockRequest).toHaveBeenCalledWith('api/v1/push/token', {
       method: 'POST',
-      body: { token: 'device-token-1', platform, device_label: undefined },
+      body: {
+        token: 'device-token-1',
+        platform,
+        installation_id: '11111111-1111-4111-8111-111111111111',
+        capabilities: ['team_workspace'],
+        device_label: undefined,
+      },
     });
   });
 

@@ -1,3 +1,5 @@
+import { getOrCreateInstallationId } from '../keychain';
+import { secureClientNonce } from '../secureNonce';
 import { registerDeviceToken, revokeDeviceToken } from '../../api/endpoints/push';
 import { currentDeviceToken, currentPushPlatform, onPushTokenRefresh, requestPushPermission } from './fcm';
 
@@ -24,7 +26,8 @@ export async function registerDevice(): Promise<void> {
   }
   registeredToken = token;
   try {
-    await registerDeviceToken(token, currentPushPlatform());
+    const installationId = await getOrCreateInstallationId(secureClientNonce);
+    await registerDeviceToken(token, currentPushPlatform(), installationId, ['team_workspace']);
   } catch {
     // A failed registration only costs the push channel.
   }
@@ -53,6 +56,8 @@ export async function revokeDevice(): Promise<void> {
 export function watchPushToken(): () => void {
   return onPushTokenRefresh((token) => {
     registeredToken = token;
-    registerDeviceToken(token, currentPushPlatform()).catch(() => undefined);
+    getOrCreateInstallationId(secureClientNonce)
+      .then(installationId => registerDeviceToken(token, currentPushPlatform(), installationId, ['team_workspace']))
+      .catch(() => undefined);
   });
 }

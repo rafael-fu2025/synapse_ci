@@ -24,7 +24,6 @@ import { SectionHeading } from '../../../components/SectionHeading';
 import { IconAction } from '../../../components/IconAction';
 import { StatusPill } from '../../../components/StatusPill';
 import { CardOutline } from '../../../components/CardOutline';
-import { AppointmentArt } from '../../appointments/components/AppointmentArt';
 import { ApiError } from '../../../api/client';
 import type { StaffQueueSummary, StaffQueueTicket, QueueStage, QueueUnit } from '../../../api/endpoints/staffQueue';
 import { useStaffQueueSummary } from '../hooks';
@@ -92,8 +91,9 @@ export function StaffQueueScreen() {
   return (
     <Screen scroll={false} bodyStyle={styles.screenBody} header={
       <PageHeader
-        title="Queue monitor"
-        subtitle="Read-only · actions on workstation"
+        edgeToEdge
+        title="Queue Monitor"
+        subtitle="Read-Only"
         onBack={navigation.goBack}
         action={
           <IconAction
@@ -127,9 +127,6 @@ export function StaffQueueScreen() {
           <>
             <View style={styles.heroShell} accessible accessibilityLabel={`Combined queue. ${totals.counts.waiting} waiting. Oldest ticket age ${duration(totals.oldest)}. Average ticket age ${duration(totals.average)}. Active ${totals.active}.`}>
               <LinearGradient colors={theme.mode === 'dark' ? ['#1c1c1c', '#0f0f0f'] : ['#520000', '#800000']} style={styles.hero}>
-                {summaries.map(summary => (
-                  <AppointmentArt key={summary.unit} unit={summary.unit} height={104} opacity={0.09} color="#ffffff" />
-                ))}
                 <View style={styles.heroTop}>
                   <View>
                     <Text style={styles.heroEyebrow}>LIVE OPERATIONS</Text>
@@ -364,7 +361,7 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     screenBody: { paddingHorizontal: 0, paddingBottom: 0 },
     scroll: { flex: 1 },
-    content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 16 },
+    content: { paddingHorizontal: 18, paddingTop: 0, paddingBottom: 16 },
     alert: {
       flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 12,
       paddingHorizontal: 12, paddingVertical: 9, borderRadius: 11,
@@ -374,7 +371,7 @@ function createStyles(theme: Theme) {
     loading: { paddingVertical: 32, gap: 9, alignItems: 'center' },
     muted: { fontSize: 9.5, fontFamily: font.body, color: theme.ink500 },
 
-    heroShell: { borderRadius: 15, overflow: 'hidden', marginBottom: 7 },
+    heroShell: { borderRadius: 15, overflow: 'hidden', marginTop: 10, marginBottom: 7 },
     hero: { padding: 15, gap: 13, overflow: 'hidden' },
     heroTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
     heroEyebrow: { color: '#ffffff', fontFamily: font.body, fontSize: 8.5, fontWeight: '800', letterSpacing: 1.1 },

@@ -1,6 +1,7 @@
 import * as Keychain from 'react-native-keychain';
 
 const SERVICE = 'com.humus.synapse.session';
+const INSTALLATION_SERVICE = 'com.humus.synapse.installation';
 
 // Native writes are asynchronous. Keep rotation, sign-out deletion and a subsequent
 // sign-in ordered so a late native write cannot resurrect a signed-out credential.
@@ -9,6 +10,22 @@ function enqueueWrite(operation: () => Promise<void>): Promise<void> {
   const result = writes.then(operation);
   writes = result.catch(() => undefined);
   return result;
+}
+
+export async function getOrCreateInstallationId(create: () => string): Promise<string> {
+  try {
+    const existing = await Keychain.getGenericPassword({ service: INSTALLATION_SERVICE });
+    if (existing && /^[0-9a-f-]{36}$/i.test(existing.password)) { return existing.password; }
+  } catch {
+    // Continue to create a new device-only installation identifier.
+  }
+  const id = create();
+  const saved = await Keychain.setGenericPassword('synapse-installation', id, {
+    service: INSTALLATION_SERVICE,
+    accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+  if (saved === false) { throw new Error('Secure installation storage is unavailable.'); }
+  return id;
 }
 
 /** The refresh token is the only long-lived credential; it stays in encrypted storage. */

@@ -13,29 +13,28 @@ import { Theme, font, palette, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatDate, formatTime } from '../../../lib/format';
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotificationHistory } from '../hooks';
+import { navigateAuthorizedIntent } from '../../workspace/NavigationIntentGate';
+import { useWorkspace } from '../../workspace/WorkspaceContext';
+import { useAuth } from '../../../store/auth';
 import { notificationDestination, NotificationDestination } from '../targets';
 import { RootStackParamList } from '../../../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-/** The notice names a record; the client owns the screen that shows it. */
-function openDestination(navigation: Nav, destination: NotificationDestination): void {
-  if (destination.kind === 'announcement') {
-    navigation.navigate('AnnouncementDetail', { id: destination.id });
-  } else if (destination.kind === 'survey') {
-    navigation.navigate('SurveyForm', { id: destination.id });
-  } else {
-    navigation.navigate('AppTabs', {
-      screen: 'Visits',
-      params: { screen: 'AppointmentDetail', params: { id: destination.id }, initial: false },
-    });
-  }
+function openDestination(
+  destination: NotificationDestination,
+  profile: ReturnType<typeof useAuth>['profile'],
+  openAuthorizedUnit: ReturnType<typeof useWorkspace>['openAuthorizedUnit'],
+): void {
+  navigateAuthorizedIntent(destination, profile, openAuthorizedUnit);
 }
 
 export function NotificationsScreen() {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const navigation = useNavigation<Nav>();
+  const { profile } = useAuth();
+  const { openAuthorizedUnit } = useWorkspace();
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const query = useNotificationHistory(page, filter);
@@ -118,7 +117,7 @@ export function NotificationsScreen() {
                 item={item}
                 disabled={busy}
                 onRead={() => { markAll.reset(); markRead.mutate(item.id); }}
-                onOpen={destination ? () => openDestination(navigation, destination) : undefined}
+                onOpen={destination ? () => openDestination(destination, profile, openAuthorizedUnit) : undefined}
               />
             );
           }}

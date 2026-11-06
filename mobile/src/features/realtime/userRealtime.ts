@@ -24,11 +24,11 @@ export function validateUserGrant(value: unknown, identity: RealtimeIdentity): R
   return grant;
 }
 
-// Hints are payload-free: the socket says "stale", the HTTP refetch says "what".
-// Events without a mobile surface (team.chat.changed, ai.insights.*) are ignored.
+// Hints carry no record content: the socket says "stale", authorized HTTP says "what".
 const EMPTY_HINT = (data: unknown): boolean => Array.isArray(data) && data.length === 0;
+const TEAM_UNITS = ['clinic', 'guidance', 'facilities'] as const;
 
-function targetsFor(event: string, data: unknown): RealtimeTarget[] {
+function targetsFor(identity: RealtimeIdentity, event: string, data: unknown): RealtimeTarget[] {
   switch (event) {
     case 'notifications.changed':
       // The bell inbox and every paged history query share the 'notifications' prefix,
@@ -49,16 +49,29 @@ function targetsFor(event: string, data: unknown): RealtimeTarget[] {
         ]
         : [];
     }
+    case 'team.tasks.changed':
+    case 'team.calendar.changed':
+    case 'team.chat.changed': {
+      const unit = data !== null && typeof data === 'object' ? (data as { unit?: unknown }).unit : undefined;
+      if (typeof unit !== 'string' || !TEAM_UNITS.includes(unit as (typeof TEAM_UNITS)[number])) {
+        return [];
+      }
+      const resource = event === 'team.tasks.changed' ? 'team' : event === 'team.calendar.changed' ? 'team-calendar' : 'team-chat';
+      return [{ key: [resource, identity.tenantId, identity.userId, unit], exact: false }];
+    }
     default:
       return [];
   }
 }
 
-function reconcileTargets(): RealtimeTarget[] {
+function reconcileTargets(identity: RealtimeIdentity): RealtimeTarget[] {
   return [
     { key: queryKeys.notifications, exact: false },
     { key: queryKeys.queue, exact: true },
     { key: ['appointments'], exact: false },
+    { key: ['team', identity.tenantId, identity.userId], exact: false },
+    { key: ['team-calendar', identity.tenantId, identity.userId], exact: false },
+    { key: ['team-chat', identity.tenantId, identity.userId], exact: false },
   ];
 }
 
@@ -75,8 +88,8 @@ export function startUserRealtime(client: QueryClient, identity: RealtimeIdentit
       reconcileMs: RECONCILE_MS,
       fetchGrant: () => userRealtimeGrant(),
       validateGrant: value => validateUserGrant(value, identity),
-      targetsFor,
-      reconcileTargets,
+      targetsFor: (event, data) => targetsFor(identity, event, data),
+      reconcileTargets: () => reconcileTargets(identity),
     };
     engines.set(engineKey, options);
   }

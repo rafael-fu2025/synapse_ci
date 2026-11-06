@@ -3,7 +3,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 export type RootStackParamList = {
-  AppTabs: NavigatorScreenParams<AppTabsParamList> | undefined;
+  AppTabs: NavigatorScreenParams<ContextTabsParamList> | undefined;
   Announcements: undefined;
   AnnouncementDetail: { id: number };
   Surveys: undefined;
@@ -11,11 +11,44 @@ export type RootStackParamList = {
   Notifications: undefined;
 };
 
-export type AppTabsParamList = {
+export type ContextTabsParamList = {
+  PersonalContext: NavigatorScreenParams<PersonalTabsParamList> | undefined;
+  WorkspaceContext: NavigatorScreenParams<WorkspaceTabsParamList> | undefined;
+};
+
+export type PersonalTabsParamList = {
   Home: NavigatorScreenParams<HomeStackParamList> | undefined;
   Visits: NavigatorScreenParams<VisitsStackParamList> | undefined;
   Queue: NavigatorScreenParams<QueueStackParamList> | undefined;
   Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
+};
+
+/** Backward-compatible alias for existing personal screens. */
+export type AppTabsParamList = PersonalTabsParamList;
+
+export type WorkspaceTabsParamList = {
+  TeamBoard: NavigatorScreenParams<TeamTasksStackParamList> | undefined;
+  MyTasks: NavigatorScreenParams<MyTasksStackParamList> | undefined;
+  TeamChat: { targetMessageId?: number } | undefined;
+  TeamCalendar: NavigatorScreenParams<TeamCalendarStackParamList> | undefined;
+};
+
+export type TeamCalendarStackParamList = {
+  TeamCalendarHome: undefined;
+  TeamCalendarEventDetail: { id: number };
+  TeamCalendarEventForm: { id?: number; initialDate?: string } | undefined;
+};
+
+export type TeamTasksStackParamList = {
+  TeamTaskList: undefined;
+  TeamTaskDetail: { id: number };
+  TeamTaskForm: { id?: number } | undefined;
+};
+
+export type MyTasksStackParamList = {
+  MyTaskList: undefined;
+  TeamTaskDetail: { id: number };
+  TeamTaskForm: { id?: number } | undefined;
 };
 
 export type HomeStackParamList = {
@@ -46,15 +79,15 @@ export type ProfileStackParamList = {
 
 export type HomeNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<HomeStackParamList, 'Dashboard'>,
-  CompositeNavigationProp<BottomTabNavigationProp<AppTabsParamList, 'Home'>, NativeStackNavigationProp<RootStackParamList>>
+  CompositeNavigationProp<BottomTabNavigationProp<PersonalTabsParamList, 'Home'>, NativeStackNavigationProp<RootStackParamList>>
 >;
 
 export type ProfileNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<ProfileStackParamList, 'ProfileHome'>,
-  BottomTabNavigationProp<AppTabsParamList, 'Profile'>
+  BottomTabNavigationProp<PersonalTabsParamList, 'Profile'>
 >;
 
 export type QueueNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<QueueStackParamList, 'QueueBoard'>,
-  BottomTabNavigationProp<AppTabsParamList, 'Queue'>
+  BottomTabNavigationProp<PersonalTabsParamList, 'Queue'>
 >;

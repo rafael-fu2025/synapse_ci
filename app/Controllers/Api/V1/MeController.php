@@ -7,6 +7,8 @@ namespace App\Controllers\Api\V1;
 use App\Models\EmployeeProfileModel;
 use App\Models\HealthProfileModel;
 use App\Models\StudentProfileModel;
+use App\Services\TeamAccess;
+use App\Services\TeamEntitlements;
 use App\Services\UniversityEmail;
 use App\Services\ProfileAvatar;
 use App\Services\ProfilePhotoService;
@@ -30,12 +32,17 @@ final class MeController extends ApiV1Controller
                     $staffUnits[] = $unit;
                 }
             }
+            $teamEntitlements = (new TeamEntitlements(
+                TeamAccess::bearer(Database::connect()),
+                config('TeamWorkspace')->enabled,
+                Database::connect()
+            ))->forIdentity($identity);
             return $this->ok([
                 'user' => $this->presentUser($identity),
                 'entitlements' => [
                     'portal' => true,
                     'staff_queue_units' => $staffUnits,
-                ],
+                ] + $teamEntitlements,
                 'photo_url' => 'api/v1/me/photo',
             ]);
         });

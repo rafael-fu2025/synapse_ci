@@ -60,6 +60,9 @@ let appointmentDetail: jest.Mock;
 let staffClinic: jest.Mock;
 let staffGuidance: jest.Mock;
 let staffAll: jest.Mock;
+let teamTasks: jest.Mock;
+let teamCalendar: jest.Mock;
+let teamChat: jest.Mock;
 
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
@@ -84,6 +87,9 @@ beforeEach(() => {
   staffClinic = jest.fn().mockResolvedValue(['fresh']);
   staffGuidance = jest.fn().mockResolvedValue(['fresh']);
   staffAll = jest.fn().mockResolvedValue(['fresh']);
+  teamTasks = jest.fn().mockResolvedValue(['fresh']);
+  teamCalendar = jest.fn().mockResolvedValue(['fresh']);
+  teamChat = jest.fn().mockResolvedValue(['fresh']);
   observe(queryKeys.notifications, notifications);
   observe(queryKeys.notificationHistory(1, 'all'), notificationHistory);
   observe(queryKeys.queue, queue);
@@ -92,6 +98,9 @@ beforeEach(() => {
   observe(queryKeys.staffQueue('clinic'), staffClinic);
   observe(queryKeys.staffQueue('guidance'), staffGuidance);
   observe(queryKeys.staffQueue('all'), staffAll);
+  observe(['team', IDENTITY.tenantId, IDENTITY.userId, 'clinic', 'tasks', { scope: 'team' }], teamTasks);
+  observe(['team-calendar', IDENTITY.tenantId, IDENTITY.userId, 'clinic', 'list'], teamCalendar);
+  observe(['team-chat', IDENTITY.tenantId, IDENTITY.userId, 'clinic', 'history'], teamChat);
   jest.spyOn(Math, 'random').mockReturnValue(1);
 });
 afterEach(() => {
@@ -227,7 +236,21 @@ describe('socket protocol and hint dispatch', () => {
     // Units without a mobile surface or wrong shapes never refresh anything.
     hint(ws, 'queue.invalidated', { unit: 'pharmacy', date: '2026-01-01' });
     hint(ws, 'queue.invalidated', { unit: 7 });
+    hint(ws, 'team.tasks.changed', { unit: 'clinic' });
+    await flush(100);
+    expect(teamTasks).toHaveBeenCalledTimes(3);
+    expect(teamCalendar).toHaveBeenCalledTimes(2);
+    expect(teamChat).toHaveBeenCalledTimes(2);
+    hint(ws, 'team.calendar.changed', { unit: 'clinic' });
+    await flush(100);
+    expect(teamCalendar).toHaveBeenCalledTimes(3);
+    expect(teamTasks).toHaveBeenCalledTimes(3);
     hint(ws, 'team.chat.changed', { unit: 'clinic' });
+    await flush(100);
+    expect(teamChat).toHaveBeenCalledTimes(3);
+    hint(ws, 'team.chat.changed', { unit: 'guidance' });
+    hint(ws, 'team.tasks.changed', { unit: 'Clinic' });
+    hint(ws, 'team.calendar.changed', []);
     hint(ws, 'ai.insights.changed', { unit: 'clinic' });
     hint(ws, 'login.carousel.changed');
     hint(ws, 'notifications.changed', {});
@@ -243,7 +266,10 @@ describe('socket protocol and hint dispatch', () => {
     expect(staffClinic).toHaveBeenCalledTimes(1);
     expect(staffGuidance).toHaveBeenCalledTimes(1);
     expect(staffAll).toHaveBeenCalledTimes(2);
-    expect(client.getQueryCache().getAll()).toHaveLength(8);
+    expect(teamTasks).toHaveBeenCalledTimes(3);
+    expect(teamCalendar).toHaveBeenCalledTimes(3);
+    expect(teamChat).toHaveBeenCalledTimes(3);
+    expect(client.getQueryCache().getAll()).toHaveLength(11);
   });
 
   it.each(['clinic', 'guidance'] as const)(
@@ -402,7 +428,13 @@ describe('hook gating', () => {
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(1);
     await act(async () => { onlineManager.setOnline(true); await flush(); });
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(2);
-    expect(notifications).toHaveBeenCalledTimes(2);
+    // React Query's online reconnect and the fresh socket lifetime each repair active data.
+    expect(notifications).toHaveBeenCalledTimes(3);
+    // Workspace queries use the fresh socket reconciliation; React Query's reconnect
+    // did not independently refetch these scoped active observers in this lifetime.
+    expect(teamTasks).toHaveBeenCalledTimes(2);
+    expect(teamCalendar).toHaveBeenCalledTimes(2);
+    expect(teamChat).toHaveBeenCalledTimes(2);
     expect(jest.getTimerCount()).toBeGreaterThan(0);
     act(() => renderer!.unmount()); renderer = undefined;
     expect(latest().close).toHaveBeenCalledTimes(1);

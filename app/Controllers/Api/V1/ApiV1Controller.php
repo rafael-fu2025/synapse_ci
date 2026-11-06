@@ -111,10 +111,10 @@ abstract class ApiV1Controller extends BaseController
         return ApiContext::identity();
     }
 
-    /** Client-safe identity view; session bookkeeping keys never cross the wire. */
+    /** Client-safe identity view; credential and session bookkeeping keys never cross the wire. */
     protected function presentUser(array $identity): array
     {
-        unset($identity['logged_in']);
+        unset($identity['auth_version'], $identity['logged_in']);
         return $identity;
     }
 

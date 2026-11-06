@@ -69,7 +69,7 @@ Open Team chat from the board/calendar or visit `/clinic/teams/chat`, `/guidance
 - The composer uses a `+ | message | send icon` layout. The message field grows from one to four lines, then scrolls. Enter sends; Shift+Enter inserts a newline. IME composition does not submit prematurely.
 - Type `@` to search current channel members. Choose with the mouse, or Up/Down then Enter/Tab; Escape dismisses the suggestions. Selected mentions are highlighted in sent messages. Editing through a mention removes its identity binding; edits before it shift its range. The server validates member identity and exact text using UTF-16 offsets, including emoji. Validated mentions generate a targeted in-app bell notification after the mention-notification migration is deployed. Self-mentions do not notify, and repeated mentions of the same person in one message create only one notice. There is no email, SMS, or device-push delivery.
 - Choose Reply on a message to quote its sender and text in your next message; cancel the preview to send normally. Reply targets must belong to the same tenant/workstation. Replies remain chronological channel messages, not separate threads.
-- The `+` opens a searchable task picker with multiple selection (up to 20 references). Remove a selected task using its chip. Search returns up to 50 active tasks; narrow the search for additional results. References must belong to active tasks in the same tenant/workstation when sent. They link to existing tasks; no task data is copied. Task title visibility follows workstation membership.
+- The `+` opens a searchable task picker with multiple selection (up to 20 references). Remove a selected task using its chip. Search returns up to 40 active tasks; narrow the search for additional results. References must belong to active tasks in the same tenant/workstation when sent. They link to existing tasks; no task data is copied. Task title visibility follows workstation membership.
 - The server stores UTC timestamps and the UI shows Asia/Manila day separators/times. Sender names resolve only through current eligible members; former senders are labeled Former member.
 - Mention notifications open the exact authorized message using `?message=<id>#chat-message-<id>`, even if it is older than the latest page. The target is focused and highlighted; browsing this historical page does not advance the chat read cursor. Show latest resumes live chat. Invalid, foreign-tenant, or other-department targets are rejected.
 - History is cursor-paginated at 40 messages per response. The browser keeps at most 400 messages in its current window. Loading older history pauses updates; Show latest resumes them. It does not load the whole channel into memory.
@@ -117,11 +117,25 @@ At most one notice is delivered to each recipient for an event/task save. Commen
 
 **Deployment required:** back up the database and apply `2026-10-23-000002_AddTeamsNotifications` through the normal migration workflow (`php spark migrate`) before enabling these producers. It adds nullable Teams references, tenant/unit-safe foreign keys, shape validation and per-recipient delivery uniqueness while preserving existing notices/read state. It is forward-only and refuses destructive rollback. It was validated on disposable schemas, then applied with explicit operator approval to local `humus_db` on 2026-10-23 (batch 29). Only this migration was applied; older pending migrations were left untouched. A fresh native SQL backup was retained under `writable/backups/humus_db_before_teams_notifications_20261023_070734_516ede.sql`. Verification preserved all 5,953 original non-history rows across 56 tables, including notification read state, and confirmed the new columns, constraints and migration record. Evidence: `writable/backups/teams_deployment_20261023_070734_243e301d.json`. Maintenance was cleared after verification. Deploy application and schema together: a notification-bearing mutation without the required schema fails/rolls back. Events/tasks created before deployment are not automatically backfilled; an unchanged save does not invent a new invitation.
 
-Notifications are in-app, not email/SMS/OS push. Opening the bell refreshes immediately; visible-page fallback polling normally reconciles within 30 seconds, or within 60 seconds when realtime is ready. Do not use Teams as an emergency clinical communication channel.
+Event participants receive persistent in-app invitations/notices for material changes. Compatible,
+capability-advertising mobile installations may also receive privacy-generic device push when the
+server push feature is enabled; no title, description, participant name, comment, or chat body enters
+the payload. Events do not send email/SMS or scheduled reminders.
+
+## Mobile Team Workspace
+
+The native app keeps Personal as the default context and exposes Team Board, My Tasks, Team Chat, and
+Team Calendar only from server-derived `/api/v1/me` entitlements. Clinic, Guidance, and BMG Facilities
+remain separate workspaces; multi-unit users choose one and may switch explicitly. Bearer APIs recheck
+membership on every request, namespace caches by tenant/user/unit, and immediately purge protected data
+on 401/403. Task/event creation and task comments use UUID-v4 idempotency keys; updates retain optimistic
+versions; chat retains its immutable nonce/cursor rules. Attachments and patient links remain unsupported.
 
 ## Deferred features
 
-Recurring events/tasks, attachments, direct messages, custom boards, a support center, a global chat unread badge, email/SMS/device-push delivery and scheduled reminders remain deferred. My tasks and My schedule remain available alongside event/task bell notices. Developer support remains separate from workstation chat.
+Recurring events/tasks, attachments, direct messages, custom boards, a support center, guaranteed push
+delivery, and scheduled reminders remain deferred. My tasks and My schedule remain available alongside
+event/task bell notices. Developer support remains separate from workstation chat.
 
 ## Focused validation
 

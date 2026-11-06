@@ -70,6 +70,20 @@ jobs:
           tests/unit/CarouselLoginSlidesTest.php
           tests/feature/CarouselAdminRoutesTest.php
           tests/feature/CarouselDefaultAssetAccessTest.php
+          tests/database/TeamsNotificationInboxTest.php
+          tests/database/MobileTokenUserReferenceMigrationTest.php
+      - name: Team Workspace private-fixture and security regressions
+        run: >-
+          php vendor/bin/phpunit --configuration phpunit.ci.xml --no-coverage
+          tests/feature/TeamApiHttpTest.php
+          tests/database/TeamAccessTest.php
+          tests/unit/TeamWorkspaceConfigTest.php
+          tests/unit/TeamWorkspaceInvalidationTest.php
+          tests/unit/NotificationTargetTest.php
+          tests/unit/PushPublisherTest.php
+          tests/unit/TeamPushRecipientTest.php
+          tests/unit/PushInstallationCapabilityTest.php
+          tests/unit/RequestContextFilterTest.php
       - name: Queue JavaScript regressions
         run: node --test tests/browser/queue.test.cjs
 

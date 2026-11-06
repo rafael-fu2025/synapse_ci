@@ -17,6 +17,9 @@ describe('notification deep-link targets', () => {
     expect(notificationDestination(item({ kind: 'appointment', id: 42 }))).toEqual({ kind: 'appointment', id: 42 });
     expect(notificationDestination(item({ kind: 'announcement', id: 41 }))).toEqual({ kind: 'announcement', id: 41 });
     expect(notificationDestination(item({ kind: 'survey', id: 7 }))).toEqual({ kind: 'survey', id: 7 });
+    expect(notificationDestination(item({ kind: 'team_task', unit: 'clinic', id: 8 }))).toEqual({ kind: 'team_task', unit: 'clinic', id: 8 });
+    expect(notificationDestination(item({ kind: 'team_event', unit: 'guidance', id: 9 }))).toEqual({ kind: 'team_event', unit: 'guidance', id: 9 });
+    expect(notificationDestination(item({ kind: 'team_chat_message', unit: 'facilities', id: 10 }))).toEqual({ kind: 'team_chat_message', unit: 'facilities', id: 10 });
   });
 
   it('opens nothing for notices without a mobile surface', () => {
@@ -33,5 +36,8 @@ describe('notification deep-link targets', () => {
     expect(notificationDestination(item({ kind: 'appointment', id: '42' }))).toBeNull();
     expect(notificationDestination(item({ kind: 'appointment' }))).toBeNull();
     expect(notificationDestination(item({ kind: 'appointment', id: Number.MAX_SAFE_INTEGER + 2 }))).toBeNull();
+    expect(notificationDestination(item({ kind: 'team_task', unit: 'Clinic', id: 1 }))).toBeNull();
+    expect(notificationDestination(item({ kind: 'team_event', unit: 'pharmacy', id: 1 }))).toBeNull();
+    expect(notificationDestination(item({ kind: 'team_chat_message', id: 1 }))).toBeNull();
   });
 });

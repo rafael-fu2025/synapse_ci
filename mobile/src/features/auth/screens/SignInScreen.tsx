@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Eye, EyeOff, ShieldCheck, TriangleAlert } from 'lucide-react-native';
+import { Eye, EyeOff, Moon, Sun, ShieldCheck, TriangleAlert } from 'lucide-react-native';
 import { Action } from '../../../components/Action';
 import { TextField } from '../../../components/TextField';
 import { ApiError, NetworkError } from '../../../api/client';
@@ -13,7 +13,7 @@ import { LOGIN_SOCIAL_LINKS } from '../loginContent';
 import { useSignInCooldown } from '../useSignInCooldown';
 
 export function SignInScreen() {
-  const { theme } = useTheme();
+  const { theme, setPreference } = useTheme();
   const styles = makeStyles(theme);
   const { signIn } = useAuth();
 
@@ -221,6 +221,13 @@ export function SignInScreen() {
             <Text style={styles.help}>Trouble signing in? Contact your system administrator.</Text>
           </View>
         </ScrollView>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={theme.mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        onPress={() => setPreference(theme.mode === 'dark' ? 'light' : 'dark')}
+        style={({ pressed }) => [styles.themeToggle, pressed && styles.pressed]}>
+        {theme.mode === 'dark' ? <Sun size={20} color={theme.ink900} /> : <Moon size={20} color={theme.ink900} />}
+      </Pressable>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -230,6 +237,12 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.surface },
     flex: { flex: 1 },
+    themeToggle: {
+      position: 'absolute', top: 12, right: 16, width: 44, height: 44,
+      alignItems: 'center', justifyContent: 'center', borderRadius: 13,
+      backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.line,
+      elevation: 3, zIndex: 1,
+    },
     // ScrollView supplies flexGrow:1, so shorthand flex weights do not enforce a 30/70 split.
     // Reserve 30% explicitly; the scrollable form takes the remainder (all space when hidden).
     carouselRow: { height: '30%', flexGrow: 0, flexShrink: 0 },

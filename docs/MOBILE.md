@@ -180,12 +180,16 @@ representative production-performance benchmark.
 
 Personal portal (students & employees): appointments, live queue tickets, announcements, identified
 surveys, notifications, health summary, profile photo, records timeline, settings/dark mode — plus a
-**read-only** staff queue monitor for users holding `clinic.queue.read` / `guidance.queue.read`.
-All staff actions remain on the web workstation by design.
+**read-only** staff queue monitor for authorized staff. Users with server-derived Clinic, Guidance, or
+BMG Facilities membership also receive a separate Team Workspace with Team Board, My Tasks, Team Chat,
+and Team Calendar. The raised center navigation action switches contexts without changing identity;
+normal dual-context sessions always begin in Personal. Bulk administration, attachments, direct
+messages, patient/clinical links, recurring events, and offline mutation queues remain web/deferred.
 
 The public login carousel uses the existing WebSocket transport for change hints, with 120-second
-HTTP reconciliation while visible/online. Authenticated resources still use their documented polling
-cadences; this change does not add private mobile subscriptions.
+HTTP reconciliation while visible/online. Authenticated Personal and Workspace resources share one private user WebSocket. It carries only
+content-free invalidation hints; authorized HTTP snapshots remain the source of truth and focused polling
+repairs missed/bounded fanout.
 
 Deliberately out of scope for v1: offline write queue, biometric unlock, i18n, tablet layouts.
 
