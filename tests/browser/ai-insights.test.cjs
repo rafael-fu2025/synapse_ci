@@ -654,7 +654,7 @@ test('409 conflict marks the open review stale, disables decisions, and current 
   await samePage(h);
 });
 
-test('cancel queued job uses its fixed POST route then stops polling after terminal status', { timeout: 20000 }, async t => {
+test('cancel queued job uses its fixed POST route then stops pending-job polling', { timeout: 20000 }, async t => {
   const h = await open(t, { jobStatus: 'queued' });
   h.panel = render({ jobStatus: 'cancelled' }).panel;
   await submit(h, '/jobs/31/cancel');
@@ -662,13 +662,19 @@ test('cancel queued job uses its fixed POST route then stops polling after termi
   assert.equal(new URLSearchParams(h.posts()[0].body).get('csrf_fixture'), 'initial-token');
   await h.page.locator('[data-ai-pending="false"]').waitFor();
   assert.equal(await h.page.getByRole('button', { name: 'Cancel waiting request' }).count(), 0);
-  await h.page.clock.runFor(30000);
+  // Fast pending-job polling stops; the intentional 30-second status fallback remains.
+  await h.page.clock.runFor(29999);
+  assert.equal(await h.page.evaluate(() => window.fixtureCalls.filter(call => call.method === 'GET').length), 1);
   assert.equal(h.gets().length, 1);
+  await h.page.clock.runFor(1);
+  await until(() => h.gets().length === 2, 'Terminal status should use the slower fallback read');
+  await idle(h);
+  assert.equal(await h.page.evaluate(() => window.fixtureCalls.filter(call => call.method === 'GET').length), 2);
   assert.equal(h.posts().length, 1);
   await samePage(h);
 });
 
-test('poll only pending and visible; visibility resumes one read and terminal status stops timers', { timeout: 20000 }, async t => {
+test('pending-job polling pauses while hidden and slows after terminal status', { timeout: 20000 }, async t => {
   const h = await open(t, { jobStatus: 'running' });
   await h.page.clock.runFor(5000);
   await until(() => h.gets().length === 1, 'Running job should poll');
@@ -683,8 +689,13 @@ test('poll only pending and visible; visibility resumes one read and terminal st
   await until(() => h.gets().length === 2, 'Becoming visible should refresh status');
   await idle(h);
   await h.page.locator('[data-ai-pending="false"]').waitFor();
-  await h.page.clock.runFor(30000);
-  assert.equal(h.gets().length, 2, 'Terminal jobs do not poll');
+  await h.page.clock.runFor(29999);
+  assert.equal(await h.page.evaluate(() => window.fixtureCalls.filter(call => call.method === 'GET').length), 2);
+  assert.equal(h.gets().length, 2, 'Terminal jobs must not retain fast pending-job polling');
+  await h.page.clock.runFor(1);
+  await until(() => h.gets().length === 3, 'Terminal status should use the slower fallback read');
+  await idle(h);
+  assert.equal(await h.page.evaluate(() => window.fixtureCalls.filter(call => call.method === 'GET').length), 3);
   assert.equal(h.posts().length, 0);
   await samePage(h);
 });

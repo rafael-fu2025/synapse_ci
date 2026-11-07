@@ -37,6 +37,12 @@ runner tests mock subprocess/database access and verify refusal and cleanup
 behavior without connecting. The Node tests exercise queue JavaScript handlers;
 they are not full-browser HTTP tests.
 
+The LIKE query-compilation tests temporarily bind both shared database groups to
+an unshared SQLite `:memory:` connection and restore the original connections
+in teardown. They create no tables and run no migrations. Compiling a MySQL
+query can initialize its connection for value escaping even without executing
+SQL, so these tests must never use the ambient application/test database.
+
 ## Isolated AI regression gate
 
 The dedicated `phpunit.ai.xml` uses `tests/_support/ai-runtime-bootstrap.php`: a temporary writable directory, no dotenv, and disposable SQLite fixtures. It explicitly lists AI test classes rather than relying on the unrelated baseline suite; CI verifies that every AI-prefixed test is listed, except the separately guarded MariaDB fixture. Tests use synthetic evidence and fake/loopback transports, not configured provider credentials or operational records.
@@ -47,6 +53,13 @@ npm ci --prefix tests/browser
 npm exec --prefix tests/browser -- playwright install chromium
 npm test --prefix tests/browser
 ```
+
+The AI browser job is pinned to `ubuntu-24.04`, supported by the locked
+Playwright version. Keep Chromium's `--with-deps` installation in CI; an
+`ubuntu-latest` OS upgrade must not silently outpace the browser's supported
+platforms. Terminal-job browser assertions distinguish fast pending-job polling
+from the intentional 30-second status fallback when realtime is unavailable;
+that fallback must never replay a mutation.
 
 The browser tests load real presentation views and JavaScript with intercepted synthetic responses; they are not a live authenticated provider/worker/database end-to-end test. Platform skips must be reported, not treated as production certification. Additive recovery migrations and MySQL behavior use the separately guarded fixture:
 
