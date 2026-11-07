@@ -8,9 +8,9 @@ import { RootStackParamList } from './types';
  */
 export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-export function navigateToWorkspaceIntent(intent: Extract<NavigationIntent, { unit: unknown }>): void {
+export function navigateToWorkspaceIntent(intent: Extract<NavigationIntent, { unit: unknown }>, taskDestination: 'TeamBoard' | 'MyTasks' = 'TeamBoard'): void {
   const params = intent.kind === 'team_task'
-    ? { screen: 'TeamBoard' as const, params: { screen: 'TeamTaskDetail' as const, params: { id: intent.id }, initial: false } }
+    ? { screen: taskDestination, params: { screen: 'TeamTaskDetail' as const, params: { id: intent.id }, initial: false } }
     : intent.kind === 'team_event'
       ? { screen: 'TeamCalendar' as const, params: { screen: 'TeamCalendarEventDetail' as const, params: { id: intent.id }, initial: false } }
       : { screen: 'TeamChat' as const, params: { targetMessageId: intent.id } };

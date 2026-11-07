@@ -1,14 +1,16 @@
-import { useCallback, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
+import { onlineManager, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RefetchOptions, UseQueryResult } from '@tanstack/react-query';
+import { NetworkError } from '../../api/client';
 import * as calendarApi from '../../api/endpoints/teamCalendar';
 import * as tasksApi from '../../api/endpoints/teamTasks';
 import type { TeamUnit } from '../../api/types';
-import { useFocusPoll } from '../../lib/useFocusPoll';
+import { useActiveScreen } from '../../lib/useActiveScreen';
 import { useAuth } from '../../store/auth';
+import { manilaDayBounds, todayInManila } from './manila';
 
 const CALENDAR_POLL_MS = 30_000;
-const MEMBER_CACHE_LIMIT = 40;
-const MEMBER_RESULT_LIMIT = 100;
 
 export const teamCalendarQueryKeys = {
   root: (tenantId: number, userId: number) => ['team-calendar', tenantId, userId] as const,
@@ -36,95 +38,264 @@ function requireUnit(unit: TeamUnit | null): TeamUnit {
   return unit;
 }
 
+/** An imperative retry must obey the same visibility/connection rules as polling. */
+function useEligibleQuery<T>(query: UseQueryResult<T>, eligible: boolean) {
+  const current = useRef({ query, eligible });
+  current.current = { query, eligible };
+  const refetch = useCallback((options?: RefetchOptions) => {
+    const state = current.current;
+    return state.eligible
+      ? state.query.refetch({ ...options, cancelRefetch: false })
+      : Promise.resolve(state.query);
+  }, []);
+  return { ...query, eligible, refetch };
+}
+
 export function useTeamCalendar(
   unit: TeamUnit | null,
   filters: calendarApi.TeamCalendarFilters,
+  enabled = true,
 ) {
   const identity = useIdentity();
-  const refetchInterval = useFocusPoll(CALENDAR_POLL_MS);
-  return useQuery({
+  const eligible = useActiveScreen(enabled && identity.tenantId > 0 && identity.userId > 0 && unit !== null);
+  const query = useQuery({
     queryKey: teamCalendarQueryKeys.list(identity.tenantId, identity.userId, unit, filters),
-    queryFn: () => calendarApi.list(unit!, filters),
-    enabled: identity.tenantId > 0 && identity.userId > 0 && unit !== null,
-    refetchInterval,
+    queryFn: () => calendarApi.list(requireUnit(unit), filters),
+    enabled: eligible,
+    staleTime: CALENDAR_POLL_MS,
+    refetchInterval: eligible ? CALENDAR_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    // A scheduled retry can otherwise start after the screen loses eligibility.
+    // Manual retry and the next eligible fallback poll retain the cached result.
+    retry: false,
   });
+  return useEligibleQuery(query, eligible);
 }
 
-export function useTeamCalendarEvent(unit: TeamUnit | null, id: number) {
+export function useTeamCalendarEvent(unit: TeamUnit | null, id: number, enabled = true) {
   const identity = useIdentity();
-  return useQuery({
+  const eligible = useActiveScreen(enabled && identity.tenantId > 0 && identity.userId > 0 && unit !== null && id > 0);
+  const query = useQuery({
     queryKey: teamCalendarQueryKeys.event(identity.tenantId, identity.userId, unit, id),
-    queryFn: () => calendarApi.detail(unit!, id),
-    enabled: identity.tenantId > 0 && identity.userId > 0 && unit !== null && id > 0,
+    queryFn: () => calendarApi.detail(requireUnit(unit), id),
+    enabled: eligible,
+    staleTime: CALENDAR_POLL_MS,
+    refetchInterval: eligible ? CALENDAR_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
+  return useEligibleQuery(query, eligible);
 }
 
-/** Page and cache bounds prevent an unbounded people-search request/cache fan-out. */
-export function useTeamCalendarMemberSearch(unit: TeamUnit | null) {
+/** Preserve server pagination rather than permanently caching the first 100 people. */
+export function useTeamCalendarMemberSearch(unit: TeamUnit | null, query: string, requestedPage = 1, enabled = true) {
   const identity = useIdentity();
-  const client = useQueryClient();
-  const cache = useRef(new Map<string, tasksApi.TeamMember[]>());
-  return useCallback(async (query: string, requestedPage = 1): Promise<tasksApi.TeamMember[]> => {
-    if (unit === null || identity.tenantId < 1 || identity.userId < 1) { return []; }
-    const q = query.trim().slice(0, 80);
-    const page = Math.min(5, Math.max(1, Math.trunc(requestedPage) || 1));
-    const cacheKey = `${identity.tenantId}:${identity.userId}:${unit}:${page}:${q.toLocaleLowerCase()}`;
-    const cached = cache.current.get(cacheKey);
-    if (cached) { return cached; }
-    const response = await client.fetchQuery({
-      queryKey: teamCalendarQueryKeys.members(identity.tenantId, identity.userId, unit, q, page),
-      queryFn: () => tasksApi.members(unit, { q, page }),
-      staleTime: 30_000,
-    });
-    const bounded = response.data.slice(0, MEMBER_RESULT_LIMIT);
-    if (cache.current.size >= MEMBER_CACHE_LIMIT) {
-      const oldest = cache.current.keys().next().value as string | undefined;
-      if (oldest !== undefined) { cache.current.delete(oldest); }
-    }
-    cache.current.set(cacheKey, bounded);
-    return bounded;
-  }, [client, identity.tenantId, identity.userId, unit]);
+  const q = query.trim().slice(0, 80);
+  const page = Math.min(100_000, Math.max(1, Math.trunc(requestedPage) || 1));
+  const eligible = useActiveScreen(enabled && identity.tenantId > 0 && identity.userId > 0 && unit !== null);
+  const result = useQuery({
+    queryKey: teamCalendarQueryKeys.members(identity.tenantId, identity.userId, unit, q, page),
+    queryFn: () => tasksApi.members(requireUnit(unit), { q, page }),
+    enabled: eligible,
+    staleTime: CALENDAR_POLL_MS,
+    // Old search terms are short-lived; selections belong to the form, not this cache.
+    gcTime: 60_000,
+    retry: false,
+  });
+  return useEligibleQuery(result, eligible);
 }
 
-function useCalendarInvalidation(unit: TeamUnit | null) {
-  const identity = useIdentity();
-  const client = useQueryClient();
-  return async (id?: number) => {
-    if (unit === null) { return; }
-    await client.invalidateQueries({
-      queryKey: teamCalendarQueryKeys.unit(identity.tenantId, identity.userId, unit),
-      exact: false,
-    });
-    if (id !== undefined) {
-      await client.invalidateQueries({
-        queryKey: teamCalendarQueryKeys.event(identity.tenantId, identity.userId, unit, id),
-      });
+/** Only a user-initiated refresh owns the native pull-to-refresh indicator. */
+export function useCalendarManualRefresh(query: { eligible: boolean; refetch: () => Promise<unknown> }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const busy = useRef(false);
+  const mounted = useRef(true);
+  const current = useRef(query);
+  current.current = query;
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const refresh = useCallback(async () => {
+    if (busy.current || !current.current.eligible) { return; }
+    busy.current = true;
+    setRefreshing(true);
+    try {
+      await current.current.refetch();
+    } finally {
+      busy.current = false;
+      if (mounted.current) { setRefreshing(false); }
     }
+  }, []);
+  return { refreshing, refresh };
+}
+
+/** Refresh entitlements only after a denied read, never for a record mutation 403. */
+export function useTeamCalendarAccess(unit: TeamUnit | null) {
+  const { user, refreshProfile } = useAuth();
+  const client = useQueryClient();
+  const identity = `${user?.tenant_id ?? 0}:${user?.id ?? 0}:${unit ?? 'none'}`;
+  const currentIdentity = useRef(identity);
+  currentIdentity.current = identity;
+  const recovering = useRef<string | null>(null);
+  const [deniedIdentity, setDeniedIdentity] = useState<string | null>(null);
+  const [refreshingAccess, setRefreshingAccess] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const recoverAccess = useCallback(async () => {
+    if (!unit || !user || recovering.current === identity || deniedIdentity === identity) { return; }
+    recovering.current = identity;
+    setDeniedIdentity(identity);
+    setRefreshingAccess(true);
+    try {
+      const key = teamCalendarQueryKeys.unit(user.tenant_id, user.id, unit);
+      await client.cancelQueries({ queryKey: key, exact: false });
+      client.removeQueries({ queryKey: key, exact: false });
+      // A successful profile refresh reconciles workspace selection without a splash.
+      await refreshProfile();
+    } catch {
+      // Keep the denied screen and an explicit recovery action on transient failure.
+    } finally {
+      if (recovering.current === identity) { recovering.current = null; }
+      if (mounted.current && currentIdentity.current === identity) { setRefreshingAccess(false); }
+    }
+  }, [client, deniedIdentity, identity, refreshProfile, unit, user]);
+
+  const retryAccess = useCallback(async () => {
+    if (recovering.current === identity) { return; }
+    recovering.current = identity;
+    setRefreshingAccess(true);
+    try {
+      await refreshProfile();
+      if (mounted.current && currentIdentity.current === identity) { setDeniedIdentity(null); }
+    } catch {
+      // Remain blocked; a network error must not pretend access was restored.
+    } finally {
+      if (recovering.current === identity) { recovering.current = null; }
+      if (mounted.current && currentIdentity.current === identity) { setRefreshingAccess(false); }
+    }
+  }, [identity, refreshProfile]);
+
+  return { accessDenied: deniedIdentity === identity, refreshingAccess, recoverAccess, retryAccess };
+}
+
+/** Follow Manila midnight and re-check after a suspended app returns to foreground. */
+export function useManilaToday(): string {
+  const [today, setToday] = useState(() => todayInManila());
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let foreground = AppState.currentState !== 'background' && AppState.currentState !== 'inactive';
+    const update = () => {
+      if (timer !== undefined) { clearTimeout(timer); }
+      const now = new Date();
+      const day = todayInManila(now);
+      setToday(day);
+      if (foreground) {
+        timer = setTimeout(update, Math.max(1, manilaDayBounds(day).end - now.getTime()));
+      }
+    };
+    const subscription = AppState.addEventListener('change', state => {
+      foreground = state === 'active';
+      if (foreground) { update(); }
+      else if (timer !== undefined) { clearTimeout(timer); }
+    });
+    update();
+    return () => {
+      if (timer !== undefined) { clearTimeout(timer); }
+      subscription.remove();
+    };
+  }, []);
+  return today;
+}
+
+type CalendarResponse = { data: calendarApi.TeamCalendarEventDetail };
+type CalendarOrigin = { tenantId: number; userId: number; unit: TeamUnit | null; generation: number };
+type CalendarOperation<Input> = {
+  input: Input;
+  origin: CalendarOrigin;
+  request: (unit: TeamUnit, input: Input) => Promise<CalendarResponse>;
+};
+
+function requireOnlineUnit(unit: TeamUnit | null): TeamUnit {
+  if (!onlineManager.isOnline()) { throw new NetworkError(); }
+  return requireUnit(unit);
+}
+
+/** Capture the endpoint and scope at invocation, even if mutation options rerender. */
+function useCalendarMutation<Input>(unit: TeamUnit | null, request: CalendarOperation<Input>['request']) {
+  const { user, profile } = useAuth();
+  const client = useQueryClient();
+  const identity = `${user?.tenant_id ?? 0}:${user?.id ?? 0}`;
+  const previousIdentity = useRef(identity);
+  const generation = useRef(0);
+  if (previousIdentity.current !== identity) {
+    previousIdentity.current = identity;
+    generation.current += 1;
+  }
+  const current = useRef({ user, profile, unit, request });
+  current.current = { user, profile, unit, request };
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const mutation = useMutation({
+    mutationFn: (operation: CalendarOperation<Input>) =>
+      operation.request(requireOnlineUnit(operation.origin.unit), operation.input),
+    retry: false,
+    networkMode: 'always',
+    onSuccess: async (response, operation) => {
+      const origin = operation.origin;
+      const state = current.current;
+      if (!mounted.current || generation.current !== origin.generation
+        || state.user?.tenant_id !== origin.tenantId || state.user.id !== origin.userId
+        || origin.unit === null) { return; }
+      if (state.profile && (!state.profile.entitlements.work.enabled
+        || !state.profile.entitlements.work.units.some(item => item.unit === origin.unit && item.features.team_calendar))) { return; }
+      try {
+        client.setQueryData<CalendarResponse>(
+          teamCalendarQueryKeys.event(origin.tenantId, origin.userId, origin.unit, response.data.id),
+          cached => cached && cached.data.version > response.data.version ? cached : response,
+        );
+        // The prefix includes detail queries; one reconciliation is sufficient.
+        await client.invalidateQueries({
+          queryKey: teamCalendarQueryKeys.unit(origin.tenantId, origin.userId, origin.unit),
+          exact: false,
+        });
+      } catch {
+        // Acknowledged writes are saved, even if subsequent cache refresh fails.
+        // Propagating this error would incorrectly offer an ambiguous create retry.
+      }
+    },
+  });
+  const operation = (input: Input): CalendarOperation<Input> => {
+    const state = current.current;
+    return {
+      input,
+      origin: { tenantId: state.user?.tenant_id ?? 0, userId: state.user?.id ?? 0, unit: state.unit, generation: generation.current },
+      request: state.request,
+    };
+  };
+  return {
+    ...mutation,
+    variables: mutation.variables?.input,
+    mutate: (input: Input) => mutation.mutate(operation(input)),
+    mutateAsync: (input: Input) => mutation.mutateAsync(operation(input)),
   };
 }
 
 export function useCreateTeamCalendarEvent(unit: TeamUnit | null) {
-  const invalidate = useCalendarInvalidation(unit);
-  return useMutation({
-    mutationFn: (input: calendarApi.TeamCalendarEventCreateInput) =>
-      calendarApi.create(requireUnit(unit), input),
-    onSuccess: response => invalidate(response.data.id),
-  });
+  return useCalendarMutation(unit, calendarApi.create);
 }
 
 export function useUpdateTeamCalendarEvent(unit: TeamUnit | null, id: number) {
-  const invalidate = useCalendarInvalidation(unit);
-  return useMutation({
-    mutationFn: (input: calendarApi.TeamCalendarEventUpdateInput) =>
-      calendarApi.update(requireUnit(unit), id, input),
-    onSuccess: () => invalidate(id),
-  });
+  return useCalendarMutation(unit, (target, input: calendarApi.TeamCalendarEventUpdateInput) => calendarApi.update(target, id, input));
 }
 
 export function useCancelTeamCalendarEvent(unit: TeamUnit | null, id: number) {
-  const invalidate = useCalendarInvalidation(unit);
-  return useMutation({
-    mutationFn: (version: number) => calendarApi.cancel(requireUnit(unit), id, version),
-    onSuccess: () => invalidate(id),
-  });
+  return useCalendarMutation(unit, (target, version: number) => calendarApi.cancel(target, id, version));
 }

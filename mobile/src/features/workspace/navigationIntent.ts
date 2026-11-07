@@ -13,7 +13,10 @@ const PUSH_TEAM_TYPES = {
 
 export function workUnitForIntent(profile: MeResponse | null, intent: NavigationIntent): TeamUnit | null {
   if (!('unit' in intent) || profile?.entitlements.work.enabled !== true) { return null; }
-  return profile.entitlements.work.units.some(item => item.unit === intent.unit) ? intent.unit : null;
+  const feature = intent.kind === 'team_event' ? 'team_calendar' : 'team_chat';
+  return profile.entitlements.work.units.some(item => item.unit === intent.unit && (intent.kind === 'team_task'
+    ? item.features.team_board || item.features.my_tasks
+    : item.features[feature])) ? intent.unit : null;
 }
 
 export function pushNavigationIntent(message: PushMessage | null): NavigationIntent | null {

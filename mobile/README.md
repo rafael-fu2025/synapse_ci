@@ -110,6 +110,25 @@ missing. Release builds enable R8; the keep rules live in `android/app/proguard-
 
 There is no automated distribution pipeline yet: builds are produced locally and uploaded by hand.
 
+## Team Workspace interaction parity
+
+Production uses `ContextTabs`, with independent Personal and Team navigation histories. Both use
+240 ms opaque cubic-out transitions and live Reduce Motion. The center action is guarded, not a
+fake tab; disabled Work features are omitted and changing units clears the old unit's navigator.
+
+Tasks, Calendar, Chat and their pickers reuse shared controls and retained serialized native sheets
+and dialogs. Drafts stay in memory, Keep editing preserves them, and accepted discard resets them
+before post-dismiss navigation. Creates/sends/comments retain exact nonce payloads for explicit
+ambiguous retries; updates/cancellation retain the reviewed version. Mutations never automatically
+retry or enter an offline write queue. Team task changes also refresh same-unit Calendar deadlines
+and Chat task-picker results without replacing browsed Chat history.
+
+The detailed screen/action checklist and **current-pass** evidence/remaining native gates live in
+[MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md](../docs/MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md#interaction-parity-pass--2026-11-07).
+Passing Jest or `assembleDebug` is not proof of Android keyboard geometry, iOS modal dismissal,
+screen-reader focus, or production animation frame rate. Use an explicitly selected native target;
+do not replace an installed app/account or perform server writes merely for visual testing.
+
 ## Checks and references
 
 ```sh

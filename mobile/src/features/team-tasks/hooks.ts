@@ -1,10 +1,13 @@
-import { useCallback, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef } from 'react';
+import { onlineManager, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RefetchOptions } from '@tanstack/react-query';
+import { ApiError, NetworkError, SessionChangedError } from '../../api/client';
 import * as api from '../../api/endpoints/teamTasks';
 import { queryKeys } from '../../api/queryKeys';
 import type { TeamUnit } from '../../api/types';
 import { useAuth } from '../../store/auth';
-import { useFocusPoll } from '../../lib/useFocusPoll';
+import { useActiveScreen } from '../../lib/useActiveScreen';
+import { invalidateTeamTasks } from '../workspace/invalidateTeamResources';
 
 const TASK_POLL_MS = 30_000;
 
@@ -13,99 +16,174 @@ function useIdentity(): { tenantId: number; userId: number } {
   return { tenantId: user?.tenant_id ?? 0, userId: user?.id ?? 0 };
 }
 
-export function useTeamMembers(unit: TeamUnit | null, filters: { q: string; page: number } = { q: '', page: 1 }) {
+/** A route's handlers and async continuations may not outlive its identity/unit/record. */
+export function useTeamTaskScreenScope(unit: TeamUnit | null, record = '') {
   const identity = useIdentity();
-  return useQuery({
-    queryKey: queryKeys.teamMembers(identity.tenantId, identity.userId, unit, filters),
-    queryFn: () => api.members(unit!, filters),
-    enabled: identity.tenantId > 0 && identity.userId > 0 && unit !== null,
-  });
+  const key = `${identity.tenantId}:${identity.userId}:${unit ?? 'none'}:${record}`;
+  const lifetime = useRef({ key, mounted: true, valid: true });
+  if (lifetime.current.key !== key) { lifetime.current.valid = false; }
+  useEffect(() => {
+    const screen = lifetime.current;
+    screen.mounted = true;
+    return () => { screen.mounted = false; };
+  }, []);
+  return useCallback(() => lifetime.current.mounted && lifetime.current.valid, []);
 }
 
-export function useTeamMemberSearch(unit: TeamUnit | null) {
+export function useTeamMembers(unit: TeamUnit | null, filters: { q: string; page: number } = { q: '', page: 1 }) {
   const identity = useIdentity();
-  const client = useQueryClient();
-  const cache = useRef(new Map<string, api.TeamMember[]>());
-  return useCallback(async (q: string, page = 1): Promise<api.TeamMember[]> => {
-    if (unit === null || identity.tenantId < 1 || identity.userId < 1) { return []; }
-    const key = `${page}:${q.trim().toLocaleLowerCase()}`;
-    const cached = cache.current.get(key);
-    if (cached) { return cached; }
-    const response = await client.fetchQuery({
-      queryKey: queryKeys.teamMembers(identity.tenantId, identity.userId, unit, { q, page }),
-      queryFn: () => api.members(unit, { q, page }),
-      staleTime: 30_000,
-    });
-    cache.current.set(key, response.data);
-    return response.data;
-  }, [client, identity.tenantId, identity.userId, unit]);
+  const active = useActiveScreen(identity.tenantId > 0 && identity.userId > 0 && unit !== null);
+  const normalized = { ...filters, q: filters.q.trim() };
+  const query = useQuery({
+    queryKey: queryKeys.teamMembers(identity.tenantId, identity.userId, unit, normalized),
+    queryFn: () => api.members(unit!, normalized),
+    enabled: active,
+  });
+  return { ...query, eligible: active, refetch: (options?: RefetchOptions) => active ? query.refetch(options) : Promise.resolve(query) };
+}
+
+/** Search pages live only in the identity/unit-scoped QueryClient, never in a second ref cache. */
+export function useTeamMemberSearch(unit: TeamUnit | null, q = '', enabled = true) {
+  const identity = useIdentity();
+  const active = useActiveScreen(enabled && identity.tenantId > 0 && identity.userId > 0 && unit !== null);
+  const search = q.trim();
+  const query = useInfiniteQuery({
+    queryKey: [...queryKeys.teamMembers(identity.tenantId, identity.userId, unit, { q: search, page: 1 }), 'search'],
+    queryFn: ({ pageParam }) => api.members(unit!, { q: search, page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, _pages, lastPageParam) => {
+      const page = lastPage.meta.page ?? lastPageParam;
+      const pages = lastPage.meta.pages ?? Math.max(1, Math.ceil(lastPage.meta.total / (lastPage.meta.limit ?? 50)));
+      return page < pages ? page + 1 : undefined;
+    },
+    enabled: active,
+    staleTime: TASK_POLL_MS,
+  });
+  return {
+    ...query,
+    eligible: active,
+    refetch: (options?: RefetchOptions) => active ? query.refetch(options) : Promise.resolve(query),
+    fetchNextPage: (options?: Parameters<typeof query.fetchNextPage>[0]) => active ? query.fetchNextPage(options) : Promise.resolve(query),
+  };
 }
 
 export function useTeamTasks(unit: TeamUnit | null, filters: api.TeamTaskFilters) {
   const identity = useIdentity();
-  const refetchInterval = useFocusPoll(TASK_POLL_MS);
-  return useQuery({
+  const active = useActiveScreen(identity.tenantId > 0 && identity.userId > 0 && unit !== null);
+  const query = useQuery({
     queryKey: queryKeys.teamTasks(identity.tenantId, identity.userId, unit, filters),
     queryFn: () => api.list(unit!, filters),
-    enabled: identity.tenantId > 0 && identity.userId > 0 && unit !== null,
-    refetchInterval,
+    enabled: active,
+    refetchInterval: active ? TASK_POLL_MS : false,
+    refetchIntervalInBackground: false,
+    // Keep rows while changing a page/filter, but never across identity, unit, or My Tasks scope.
+    placeholderData: (previousData, previousQuery) => {
+      const key = previousQuery?.queryKey;
+      const previousFilters = key?.[5] as api.TeamTaskFilters | undefined;
+      return unit !== null && identity.tenantId > 0 && identity.userId > 0
+        && key?.[1] === identity.tenantId && key?.[2] === identity.userId
+        && key?.[3] === unit && previousFilters?.scope === filters.scope
+        ? previousData : undefined;
+    },
   });
+  const visible = query.error instanceof ApiError && [401, 403].includes(query.error.status)
+    ? { ...query, data: undefined } : query;
+  return { ...visible, eligible: active, refetch: (options?: RefetchOptions) => active ? query.refetch(options) : Promise.resolve(visible) };
 }
 
 export function useTeamTask(unit: TeamUnit | null, id: number) {
   const identity = useIdentity();
-  return useQuery({
+  const active = useActiveScreen(identity.tenantId > 0 && identity.userId > 0 && unit !== null && id > 0);
+  const query = useQuery({
     queryKey: queryKeys.teamTask(identity.tenantId, identity.userId, unit, id),
     queryFn: () => api.detail(unit!, id),
-    enabled: identity.tenantId > 0 && identity.userId > 0 && unit !== null && id > 0,
+    enabled: active,
   });
+  const visible = query.error instanceof ApiError && [401, 403].includes(query.error.status)
+    ? { ...query, data: undefined } : query;
+  return { ...visible, eligible: active, refetch: (options?: RefetchOptions) => active ? query.refetch(options) : Promise.resolve(visible) };
+}
+
+/** A denied read establishes access loss. A record-action 403 alone does not. */
+export function useTeamTaskAccessRecovery(unit: TeamUnit | null, readError: unknown) {
+  const identity = useIdentity();
+  const { refreshProfile } = useAuth();
+  const client = useQueryClient();
+  const recovered = useRef<{ scope: string; error: unknown } | null>(null);
+  const reconcileAccess = useCallback(() => refreshProfile().catch(() => undefined), [refreshProfile]);
+
+  useEffect(() => {
+    if (unit === null || identity.tenantId < 1 || identity.userId < 1
+      || !(readError instanceof ApiError) || readError.status !== 403) { return; }
+    const scope = `${identity.tenantId}:${identity.userId}:${unit}`;
+    if (recovered.current?.scope === scope && recovered.current.error === readError) { return; }
+    recovered.current = { scope, error: readError };
+    const queryKey = queryKeys.teamUnit(identity.tenantId, identity.userId, unit);
+    // Preserve the observer's denied state (and its error), not its cached protected data.
+    for (const query of client.getQueryCache().findAll({ queryKey, exact: false })) {
+      query.setState({ data: undefined, dataUpdatedAt: 0, dataUpdateCount: query.state.dataUpdateCount + 1 });
+    }
+    client.cancelQueries({ queryKey, exact: false }, { revert: false }).then(() => {
+      client.removeQueries({ queryKey, exact: false, type: 'inactive' });
+    });
+    reconcileAccess();
+  }, [client, identity.tenantId, identity.userId, readError, reconcileAccess, unit]);
+
+  return reconcileAccess;
 }
 
 function requireUnit(unit: TeamUnit | null): TeamUnit {
   if (unit === null) { throw new Error('A Team Workspace unit is required.'); }
+  // Do not let React Query queue a write for automatic execution on reconnect.
+  if (!onlineManager.isOnline()) { throw new NetworkError(); }
   return unit;
 }
 
-function useTaskInvalidation(unit: TeamUnit | null) {
+function useTaskMutation<TInput, TResponse>(
+  unit: TeamUnit | null,
+  id: number,
+  operation: string,
+  write: (taskUnit: TeamUnit, input: TInput) => Promise<TResponse>,
+) {
   const identity = useIdentity();
   const client = useQueryClient();
-  return async (id?: number) => {
-    if (unit === null) { return; }
-    await client.invalidateQueries({ queryKey: queryKeys.teamUnit(identity.tenantId, identity.userId, unit), exact: false });
-    if (id !== undefined) {
-      await client.invalidateQueries({ queryKey: queryKeys.teamTask(identity.tenantId, identity.userId, unit, id) });
-    }
-  };
+  const latest = useRef({ ...identity, unit, id });
+  latest.current = { ...identity, unit, id };
+  return useMutation({
+    // A changed scope detaches the observer instead of changing an in-flight write's callbacks.
+    mutationKey: ['team', identity.tenantId, identity.userId, unit, 'task-write', operation, id],
+    mutationFn: (input: TInput) => {
+      if (identity.tenantId < 1 || identity.userId < 1
+        || latest.current.tenantId !== identity.tenantId || latest.current.userId !== identity.userId
+        || latest.current.unit !== unit || latest.current.id !== id) { throw new SessionChangedError(); }
+      return write(requireUnit(unit), input);
+    },
+    retry: false,
+    networkMode: 'always',
+    onSuccess: async () => {
+      if (unit === null || latest.current.tenantId !== identity.tenantId || latest.current.userId !== identity.userId) { return; }
+      try {
+        await invalidateTeamTasks(client, identity, unit);
+      } catch {
+        // The API already acknowledged the write. A cache-refresh failure must not offer a duplicate send.
+        // Invalidated queries remain stale and expose their own read errors/retry controls.
+      }
+    },
+  });
 }
 
 export function useCreateTeamTask(unit: TeamUnit | null) {
-  const invalidate = useTaskInvalidation(unit);
-  return useMutation({
-    mutationFn: (input: api.TeamTaskCreateInput) => api.create(requireUnit(unit), input),
-    onSuccess: response => invalidate(response.data.id),
-  });
+  return useTaskMutation(unit, 0, 'create', (taskUnit, input: api.TeamTaskCreateInput) => api.create(taskUnit, input));
 }
 
 export function useUpdateTeamTask(unit: TeamUnit | null, id: number) {
-  const invalidate = useTaskInvalidation(unit);
-  return useMutation({
-    mutationFn: (input: api.TeamTaskUpdateInput) => api.update(requireUnit(unit), id, input),
-    onSuccess: () => invalidate(id),
-  });
+  return useTaskMutation(unit, id, 'update', (taskUnit, input: api.TeamTaskUpdateInput) => api.update(taskUnit, id, input));
 }
 
 export function useChangeTeamTaskStatus(unit: TeamUnit | null, id: number) {
-  const invalidate = useTaskInvalidation(unit);
-  return useMutation({
-    mutationFn: (input: { status: api.TeamTaskStatus; version: number }) => api.changeStatus(requireUnit(unit), id, input),
-    onSuccess: () => invalidate(id),
-  });
+  return useTaskMutation(unit, id, 'status', (taskUnit, input: { status: api.TeamTaskStatus; version: number }) => api.changeStatus(taskUnit, id, input));
 }
 
 export function useCommentTeamTask(unit: TeamUnit | null, id: number) {
-  const invalidate = useTaskInvalidation(unit);
-  return useMutation({
-    mutationFn: (input: api.TeamTaskCommentInput) => api.comment(requireUnit(unit), id, input),
-    onSuccess: () => invalidate(id),
-  });
+  return useTaskMutation(unit, id, 'comment', (taskUnit, input: api.TeamTaskCommentInput) => api.comment(taskUnit, id, input));
 }

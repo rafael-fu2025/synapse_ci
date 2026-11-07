@@ -8,7 +8,7 @@ import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
 import { Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
-import { useAuth } from '../../../store/auth';
+import { useSignOutConfirmation } from '../../auth/useSignOutConfirmation';
 import { ProfileStackParamList } from '../../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'Settings'>;
@@ -17,11 +17,11 @@ export function SettingsScreen() {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const navigation = useNavigation<Props['navigation']>();
-  const { signOut } = useAuth();
+  const { requestSignOut, signOutDialog } = useSignOutConfirmation();
 
   return (
-    <Screen header={<PageHeader edgeToEdge title="Settings" onBack={navigation.goBack} />}>
-
+    <Screen bottomSafeArea header={<PageHeader edgeToEdge title="Settings" onBack={navigation.goBack} />}>
+      {signOutDialog}
       <View style={styles.group}>
         <Text style={styles.groupLabel}>PREFERENCES</Text>
         <SettingsRow icon={<Moon size={16} color={theme.brandIcon} />} title="Appearance" caption="Light, dark, or system theme" onPress={() => navigation.navigate('Appearance')} />
@@ -32,9 +32,7 @@ export function SettingsScreen() {
         <SettingsRow icon={<ShieldCheck size={16} color={theme.brandIcon} />} title="Privacy & security" caption="Data handling and session control" onPress={() => navigation.navigate('PrivacySecurity')} />
       </View>
 
-      <Pressable accessibilityRole="button" accessibilityLabel="Sign out" style={styles.signOut} onPress={() => {
-        signOut().catch(() => undefined);
-      }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Sign out" style={styles.signOut} onPress={requestSignOut}>
         <LogOut size={15} color="#ffffff" />
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>

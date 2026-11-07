@@ -8,12 +8,15 @@ export function PageHeader({
   title,
   subtitle,
   onBack,
+  backDisabled = false,
   action,
   edgeToEdge = false,
 }: {
   title: string;
   subtitle?: string;
   onBack?: () => void;
+  /** Keep the back affordance visible while a pending operation locks navigation. */
+  backDisabled?: boolean;
   action?: React.ReactNode;
   /** Full-width fixed-slot header; removes legacy body-gutter and bottom margins. */
   edgeToEdge?: boolean;
@@ -25,16 +28,18 @@ export function PageHeader({
       <View style={styles.row}>
         {onBack ? (
           <Pressable
-            onPress={onBack}
+            onPress={backDisabled ? undefined : onBack}
+            disabled={backDisabled}
             accessibilityRole="button"
             accessibilityLabel="Go back"
+            accessibilityState={{ disabled: backDisabled }}
             hitSlop={8}
-            style={styles.back}>
+            style={({ pressed }) => [styles.back, pressed && !backDisabled && styles.pressed, backDisabled && styles.disabled]}>
             <ArrowLeft size={19} color={theme.ink700} />
           </Pressable>
         ) : null}
         <View style={styles.copy}>
-          <Text style={styles.title}>{title}</Text>
+          <Text accessibilityRole="header" style={styles.title}>{title}</Text>
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
         {action}
@@ -58,8 +63,8 @@ function createStyles(theme: Theme) {
     edgeToEdge: { marginHorizontal: 0, marginBottom: 0 },
     row: { minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 10 },
     back: {
-      width: 38,
-      height: 38,
+      width: 44,
+      height: 44,
       alignItems: 'center',
       justifyContent: 'center',
       borderRadius: 12,
@@ -68,6 +73,8 @@ function createStyles(theme: Theme) {
       borderColor: theme.line,
     },
     copy: { flex: 1, minWidth: 0 },
+    pressed: { opacity: 0.7 },
+    disabled: { opacity: 0.5 },
     title: { ...type.pageTitle, letterSpacing: -0.6, color: theme.ink900 },
     subtitle: { marginTop: 3, fontSize: 11.5, fontFamily: font.body, color: theme.ink500 },
   });

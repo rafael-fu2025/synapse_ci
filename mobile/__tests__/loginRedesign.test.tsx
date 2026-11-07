@@ -116,6 +116,7 @@ beforeEach(() => {
     profile: null,
     signIn,
     retryBootstrap: jest.fn(),
+    refreshProfile: jest.fn(),
     signOut: jest.fn(),
     acknowledgeExpired: jest.fn(),
   });

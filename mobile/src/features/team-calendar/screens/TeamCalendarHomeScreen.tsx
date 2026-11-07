@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,14 +11,12 @@ import {
 import { useNetInfo } from '@react-native-community/netinfo';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   Plus,
   RefreshCw,
-  Users,
 } from 'lucide-react-native';
 import type {
   TeamCalendarItem,
@@ -28,15 +26,16 @@ import type {
 } from '../../../api/endpoints/teamCalendar';
 import { Action } from '../../../components/Action';
 import { EmptyState } from '../../../components/EmptyState';
+import { IconAction } from '../../../components/IconAction';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
-import { useAuth } from '../../../store/auth';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Theme, font, memoizeStyles, type } from '../../../theme/tokens';
 import { useWorkspace } from '../../workspace/WorkspaceContext';
+import { WorkspaceHeaderActions } from '../../workspace/WorkspaceHeaderActions';
 import { CalendarItemRow } from '../components/CalendarItemRow';
 import { teamCalendarErrorKind, teamCalendarErrorMessage } from '../errors';
-import { teamCalendarQueryKeys, useTeamCalendar } from '../hooks';
+import { useCalendarManualRefresh, useManilaToday, useTeamCalendar, useTeamCalendarAccess } from '../hooks';
 import {
   addManilaDays,
   addManilaMonths,
@@ -59,13 +58,12 @@ const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 export function TeamCalendarHomeScreen() {
   const navigation = useNavigation<Navigation>();
   const openTask = useOpenTaskDeadline();
-  const { activeUnit, enterPersonal, openUnitPicker } = useWorkspace();
-  const { retryBootstrap, user } = useAuth();
-  const queryClient = useQueryClient();
+  const { activeUnit, openUnitPicker } = useWorkspace();
   const network = useNetInfo();
   const { theme } = useTheme();
   const styles = makeStyles(theme);
-  const today = useMemo(() => todayInManila(), []);
+  const today = useManilaToday();
+  const previousToday = useRef(today);
   const [view, setView] = useState<TeamCalendarView>('agenda');
   const [scope, setScope] = useState<TeamCalendarScope>('team');
   const [status, setStatus] = useState<TeamCalendarStatusFilter>('scheduled');
@@ -73,37 +71,29 @@ export function TeamCalendarHomeScreen() {
   const [selectedDate, setSelectedDate] = useState(today);
   const unit = activeUnit?.features.team_calendar === true ? activeUnit.unit : null;
   const filters = useMemo(() => ({ date, view, scope, status }), [date, scope, status, view]);
-  const query = useTeamCalendar(unit, filters);
-  const accessRecoveryStarted = useRef(false);
+  const { accessDenied, refreshingAccess, recoverAccess, retryAccess } = useTeamCalendarAccess(unit);
+  const query = useTeamCalendar(unit, filters, !accessDenied);
+  const { refreshing, refresh } = useCalendarManualRefresh(query);
   const errorKind = query.isError ? teamCalendarErrorKind(query.error) : null;
-  const forbidden = errorKind === 'forbidden';
+  const forbidden = accessDenied || errorKind === 'forbidden';
   const items = useMemo(() => forbidden ? [] : query.data?.data ?? [], [forbidden, query.data]);
-  const meta = query.data?.meta;
-  const offline = network.isConnected === false
-    || network.isInternetReachable === false
-    || query.fetchStatus === 'paused';
-
-  const recoverAccess = useCallback(async () => {
-    if (accessRecoveryStarted.current || !activeUnit || !user) { return; }
-    accessRecoveryStarted.current = true;
-    const key = teamCalendarQueryKeys.unit(user.tenant_id, user.id, activeUnit.unit);
-    await queryClient.cancelQueries({ queryKey: key, exact: false });
-    queryClient.removeQueries({ queryKey: key, exact: false });
-    enterPersonal();
-    await retryBootstrap().catch(() => undefined);
-  }, [activeUnit, enterPersonal, queryClient, retryBootstrap, user]);
+  const meta = forbidden ? undefined : query.data?.meta;
+  const offline = network.isConnected === false || query.fetchStatus === 'paused';
 
   useEffect(() => {
-    accessRecoveryStarted.current = false;
-  }, [unit]);
+    if (errorKind === 'forbidden') { recoverAccess().catch(() => undefined); }
+  }, [errorKind, recoverAccess]);
 
   useEffect(() => {
-    if (forbidden) { recoverAccess().catch(() => undefined); }
-  }, [forbidden, recoverAccess]);
-
-  useEffect(() => {
-    setSelectedDate(date);
-  }, [date, view]);
+    const previous = previousToday.current;
+    previousToday.current = today;
+    // Follow today only when the user is still viewing it. Browsed dates survive
+    // midnight, foregrounding, task navigation, and background refreshes.
+    if (date === previous && selectedDate === previous) {
+      setDate(today);
+      setSelectedDate(today);
+    }
+  }, [date, selectedDate, today]);
 
   const header = (
     <PageHeader
@@ -111,24 +101,15 @@ export function TeamCalendarHomeScreen() {
       title="Team Calendar"
       subtitle={activeUnit?.label ?? 'Choose a Team Workspace'}
       action={(
-        <View style={styles.headerActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Switch Team Workspace unit"
-            onPress={openUnitPicker}
-            style={styles.headerButton}>
-            <Users size={19} color={theme.brandIcon} />
-          </Pressable>
-          {unit && activeUnit?.can_manage ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Create event"
+        <WorkspaceHeaderActions root>
+          {unit && !forbidden ? (
+            <IconAction
+              label="Create event"
+              icon={<Plus size={19} color={theme.brandIcon} />}
               onPress={() => navigation.navigate('TeamCalendarEventForm', { initialDate: selectedDate })}
-              style={styles.createButton}>
-              <Plus size={20} color="#ffffff" />
-            </Pressable>
+            />
           ) : null}
-        </View>
+        </WorkspaceHeaderActions>
       )}
     />
   );
@@ -143,6 +124,19 @@ export function TeamCalendarHomeScreen() {
             ? 'Calendar access is not enabled for this Team Workspace unit.'
             : 'Choose a Team Workspace unit to view its calendar.'}
           action={!activeUnit ? <Action full onPress={openUnitPicker}>Choose unit</Action> : undefined}
+        />
+      </Screen>
+    );
+  }
+
+  if (forbidden) {
+    return (
+      <Screen header={header}>
+        <EmptyState
+          icon={<CalendarDays size={30} color={theme.brandIcon} />}
+          title="Calendar access changed"
+          body="Your calendar read access is no longer available. Refresh workspace access to continue."
+          action={<Action full loading={refreshingAccess} disabled={offline} onPress={() => { retryAccess().catch(() => undefined); }}>Refresh access</Action>}
         />
       </Screen>
     );
@@ -173,7 +167,8 @@ export function TeamCalendarHomeScreen() {
     <Screen scroll={false} bodyStyle={styles.screen} header={header}>
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => { query.refetch().catch(() => undefined); }} />}>
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} enabled={query.eligible} tintColor={theme.brandIcon} colors={[theme.brandIcon]} onRefresh={() => { refresh().catch(() => undefined); }} />}>
         <SegmentedControl
           label="Calendar view"
           values={VIEWS}
@@ -204,7 +199,7 @@ export function TeamCalendarHomeScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel="Previous calendar period" onPress={() => move(-1)} style={styles.periodButton}>
             <ChevronLeft size={19} color={theme.ink700} />
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Go to today" onPress={() => { setDate(today); setSelectedDate(today); }} style={styles.periodLabelButton}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Go to today" onPress={() => { const currentToday = todayInManila(); setDate(currentToday); setSelectedDate(currentToday); }} style={styles.periodLabelButton}>
             <Text style={styles.periodLabel}>{periodLabel(view, date, meta?.start_date, meta?.end_date)}</Text>
             <Text style={styles.todayHint}>Tap for today</Text>
           </Pressable>
@@ -217,16 +212,22 @@ export function TeamCalendarHomeScreen() {
         {query.isError ? (
           <View style={styles.errorBlock}>
             <Notice
-              text={teamCalendarErrorMessage(query.error, items.length > 0
+              text={query.data
                 ? 'Could not refresh. Showing the last available calendar.'
-                : 'Could not load Team Calendar.')}
+                : teamCalendarErrorMessage(query.error, 'Could not load Team Calendar.')}
               tone="danger"
             />
-            {!forbidden && errorKind !== 'unauthorized' ? <Action variant="secondary" onPress={() => { query.refetch().catch(() => undefined); }}>Retry</Action> : null}
+            {errorKind !== 'unauthorized' ? <Action variant="secondary" loading={refreshing} disabled={!query.eligible} onPress={() => { refresh().catch(() => undefined); }}>Retry</Action> : null}
           </View>
         ) : null}
+        {meta ? <Text style={styles.capHint}>Per period: up to 250 events and 250 task deadlines.</Text> : null}
         {meta?.truncated ? (
-          <Notice text={`Results are truncated. Showing up to 250 events and 250 task deadlines for this period (${meta.total_events} events, ${meta.total_tasks} tasks). Narrow the period or scope to review more.`} tone="warning" />
+          <View style={styles.errorBlock}>
+            <Notice text={`Results are truncated (${meta.total_events} events, ${meta.total_tasks} task deadlines). Narrow the range or scope to review more.`} tone="warning" />
+            {view !== 'week' ? <Action variant="secondary" onPress={() => selectView('week')}>Show selected week</Action> : null}
+            {scope !== 'mine' ? <Action variant="secondary" onPress={() => setScope('mine')}>Show only mine</Action> : null}
+            {view === 'week' && scope === 'mine' ? <Text style={styles.capHint}>This is the narrowest available range. Use the period arrows to review another week.</Text> : null}
+          </View>
         ) : null}
         {query.isLoading ? <ActivityIndicator accessibilityLabel="Loading calendar" style={styles.loader} color={theme.brandIcon} /> : null}
 
@@ -235,7 +236,7 @@ export function TeamCalendarHomeScreen() {
             icon={<CalendarDays size={30} color={theme.brandIcon} />}
             title="Nothing scheduled"
             body={scope === 'mine' ? 'You have no events or task deadlines in this period.' : 'This team has no events or task deadlines in this period.'}
-            action={activeUnit?.can_manage ? <Action full onPress={() => navigation.navigate('TeamCalendarEventForm', { initialDate: selectedDate })}>Create event</Action> : undefined}
+            action={<Action full icon={<Plus size={17} color="#ffffff" />} onPress={() => navigation.navigate('TeamCalendarEventForm', { initialDate: selectedDate })}>Create event</Action>}
           />
         ) : null}
 
@@ -271,6 +272,7 @@ function SegmentedControl<T extends string>({ label, values, selected, labelFor,
           <Pressable
             key={value}
             accessibilityRole="radio"
+            accessibilityLabel={`${label}: ${labelFor(value)}`}
             accessibilityState={{ checked: active }}
             onPress={() => onChange(value)}
             style={[styles.segment, active && styles.segmentActive]}>
@@ -395,7 +397,7 @@ function Notice({ text, tone }: { text: string; tone: 'warning' | 'danger' }) {
   const styles = makeStyles(theme);
   return (
     <View accessibilityRole="alert" style={[styles.notice, tone === 'danger' ? styles.noticeDanger : styles.noticeWarning]}>
-      {tone === 'danger' ? <RefreshCw size={16} color="#a33b3b" /> : null}
+      {tone === 'danger' ? <RefreshCw size={16} color={theme.mode === 'dark' ? '#ffb4ae' : '#a33b3b'} /> : null}
       <Text style={[styles.noticeText, tone === 'danger' && styles.noticeDangerText]}>{text}</Text>
     </View>
   );
@@ -415,9 +417,7 @@ function createStyles(theme: Theme) {
   return StyleSheet.create({
     screen: { paddingHorizontal: 0 },
     content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 30 },
-    headerActions: { flexDirection: 'row', gap: 8 },
-    headerButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.surface },
-    createButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: theme.brand },
+    capHint: { ...type.caption, color: theme.ink500, marginTop: 8 },
     segments: { minHeight: 44, flexDirection: 'row', padding: 3, borderRadius: 13, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.surface },
     segmentsCompact: { minWidth: 0 },
     segment: { minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 8, borderRadius: 10 },
@@ -431,10 +431,10 @@ function createStyles(theme: Theme) {
     periodLabel: { ...type.cardTitle, color: theme.ink900 },
     todayHint: { ...type.micro, marginTop: 2, color: theme.ink500 },
     notice: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, marginTop: 8, borderRadius: 11, borderWidth: 1 },
-    noticeWarning: { borderColor: '#ead39f', backgroundColor: '#f9efd9' },
-    noticeDanger: { borderColor: '#ebc5c2', backgroundColor: '#fae8e6' },
-    noticeText: { ...type.bodyStrong, flex: 1, color: '#79591f' },
-    noticeDangerText: { color: '#8c3030' },
+    noticeWarning: { borderColor: theme.mode === 'dark' ? '#685536' : '#ead39f', backgroundColor: theme.mode === 'dark' ? '#30291c' : '#f9efd9' },
+    noticeDanger: { borderColor: theme.mode === 'dark' ? '#774542' : '#ebc5c2', backgroundColor: theme.mode === 'dark' ? '#3a2323' : '#fae8e6' },
+    noticeText: { ...type.bodyStrong, flex: 1, color: theme.mode === 'dark' ? '#f5d697' : '#79591f' },
+    noticeDangerText: { color: theme.mode === 'dark' ? '#ffb4ae' : '#8c3030' },
     errorBlock: { gap: 8 },
     loader: { marginTop: 30 },
     listArea: { marginTop: 8 },

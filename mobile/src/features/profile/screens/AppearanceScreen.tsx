@@ -24,7 +24,7 @@ export function AppearanceScreen() {
   const navigation = useNavigation<Props['navigation']>();
 
   return (
-    <Screen header={<PageHeader edgeToEdge title="Appearance" subtitle="Saved on this device" onBack={navigation.goBack} />}>
+    <Screen bottomSafeArea header={<PageHeader edgeToEdge title="Appearance" subtitle="Saved on this device" onBack={navigation.goBack} />}>
 
       <View style={styles.preview}>
         <Image source={mode === 'dark' ? require('../../../assets/brand/synapse-white.png') : require('../../../assets/brand/synapse-maroon.png')} style={styles.previewLogo} resizeMode="contain" accessibilityLabel="SYNAPSE" />

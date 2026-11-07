@@ -22,6 +22,9 @@ import { NavigationIntentGate } from '../features/workspace/NavigationIntentGate
 import { UserRealtimeGate } from '../features/realtime/UserRealtimeGate';
 import { navigationRef } from './navigationRef';
 import { ContextTabs } from './ContextTabs';
+import { AccountStack } from './stacks/AccountStack';
+import { WorkspaceNotice } from '../features/workspace/WorkspaceNotice';
+import { queueNavigationIntent, takePendingNavigationIntent } from '../features/workspace/navigationIntent';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -29,7 +32,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 /** Root gate: splash while restoring, sign-in when unauthenticated, the app when signed in. */
 export function RootNavigator() {
   const { theme } = useTheme();
-  const { status } = useAuth();
+  const { status, profile } = useAuth();
+  const personalEnabled = profile?.entitlements.personal.enabled === true;
   const network = useNetInfo();
   const offline = network.isConnected === false;
 
@@ -55,7 +59,10 @@ export function RootNavigator() {
   );
 
   return (
-    <NavigationContainer theme={navigationTheme} ref={navigationRef}>
+    <NavigationContainer theme={navigationTheme} ref={navigationRef} onReady={() => {
+      const pending = takePendingNavigationIntent();
+      if (pending) { queueNavigationIntent(pending); }
+    }}>
       {status === 'restoring' ? (
         <SplashScreen />
       ) : status === 'bootstrapError' ? (
@@ -70,26 +77,22 @@ export function RootNavigator() {
           <NavigationIntentGate />
           {offline ? <OfflineBanner /> : null}
           <PushBanner />
+          <WorkspaceNotice />
           <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="AppTabs" component={ContextTabs} />
-            <Stack.Screen
-              name="Announcements"
-              component={AnnouncementsScreen}
-            />
-            <Stack.Screen
-              name="AnnouncementDetail"
-              component={AnnouncementDetailScreen}
-            />
-            <Stack.Screen name="Surveys" component={SurveysScreen} />
-            <Stack.Screen
-              name="SurveyForm"
-              component={SurveyFormScreen}
-              options={{ gestureEnabled: false }}
-            />
+            {personalEnabled ? (
+              <Stack.Group navigationKey="personal">
+                <Stack.Screen name="Announcements" component={AnnouncementsScreen} />
+                <Stack.Screen name="AnnouncementDetail" component={AnnouncementDetailScreen} />
+                <Stack.Screen name="Surveys" component={SurveysScreen} />
+                <Stack.Screen name="SurveyForm" component={SurveyFormScreen} options={{ gestureEnabled: false }} />
+              </Stack.Group>
+            ) : null}
             <Stack.Screen
               name="Notifications"
               component={NotificationsScreen}
             />
+            <Stack.Screen name="AccountSettings" component={AccountStack} />
           </Stack.Navigator>
         </View>
       )}

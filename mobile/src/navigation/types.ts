@@ -9,7 +9,10 @@ export type RootStackParamList = {
   Surveys: undefined;
   SurveyForm: { id: number };
   Notifications: undefined;
+  AccountSettings: NavigatorScreenParams<AccountStackParamList> | undefined;
 };
+
+export type AccountStackParamList = Pick<ProfileStackParamList, 'Settings' | 'Appearance' | 'PrivacySecurity'>;
 
 export type ContextTabsParamList = {
   PersonalContext: NavigatorScreenParams<PersonalTabsParamList> | undefined;

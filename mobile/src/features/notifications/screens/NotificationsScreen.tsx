@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -16,25 +16,24 @@ import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotificationHi
 import { navigateAuthorizedIntent } from '../../workspace/NavigationIntentGate';
 import { useWorkspace } from '../../workspace/WorkspaceContext';
 import { useAuth } from '../../../store/auth';
-import { notificationDestination, NotificationDestination } from '../targets';
+import { notificationDestination } from '../targets';
 import { RootStackParamList } from '../../../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
-function openDestination(
-  destination: NotificationDestination,
-  profile: ReturnType<typeof useAuth>['profile'],
-  openAuthorizedUnit: ReturnType<typeof useWorkspace>['openAuthorizedUnit'],
-): void {
-  navigateAuthorizedIntent(destination, profile, openAuthorizedUnit);
-}
 
 export function NotificationsScreen() {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const navigation = useNavigation<Nav>();
-  const { profile } = useAuth();
-  const { openAuthorizedUnit } = useWorkspace();
+  const { status, profile } = useAuth();
+  const current = useRef({ status, profile });
+  const mounted = useRef(true);
+  current.current = { status, profile };
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const { openAuthorizedUnit, requestDiscard, enterPersonal, showNotice } = useWorkspace();
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const query = useNotificationHistory(page, filter);
@@ -49,7 +48,7 @@ export function NotificationsScreen() {
   const mutationError = markRead.isError || markAll.isError;
 
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} bottomSafeArea>
       <PageHeader
         title="Notifications"
         subtitle={unread === undefined ? 'Your in-app updates' : unread > 0 ? `${unread >= 100 ? '100+' : unread} unread` : 'You are all caught up'}
@@ -117,7 +116,17 @@ export function NotificationsScreen() {
                 item={item}
                 disabled={busy}
                 onRead={() => { markAll.reset(); markRead.mutate(item.id); }}
-                onOpen={destination ? () => openDestination(destination, profile, openAuthorizedUnit) : undefined}
+                onOpen={destination ? () => {
+                  const unavailable = () => {
+                    if (mounted.current) { showNotice?.('This item is not available to your account, or an action is still finishing.'); }
+                  };
+                  if (!navigateAuthorizedIntent(destination, profile, openAuthorizedUnit, requestDiscard, enterPersonal, {
+                    getProfile: () => mounted.current && current.current.status === 'signedIn' ? current.current.profile : null,
+                    onUnavailable: unavailable,
+                  })) {
+                    unavailable();
+                  }
+                } : undefined}
               />
             );
           }}

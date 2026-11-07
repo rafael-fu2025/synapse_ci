@@ -67,6 +67,7 @@ beforeEach(() => {
     profile: null,
     signIn,
     retryBootstrap: jest.fn(),
+    refreshProfile: jest.fn(),
     signOut: jest.fn(),
     acknowledgeExpired: jest.fn(),
   });
@@ -254,7 +255,7 @@ describe('Action', () => {
 
     act(() => renderer!.update(<Action onPress={onPress} loading>Sign in</Action>));
     expect(button().props.accessibilityState).toMatchObject({ disabled: true, busy: true });
-    expect(style().opacity).toBe(0.75);
+    expect(style().opacity).toBe(0.5);
     expect(renderer!.root.findAllByType(ActivityIndicator)).toHaveLength(1);
 
     act(() => renderer!.update(<Action>Sign in</Action>));

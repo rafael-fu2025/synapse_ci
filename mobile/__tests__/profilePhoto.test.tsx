@@ -212,7 +212,7 @@ describe('useProfilePhoto shared session cache', () => {
     fetchPhoto = jest.spyOn(health, 'profilePhoto');
     jest.mocked(useAuth).mockImplementation(() => ({
       user: currentUser, profile: null, status: currentUser ? 'signedIn' : 'signedOut',
-      signIn: jest.fn(), retryBootstrap: jest.fn(), signOut: jest.fn(), acknowledgeExpired: jest.fn(),
+      signIn: jest.fn(), retryBootstrap: jest.fn(), refreshProfile: jest.fn(), signOut: jest.fn(), acknowledgeExpired: jest.fn(),
     }));
   });
 

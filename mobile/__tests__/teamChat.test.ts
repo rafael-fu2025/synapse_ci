@@ -21,6 +21,7 @@ jest.mock('../src/lib/keychain', () => ({
 }));
 jest.mock('../src/store/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
+jest.mock('../src/lib/useActiveScreen', () => ({ useActiveScreen: () => true, useForegroundOnline: () => true }));
 
 function response(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -113,6 +114,27 @@ describe('Team Chat cursor and display helpers', () => {
       message(3),
     ], 1, 1);
     expect(rows.map(row => row.kind)).toEqual(['day', 'message', 'unread', 'message', 'day', 'message']);
+  });
+
+  it('keeps references for unchanged pages while replacing changed reply/task/mention fields', () => {
+    const current = [message(1), message(2)];
+    expect(mergeChatMessages(current, [message(1), message(2)], 'newer')).toBe(current);
+    const next = mergeChatMessages(current, [message(2, { tasks: [{ id: 1, title: 'Renamed' }] })], 'newer');
+    expect(next[0]).toBe(current[0]);
+    expect(next[1]).not.toBe(current[1]);
+    expect(mergeChatMessages(next, [], 'newer')).toBe(next);
+  });
+
+  it('adds bounded-height read markers after actual messages when requested', () => {
+    const rows = buildChatRows([message(1)], 0, 1, true, true);
+    expect(rows.at(-1)).toEqual({ kind: 'read-marker', key: 'read-marker:1', messageId: 1 });
+    expect(rows.at(-2)?.kind).toBe('message');
+  });
+
+  it('uses a distinct task-picker prefix for task-only invalidation', () => {
+    const identity = { tenantId: 9, userId: 12 };
+    expect(teamChatKeys.taskPicker(identity, 'clinic')).toEqual(['team-chat', 9, 12, 'clinic', 'tasks']);
+    expect(teamChatKeys.tasks(identity, 'clinic', '  active  ')).toEqual(['team-chat', 9, 12, 'clinic', 'tasks', 'active']);
   });
 
   it('uses the exact local realtime invalidation root', () => {

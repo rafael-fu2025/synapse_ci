@@ -33,7 +33,7 @@ export function CalendarItemRow({
       <View style={[styles.icon, event ? styles.eventIcon : styles.taskIcon]}>
         {event
           ? <CalendarClock size={18} color={theme.brandIcon} />
-          : <CheckSquare2 size={18} color="#347293" />}
+          : <CheckSquare2 size={18} color={theme.mode === 'dark' ? '#a6d6f0' : '#347293'} />}
       </View>
       <View style={styles.copy}>
         <View style={styles.titleRow}>
@@ -65,7 +65,7 @@ function createStyles(theme: Theme) {
     taskRow: { borderColor: theme.mode === 'dark' ? theme.line : '#cfe2eb' },
     icon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 11 },
     eventIcon: { backgroundColor: theme.brand50 },
-    taskIcon: { backgroundColor: '#e3f0f6' },
+    taskIcon: { backgroundColor: theme.mode === 'dark' ? '#20313c' : '#e3f0f6' },
     copy: { flex: 1, minWidth: 0 },
     titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
     title: { ...type.cardTitle, flex: 1, color: theme.ink900 },
