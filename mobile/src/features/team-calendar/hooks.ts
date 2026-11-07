@@ -7,6 +7,7 @@ import * as calendarApi from '../../api/endpoints/teamCalendar';
 import * as tasksApi from '../../api/endpoints/teamTasks';
 import type { TeamUnit } from '../../api/types';
 import { useActiveScreen } from '../../lib/useActiveScreen';
+import { useRealtimeReady } from '../../lib/useRealtimeReady';
 import { useAuth } from '../../store/auth';
 import { manilaDayBounds, todayInManila } from './manila';
 
@@ -57,13 +58,14 @@ export function useTeamCalendar(
   enabled = true,
 ) {
   const identity = useIdentity();
+  const realtime = useRealtimeReady();
   const eligible = useActiveScreen(enabled && identity.tenantId > 0 && identity.userId > 0 && unit !== null);
   const query = useQuery({
     queryKey: teamCalendarQueryKeys.list(identity.tenantId, identity.userId, unit, filters),
     queryFn: () => calendarApi.list(requireUnit(unit), filters),
     enabled: eligible,
     staleTime: CALENDAR_POLL_MS,
-    refetchInterval: eligible ? CALENDAR_POLL_MS : false,
+    refetchInterval: eligible && !realtime ? CALENDAR_POLL_MS : false,
     refetchIntervalInBackground: false,
     // A scheduled retry can otherwise start after the screen loses eligibility.
     // Manual retry and the next eligible fallback poll retain the cached result.
@@ -74,13 +76,14 @@ export function useTeamCalendar(
 
 export function useTeamCalendarEvent(unit: TeamUnit | null, id: number, enabled = true) {
   const identity = useIdentity();
+  const realtime = useRealtimeReady();
   const eligible = useActiveScreen(enabled && identity.tenantId > 0 && identity.userId > 0 && unit !== null && id > 0);
   const query = useQuery({
     queryKey: teamCalendarQueryKeys.event(identity.tenantId, identity.userId, unit, id),
     queryFn: () => calendarApi.detail(requireUnit(unit), id),
     enabled: eligible,
     staleTime: CALENDAR_POLL_MS,
-    refetchInterval: eligible ? CALENDAR_POLL_MS : false,
+    refetchInterval: eligible && !realtime ? CALENDAR_POLL_MS : false,
     refetchIntervalInBackground: false,
     retry: false,
   });

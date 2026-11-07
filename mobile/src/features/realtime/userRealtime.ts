@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { userRealtimeGrant } from '../../api/endpoints/realtime';
 import { queryKeys } from '../../api/queryKeys';
 import { teamTaskResourceKeys } from '../workspace/invalidateTeamResources';
+import { ownUserRealtime } from '../../lib/realtime/transportState';
 import {
   RealtimeGrant,
   RealtimeTarget,
@@ -76,6 +77,10 @@ function reconcileTargets(identity: RealtimeIdentity): RealtimeTarget[] {
     { key: ['team', identity.tenantId, identity.userId], exact: false },
     { key: ['team-calendar', identity.tenantId, identity.userId], exact: false },
     { key: ['team-chat', identity.tenantId, identity.userId], exact: false },
+    // Staff fanout is bounded too; a healthy socket cannot guarantee every hint arrives.
+    { key: queryKeys.staffQueue('clinic'), exact: true },
+    { key: queryKeys.staffQueue('guidance'), exact: true },
+    { key: queryKeys.staffQueue('all'), exact: true },
   ];
 }
 
@@ -97,6 +102,11 @@ export function startUserRealtime(client: QueryClient, identity: RealtimeIdentit
     };
     engines.set(engineKey, options);
   }
-  return startSocketRealtime(client, options);
+  const transport = ownUserRealtime(client, identity);
+  const stop = startSocketRealtime(client, options, { onReadyChange: transport.setReady });
+  return () => {
+    transport.release();
+    stop();
+  };
 }
 

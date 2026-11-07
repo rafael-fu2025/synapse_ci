@@ -35,8 +35,12 @@ function json(status: number, body: unknown = { error: { code: 'unauthenticated'
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+// Synthetic per-test values are used only by mocked fetch/keychain calls.
+let tokens: { oldAccess: string; oldRefresh: string; newAccess: string; newRefresh: string;
+  rotatedAccess: string; rotatedRefresh: string; newRotatedAccess: string; newRotatedRefresh: string };
+function fixtureToken() { return `fixture-${Math.random().toString(36).slice(2)}`; }
 function rotated() {
-  return json(200, { token: { access_token: 'rotated-access', refresh_token: 'rotated-refresh' } });
+  return json(200, { token: { access_token: tokens.rotatedAccess, refresh_token: tokens.rotatedRefresh } });
 }
 
 const surfaces = [
@@ -52,10 +56,12 @@ function bearer(call: number) {
 }
 
 beforeEach(() => {
+  tokens = { oldAccess: fixtureToken(), oldRefresh: fixtureToken(), newAccess: fixtureToken(), newRefresh: fixtureToken(),
+    rotatedAccess: fixtureToken(), rotatedRefresh: fixtureToken(), newRotatedAccess: fixtureToken(), newRotatedRefresh: fixtureToken() };
   __resetClientForTests();
-  jest.mocked(getRefreshToken).mockReset().mockResolvedValue('old-refresh');
+  jest.mocked(getRefreshToken).mockReset().mockResolvedValue(tokens.oldRefresh);
   jest.mocked(setRefreshToken).mockReset().mockResolvedValue(undefined);
-  setAccessToken('old-access');
+  setAccessToken(tokens.oldAccess);
   expired = jest.fn();
   setSessionExpiredHandler(expired);
   fetchMock = jest.fn();
@@ -69,15 +75,13 @@ afterEach(() => {
 });
 
 describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
-  it.each([
-    ['sign-out', null],
-    ['account switch', 'new-user-access'],
-  ])('discards a successful old response after %s', async (_boundary, nextToken) => {
+  it.each(['sign-out', 'account switch'] as const)('discards a successful old response after %s', async boundary => {
+    const nextToken = boundary === 'account switch' ? tokens.newAccess : null;
     const response = deferred<Response>();
     fetchMock.mockReturnValueOnce(response.promise);
     const pending = run('api/v1/private');
     const rejected = captureRejection(pending);
-    expect(bearer(0)).toBe('Bearer old-access');
+    expect(bearer(0)).toBe(`Bearer ${tokens.oldAccess}`);
 
     setAccessToken(nextToken);
     response.resolve(json(200, { private: 'old user data' }));
@@ -93,7 +97,7 @@ describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
     fetchMock.mockReturnValueOnce(response.promise);
     const pending = run('api/v1/private');
     const rejected = captureRejection(pending);
-    setAccessToken('new-user-access');
+    setAccessToken(tokens.newAccess);
     if (failure === 'network') {
       response.reject(new Error('offline'));
     } else {
@@ -102,16 +106,17 @@ describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
     await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(getRefreshToken).not.toHaveBeenCalled();
-    expect(getAccessToken()).toBe('new-user-access');
+    expect(getAccessToken()).toBe(tokens.newAccess);
     expect(expired).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['sign-out', null, 200],
-    ['account switch', 'new-user-access', 200],
-    ['sign-out', null, 401],
-    ['account switch', 'new-user-access', 401],
-  ] as const)('ignores a late refresh across a session boundary (case %#)', async (_boundary, nextToken, status) => {
+    ['sign-out', 200],
+    ['account switch', 200],
+    ['sign-out', 401],
+    ['account switch', 401],
+  ] as const)('ignores a late refresh across a session boundary (case %#)', async (boundary, status) => {
+    const nextToken = boundary === 'account switch' ? tokens.newAccess : null;
     const refreshResponse = deferred<Response>();
     const refreshStarted = deferred<void>();
     fetchMock.mockResolvedValueOnce(json(401)).mockImplementationOnce(() => {
@@ -142,11 +147,11 @@ describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
     const pending = run('api/v1/private');
     const rejected = captureRejection(pending);
     await saving.promise;
-    setAccessToken('new-user-access');
+    setAccessToken(tokens.newAccess);
     saved.resolve();
 
     await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
-    expect(getAccessToken()).toBe('new-user-access');
+    expect(getAccessToken()).toBe(tokens.newAccess);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(expired).not.toHaveBeenCalled();
   });
@@ -161,7 +166,7 @@ describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
       .mockResolvedValueOnce(json(200, { data: 'delayed retry' }));
     const old = run('api/v1/delayed');
     await run('api/v1/fast');
-    expect(getAccessToken()).toBe('rotated-access');
+    expect(getAccessToken()).toBe(tokens.rotatedAccess);
     delayed.resolve(json(401));
     await old;
 
@@ -172,14 +177,14 @@ describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
       'http://api.test/api/v1/fast',
       'http://api.test/api/v1/delayed',
     ]);
-    expect(bearer(0)).toBe('Bearer old-access');
-    expect(bearer(1)).toBe('Bearer old-access');
+    expect(bearer(0)).toBe(`Bearer ${tokens.oldAccess}`);
+    expect(bearer(1)).toBe(`Bearer ${tokens.oldAccess}`);
     expect(bearer(2)).toBeNull();
-    expect(bearer(3)).toBe('Bearer rotated-access');
-    expect(bearer(4)).toBe('Bearer rotated-access');
+    expect(bearer(3)).toBe(`Bearer ${tokens.rotatedAccess}`);
+    expect(bearer(4)).toBe(`Bearer ${tokens.rotatedAccess}`);
     expect(getRefreshToken).toHaveBeenCalledTimes(1);
     expect(setRefreshToken).toHaveBeenCalledTimes(1);
-    expect(setRefreshToken).toHaveBeenCalledWith('rotated-refresh');
+    expect(setRefreshToken).toHaveBeenCalledWith(tokens.rotatedRefresh);
     expect(expired).not.toHaveBeenCalled();
   });
 
@@ -196,16 +201,16 @@ describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
     } else {
       await expect(pending).rejects.toMatchObject({ status: 503 });
     }
-    expect(getAccessToken()).toBe('old-access');
+    expect(getAccessToken()).toBe(tokens.oldAccess);
     expect(setRefreshToken).not.toHaveBeenCalled();
     expect(expired).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(2);
 
     fetchMock.mockResolvedValueOnce(json(401)).mockResolvedValueOnce(rotated()).mockResolvedValueOnce(json(200, { ok: true }));
     await run('api/v1/private');
-    expect(getAccessToken()).toBe('rotated-access');
+    expect(getAccessToken()).toBe(tokens.rotatedAccess);
     expect(getRefreshToken).toHaveBeenCalledTimes(2);
-    expect(setRefreshToken).toHaveBeenCalledWith('rotated-refresh');
+    expect(setRefreshToken).toHaveBeenCalledWith(tokens.rotatedRefresh);
     expect(expired).not.toHaveBeenCalled();
   });
 
@@ -237,10 +242,10 @@ describe.each(surfaces)('$name session boundaries', ({ name, run }) => {
     const pending = run('api/v1/private');
     const rejected = captureRejection(pending);
     await retryStarted.promise;
-    setAccessToken('new-user-access');
+    setAccessToken(tokens.newAccess);
     retry.resolve(json(200, { private: 'old user data' }));
     await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
-    expect(getAccessToken()).toBe('new-user-access');
+    expect(getAccessToken()).toBe(tokens.newAccess);
     expect(expired).not.toHaveBeenCalled();
   });
 });
@@ -272,18 +277,18 @@ it('does not let an old refresh finalizer detach the new session\'s pending refr
   const old = refreshSession();
   const rejected = captureRejection(old);
   await oldStarted.promise;
-  setAccessToken('new-user-access');
-  jest.mocked(getRefreshToken).mockResolvedValue('new-user-refresh');
+  setAccessToken(tokens.newAccess);
+  jest.mocked(getRefreshToken).mockResolvedValue(tokens.newRefresh);
   const current = refreshSession();
   await newStarted.promise;
   oldResponse.resolve(rotated());
   await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
   expect(refreshSession()).toBe(current);
-  newResponse.resolve(json(200, { token: { access_token: 'new-rotated-access', refresh_token: 'new-rotated-refresh' } }));
+  newResponse.resolve(json(200, { token: { access_token: tokens.newRotatedAccess, refresh_token: tokens.newRotatedRefresh } }));
   await expect(current).resolves.toBe(true);
-  expect(getAccessToken()).toBe('new-rotated-access');
+  expect(getAccessToken()).toBe(tokens.newRotatedAccess);
   expect(setRefreshToken).toHaveBeenCalledTimes(1);
-  expect(setRefreshToken).toHaveBeenCalledWith('new-rotated-refresh');
+  expect(setRefreshToken).toHaveBeenCalledWith(tokens.newRotatedRefresh);
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -294,7 +299,7 @@ describe('sign-out revocation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe('http://api.test/api/v1/auth/logout');
     expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
-    expect(bearer(0)).toBe('Bearer old-access');
+    expect(bearer(0)).toBe(`Bearer ${tokens.oldAccess}`);
     expect(getRefreshToken).not.toHaveBeenCalled();
     expect(setRefreshToken).not.toHaveBeenCalled();
     expect(expired).not.toHaveBeenCalled();

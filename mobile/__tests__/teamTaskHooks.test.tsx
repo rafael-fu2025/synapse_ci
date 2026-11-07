@@ -6,6 +6,7 @@ import * as api from '../src/api/endpoints/teamTasks';
 import { queryKeys } from '../src/api/queryKeys';
 import type { TeamUnit } from '../src/api/types';
 import { useActiveScreen } from '../src/lib/useActiveScreen';
+import { ownUserRealtime } from '../src/lib/realtime/transportState';
 import { invalidateTeamTasks } from '../src/features/workspace/invalidateTeamResources';
 import { useChangeTeamTaskStatus, useCommentTeamTask, useCreateTeamTask, useTeamMemberSearch, useTeamTask, useTeamTaskAccessRecovery, useTeamTasks, useUpdateTeamTask } from '../src/features/team-tasks/hooks';
 
@@ -94,6 +95,54 @@ describe('Team task scoped query hooks', () => {
     mockActive = true; rerender(Probes); await flush();
     expect(api.list).toHaveBeenCalledTimes(3); expect(api.detail).toHaveBeenCalledTimes(2);
     expect(useActiveScreen).toHaveBeenCalledWith(true);
+  });
+
+  it('replaces only the short poll with real readiness, retaining invalidation and manual HTTP reads', async () => {
+    const transport = ownUserRealtime(client, { tenantId: 7, userId: 5 });
+    try {
+      render(ListProbe); await flush();
+      expect(api.list).toHaveBeenCalledTimes(1);
+      await flush(30_000);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      act(() => transport.setReady(true)); await flush();
+      await flush(90_000);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      expect(listResult.eligible).toBe(true);
+      await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.teamUnit(7, 5, 'clinic') }); });
+      await flush();
+      expect(api.list).toHaveBeenCalledTimes(3);
+      await act(async () => { await listResult.refetch(); }); await flush();
+      expect(api.list).toHaveBeenCalledTimes(4);
+      act(() => transport.setReady(false)); await flush();
+      await flush(29_999);
+      expect(api.list).toHaveBeenCalledTimes(4);
+      await flush(1);
+      expect(api.list).toHaveBeenCalledTimes(5);
+    } finally {
+      act(() => transport.release());
+    }
+  });
+
+  it('does not let another client or previous account suppress the current account fallback', async () => {
+    const otherClient = new QueryClient();
+    const otherTransport = ownUserRealtime(otherClient, { tenantId: 7, userId: 5 });
+    let transport = ownUserRealtime(client, { tenantId: 7, userId: 6 });
+    otherTransport.setReady(true); transport.setReady(true);
+    try {
+      render(ListProbe); await flush();
+      await flush(30_000);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      act(() => { transport = ownUserRealtime(client, { tenantId: 7, userId: 5 }); transport.setReady(true); });
+      await flush(30_000);
+      expect(api.list).toHaveBeenCalledTimes(2);
+      mockIdentity = { id: 6, tenant_id: 7 }; rerender(ListProbe); await flush();
+      expect(api.list).toHaveBeenCalledTimes(3);
+      await flush(30_000);
+      expect(api.list).toHaveBeenCalledTimes(4);
+    } finally {
+      act(() => transport.release());
+      otherTransport.release(); otherClient.clear();
+    }
   });
 
   it('keeps same-scope rows while a page/filter loads but never carries them into a new unit or list scope', async () => {

@@ -164,13 +164,25 @@ UI by `/me` entitlements but always honors 401/403.
   the active Workspace unit remounts its navigator so old records, versions, and forms cannot carry
   over. Disabled Work features are omitted. Cross-tab actions use explicit nested routes;
   Home’s “Book a visit” opens the Visits booking flow, not an unregistered Home route.
-- Personal, Workspace, and context transitions share 240 ms cubic-out, opaque current-width motion
-  with live Reduce Motion support. The center CTA responds to accepted switches and blocks rapid
-  duplicate taps; shared overlays/submissions lock it. The custom bar hides for the keyboard.
-- Queries use a 30-second freshness window and an in-memory cache only. Focused queue polling (15s),
-  notifications (30s), Tasks/Calendar (30s), and latest Chat (5s) keep their resource-specific cadence.
-  Team automatic reads pause in the background, offline, and beneath shared overlays. Native
-  connectivity resumes reads; public Internet reachability is not required for a LAN API.
+- Personal, Workspace, and context **scenes** share 240 ms cubic-out, opaque current-width motion.
+  One persistent navigation bar stays outside those scenes: its raised circular CTA remains anchored
+  while a native-driver, center-out reveal transforms the full bar to maroon for Work and reverses
+  to the themed Personal surface. Tab foregrounds follow in a coordinated 400 ms sequence; live
+  Reduce Motion settles immediately. Accepted context changes—not picker opening or a cancelled
+  discard prompt—drive this animation. Duplicate taps and overlay/submission locks remain guarded;
+  the complete floating bar hides for the keyboard without leaving a bottom gap.
+- Queries use a 30-second freshness window and an in-memory cache only. Polling is the default:
+  queue/staff queue 15s, notifications 30s, Tasks/Calendar 30s and latest Chat 5s. A healthy authenticated
+  private WebSocket takes priority and pauses these short timers; an enabled grant or socket open
+  without server `ready` does not. Hints and manual/initial reads remain enabled. Connection loss,
+  heartbeat timeout, renewal or lifetime cleanup restores eligible fallback polling. Team automatic
+  reads pause in the background, offline, and beneath shared overlays. Native connectivity resumes
+  reads; public Internet reachability is not required for a LAN API.
+- Both connected and fallback modes retain 120-second repair snapshots for hint-covered resources,
+  now including the staff queue: publisher fanout is bounded. Readiness is QueryClient/identity/lease
+  scoped, not persisted, and old connection callbacks cannot suppress a new account's polls.
+  Dashboard `/me` has no matching hint and keeps its independent 30-second refresh. Public carousel
+  socket health is separate from the authenticated transport.
 - Team task changes invalidate same-unit Tasks, Calendar deadlines, and Chat task-picker results,
   not browsed Chat history. Chat serializes physical reads, retains its bounded history window, and
   advances read cursors only for actually visible message bottoms. Pull-refresh feedback is separate
@@ -247,6 +259,72 @@ grants and reconnects with capped jittered backoff. Initial/foreground/reconnect
 120-second reconciliation repair dropped hints. The six-second visual rotation is independent;
 invalidation keeps the selected slide by ID when it still exists and does not reset form fields.
 
+### Floating context-switcher acceptance
+
+The shared bar is mounted once at the outer `ContextTabs` level, not inside a sliding context scene.
+Its 56×56 CTA disc sits in a 64×64 separation ring, raised 22px above the surface; the destination
+caption is outside the disc. A 76px central slot keeps real tabs clear of the button. The reveal is
+clipped to the bar, but the raised hit area and shadow are not clipped. Safe-area padding, larger
+text and keyboard visibility must not stretch the circle or leave an empty keyboard gap.
+
+Implementation was completed without a device/emulator. After the native packaging repair, the
+user confirmed the navigation and switcher work on the connected Android phone and match the
+intended design. The remaining cross-device/accessibility/performance matrix is still pending:
+
+1. Verify the button is visibly raised, perfectly circular and touchable at its upper edge. Check
+   narrow/wide layouts, portrait/landscape, both themes, larger text and device bottom insets.
+2. Switch Personal → Work: the bar/button stay anchored while maroon spreads from the center across
+   the full bar, including the safe-bottom area. Work tabs follow in sequence with readable white
+   foregrounds. Switch back: the reveal reverses to the active Personal theme without a moving bar.
+3. Reverse an accepted switch mid-animation. Verify no snapping, duplicate context action or stale
+   tab destination; same-unit tab selections, nested routes and local state stay retained.
+4. Open/cancel unit selection and Keep editing on a disposable local draft. Neither should animate
+   an unaccepted context change. Pending submission and overlay-exit locks must still prevent taps.
+5. Show/hide the keyboard while in each context and while switching. The entire floating bar hides
+   without a bottom gap and restores the correct context. Live Reduce Motion settles immediately.
+6. Verify Personal-only/Work-only accounts have no context action or reserved center slot, and
+   disabled Work features do not leave phantom tabs. Check TalkBack/VoiceOver sees one actionable
+   tab set, not the decorative crossfade layers.
+
+Jest geometry/animation assertions and a debug build are not proof of native shadow rendering,
+touch dispatch or frame-time smoothness. Profile the release build before claiming sustained FPS.
+
+### Display refresh-rate acceptance
+
+Display refresh support is a native window policy, **not** a polling interval or an animation duration.
+Android 16+ propagates the HIGH requested frame-rate category to the main and RN Modal view trees;
+earlier releases prefer an advertised same-resolution rate where safe. API 24–33 defers to the OS
+on multi-resolution displays rather than risk a resolution switch. Foreground preferences are
+released/restored across app, modal, display and React-context lifecycles. No global display settings,
+battery saver, thermal policies or user-selected mode is changed. iOS already opts into ProMotion
+with `CADisableMinimumFrameDurationOnPhone`; no iOS build was performed on Windows.
+
+Implementation was completed without a device/emulator. The later repaired APK passed startup
+on the physical API 33 phone; sustained frame-rate and full display-lifecycle acceptance remain
+pending. After rebuilding the native app:
+
+1. With the device set to each supported normal/high refresh option, inspect Personal and Work
+   scrolling, the center context switch, tab transitions, sheets/confirmation dialogs and keyboard
+   entry/exit. Do not expect a 60 Hz panel to acquire a 90/120 Hz mode.
+2. Repeat after background/resume, rotation, opening/closing sheets and moving to another supported
+   display if available. Native windows must not retain stale preferences after closure.
+3. Repeat with battery saver, Reduce Motion, and any available thermal/user refresh limits. The OS
+   remains authoritative; an observed cap is not permission to disable those limits.
+4. Profile a release/profile build's frame times, not just display Hz: 60/90/120 Hz frame budgets are
+   approximately 16.67/11.11/8.33 ms. Record jank/dropped-frame evidence before claiming sustained FPS.
+5. Check freshness separately: with realtime disabled, fallback polling runs at its resource cadence;
+   with authenticated realtime ready, hints refresh without parallel short polling. Stop/restore the
+   socket and verify fallback/reconnect without losing drafts or replacing browsed Chat history.
+   Leave the socket quiet long enough to verify the 120-second repair still runs.
+
+The dependency-free native selector tests compile the actual pure Java selector with local `javac`
+and run it with `java`; bounded source contracts check native lifecycle/API wiring. These tests do
+not replace Android WindowManager or real-panel acceptance:
+
+```sh
+node --test android/app/src/test/refresh-rate-policy.test.cjs
+```
+
 ## Quality gates
 
 ```bash
@@ -254,11 +332,23 @@ cd mobile
 npx tsc --noEmit   # types
 npm run lint       # eslint (four existing secureNonce no-bitwise warnings; no errors)
 npm test -- --runInBand  # jest
-node --test scripts/dev-tooling.test.cjs  # developer tooling, no device or network
+node --test scripts/dev-tooling.test.cjs scripts/check-android-apk.test.cjs  # no device/network
+node --test android/app/src/test/refresh-rate-policy.test.cjs  # local JDK, no device
 ```
 
-`.github/workflows/mobile.yml` runs exactly these four gates on every push and pull request, so a
-regression in the client cannot reach `main` unverified. `npm run coverage` is available locally but
+`.github/workflows/mobile.yml` runs these gates on every push and pull request, including the
+native selector tests under a configured JDK and a separate Android debug build/packaging job.
+Standalone JVM tests do not prove Android emitted the Java implementation: the APK checker follows
+actual DEX class definitions and requires both the selector and its nested `Mode` class. From
+`mobile/android`, build with the canonical Metro port, then check the artifact from `mobile/`:
+
+```sh
+bash gradlew :app:assembleDebug -PreactNativeDevServerPort=8083 --console=plain
+# Return to mobile/ after the build:
+node scripts/check-android-apk.cjs android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+These commands do not install an app or start Metro. `npm run coverage` is available locally but
 must **not** be combined with `--runInBand`: coverage instrumentation slows the fake-timer suites
 enough to time them out.
 

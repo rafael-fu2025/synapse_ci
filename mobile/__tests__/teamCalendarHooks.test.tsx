@@ -10,6 +10,7 @@ import * as tasks from '../src/api/endpoints/teamTasks';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { OverlayProvider, useOverlayActivity } from '../src/components/OverlayProvider';
 import { useAuth } from '../src/store/auth';
+import { ownUserRealtime } from '../src/lib/realtime/transportState';
 import {
   teamCalendarQueryKeys,
   useCalendarManualRefresh,
@@ -191,6 +192,58 @@ describe('real Calendar query eligibility and refresh', () => {
     expect(calendar.list).toHaveBeenCalledTimes(4);
     act(() => onlineManager.setOnline(true)); await flush();
     expect(calendar.list).toHaveBeenCalledTimes(5);
+  });
+
+  it('suppresses list/detail polling only while ready, retaining hints and foreground eligibility on fallback', async () => {
+    const transport = ownUserRealtime(client, { tenantId: 3, userId: 7 });
+    try {
+      render(QueryProbes); await flush();
+      await flush(30_000);
+      expect(calendar.list).toHaveBeenCalledTimes(2); expect(calendar.detail).toHaveBeenCalledTimes(2);
+      act(() => transport.setReady(true)); await flush(90_000);
+      expect(listResult.eligible).toBe(true); expect(detailResult.eligible).toBe(true);
+      expect(calendar.list).toHaveBeenCalledTimes(2); expect(calendar.detail).toHaveBeenCalledTimes(2);
+      await act(async () => { await client.invalidateQueries({ queryKey: teamCalendarQueryKeys.unit(3, 7, 'clinic') }); });
+      await flush();
+      expect(calendar.list).toHaveBeenCalledTimes(3); expect(calendar.detail).toHaveBeenCalledTimes(3);
+      expect(tasks.members).toHaveBeenCalledTimes(2);
+      setAppState('background');
+      act(() => transport.setReady(false)); await flush(60_000);
+      expect(calendar.list).toHaveBeenCalledTimes(3); expect(calendar.detail).toHaveBeenCalledTimes(3);
+      setAppState('active'); await flush();
+      expect(calendar.list).toHaveBeenCalledTimes(4); expect(calendar.detail).toHaveBeenCalledTimes(4);
+      await flush(30_000);
+      expect(calendar.list).toHaveBeenCalledTimes(5); expect(calendar.detail).toHaveBeenCalledTimes(5);
+    } finally {
+      act(() => transport.release());
+    }
+  });
+
+  it('restores the fallback for a replacement lease without allowing old callbacks to suppress it', async () => {
+    const oldTransport = ownUserRealtime(client, { tenantId: 3, userId: 7 });
+    oldTransport.setReady(true);
+    let replacement: ReturnType<typeof ownUserRealtime> | undefined;
+    try {
+      render(QueryProbes); await flush();
+      await flush(60_000);
+      expect(calendar.list).toHaveBeenCalledTimes(1); expect(calendar.detail).toHaveBeenCalledTimes(1);
+      act(() => { replacement = ownUserRealtime(client, { tenantId: 3, userId: 7 }); }); await flush();
+      act(() => { oldTransport.setReady(true); oldTransport.release(); });
+      await flush(30_000);
+      expect(calendar.list).toHaveBeenCalledTimes(2); expect(calendar.detail).toHaveBeenCalledTimes(2);
+      act(() => replacement!.setReady(true)); await flush();
+      act(() => { oldTransport.setReady(false); oldTransport.release(); });
+      unit = 'guidance'; rerender(); await flush();
+      expect(calendar.list).toHaveBeenCalledTimes(3); expect(calendar.detail).toHaveBeenCalledTimes(3);
+      expect(calendar.list).toHaveBeenLastCalledWith('guidance', filters);
+      await flush(60_000);
+      expect(calendar.list).toHaveBeenCalledTimes(3); expect(calendar.detail).toHaveBeenCalledTimes(3);
+      act(() => replacement!.release()); await flush();
+      await flush(30_000);
+      expect(calendar.list).toHaveBeenCalledTimes(4); expect(calendar.detail).toHaveBeenCalledTimes(4);
+    } finally {
+      act(() => { replacement?.release(); oldTransport.release(); });
+    }
   });
 
   it('pauses active observers behind a real overlay and resumes stale caches only after native exit', async () => {

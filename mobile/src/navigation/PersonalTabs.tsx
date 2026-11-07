@@ -6,7 +6,7 @@ import { HomeStack } from './stacks/HomeStack';
 import { ProfileStack } from './stacks/ProfileStack';
 import { QueueStack } from './stacks/QueueStack';
 import { VisitsStack } from './stacks/VisitsStack';
-import { SharedContextTabBar } from './SharedContextTabBar';
+import { ContextTabBarBinding } from './ContextTabBarBinding';
 import { useTabMotionOptions } from './useTabMotionOptions';
 
 const Tab = createBottomTabNavigator<PersonalTabsParamList>();
@@ -16,9 +16,10 @@ export function PersonalTabs() {
   const motion = useTabMotionOptions();
   return (
     <Tab.Navigator
-      tabBar={(props) => <SharedContextTabBar {...props} />}
+      tabBar={(props) => <ContextTabBarBinding mode="personal" {...props} />}
       screenOptions={({ route }) => ({
         ...motion,
+        tabBarStyle: { height: 0 },
         tabBarIcon: ({ color, focused }) => {
           const Icon = ICONS[route.name];
           return <Icon size={21} color={color} strokeWidth={focused ? 2.5 : 2} />;

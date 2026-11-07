@@ -23,6 +23,10 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - name: Install locked dependencies
         run: npm ci
       - name: Type check
@@ -33,4 +37,34 @@ jobs:
         # Serialized: the suite drives fake timers and real timers in the same files.
         run: npm test -- --runInBand
       - name: Developer tooling tests
-        run: node --test scripts/dev-tooling.test.cjs
+        run: node --test scripts/dev-tooling.test.cjs scripts/check-android-apk.test.cjs
+      - name: Native refresh-rate policy tests
+        run: node --test android/app/src/test/refresh-rate-policy.test.cjs
+
+  android-packaging:
+    name: Android native packaging
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build debug APK without a device
+        working-directory: mobile/android
+        run: bash gradlew :app:assembleDebug -PreactNativeDevServerPort=8083 --console=plain
+      - name: Verify native class definitions in the APK
+        run: node scripts/check-android-apk.cjs android/app/build/outputs/apk/debug/app-debug.apk

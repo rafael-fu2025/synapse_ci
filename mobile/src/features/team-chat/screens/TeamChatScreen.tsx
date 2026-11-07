@@ -16,6 +16,7 @@ import { secureClientNonce } from '../../../lib/secureNonce';
 import { useForegroundOnline } from '../../../lib/useActiveScreen';
 import { useKeyboardVisible } from '../../../lib/useKeyboardVisible';
 import { useReducedMotion } from '../../../lib/useReducedMotion';
+import { useRealtimeReady } from '../../../lib/useRealtimeReady';
 import { navigateToWorkspaceIntent, navigationRef } from '../../../navigation/navigationRef';
 import type { WorkspaceTabsParamList } from '../../../navigation/types';
 import { useAuth } from '../../../store/auth';
@@ -47,15 +48,16 @@ const ChatStatus = memo(function ChatStatusView({ updatedAt, active, mode, error
 }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
+  const realtime = useRealtimeReady();
   const [stale, setStale] = useState(false);
   useEffect(() => {
-    if (!updatedAt || !active) { setStale(false); return; }
+    if (!updatedAt || !active || realtime) { setStale(false); return; }
     const remaining = updatedAt + 15_000 - Date.now();
     setStale(remaining <= 0);
     if (remaining <= 0) { return; }
     const timer = setTimeout(() => setStale(true), remaining);
     return () => clearTimeout(timer);
-  }, [active, updatedAt]);
+  }, [active, realtime, updatedAt]);
   const kind = teamChatErrorKind(error);
   const text = kind === 'forbidden' ? 'Team Workspace access changed. Protected chat data was removed.'
     : kind === 'unauthorized' ? 'Your session expired. Protected chat data was removed.'
@@ -63,7 +65,7 @@ const ChatStatus = memo(function ChatStatusView({ updatedAt, active, mode, error
         : error && loaded ? mode === 'history'
           ? 'The requested history could not be loaded. Your current window is unchanged; try again.'
           : 'Updates interrupted. Showing the last loaded messages; pull to retry.'
-          : stale && mode === 'latest' ? 'Messages may be out of date. Pull to refresh.' : null;
+          : !realtime && stale && mode === 'latest' ? 'Messages may be out of date. Pull to refresh.' : null;
   return text ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={styles.status}>{text}</Text> : null;
 });
 
