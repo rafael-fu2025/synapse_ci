@@ -239,11 +239,11 @@ describe('socket protocol and hint dispatch', () => {
     hint(ws, 'team.tasks.changed', { unit: 'clinic' });
     await flush(100);
     expect(teamTasks).toHaveBeenCalledTimes(3);
-    expect(teamCalendar).toHaveBeenCalledTimes(2);
+    expect(teamCalendar).toHaveBeenCalledTimes(3); // Task deadlines share the calendar projection.
     expect(teamChat).toHaveBeenCalledTimes(2);
     hint(ws, 'team.calendar.changed', { unit: 'clinic' });
     await flush(100);
-    expect(teamCalendar).toHaveBeenCalledTimes(3);
+    expect(teamCalendar).toHaveBeenCalledTimes(4);
     expect(teamTasks).toHaveBeenCalledTimes(3);
     hint(ws, 'team.chat.changed', { unit: 'clinic' });
     await flush(100);
@@ -267,7 +267,7 @@ describe('socket protocol and hint dispatch', () => {
     expect(staffGuidance).toHaveBeenCalledTimes(1);
     expect(staffAll).toHaveBeenCalledTimes(2);
     expect(teamTasks).toHaveBeenCalledTimes(3);
-    expect(teamCalendar).toHaveBeenCalledTimes(3);
+    expect(teamCalendar).toHaveBeenCalledTimes(4);
     expect(teamChat).toHaveBeenCalledTimes(3);
     expect(client.getQueryCache().getAll()).toHaveLength(11);
   });

@@ -1,55 +1,73 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
+import { BackHandler, Keyboard, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { useNavigation } from '@react-navigation/native';
-import { Text } from 'react-native';
+import type { BottomTabBarProps, BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { TabActions, useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NavigationState, PartialState } from '@react-navigation/native';
 import { Screen } from '../components/Screen';
-import { WorkspaceDiscardDialog } from '../features/workspace/WorkspaceDiscardDialog';
 import { useWorkspace } from '../features/workspace/WorkspaceContext';
-import { WorkspaceUnitPicker } from '../features/workspace/WorkspaceUnitPicker';
 import { ContextTabsParamList } from './types';
 import { PersonalTabs } from './PersonalTabs';
 import { WorkspaceTabs } from './WorkspaceTabs';
+import { useTabMotionOptions } from './useTabMotionOptions';
 
 const Tab = createBottomTabNavigator<ContextTabsParamList>();
-type ContextNavigation = BottomTabNavigationProp<ContextTabsParamList>;
 
-function useContextModeSync() {
-  const { mode, personalEnabled } = useWorkspace();
-  const navigation = useNavigation<ContextNavigation>();
-  useEffect(() => {
-    navigation.jumpTo(mode === 'workspace' || !personalEnabled ? 'WorkspaceContext' : 'PersonalContext');
-  }, [mode, navigation, personalEnabled]);
+function hasPoppableStack(state: NavigationState | PartialState<NavigationState> | undefined): boolean {
+  if (!state) { return false; }
+  if (state.type === 'stack' && (state.index ?? 0) > 0) { return true; }
+  return hasPoppableStack(state.routes[state.index ?? 0]?.state);
 }
 
-function PersonalContextScreen() {
-  useContextModeSync();
-  return <PersonalTabs />;
+function ContextModeSync({ navigation, state }: BottomTabBarProps) {
+  const { mode, personalEnabled } = useWorkspace();
+  const route = mode === 'workspace' || !personalEnabled ? 'WorkspaceContext' : 'PersonalContext';
+  useEffect(() => {
+    if (state.routes[state.index]?.name !== route) { navigation.dispatch(TabActions.jumpTo(route)); }
+  }, [navigation, route, state.index, state.routes]);
+  return null;
 }
 
 function WorkspaceContextScreen() {
-  useContextModeSync();
+  const { personalEnabled, enterPersonal } = useWorkspace();
+  const navigation = useNavigation<BottomTabNavigationProp<ContextTabsParamList>>();
+  useFocusEffect(useCallback(() => {
+    if (!personalEnabled) { return undefined; }
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (Keyboard.isVisible()) {
+        Keyboard.dismiss();
+        return true;
+      }
+      const state = navigation.getState();
+      if (hasPoppableStack(state.routes[state.index]?.state)) { return false; }
+      enterPersonal();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [enterPersonal, navigation, personalEnabled]));
   return <WorkspaceTabs />;
 }
 
-/** Keeps both independent navigator trees alive and hides the parent context tabs. */
+/** Both contexts retain their same-unit history; only accepted transitions change focus. */
 export function ContextTabs() {
-  const { personalEnabled, workEnabled } = useWorkspace();
+  const { mode, personalEnabled, workEnabled } = useWorkspace();
+  const motion = useTabMotionOptions();
+  const route = mode === 'workspace' || !personalEnabled ? 'WorkspaceContext' : 'PersonalContext';
   if (!personalEnabled && !workEnabled) {
     return <Screen><Text accessibilityRole="alert">No mobile portal access is available for this account.</Text></Screen>;
   }
   return (
-    <>
-      <Tab.Navigator
-        initialRouteName={personalEnabled ? 'PersonalContext' : 'WorkspaceContext'}
-        backBehavior={personalEnabled ? 'initialRoute' : 'none'}
-        tabBar={() => null}
-        screenOptions={{ headerShown: false, lazy: false, freezeOnBlur: true }}>
-        {personalEnabled ? <Tab.Screen name="PersonalContext" component={PersonalContextScreen} /> : null}
-        {workEnabled ? <Tab.Screen name="WorkspaceContext" component={WorkspaceContextScreen} /> : null}
-      </Tab.Navigator>
-      <WorkspaceUnitPicker />
-      <WorkspaceDiscardDialog />
-    </>
+    <Tab.Navigator
+      initialRouteName={route}
+      backBehavior="none"
+      tabBar={(props) => <ContextModeSync {...props} />}
+      screenOptions={motion}>
+      {personalEnabled ? <Tab.Screen name="PersonalContext" component={PersonalContextScreen} /> : null}
+      {workEnabled ? <Tab.Screen name="WorkspaceContext" component={WorkspaceContextScreen} /> : null}
+    </Tab.Navigator>
   );
+}
+
+function PersonalContextScreen() {
+  return <PersonalTabs />;
 }

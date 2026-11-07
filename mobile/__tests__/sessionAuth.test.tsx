@@ -103,6 +103,48 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
+it('refreshes authoritative access without leaving signedIn and coalesces simultaneous reads', async () => {
+  await mount();
+  await signIn();
+  const pending = deferred<Response>();
+  fetchMock.mockReturnValueOnce(pending.promise);
+  let first!: Promise<void>;
+  let second!: Promise<void>;
+  act(() => { first = auth.refreshProfile(); second = auth.refreshProfile(); });
+  expect(first).toBe(second);
+  expect(auth.status).toBe('signedIn');
+  expect(auth.profile?.user.id).toBe(1);
+  const next = profile();
+  next.entitlements.personal.enabled = false;
+  pending.resolve(json(200, next));
+  await act(async () => { await first; });
+  expect(auth.status).toBe('signedIn');
+  expect(auth.profile?.entitlements.personal.enabled).toBe(false);
+});
+
+it('retains the current session after a temporary access refresh failure', async () => {
+  await mount();
+  await signIn();
+  fetchMock.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => { await expect(auth.refreshProfile()).rejects.toThrow(); });
+  expect(auth.status).toBe('signedIn');
+  expect(auth.user?.id).toBe(1);
+  expect(getAccessToken()).toBe('access-1');
+});
+
+it('does not restore a signed-out identity from a late access refresh', async () => {
+  await mount();
+  await signIn();
+  const pending = deferred<Response>();
+  fetchMock.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(json(200, {}));
+  const result = captureRejection(auth.refreshProfile());
+  await act(async () => { await auth.signOut(); });
+  pending.resolve(json(200, profile()));
+  await act(async () => { expect(await result).toBeInstanceOf(SessionChangedError); });
+  expect(auth.status).toBe('signedOut');
+  expect(auth.profile).toBeNull();
+});
+
 it('clears cached private data and leaves signedIn immediately, before a stalled revoke completes', async () => {
   await mount();
   await signIn();

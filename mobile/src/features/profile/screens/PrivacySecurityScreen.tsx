@@ -10,6 +10,7 @@ import { PageHeader } from '../../../components/PageHeader';
 import { palette, Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { useAuth } from '../../../store/auth';
+import { useSignOutConfirmation } from '../../auth/useSignOutConfirmation';
 import { ProfileStackParamList } from '../../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'PrivacySecurity'>;
@@ -18,11 +19,12 @@ export function PrivacySecurityScreen() {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const navigation = useNavigation<Props['navigation']>();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const { requestSignOut, signOutDialog } = useSignOutConfirmation();
 
   return (
-    <Screen header={<PageHeader edgeToEdge title="Privacy & security" onBack={navigation.goBack} />}>
-
+    <Screen bottomSafeArea header={<PageHeader edgeToEdge title="Privacy & security" onBack={navigation.goBack} />}>
+      {signOutDialog}
       <LinearGradient colors={[palette.brand900, palette.brand600]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
         <ShieldCheck size={34} color="#ffffff" />
         <View style={styles.heroCopy}>
@@ -50,9 +52,7 @@ export function PrivacySecurityScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Action variant="danger" full onPress={() => {
-          signOut().catch(() => undefined);
-        }}>
+        <Action variant="danger" full onPress={requestSignOut}>
           Sign out of this device
         </Action>
       </View>

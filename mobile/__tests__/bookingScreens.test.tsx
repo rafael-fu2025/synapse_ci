@@ -15,6 +15,7 @@ import { AppointmentsScreen } from '../src/features/appointments/screens/Appoint
 import { AppointmentDetailScreen } from '../src/features/appointments/screens/AppointmentDetailScreen';
 import { AppointmentCard } from '../src/features/appointments/components/AppointmentCard';
 
+jest.mock('../src/features/workspace/WorkspaceContext', () => ({ useOptionalWorkspace: () => null }));
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 jest.mock('../src/features/appointments/hooks', () => ({

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { elevation, spacing, type } from '../theme/tokens';
 
@@ -12,6 +12,10 @@ export function Action({
   full = false,
   loading = false,
   disabled = false,
+  icon,
+  accessibilityLabel,
+  accessibilityHint,
+  testID,
   style,
 }: {
   children: React.ReactNode;
@@ -20,6 +24,10 @@ export function Action({
   full?: boolean;
   loading?: boolean;
   disabled?: boolean;
+  icon?: React.ReactNode;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
+  testID?: string;
   style?: ViewStyle;
 }) {
   const { theme } = useTheme();
@@ -28,21 +36,30 @@ export function Action({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={isDisabled ? undefined : onPress}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
+      testID={testID}
       style={({ pressed }) => [
         styles.base,
         styles[variant],
         full && styles.full,
-        (pressed || loading) && styles.pressed,
-        disabled && styles.disabled,
+        pressed && !isDisabled && styles.pressed,
+        isDisabled && styles.disabled,
         style,
       ]}>
+      <View style={[styles.content, loading && styles.hidden]} pointerEvents="none">
+        {icon}
+        <Text style={[styles.label, styles[`${variant}Label` as const] as object]}>{children}</Text>
+      </View>
       {loading ? (
-        <ActivityIndicator size="small" color={variant === 'primary' || variant === 'danger' ? '#ffffff' : theme.brandIcon} />
+        <View style={styles.spinner} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <ActivityIndicator size="small" color={variant === 'primary' || variant === 'danger' ? '#ffffff' : theme.brandIcon} />
+        </View>
       ) : null}
-      <Text style={[styles.label, styles[`${variant}Label` as const] as object]}>{children}</Text>
     </Pressable>
   );
 }
@@ -60,6 +77,9 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
       borderRadius: 12,
       opacity: 1,
     },
+    content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+    hidden: { opacity: 0 },
+    spinner: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
     full: { width: '100%' as const },
     pressed: { opacity: 0.75, transform: [{ translateY: -0.5 }] },
     disabled: { opacity: 0.5 },

@@ -18,6 +18,7 @@ import { AppTabsParamList, VisitsStackParamList } from '../../../navigation/type
 import { formatDateTile, formatFullDate } from '../../../lib/format';
 import { BOOKING_STEPS, BookingStep, PREFERRED_TIMES, TYPE_LABELS, formatPreferredTime, isHalfDay, nextDays, previousBookingStep } from '../booking';
 import { appointmentErrorMessage } from '../errors';
+import { useContextDraftRegistration } from '../../workspace/useContextDraftRegistration';
 
 // Keep nested tab destinations typed locally; Booking may be hosted from Home or Visits.
 type BookingTabs = Omit<AppTabsParamList, 'Visits'> & {
@@ -44,6 +45,15 @@ export function BookingScreen() {
   const [reviewed, setReviewed] = useState(false);
   const [received, setReceived] = useState<Appointment | null>(null);
   const submitting = useRef(false);
+  useContextDraftRegistration({
+    dirty: step !== 'success' && (unit !== null || reason !== '' || date !== null || visitType !== null),
+    submitting: create.isPending,
+    onDiscard: () => {
+      setStep('unit'); setUnit(null); setDate(null); setTime(null); setVisitType(null);
+      setReason(''); setError(null); setReviewed(false); setReceived(null);
+      submitting.current = false;
+    },
+  });
 
   const days = useMemo(() => nextDays(14), []);
   const types = unit === 'guidance' ? GUIDANCE_TYPES : CLINIC_TYPES;

@@ -8,6 +8,9 @@ import type {
 export const CHAT_PAGE_LIMIT = 40;
 export const CHAT_WINDOW_LIMIT = 400;
 export const CHAT_POLL_MS = 5_000;
+export const CHAT_TASK_LIMIT = 20;
+export const CHAT_TASK_SEARCH_LIMIT = 40;
+export const CHAT_MEMBER_SEARCH_LIMIT = 20;
 
 export type TeamChatMode = 'latest' | 'history';
 export type TeamChatMergeDirection = 'latest' | 'older' | 'newer';
@@ -41,7 +44,13 @@ export interface ChatMessageRow {
   message: TeamChatMessage;
 }
 
-export type TeamChatRow = ChatDayRow | ChatUnreadRow | ChatMessageRow;
+export interface ChatReadMarkerRow {
+  kind: 'read-marker';
+  key: string;
+  messageId: number;
+}
+
+export type TeamChatRow = ChatDayRow | ChatUnreadRow | ChatMessageRow | ChatReadMarkerRow;
 
 const manilaDayKey = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Manila',
@@ -74,6 +83,7 @@ export function buildChatRows(
   lastReadId: number,
   actorId: number,
   includeUnread = true,
+  includeReadMarkers = false,
 ): TeamChatRow[] {
   const rows: TeamChatRow[] = [];
   let day = '';
@@ -99,25 +109,59 @@ export function buildChatRows(
       unreadInserted = true;
     }
     rows.push({ kind: 'message', key: `message:${message.id}`, message });
+    if (includeReadMarkers) {
+      // A bounded-height row after the bubble also works for viewport-tall text:
+      // the cursor advances only once the message's actual bottom is visible.
+      rows.push({ kind: 'read-marker', key: `read-marker:${message.id}`, messageId: message.id });
+    }
   }
   return rows;
 }
 
-/** Merge by immutable server id and cap the in-memory channel window. */
+function sameMessage(left: TeamChatMessage, right: TeamChatMessage): boolean {
+  return left === right || (
+    left.id === right.id && left.body === right.body &&
+    left.created_at === right.created_at && left.client_nonce === right.client_nonce &&
+    left.sender.id === right.sender.id && left.sender.name === right.sender.name &&
+    left.tasks.length === right.tasks.length && left.tasks.every((task, index) =>
+      task.id === right.tasks[index].id && task.title === right.tasks[index].title) &&
+    left.mentions.length === right.mentions.length && left.mentions.every((mention, index) => {
+      const next = right.mentions[index];
+      return mention.user_id === next.user_id && mention.name === next.name &&
+        mention.start === next.start && mention.length === next.length;
+    }) &&
+    (left.reply_to === right.reply_to || (
+      left.reply_to !== null && right.reply_to !== null &&
+      left.reply_to.id === right.reply_to.id &&
+      left.reply_to.sender_name === right.reply_to.sender_name &&
+      left.reply_to.body === right.reply_to.body
+    ))
+  );
+}
+
+/** Bound the window without replacing unchanged messages (or an unchanged array). */
 export function mergeChatMessages(
   current: readonly TeamChatMessage[],
   incoming: readonly TeamChatMessage[],
   direction: TeamChatMergeDirection,
   limit = CHAT_WINDOW_LIMIT,
+  replace = false,
 ): TeamChatMessage[] {
-  const byId = new Map<number, TeamChatMessage>();
-  for (const message of current) { byId.set(message.id, message); }
-  for (const message of incoming) { byId.set(message.id, message); }
+  const existing = new Map(current.map(message => [message.id, message]));
+  const byId = replace ? new Map<number, TeamChatMessage>() : new Map(existing);
+  for (const message of incoming) {
+    const previous = existing.get(message.id);
+    byId.set(message.id, previous && sameMessage(previous, message) ? previous : message);
+  }
   const ordered = [...byId.values()].sort((a, b) => a.id - b.id);
-  if (ordered.length <= limit) { return ordered; }
-  return direction === 'older'
+  const bounded = ordered.length <= limit ? ordered : direction === 'older'
     ? ordered.slice(0, limit)
     : ordered.slice(ordered.length - limit);
+  if (current.length === bounded.length && bounded.every((message, index) => message === current[index])) {
+    // Callers treat both the window and its messages as immutable.
+    return current as TeamChatMessage[];
+  }
+  return bounded;
 }
 
 /** Locate an unfinished @name immediately before the collapsed cursor. */

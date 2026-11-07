@@ -10,8 +10,9 @@ import { SettingsScreen } from '../src/features/profile/screens/SettingsScreen';
 import { HealthProfileScreen } from '../src/features/profile/screens/HealthProfileScreen';
 import { useHealthSummary } from '../src/features/profile/hooks';
 
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme, mode: 'light', preference: 'system', setPreference: jest.fn() }) }));
-jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) }));
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }) }));
 jest.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: { entitlements: { staff_queue_units: [] } } }) }));

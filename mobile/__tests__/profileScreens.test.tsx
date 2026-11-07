@@ -10,6 +10,7 @@ import { removePhoto, uploadPhoto } from '../src/api/endpoints/health';
 import type { Appointment } from '../src/api/endpoints/appointments';
 import type { User } from '../src/api/types';
 import { Action } from '../src/components/Action';
+import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { EmptyState } from '../src/components/EmptyState';
 import { ProfilePhotoScreen } from '../src/features/profile/screens/ProfilePhotoScreen';
 import { RecordsScreen } from '../src/features/profile/screens/RecordsScreen';
@@ -22,6 +23,7 @@ import { useTheme } from '../src/theme/ThemeProvider';
 import { darkTheme, lightTheme } from '../src/theme/tokens';
 import { version } from '../package.json';
 
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test' } }));
 jest.mock('../src/api/client', () => ({
   ...jest.requireActual('../src/api/client'),
@@ -42,7 +44,7 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (effect: () => (() => void)) => jest.requireActual('react').useEffect(effect, [effect]),
 }));
 jest.mock('react-native-image-picker', () => ({ launchImageLibrary: jest.fn() }));
-jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) }));
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
 jest.mock('lucide-react-native', () => ({
   ArrowLeft: () => null, Camera: () => null, ImagePlus: () => null, Trash2: () => null,
@@ -102,7 +104,7 @@ beforeEach(() => {
   jest.mocked(removePhoto).mockResolvedValue(undefined);
   jest.mocked(launchImageLibrary).mockResolvedValue({ assets: [pickerAsset()] });
   jest.mocked(useAuth).mockReturnValue({
-    status: 'signedIn', user, profile: null, signIn: jest.fn(), retryBootstrap: jest.fn(), signOut, acknowledgeExpired: jest.fn(),
+    status: 'signedIn', user, profile: null, signIn: jest.fn(), retryBootstrap: jest.fn(), refreshProfile: jest.fn(), signOut, acknowledgeExpired: jest.fn(),
   });
   jest.mocked(useTheme).mockReturnValue({ theme: lightTheme, mode: 'light', preference: 'system', setPreference });
   jest.mocked(useQueryClient).mockReturnValue({ invalidateQueries } as unknown as ReturnType<typeof useQueryClient>);
@@ -363,6 +365,9 @@ describe('SettingsScreen and PrivacySecurityScreen', () => {
     expect(hasText('Notifications')).toBe(false);
     expect(hasText('Help & support')).toBe(false);
     await act(async () => button('Sign out').props.onPress());
+    expect(signOut).not.toHaveBeenCalled();
+    act(() => renderer!.root.findByType(ConfirmDialog).props.onConfirm());
+    await act(async () => renderer!.root.findByType(ConfirmDialog).props.onDismiss());
     expect(signOut).toHaveBeenCalledTimes(1);
   });
 
@@ -376,6 +381,9 @@ describe('SettingsScreen and PrivacySecurityScreen', () => {
     expect(hasText('Read full privacy notice')).toBe(false);
     expect(hasText('Your refresh token is kept in your device\'s Keychain or Keystore. Your access token is held in memory.')).toBe(true);
     await act(async () => renderer!.root.findByType(Action).props.onPress());
+    expect(signOut).not.toHaveBeenCalled();
+    act(() => renderer!.root.findByType(ConfirmDialog).props.onConfirm());
+    await act(async () => renderer!.root.findByType(ConfirmDialog).props.onDismiss());
     expect(signOut).toHaveBeenCalledTimes(1);
   });
 });

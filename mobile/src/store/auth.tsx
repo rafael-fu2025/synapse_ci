@@ -24,6 +24,8 @@ export interface AuthContextValue {
   profile: MeResponse | null;
   signIn: (identifier: string, password: string) => Promise<void>;
   retryBootstrap: () => Promise<void>;
+  /** Refresh entitlements without unmounting the signed-in navigation trees. */
+  refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
   acknowledgeExpired: () => void;
 }
@@ -35,6 +37,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('restoring');
   const [profile, setProfile] = useState<MeResponse | null>(null);
   const operation = useRef(0);
+  const current = useRef({ status, profile });
+  current.current = { status, profile };
+  const profileRefresh = useRef<{ version: number; promise: Promise<void> } | null>(null);
 
   const user = profile?.user ?? null;
 
@@ -49,7 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryClient.clear();
     clearRefreshToken().catch(() => undefined);
     setProfile(null);
-    setStatus((current) => (current === 'signedIn' ? 'expired' : 'signedOut'));
+    setStatus((previousStatus) => (previousStatus === 'signedIn' ? 'expired' : 'signedOut'));
   }, []);
 
   useEffect(() => {
@@ -157,6 +162,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await bootstrapSession(version);
   }, [bootstrapSession]);
 
+  const refreshProfile = useCallback((): Promise<void> => {
+    const previous = current.current.profile;
+    if (current.current.status !== 'signedIn' || previous === null) {
+      return Promise.resolve();
+    }
+    const version = operation.current;
+    if (profileRefresh.current?.version === version) {
+      return profileRefresh.current.promise;
+    }
+    const promise = (async () => {
+      const next = await meApi.me();
+      if (version !== operation.current || current.current.status !== 'signedIn') {
+        throw new SessionChangedError();
+      }
+      if (next.user.id !== previous.user.id || next.user.tenant_id !== previous.user.tenant_id) {
+        throw new SessionChangedError();
+      }
+      queryClient.setQueryData(queryKeys.me, next);
+      setProfile(next);
+    })();
+    profileRefresh.current = { version, promise };
+    const clear = () => {
+      if (profileRefresh.current?.promise === promise) { profileRefresh.current = null; }
+    };
+    promise.then(clear, clear);
+    return promise;
+  }, []);
+
+  // Personal /me refreshes also reconcile workspace entitlements for this identity.
+  useEffect(() => {
+    if (status !== 'signedIn' || profile === null) { return undefined; }
+    const version = operation.current;
+    const cache = queryClient.getQueryCache?.();
+    return cache?.subscribe(event => {
+      if (version !== operation.current || current.current.status !== 'signedIn') { return; }
+      if (event.type !== 'updated' || event.query.queryKey.length !== 1 || event.query.queryKey[0] !== 'me') { return; }
+      const next = event.query.state.data as MeResponse | undefined;
+      if (next?.user.id !== profile.user.id || next.user.tenant_id !== profile.user.tenant_id || !next.entitlements) { return; }
+      setProfile(next);
+    });
+  }, [profile, status]);
+
   const signOut = useCallback(async () => {
     operation.current += 1;
     // The device token is withdrawn while the session is still valid; the request
@@ -174,8 +221,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const acknowledgeExpired = useCallback(() => setStatus('signedOut'), []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, profile, signIn, retryBootstrap, signOut, acknowledgeExpired }),
-    [status, user, profile, signIn, retryBootstrap, signOut, acknowledgeExpired],
+    () => ({ status, user, profile, signIn, retryBootstrap, refreshProfile, signOut, acknowledgeExpired }),
+    [status, user, profile, signIn, retryBootstrap, refreshProfile, signOut, acknowledgeExpired],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

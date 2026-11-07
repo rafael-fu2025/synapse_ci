@@ -139,15 +139,20 @@ Do not put passwords, real user credentials, bearer tokens, or refresh tokens in
   `types.ts` (wire contract of `docs/MOBILE_API.md`), `queryKeys.ts`, `poll.ts` (intervals mirror
   the web client: queue 15s, notifications 30s).
 - **`src/features/<domain>/`** — screens, components, React Query hooks per feature
-  (auth, dashboard, appointments, queue, announcements, surveys, notifications, profile, staff-queue).
-- **`src/navigation/`** — root gate (splash/sign-in/app by auth status) + 4 bottom tabs
-  (Home, Visits, Queue, Profile); engagement surfaces push onto the root stack above the tabs.
+  (auth, dashboard, appointments, queue, announcements, surveys, notifications, profile, staff-queue,
+  workspace, team-tasks, team-calendar, team-chat).
+- **`src/navigation/`** — root auth gate + production `ContextTabs`, with independently retained
+  Personal tabs (Home, Visits, Queue, Profile) and authorized Workspace tabs (Team Board, My Tasks,
+  Team Chat, Team Calendar). The center control switches context; it is not a fifth route.
+  Notifications and engagement surfaces push onto the root stack. A separate Account stack reuses
+  settings, appearance, and privacy screens without exposing Personal records to Work-only accounts.
 - **`src/store/auth.tsx`** — the only client session state (status + user). Access token lives in
   memory; the refresh token lives in the device keychain (`react-native-keychain`).
 - **`src/theme/`** — design tokens translated 1:1 from the reference CSS, light + dark, with a
   system/light/dark preference persisted in AsyncStorage.
-- **`src/components/`** — design-system primitives (Screen, PageHeader, StatusPill, AppCard, TextField,
-  DetailRow, EmptyState, Action, Avatar, Typography, OfflineBanner).
+- **`src/components/`** — shared primitives (Screen, PageHeader, StatusPill, AppCard, TextField,
+  DetailRow, EmptyState, Action, IconAction, Avatar, Typography, OfflineBanner) and retained,
+  serialized BottomSheet/ConfirmDialog presenters under OverlayProvider.
 
 **Server state is React Query only** — no other caching layer; mutations never auto-retry and
 invalidate their queries on success. The backend remains the single source of truth; the app hides
@@ -155,11 +160,21 @@ UI by `/me` entitlements but always honors 401/403.
 
 ### Navigation, freshness, and session boundaries
 
-- Tabs are mounted once and frozen while hidden. Cross-tab actions use explicit nested routes;
+- Tabs remain mounted and freeze while hidden; same-unit context switches retain history. Changing
+  the active Workspace unit remounts its navigator so old records, versions, and forms cannot carry
+  over. Disabled Work features are omitted. Cross-tab actions use explicit nested routes;
   Home’s “Book a visit” opens the Visits booking flow, not an unregistered Home route.
-- Queries use a 30-second freshness window and an in-memory cache only. Queue polling (15s) and
-  notification polling (30s) run only for focused screens, and pause when the app backgrounds.
-  Native connectivity events resume queries; public Internet reachability is not required for a LAN API.
+- Personal, Workspace, and context transitions share 240 ms cubic-out, opaque current-width motion
+  with live Reduce Motion support. The center CTA responds to accepted switches and blocks rapid
+  duplicate taps; shared overlays/submissions lock it. The custom bar hides for the keyboard.
+- Queries use a 30-second freshness window and an in-memory cache only. Focused queue polling (15s),
+  notifications (30s), Tasks/Calendar (30s), and latest Chat (5s) keep their resource-specific cadence.
+  Team automatic reads pause in the background, offline, and beneath shared overlays. Native
+  connectivity resumes reads; public Internet reachability is not required for a LAN API.
+- Team task changes invalidate same-unit Tasks, Calendar deadlines, and Chat task-picker results,
+  not browsed Chat history. Chat serializes physical reads, retains its bounded history window, and
+  advances read cursors only for actually visible message bottoms. Pull-refresh feedback is separate
+  from quiet Team updates; refresh failure keeps authorized cached data and reports the failure.
 - Cached data stays visible during refresh. Home always retains queue, announcement, and survey
   slots; loading, failed requests, and genuinely empty responses have different messages.
 - Sign-out/expiry immediately clears the access token, user, and query cache. Every authenticated
@@ -170,6 +185,17 @@ UI by `/me` entitlements but always honors 401/403.
   without deleting the encrypted refresh token; a later app launch can attempt restoration again.
 - Booking/survey submissions block duplicate taps. Survey drafts stay in memory only and leaving
   asks before discarding them. Preferred appointment times are **requests**, not guaranteed slots.
+- Workspace forms/composers and directly affected booking/cancellation flows register actual draft
+  reset callbacks and submission locks. Keep editing preserves values; discard resets memory before
+  guarded navigation continues after native dialog dismissal. Same-unit safe record pushes preserve
+  retained composers. Updates use reviewed optimistic versions; explicit ambiguous retries preserve
+  the original payload and nonce/version. No offline mutation is queued or automatically replayed.
+- Authoritative same-identity `/me` access refresh does not replace the signed-in navigation tree.
+  Record-edit 403 is not by itself proof of lost Workspace membership. Unit/feature changes and
+  external destinations are revalidated, including after delayed confirmation. Revoked Personal root
+  routes are removed; registration scopes preserve still-authorized drafts and submission locks.
+  Cache reconciliation is session-operation fenced against same-turn sign-out events, and unavailable
+  targets produce visible feedback.
 - Private photo URLs are separated by owner and preview session; bearer tokens never appear in URLs.
 
 These safeguards are covered by regression tests, but they do not replace release-device profiling,
@@ -226,7 +252,7 @@ invalidation keeps the selected slide by ID when it still exists and does not re
 ```bash
 cd mobile
 npx tsc --noEmit   # types
-npm run lint       # eslint (zero warnings)
+npm run lint       # eslint (four existing secureNonce no-bitwise warnings; no errors)
 npm test -- --runInBand  # jest
 node --test scripts/dev-tooling.test.cjs  # developer tooling, no device or network
 ```
@@ -248,3 +274,19 @@ Device smoke checklist (use synthetic accounts only):
    and successful submission remains visible after refetch.
 6. Disconnect the API/network: errors must not claim that tickets, appointments, or updates are empty.
 7. Sign out and use a different account: no former account’s cached profile, records, or photo is shown.
+8. Work: exercise Board/My Tasks search, clear/reset, empty refresh, pagination and task details. Use
+   only disposable fixtures for status/checklist/comments/create/edit writes; inspect pending and
+   permission states before accepting any mutation.
+9. Keep/discard an unsent comment, task/event form and Chat composer through header Back, Android
+   Back, context/unit switch and delayed notification entry. Confirm navigation waits for native close.
+10. Open low-page multiline/member/checklist inputs and sheet search with the keyboard visible.
+    Confirm the focused field and actions are reachable, no duplicate Android avoidance appears,
+    keyboard Back does not leave Work, and closing/reopening preserves values and scroll.
+11. Check Calendar Agenda/Week/Month and Chat history/latest/source/task links. Validate native picker,
+    sheet drag, capped-list feedback, long labels, large text, both themes and live Reduce Motion.
+12. Revoke only a disposable fixture unit/feature/Personal entitlement. Unrelated authorized drafts
+    and pending guards must remain, while revoked screens and delayed targets close or fail closed.
+
+Record current-code outcomes and blocked cases in
+[MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md](MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md#interaction-parity-pass--2026-11-07).
+Never infer iOS or release frame-rate acceptance from these Android debug checks.

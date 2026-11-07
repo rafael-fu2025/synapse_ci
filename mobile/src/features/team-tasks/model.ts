@@ -1,4 +1,5 @@
-import type { TeamTaskPriority, TeamTaskStatus, TeamTaskSummary } from '../../api/endpoints/teamTasks';
+import type { TeamTaskChecklistItem, TeamTaskDetail, TeamTaskEditableInput, TeamTaskPriority, TeamTaskStatus, TeamTaskSummary } from '../../api/endpoints/teamTasks';
+import { parseManilaDate } from '../team-calendar/manila';
 import type { StatusTone } from '../../theme/tokens';
 
 export const TASK_STATUSES: readonly TeamTaskStatus[] = ['todo', 'in_progress', 'blocked', 'done'];
@@ -24,8 +25,57 @@ export function groupTasks(tasks: TeamTaskSummary[]) {
 }
 
 export function validDateOnly(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) { return false; }
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return parseManilaDate(value) !== null;
+}
+
+/** Local row identity must not change when text is edited or another row is removed. */
+export interface ChecklistDraftItem extends TeamTaskChecklistItem {
+  clientId: string;
+}
+
+export interface TeamTaskDraft extends Omit<TeamTaskEditableInput, 'checklist'> {
+  checklist: ChecklistDraftItem[];
+}
+
+let nextChecklistId = 0;
+export function checklistDraftItem(item: TeamTaskChecklistItem): ChecklistDraftItem {
+  nextChecklistId += 1;
+  return { ...item, clientId: `checklist-${nextChecklistId}` };
+}
+
+export function emptyTaskDraft(): TeamTaskDraft {
+  return { title: '', description: '', status: 'todo', priority: 'normal', assignee_user_id: null, due_date: null, checklist: [] };
+}
+
+export function taskEditableInput(task: TeamTaskDetail): TeamTaskEditableInput {
+  return {
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    assignee_user_id: task.assignee?.id ?? null,
+    due_date: task.due_date,
+    checklist: task.checklist.map(({ text, done }) => ({ text, done })),
+  };
+}
+
+export function taskDraft(task: TeamTaskDetail): TeamTaskDraft {
+  return { ...taskEditableInput(task), checklist: task.checklist.map(checklistDraftItem) };
+}
+
+/** An explicit wire projection prevents client-only checklist IDs escaping into strict API payloads. */
+export function taskDraftInput(draft: TeamTaskDraft): TeamTaskEditableInput {
+  return {
+    title: draft.title,
+    description: draft.description,
+    status: draft.status,
+    priority: draft.priority,
+    assignee_user_id: draft.assignee_user_id,
+    due_date: draft.due_date,
+    checklist: draft.checklist.map(({ text, done }) => ({ text, done })),
+  };
+}
+
+export function taskDraftSnapshot(draft: TeamTaskDraft): string {
+  return JSON.stringify(taskDraftInput(draft));
 }

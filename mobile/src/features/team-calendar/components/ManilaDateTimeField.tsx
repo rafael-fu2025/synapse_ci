@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { CalendarDays, Clock3 } from 'lucide-react-native';
@@ -29,9 +29,13 @@ export function ManilaDateTimeField({
   const pickerValue = manilaWallToPickerDate(value);
   const timeLabel = formatManilaTimeFromInstant(pickerValue.toISOString());
 
+  useEffect(() => {
+    if (disabled) { setMode(null); }
+  }, [disabled]);
+
   const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
     if (Platform.OS === 'android') { setMode(null); }
-    if (event.type !== 'set' || !selected) { return; }
+    if (disabled || event.type !== 'set' || !selected) { return; }
     onChange(mergePickerSelection(value, selected, mode ?? 'date'));
   };
 
@@ -61,7 +65,7 @@ export function ManilaDateTimeField({
         </Pressable>
       </View>
       <Text style={styles.hint}>Asia/Manila time</Text>
-      {mode ? (
+      {mode && !disabled ? (
         <View style={styles.pickerWrap}>
           <DateTimePicker
             value={pickerValue}
@@ -70,6 +74,8 @@ export function ManilaDateTimeField({
             timeZoneName="Asia/Manila"
             is24Hour={false}
             minuteInterval={5}
+            disabled={disabled}
+            themeVariant={theme.mode}
             onChange={handleChange}
           />
           {Platform.OS === 'ios' ? (
@@ -94,7 +100,7 @@ function createStyles(theme: Theme) {
       gap: 8,
       paddingHorizontal: 12,
       borderWidth: 1,
-      borderColor: '#ccd9d6',
+      borderColor: theme.line,
       borderRadius: 12,
       backgroundColor: theme.surfaceWarm,
     },

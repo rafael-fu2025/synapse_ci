@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Reply } from 'lucide-react-native';
-import type { TeamChatMessage } from '../../../api/endpoints/teamChat';
+import type { TeamChatMessage, TeamChatTaskReference } from '../../../api/endpoints/teamChat';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Theme, font, memoizeStyles, type } from '../../../theme/tokens';
 import { formatChatTime, normalizeMentions } from '../model';
@@ -13,18 +13,24 @@ function preview(value: string, maximum = 180): string {
     : `${characters.slice(0, maximum).join('')}…`;
 }
 
-export function TeamChatMessageBubble({
+export const TeamChatMessageBubble = memo(function MessageBubble({
   message,
   own,
   targeted,
   replyDisabled,
+  navigationDisabled = false,
   onReply,
+  onOpenSource,
+  onOpenTask,
 }: {
   message: TeamChatMessage;
   own: boolean;
   targeted: boolean;
   replyDisabled: boolean;
+  navigationDisabled?: boolean;
   onReply: (message: TeamChatMessage) => void;
+  onOpenSource: (messageId: number) => void;
+  onOpenTask: (task: TeamChatTaskReference) => void;
 }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
@@ -65,24 +71,37 @@ export function TeamChatMessageBubble({
           </Text>
         </View>
         {message.reply_to ? (
-          <View style={[styles.quote, own && styles.ownQuote]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open original message from ${message.reply_to.sender_name}`}
+            accessibilityState={{ disabled: navigationDisabled }}
+            disabled={navigationDisabled}
+            onPress={() => { if (!navigationDisabled && message.reply_to) { onOpenSource(message.reply_to.id); } }}
+            style={({ pressed }) => [styles.quote, own && styles.ownQuote, navigationDisabled && styles.disabled, pressed && styles.pressed]}>
             <Text style={[styles.quoteSender, own && styles.ownText]}>
               Reply to {message.reply_to.sender_name}
             </Text>
             <Text numberOfLines={2} style={[styles.quoteBody, own && styles.ownMuted]}>
               {preview(message.reply_to.body)}
             </Text>
-          </View>
+          </Pressable>
         ) : null}
         <Text selectable style={[styles.body, own && styles.ownText]}>{body}</Text>
         {message.tasks.length > 0 ? (
           <View accessibilityLabel={`${message.tasks.length} task references`} style={styles.tasks}>
             {message.tasks.map(task => (
-              <View key={task.id} style={[styles.task, own && styles.ownTask]}>
+              <Pressable
+                key={task.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Open task ${task.id}: ${task.title}`}
+                accessibilityState={{ disabled: navigationDisabled }}
+                disabled={navigationDisabled}
+                onPress={() => { if (!navigationDisabled) { onOpenTask(task); } }}
+                style={({ pressed }) => [styles.task, own && styles.ownTask, navigationDisabled && styles.disabled, pressed && styles.pressed]}>
                 <Text numberOfLines={2} style={[styles.taskText, own && styles.ownText]}>
                   Task #{task.id}: {task.title}
                 </Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         ) : null}
@@ -92,7 +111,7 @@ export function TeamChatMessageBubble({
         accessibilityLabel={`Reply to ${message.sender.name}`}
         accessibilityState={{ disabled: replyDisabled }}
         disabled={replyDisabled}
-        onPress={() => onReply(message)}
+        onPress={() => { if (!replyDisabled) { onReply(message); } }}
         style={({ pressed }) => [
           styles.reply,
           replyDisabled && styles.disabled,
@@ -102,7 +121,7 @@ export function TeamChatMessageBubble({
       </Pressable>
     </View>
   );
-}
+});
 
 function createStyles(theme: Theme) {
   return StyleSheet.create({
@@ -137,8 +156,8 @@ function createStyles(theme: Theme) {
       backgroundColor: theme.brand,
     },
     heading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-    sender: { ...type.caption, flex: 1, color: theme.ink700 },
-    time: { fontFamily: font.body, fontSize: 9, color: theme.ink500 },
+    sender: { ...type.caption, flexShrink: 1, color: theme.ink700 },
+    time: { fontFamily: font.body, fontSize: 9, flexShrink: 0, color: theme.ink500 },
     body: { ...type.body, color: theme.ink900, lineHeight: 18 },
     ownText: { color: '#ffffff' },
     ownMuted: { color: 'rgba(255,255,255,0.78)' },
@@ -148,6 +167,7 @@ function createStyles(theme: Theme) {
       backgroundColor: theme.brand100,
     },
     quote: {
+      minHeight: 44,
       marginBottom: 7,
       paddingLeft: 9,
       paddingVertical: 4,
@@ -163,6 +183,8 @@ function createStyles(theme: Theme) {
     quoteBody: { ...type.caption, marginTop: 2, color: theme.ink500 },
     tasks: { gap: 5, marginTop: 8 },
     task: {
+      minHeight: 44,
+      justifyContent: 'center',
       alignSelf: 'flex-start',
       maxWidth: '100%',
       paddingHorizontal: 9,

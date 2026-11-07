@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { userRealtimeGrant } from '../../api/endpoints/realtime';
 import { queryKeys } from '../../api/queryKeys';
+import { teamTaskResourceKeys } from '../workspace/invalidateTeamResources';
 import {
   RealtimeGrant,
   RealtimeTarget,
@@ -56,7 +57,10 @@ function targetsFor(identity: RealtimeIdentity, event: string, data: unknown): R
       if (typeof unit !== 'string' || !TEAM_UNITS.includes(unit as (typeof TEAM_UNITS)[number])) {
         return [];
       }
-      const resource = event === 'team.tasks.changed' ? 'team' : event === 'team.calendar.changed' ? 'team-calendar' : 'team-chat';
+      if (event === 'team.tasks.changed') {
+        return teamTaskResourceKeys(identity, unit as (typeof TEAM_UNITS)[number]).map(key => ({ key, exact: false }));
+      }
+      const resource = event === 'team.calendar.changed' ? 'team-calendar' : 'team-chat';
       return [{ key: [resource, identity.tenantId, identity.userId, unit], exact: false }];
     }
     default:

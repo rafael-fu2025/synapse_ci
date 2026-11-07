@@ -16,6 +16,7 @@ import { appointmentErrorMessage } from '../errors';
 import { TYPE_LABELS } from '../booking';
 import { unitLabel } from '../status';
 import { VisitsStackParamList } from '../../../navigation/types';
+import { useContextDraftRegistration } from '../../workspace/useContextDraftRegistration';
 
 type Props = NativeStackScreenProps<VisitsStackParamList, 'CancelAppointment'>;
 
@@ -32,6 +33,10 @@ export function CancelAppointmentScreen() {
   const [error, setError] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
   const cancellable = appointment && ['requested', 'scheduled', 'confirmed'].includes(appointment.status);
+  useContextDraftRegistration({
+    dirty: reason.trim() !== '', submitting: cancel.isPending,
+    onDiscard: () => { setReason(''); setError(null); setReasonError(null); },
+  });
 
   async function onSubmit() {
     if (submitting.current || !cancellable || query.isError) {
@@ -59,8 +64,8 @@ export function CancelAppointmentScreen() {
   }
 
   return (
-    <Screen>
-      <PageHeader title="Cancel appointment" onBack={() => { if (!submitting.current) { navigation.goBack(); } }} />
+    <Screen keyboardAware>
+      <PageHeader title="Cancel appointment" backDisabled={cancel.isPending} onBack={() => { if (!submitting.current) { navigation.goBack(); } }} />
       {query.isLoading ? <ActivityIndicator color={theme.brandIcon} /> : null}
       {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
       {!query.isLoading && !query.isError && !appointment ? <Text style={styles.caption}>This appointment is no longer available.</Text> : null}
