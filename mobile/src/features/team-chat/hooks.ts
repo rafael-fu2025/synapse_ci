@@ -12,6 +12,7 @@ import * as api from '../../api/endpoints/teamChat';
 import { NetworkError } from '../../api/client';
 import type { TeamUnit } from '../../api/types';
 import { useActiveScreen, useForegroundOnline } from '../../lib/useActiveScreen';
+import { useRealtimeReady } from '../../lib/useRealtimeReady';
 import { useAuth } from '../../store/auth';
 import {
   CHAT_POLL_MS,
@@ -131,6 +132,7 @@ interface ChannelJob {
 export function useTeamChatChannel({ unit, targetMessageId, paused = false }: UseTeamChatChannelOptions): TeamChatChannelState {
   const identity = useTeamChatIdentity();
   const client = useQueryClient();
+  const realtime = useRealtimeReady();
   const enabled = unit !== null && identity.tenantId > 0 && identity.userId > 0;
   const active = useActiveScreen(enabled && !paused);
   const target = Number.isSafeInteger(targetMessageId) && (targetMessageId ?? 0) > 0 ? targetMessageId! : null;
@@ -380,14 +382,17 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
     if (event.type !== 'updated' || event.action.type !== 'invalidate' ||
         !matchQuery({ queryKey: signalKey, exact: true }, event.query)) { return; }
     invalidation.current += 1;
+    // Re-arm this signal only; a failed HTTP read must not swallow later hints.
+    // Actual freshness and the retained window advance only after a successful read.
+    event.query.setState({ isInvalidated: false });
     if (context.current.active && state.current.mode === 'latest') { requestRef.current('poll'); }
   }), [client, signalKey]);
 
   useEffect(() => {
-    if (!active || !snapshot.loaded || snapshot.mode !== 'latest' || blocked.current) { return; }
+    if (!active || realtime || !snapshot.loaded || snapshot.mode !== 'latest' || blocked.current) { return; }
     const timer = setInterval(() => { requestRef.current('poll'); }, CHAT_POLL_MS);
     return () => clearInterval(timer);
-  }, [active, snapshot.loaded, snapshot.mode]);
+  }, [active, realtime, snapshot.loaded, snapshot.mode]);
 
   const acknowledge = useCallback((messageId: number) => {
     const value = state.current;

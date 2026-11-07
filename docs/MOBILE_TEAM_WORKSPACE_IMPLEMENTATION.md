@@ -244,12 +244,152 @@ checks. Viewing Chat can still trigger its normal read acknowledgements; those a
 - [ ] Complete role/unit/revocation/ambiguous-response matrix and external push on disposable native
   data. Socket-free synthetic fixture tests do not prove native acceptance or real backend behavior.
 
-The original Metro process on 8083 was inspected but not killed/restarted. A parent-owned separate
-loopback Metro preview on **18083** and an additive USB reverse mapping enabled current-code
-inspection. The phone's development bundle location is `localhost:18083`; this preview is left
-running for local handoff, with the API/account configuration unchanged. To return to the original
-preview deliberately, first confirm 8083 responds, set the phone's bundle location back to
-`localhost:8083`, then stop only the separate 18083 Metro process and remove only that additive mapping.
+The original Metro process on 8083 was inspected but not killed/restarted. A separate loopback
+preview on **18083** and an additive USB reverse mapping were used for the earlier inspection.
+That preview was later stopped; this paragraph is historical evidence, not the current setup.
+The subsequent crash investigation verified the installed APK's Metro default is **8083**, no saved
+`debug_http_host` override file was present, and USB mappings include 8080/8081/8083. Keep 8083
+canonical; the stopped preview is not required. No user-owned server was restarted for the repair.
+
+## Display refresh and transport-priority correction — 2026-11-07
+
+The earlier parity pass interpreted “screen refresh rates” as data polling. The clarified requirement
+is **native display refresh support** (60/90/120 Hz and adaptive panels), separately from data delivery.
+No connected device or emulator is used for this correction; physical acceptance remains pending.
+
+- Android foreground main and RN Modal windows request high refresh through supported native APIs,
+  without hard-coded 120 Hz, display-mode IDs, resolution changes or a JavaScript frame loop. The
+  system remains authoritative over panel capabilities, battery saver, thermal and user limits.
+- iOS already contains the ProMotion opt-in. This Windows implementation does not claim a fresh iOS
+  build or sustained-FPS verification. Native Android changes require rebuilding/installing the app.
+- Polling remains the default when realtime is disabled or not healthy. Only the authenticated
+  private socket's server `ready` state pauses short Tasks/Calendar/Chat/notification/queue polling.
+  Initial/manual HTTP reads and hint invalidation remain active. Close, heartbeat timeout, renewal
+  and lifetime cleanup restore eligible fallback timers; no mutation is automatically replayed.
+- Connection readiness is QueryClient/identity/lifetime scoped. Public carousel readiness is separate.
+  Slow 120-second repair stays in both modes, now including staff queue snapshots because fanout is
+  bounded. Dashboard `/me` has no profile hint and keeps its independent polling.
+- Added regression coverage exercises authenticated readiness, timeout/renewal/close fallback,
+  stale leases, actual hook fetch counts, notification eligibility and retained Chat windows.
+
+### Correction-pass verification
+
+- `npm test -- --runInBand --detectOpenHandles`: **56 suites / 974 tests passed**, with no reported
+  open handles. The staff queue hook test now mocks the realtime-aware polling boundary and verifies
+  that pausing its interval does not disable the query.
+- `npx tsc --noEmit`: passed. `npm run lint`: **0 errors**, with the four existing `secureNonce`
+  `no-bitwise` warnings unchanged.
+- Developer-tooling tests: **20/20 passed**. Native refresh-rate policy tests: **9/9 passed**, including
+  compilation and execution of the production Java selector.
+- Android `:app:assembleDebug`: passed as a build-only check. No installation, device/emulator
+  interaction, server writes, commits or pushes were performed for this correction.
+
+See [display-rate acceptance](MOBILE.md#display-refresh-rate-acceptance) for the later device checklist.
+A passing build, selector test or display-Hz overlay is not evidence of sustained rendered FPS.
+
+## Floating context CTA redesign — 2026-11-07
+
+The prior switcher was a 40×32 pill in each context's tab row, so both its shape and screen-like
+sliding behavior were incorrect. The production bar now lives once at the outer `ContextTabs`
+level, outside animated context scenes; inner navigator bindings retain real tab events, selection
+and independent same-unit histories.
+
+- The CTA is a fixed 56×56 circle in a 64×64 separation ring with native elevation/shadow, raised
+  22px above the bar. The caption is outside the disc; safe-area and larger-text layout cannot
+  stretch it. The raised hit area stays inside an unclipped host, separate from the clipped reveal.
+- A native-driver center-out maroon reveal transforms the full bar for Work. Tab icons/labels and
+  contrasting CTA content follow in a coordinated 400 ms sequence; returning to Personal reverses
+  it. Only screen content uses the existing 240 ms slide—never the shared bar or center button.
+- Accepted context changes drive the reveal. Picker opening, cancelled discard, pending submissions
+  and overlay exit cannot bypass existing guards or prematurely animate a switch. Obsolete route
+  handlers and binding cleanup cannot activate the wrong context; rapid reversal starts at current
+  animation progress, and live Reduce Motion settles immediately.
+- The keyboard hides the entire floating bar without a leftover gap. Work-only and Personal-only
+  accounts have no CTA or center slot, and disabled feature routes remain omitted.
+- The high-refresh and realtime-first correction is unchanged. No device/emulator, server mutation,
+  app installation, user-owned process termination, commit or push was used for this redesign.
+
+### CTA redesign verification
+
+- Complete serialized Jest gate: **58 suites / 1,010 tests passed** with `--detectOpenHandles`, no
+  reported open handles and no skipped tests. Focused bar/navigation coverage passed **3 suites /
+  51 tests**: actual Animated.Value progress, circle/anchor geometry, reveal/caption sequencing,
+  reversal, reduced motion, keyboard/stale handlers, scoped bindings and real nested router history.
+- TypeScript passed. ESLint reported **0 errors**, with the four existing `secureNonce` warnings.
+  Developer-tooling tests passed **20/20**, native selector tests passed **9/9**, and whitespace
+  checks passed.
+- Android `:app:assembleDebug` passed (**2m 15s**, build only). Current Android JavaScript bundle
+  compilation also passed using standalone output outside the repository, without starting or
+  changing a Metro server. These checks are not frame-performance measurements.
+
+See [floating switcher acceptance](MOBILE.md#floating-context-switcher-acceptance) for native visual,
+touch, safe-area, font-scale, accessibility and smoothness checks. Those checks remain pending;
+unit tests and a debug build alone cannot establish native visual acceptance.
+
+## Native startup repair and device confirmation — 2026-11-07
+
+The connected API 33 Android phone repeatedly crashed before rendering React Native. Crash logs
+identified `NoClassDefFoundError: SupportedRefreshRatePolicy$Mode` from the legacy window-rate
+path in `WindowRefreshRatePolicy.update()`. The installed APK matched the local build, but Android
+Java compilation had emitted only generated classes; neither selector class was defined in DEX.
+Standalone JVM selector tests explicitly compile the source and therefore missed this packaging gap.
+The noncanonical `com/com.humus.synapse` directory was replaced with `com/humus/synapse` for all
+production native sources and the Java test, without changing package names or app identity.
+
+- The corrected build ran Java compilation and produced both selector classes. Android
+  `:app:assembleDebug -PreactNativeDevServerPort=8083` passed; the APK class-definition gate verified
+  all five required application/policy classes across 19 DEX files. The same gate rejects the old
+  broken APK, including the case where the missing class exists only as a referenced descriptor.
+- Added seven packaging-parser regression tests and a canonical native package-path contract.
+  Final tooling/parser checks passed **27/27**; native policy checks passed **10/10**. The mobile CI
+  now includes a separate device-free debug build and required APK class-definition verification.
+- With explicit approval, the debug app was updated **in place** on the connected phone. No
+  uninstall, data clear, credential edit, login submission, account change or server mutation was
+  performed. Installed/corrected APK hashes matched, the process stayed resumed without a new
+  crash, and the React Native sign-in screen was observed. Metro 8083 and the backend 8080 passed
+  bounded unauthenticated diagnostics; no user-owned server was stopped or restarted.
+- The user subsequently confirmed the app is running correctly and the navigation/switcher match
+  the intended design. This is physical-device startup and visual-design confirmation, not the full
+  accessibility, multi-device/modal/display matrix, iOS acceptance or sustained-FPS profiling.
+
+## Pre-merge review corrections — 2026-11-08
+
+The final review found and corrected three freshness/navigation defects and one native ordering
+edge case before committing:
+
+- Socket hints overlapping an active HTTP read now preserve their targets for one trailing read.
+  Stopping the socket lifetime prevents further drains; disabled observers do not acquire automatic
+  reads. A lone-event regression verifies the older response cannot silently consume the hint.
+- Chat re-arms only its disabled invalidation signal on consumption. Failed reads keep the displayed
+  messages, error and freshness timestamp unchanged; a later hint or the actual 120-second repair
+  can retry. The recovery test keeps heartbeat pongs active to prove polling fallback is not masking
+  the repair. Healthy steady-state short polling remains off, and no mutation replay was added.
+- The Work route now has an active-unit-scoped navigation key. Same-feature unit switches and unit
+  revocation reset the parent-owned Work stack rather than rehydrate an old unit's detail ID. The
+  new regressions failed before the fix and verify Personal nested history/local state and the
+  persistent shared bar remain intact afterward.
+- Configuration changes perform one coalesced native UI-queue recheck after ViewRoot updates its
+  display. Pause/detach/destroy cancel pending work; no frame-production loop or power override was
+  introduced. Full external-display moves, including same-configuration moves, remain a native
+  acceptance limit.
+
+- The pre-commit hook flagged fixed synthetic token strings in the existing mocked session-client
+  test. Those fixtures now use per-test generated values; all 36 session race/revocation cases
+  remain intact. No real credential or client authorization behavior changed.
+
+Targeted realtime/Chat gates passed **123 tests** and navigation gates passed **53 tests**. Native
+policy checks passed **11/11**, tooling/parser checks passed **27/27**, TypeScript passed and ESLint
+retained only the four existing nonce warnings. The new hosted Android packaging CI job has not yet
+run; local build/class-definition checks are separate evidence, not a claim of hosted CI success.
+
+**Final post-review gate:** the complete serialized Jest run with `--detectOpenHandles` passed
+**58 suites / 1,018 tests**, with no reported open handles or skipped tests. The final reviewed
+Android debug build passed and the APK gate verified all five required class definitions in 19 DEX
+files. This build was not reinstalled during the review/commit step; the earlier repaired build is
+the user-confirmed device evidence. No device/account/server actions were performed in this review.
+
+The ignore review found existing rules already exclude local APK/build/cache output, environment
+files, keystores, Firebase configuration and crash logs; no ignore-rule change was necessary.
 
 ## Deployment record
 

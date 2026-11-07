@@ -29,6 +29,11 @@ export type SocketEngineOptions = {
   reconcileTargets: () => RealtimeTarget[];
 };
 
+export type SocketRealtimeObserver = {
+  /** True only after server authentication; false before any close, renewal, or stop. */
+  onReadyChange: (ready: boolean) => void;
+};
+
 // Keep server throttling across keyboard/foreground/offline lifetime changes without
 // keeping any transport timer alive while paused. Keyed per client, then per engine
 // description (which must stay stable across lifetimes) so deadlines neither leak
@@ -82,8 +87,14 @@ function targetId(target: RealtimeTarget): string {
 }
 
 /** One active/foreground/online lifetime. Stale grants and callbacks cannot restart it. */
-export function startSocketRealtime(client: QueryClient, options: SocketEngineOptions): () => void {
+export function startSocketRealtime(client: QueryClient, options: SocketEngineOptions, observer?: SocketRealtimeObserver): () => void {
   let stopped = false;
+  let reportedReady = false;
+  const reportReady = (ready: boolean) => {
+    if (reportedReady === ready) { return; }
+    reportedReady = ready;
+    observer?.onReadyChange(ready);
+  };
   let generation = 0;
   let socket: WebSocket | null = null;
   let connecting = false;
@@ -109,23 +120,30 @@ export function startSocketRealtime(client: QueryClient, options: SocketEngineOp
     const targets = [...pending.values()];
     pending.clear();
     refreshing = true;
-    const alreadyFetching = targets.some(target =>
-      client.getQueryCache().getAll().some(query =>
-        matchQuery({ queryKey: target.key, exact: target.exact }, query) &&
-        query.state.fetchStatus === 'fetching'));
+    const alreadyFetching = new Map<string, RealtimeTarget>();
     try {
       for (const target of targets) {
+        if (stopped) { return; }
         await client.invalidateQueries({ queryKey: target.key, exact: target.exact, refetchType: 'none' });
       }
       for (const target of targets) {
+        if (stopped) { return; }
+        if (client.getQueryCache().getAll().some(query =>
+          matchQuery({ queryKey: target.key, exact: target.exact }, query) && query.isActive() &&
+          query.state.fetchStatus === 'fetching')) {
+          alreadyFetching.set(targetId(target), target);
+        }
         await client.refetchQueries({ queryKey: target.key, exact: target.exact, type: 'active' }, { cancelRefetch: false });
       }
     } catch {
       // The queries retain their last good data. Reconciliation will retry later.
     } finally {
       refreshing = false;
-      if (!stopped && (dirty || alreadyFetching)) {
-        refresh();
+      if (!stopped) {
+        // The reused response may predate this hint. Preserve its targets for one
+        // trailing read after the physical HTTP request has settled.
+        for (const target of alreadyFetching.values()) { pending.set(targetId(target), target); }
+        if (pending.size > 0) { refresh(); }
       }
     }
   }
@@ -153,6 +171,7 @@ export function startSocketRealtime(client: QueryClient, options: SocketEngineOp
   }
 
   function clearConnection() {
+    reportReady(false);
     generation += 1;
     connecting = false;
     clearTimeout(deadline);
@@ -231,6 +250,7 @@ export function startSocketRealtime(client: QueryClient, options: SocketEngineOp
         if (message.type === 'ready' && !ready && ticket === null) {
           ready = true;
           readyAt = Date.now();
+          reportReady(true);
           clearTimeout(deadline);
           queueReconcileTargets();
           refresh(true);

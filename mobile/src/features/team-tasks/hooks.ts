@@ -7,6 +7,7 @@ import { queryKeys } from '../../api/queryKeys';
 import type { TeamUnit } from '../../api/types';
 import { useAuth } from '../../store/auth';
 import { useActiveScreen } from '../../lib/useActiveScreen';
+import { useRealtimeReady } from '../../lib/useRealtimeReady';
 import { invalidateTeamTasks } from '../workspace/invalidateTeamResources';
 
 const TASK_POLL_MS = 30_000;
@@ -69,12 +70,13 @@ export function useTeamMemberSearch(unit: TeamUnit | null, q = '', enabled = tru
 
 export function useTeamTasks(unit: TeamUnit | null, filters: api.TeamTaskFilters) {
   const identity = useIdentity();
+  const realtime = useRealtimeReady();
   const active = useActiveScreen(identity.tenantId > 0 && identity.userId > 0 && unit !== null);
   const query = useQuery({
     queryKey: queryKeys.teamTasks(identity.tenantId, identity.userId, unit, filters),
     queryFn: () => api.list(unit!, filters),
     enabled: active,
-    refetchInterval: active ? TASK_POLL_MS : false,
+    refetchInterval: active && !realtime ? TASK_POLL_MS : false,
     refetchIntervalInBackground: false,
     // Keep rows while changing a page/filter, but never across identity, unit, or My Tasks scope.
     placeholderData: (previousData, previousQuery) => {

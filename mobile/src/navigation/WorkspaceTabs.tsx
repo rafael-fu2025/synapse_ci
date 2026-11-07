@@ -5,7 +5,7 @@ import { TeamChatRoot } from '../features/team-chat';
 import { TeamCalendarRoot } from '../features/team-calendar/TeamCalendarStack';
 import { MyTasksStack, TeamBoardStack } from '../features/team-tasks/TeamTaskStacks';
 import { WorkspaceTabsParamList } from './types';
-import { SharedContextTabBar } from './SharedContextTabBar';
+import { ContextTabBarBinding } from './ContextTabBarBinding';
 import { useTabMotionOptions } from './useTabMotionOptions';
 import { useWorkspace } from '../features/workspace/WorkspaceContext';
 
@@ -21,9 +21,10 @@ export function WorkspaceTabs() {
   return (
     <Tab.Navigator
       key={activeUnit?.unit ?? 'no-unit'}
-      tabBar={(props) => <SharedContextTabBar {...props} />}
+      tabBar={(props) => <ContextTabBarBinding mode="workspace" {...props} />}
       screenOptions={({ route }) => ({
         ...motion,
+        tabBarStyle: { height: 0 },
         tabBarLabel: LABELS[route.name],
         tabBarIcon: ({ color, focused }) => {
           const Icon = ICONS[route.name];

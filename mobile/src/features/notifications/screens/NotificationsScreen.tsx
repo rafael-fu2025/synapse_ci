@@ -142,7 +142,7 @@ export function NotificationsScreen() {
           <Action variant="secondary" disabled={!data || currentPage >= data.pages || query.isFetching || busy} onPress={() => setPage(currentPage + 1)}>Next</Action>
         </View>
       ) : null}
-      <Text style={styles.footer}>Checks for in-app updates every {poll.notificationsMs / 1000}s while this screen is open.</Text>
+      <Text style={styles.footer}>Uses realtime updates when connected; otherwise checks every {poll.notificationsMs / 1000}s while this screen is open.</Text>
     </Screen>
   );
 }

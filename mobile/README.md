@@ -80,11 +80,44 @@ same first-frame ticket rule; see [MOBILE_API.md](../docs/MOBILE_API.md#private-
 Payload-free hints refresh the React Query caches: `notifications.changed` (bell inbox),
 `portal.queue.changed` (personal queue card), `portal.appointments.changed` (visits lists/detail),
 and `queue.invalidated` (staff queue board for the named unit). Hints never carry content — the
-socket says "stale", the HTTP refetch says "what". All focus-poll intervals and the 120-second
-reconciliation remain the fallback; a missing or disabled socket changes nothing except latency.
-The socket closes on sign-out/expiry, backgrounding, and offline, like the carousel listener.
+socket says "stale", the HTTP refetch says "what". **Polling is the default; a healthy authenticated
+WebSocket takes priority.** Queue/staff queue (15s), notifications (30s), Tasks/Calendar (30s), and
+latest Chat (5s) stop their short polling timers only after the server's authenticated `ready` frame.
+An enabled grant or an open-but-not-authenticated socket is not sufficient. Disconnect, heartbeat
+timeout, ticket renewal, offline/background and sign-out release readiness; eligible fallback timers
+resume without an automatic mutation replay. Query eligibility remains separate, so socket hints,
+manual refresh, and initial HTTP reads keep working while polling is paused.
+
+The 120-second HTTP reconciliation stays active even on a healthy connection, including staff queue
+snapshots: server fanout is bounded, so a connected socket can still miss a hint. Chat keeps its
+serialized read queue and historical windows. Dashboard `/me` refresh retains its own polling because
+this private channel has no corresponding profile event. Public login-carousel readiness never
+suppresses signed-in polling. The socket closes on sign-out/expiry, backgrounding, and offline.
 
 **HTTP 429 is not a connectivity failure.** Default login budgets are 5 attempts/300 seconds per IP + identity and 60/60 seconds per IP, shared by web/mobile. Honor `Retry-After`; do not reset credentials or keep probing sign-in. Use only local synthetic accounts described in [LOCAL_TEST_ACCOUNTS.md](../tests/LOCAL_TEST_ACCOUNTS.md); no passwords belong in docs or diagnostics.
+
+## Display refresh rates (60/90/120 Hz and adaptive panels)
+
+Display Hz and data polling are independent. The app does not render frames from a JavaScript timer,
+force every display to 120 Hz, change resolution, or override user/power/thermal limits.
+
+- **Android 16 / API 36+:** a HIGH frame-rate category propagates through each active app window's
+  native view hierarchy, including React Native Modal windows. The OS can downshift on idle and
+  keeps control of the physical refresh rate.
+- **Android API 24–35:** active windows prefer the highest valid advertised rate at the current
+  resolution. On API 24–33, multi-resolution displays conservatively retain the OS default because
+  the legacy hint may choose the default resolution. Explicit display-mode choices are not replaced.
+- Window preferences are released on pause/destroy, modal closure and display removal; re-evaluated
+  on resume, attachment, configuration/display changes and React context changes.
+- **iOS:** `CADisableMinimumFrameDurationOnPhone` is already enabled for ProMotion-capable iPhones.
+  The system still applies the panel, Low Power Mode, accessibility and thermal constraints.
+
+Native changes require a **new Android build/install**; Fast Refresh alone cannot apply them. The
+policy is a request, not a measured sustained-FPS guarantee. Validate scrolling, context transitions,
+sheets/dialogs and keyboard transitions on the connected device at its selectable refresh rates,
+then repeat in battery-saving mode and after background/resume. Use a release/profile build for
+frame-time measurements; Metro debug performance and a display-Hz overlay alone do not prove
+rendered-frame delivery. See [the display-rate test checklist](../docs/MOBILE.md#display-refresh-rate-acceptance).
 
 ## Theme contrast
 
@@ -113,8 +146,10 @@ There is no automated distribution pipeline yet: builds are produced locally and
 ## Team Workspace interaction parity
 
 Production uses `ContextTabs`, with independent Personal and Team navigation histories. Both use
-240 ms opaque cubic-out transitions and live Reduce Motion. The center action is guarded, not a
-fake tab; disabled Work features are omitted and changing units clears the old unit's navigator.
+240 ms opaque cubic-out **scene** transitions and live Reduce Motion. A single stationary navigation
+bar sits outside those scenes, with a raised circular center CTA and a coordinated 400 ms maroon
+reveal for Work/reverse reveal for Personal. The guarded action is not a fake tab; disabled Work
+features are omitted and changing units clears the old unit's navigator.
 
 Tasks, Calendar, Chat and their pickers reuse shared controls and retained serialized native sheets
 and dialogs. Drafts stay in memory, Keep editing preserves them, and accepted discard resets them
@@ -132,15 +167,23 @@ do not replace an installed app/account or perform server writes merely for visu
 ## Checks and references
 
 ```sh
-node --test scripts/dev-tooling.test.cjs  # isolated tooling tests; no network/device
+node --test scripts/dev-tooling.test.cjs scripts/check-android-apk.test.cjs  # no network/device
+node --test android/app/src/test/refresh-rate-policy.test.cjs  # local JDK; no device
 npx tsc --noEmit
 npm run lint
 npm test -- --runInBand
 ```
 
-`.github/workflows/mobile.yml` runs these four gates on every push and pull request. `npm run coverage`
-is available locally but must not be combined with `--runInBand`: coverage instrumentation slows the
-fake-timer suites enough to time them out.
+`.github/workflows/mobile.yml` runs these gates on every push and pull request, with a JDK for the
+native selector tests and a separate Android build/class-definition packaging gate. After a local
+debug build, verify the actual APK too:
+
+```sh
+node scripts/check-android-apk.cjs android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+`npm run coverage` is available locally but must not be combined with `--runInBand`: coverage
+instrumentation slows the fake-timer suites enough to time them out.
 
 `npm run ios` also uses Metro on 8083 without starting a second packager. iOS requires macOS/Xcode and CocoaPods (`bundle install`, then `bundle exec pod install` from `ios/`). The Android USB routing helpers do not configure physical iOS devices; select a reachable API URL for your iOS setup.
 

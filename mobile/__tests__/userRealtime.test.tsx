@@ -1,5 +1,5 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider, QueryObserver, onlineManager } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryObserver, focusManager, onlineManager } from '@tanstack/react-query';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { userRealtimeGrant } from '../src/api/endpoints/realtime';
 import { __resetClientForTests, setAccessToken } from '../src/api/client';
@@ -7,6 +7,7 @@ import { RealtimeIdentity, startUserRealtime, validateUserGrant } from '../src/f
 import { useUserRealtime } from '../src/features/realtime/useUserRealtime';
 import { queryKeys } from '../src/api/queryKeys';
 import { config } from '../src/lib/config';
+import { isUserRealtimeReady, ownUserRealtime, subscribeUserRealtime } from '../src/lib/realtime/transportState';
 
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test/subpath' } }));
 jest.mock('../src/api/endpoints/realtime', () => ({ userRealtimeGrant: jest.fn() }));
@@ -68,6 +69,7 @@ beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
   jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
   onlineManager.setOnline(true);
+  focusManager.setFocused(true);
   config.apiBaseUrl = 'https://api.test/subpath';
   MockSocket.instances = [];
   globalThis.WebSocket = MockSocket as unknown as typeof WebSocket;
@@ -114,6 +116,7 @@ afterEach(() => {
   __resetClientForTests();
   globalThis.WebSocket = originalWebSocket;
   onlineManager.setOnline(true);
+  focusManager.setFocused(undefined);
   jest.restoreAllMocks();
   jest.useRealTimers();
 });
@@ -176,28 +179,28 @@ describe('socket protocol and hint dispatch', () => {
   it('authenticates in a frame and reconciles the personal targets on ready', async () => {
     const ws = await start();
     expect(ws.options).toEqual({ headers: { Origin: 'https://api.test' } });
-    // Start reconciles the personal targets immediately; with staleTime Infinity the
-    // observers do not fetch on mount, so staff boards stay at zero until a hint.
+    // Start reconciles all covered targets immediately; staleTime Infinity prevents
+    // observer mount fetches, so every count here comes from reconciliation.
     expect(notifications).toHaveBeenCalledTimes(1);
     expect(notificationHistory).toHaveBeenCalledTimes(1);
     expect(queue).toHaveBeenCalledTimes(1);
     expect(appointmentList).toHaveBeenCalledTimes(1);
     expect(appointmentDetail).toHaveBeenCalledTimes(1);
-    expect(staffClinic).toHaveBeenCalledTimes(0);
-    expect(staffGuidance).toHaveBeenCalledTimes(0);
-    expect(staffAll).toHaveBeenCalledTimes(0);
+    expect(staffClinic).toHaveBeenCalledTimes(1);
+    expect(staffGuidance).toHaveBeenCalledTimes(1);
+    expect(staffAll).toHaveBeenCalledTimes(1);
     ws.ready();
     await flush();
     expect(ws.send.mock.calls).toEqual([[JSON.stringify({ type: 'authenticate', ticket: 'single-use-secret' })]]);
-    // Ready refreshes notifications, queue, and both appointment keys; staff boards wait for hints.
+    // Server readiness repairs every covered resource, including the staff summary boards.
     expect(notifications).toHaveBeenCalledTimes(2);
     expect(notificationHistory).toHaveBeenCalledTimes(2);
     expect(queue).toHaveBeenCalledTimes(2);
     expect(appointmentList).toHaveBeenCalledTimes(2);
     expect(appointmentDetail).toHaveBeenCalledTimes(2);
-    expect(staffClinic).toHaveBeenCalledTimes(0);
-    expect(staffGuidance).toHaveBeenCalledTimes(0);
-    expect(staffAll).toHaveBeenCalledTimes(0);
+    expect(staffClinic).toHaveBeenCalledTimes(2);
+    expect(staffGuidance).toHaveBeenCalledTimes(2);
+    expect(staffAll).toHaveBeenCalledTimes(2);
   });
 
   it('maps each personal hint to its own queries and ignores everything else', async () => {
@@ -211,7 +214,7 @@ describe('socket protocol and hint dispatch', () => {
     expect(notificationHistory).toHaveBeenCalledTimes(3);
     expect(queue).toHaveBeenCalledTimes(2);
     expect(appointmentList).toHaveBeenCalledTimes(2);
-    expect(staffClinic).toHaveBeenCalledTimes(0);
+    expect(staffClinic).toHaveBeenCalledTimes(2);
 
     hint(ws, 'portal.queue.changed');
     await flush(100);
@@ -227,12 +230,12 @@ describe('socket protocol and hint dispatch', () => {
 
     hint(ws, 'queue.invalidated', { unit: 'clinic', date: '2026-01-01' });
     await flush(100);
-    expect(staffClinic).toHaveBeenCalledTimes(1);
-    expect(staffGuidance).toHaveBeenCalledTimes(0);
-    expect(staffAll).toHaveBeenCalledTimes(1);
+    expect(staffClinic).toHaveBeenCalledTimes(3);
+    expect(staffGuidance).toHaveBeenCalledTimes(2);
+    expect(staffAll).toHaveBeenCalledTimes(3);
     hint(ws, 'queue.invalidated', { unit: 'guidance', date: '2026-01-01' });
     await flush(100);
-    expect(staffGuidance).toHaveBeenCalledTimes(1);
+    expect(staffGuidance).toHaveBeenCalledTimes(3);
     // Units without a mobile surface or wrong shapes never refresh anything.
     hint(ws, 'queue.invalidated', { unit: 'pharmacy', date: '2026-01-01' });
     hint(ws, 'queue.invalidated', { unit: 7 });
@@ -263,9 +266,9 @@ describe('socket protocol and hint dispatch', () => {
     expect(queue).toHaveBeenCalledTimes(3);
     expect(appointmentList).toHaveBeenCalledTimes(3);
     expect(appointmentDetail).toHaveBeenCalledTimes(3);
-    expect(staffClinic).toHaveBeenCalledTimes(1);
-    expect(staffGuidance).toHaveBeenCalledTimes(1);
-    expect(staffAll).toHaveBeenCalledTimes(2);
+    expect(staffClinic).toHaveBeenCalledTimes(3);
+    expect(staffGuidance).toHaveBeenCalledTimes(3);
+    expect(staffAll).toHaveBeenCalledTimes(4);
     expect(teamTasks).toHaveBeenCalledTimes(3);
     expect(teamCalendar).toHaveBeenCalledTimes(4);
     expect(teamChat).toHaveBeenCalledTimes(3);
@@ -273,7 +276,7 @@ describe('socket protocol and hint dispatch', () => {
   });
 
   it.each(['clinic', 'guidance'] as const)(
-    'refreshes the active %s and all boards through HTTP, but no other queries', async unit => {
+    'refreshes only the hinted %s and aggregate boards after initial reconciliation', async unit => {
       const extendedKey = [...queryKeys.staffQueue('all'), 'unrelated'];
       const extendedFetch = jest.fn().mockResolvedValue(['unrelated']);
       client.setQueryData(extendedKey, ['cached']);
@@ -283,13 +286,15 @@ describe('socket protocol and hint dispatch', () => {
         const ws = await start();
         ws.ready();
         await flush();
-        expect(staffAll).not.toHaveBeenCalled();
+        expect(staffAll).toHaveBeenCalledTimes(2);
+        expect(staffClinic).toHaveBeenCalledTimes(2);
+        expect(staffGuidance).toHaveBeenCalledTimes(2);
         // Date is not required by the existing hint contract; only unit selects targets.
         hint(ws, 'queue.invalidated', { unit });
         await flush(100);
-        expect(staffAll).toHaveBeenCalledTimes(1);
-        expect(staffClinic).toHaveBeenCalledTimes(unit === 'clinic' ? 1 : 0);
-        expect(staffGuidance).toHaveBeenCalledTimes(unit === 'guidance' ? 1 : 0);
+        expect(staffAll).toHaveBeenCalledTimes(3);
+        expect(staffClinic).toHaveBeenCalledTimes(unit === 'clinic' ? 3 : 2);
+        expect(staffGuidance).toHaveBeenCalledTimes(unit === 'guidance' ? 3 : 2);
         expect(client.getQueryData(queryKeys.staffQueue('all'))).toEqual(['fresh']);
         expect(client.getQueryData(queryKeys.staffQueue(unit))).toEqual(['fresh']);
         expect(extendedFetch).not.toHaveBeenCalled();
@@ -314,7 +319,7 @@ describe('socket protocol and hint dispatch', () => {
     hint(ws, 'queue.invalidated', { unit: 'clinic' }, 'private.tenant.7.user.43');
     await flush(100);
     for (const fetchQuery of [staffAll, staffClinic, staffGuidance]) {
-      expect(fetchQuery).not.toHaveBeenCalled();
+      expect(fetchQuery).toHaveBeenCalledTimes(2);
     }
     for (const unit of ['all', 'clinic', 'guidance']) {
       expect(client.getQueryState(queryKeys.staffQueue(unit))?.isInvalidated).toBe(false);
@@ -322,6 +327,64 @@ describe('socket protocol and hint dispatch', () => {
     for (const fetchQuery of [notifications, notificationHistory, queue, appointmentList, appointmentDetail]) {
       expect(fetchQuery).toHaveBeenCalledTimes(2);
     }
+  });
+
+  it('retains a lone hint that overlaps an existing HTTP read for exactly one trailing fetch', async () => {
+    const ws = await start();
+    ws.ready();
+    await flush();
+    let resolveOld!: (value: string[]) => void;
+    notifications.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const external = client.refetchQueries({ queryKey: queryKeys.notifications, exact: true });
+    expect(notifications).toHaveBeenCalledTimes(3);
+    hint(ws, 'notifications.changed');
+    await flush(100);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    resolveOld(['snapshot before hint']);
+    await external;
+    await flush(100);
+    expect(notifications).toHaveBeenCalledTimes(4);
+    expect(client.getQueryData(queryKeys.notifications)).toEqual(['fresh']);
+    await flush(5_000);
+    expect(notifications).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not run trailing HTTP work after stopping an overlapped lifetime', async () => {
+    const ws = await start();
+    ws.ready();
+    await flush();
+    let resolveOld!: (value: string[]) => void;
+    notifications.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const external = client.refetchQueries({ queryKey: queryKeys.notifications, exact: true });
+    hint(ws, 'notifications.changed');
+    await flush(100);
+    const historyReadsBeforeStop = notificationHistory.mock.calls.length;
+    stop!(); stop = undefined;
+    resolveOld(['external result']);
+    await external;
+    await flush(5_000);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(notificationHistory).toHaveBeenCalledTimes(historyReadsBeforeStop);
+  });
+
+  it('does not schedule trailing reads for a disabled observer with an external fetch', async () => {
+    const ws = await start();
+    ws.ready();
+    await flush();
+    let resolveOld!: (value: string[]) => void;
+    const read = jest.fn(() => new Promise<string[]>(resolve => { resolveOld = resolve; }));
+    const key = ['team-chat', IDENTITY.tenantId, IDENTITY.userId, 'guidance', 'history'];
+    const observer = new QueryObserver(client, { queryKey: key, queryFn: read, enabled: false });
+    const un = observer.subscribe(() => undefined);
+    try {
+      const external = client.fetchQuery({ queryKey: key, queryFn: read });
+      hint(ws, 'team.chat.changed', { unit: 'guidance' });
+      await flush(100);
+      resolveOld(['external result']);
+      await external;
+      await flush(5_000);
+      expect(read).toHaveBeenCalledTimes(1);
+    } finally { un(); }
   });
 
   it('coalesces a multi-hint burst into one refresh per query', async () => {
@@ -341,12 +404,150 @@ describe('socket protocol and hint dispatch', () => {
   });
 });
 
+describe('authenticated transport readiness', () => {
+  it('stays in fallback during grant fetch and socket open until one authenticated server ready', async () => {
+    let resolveGrant!: (value: { data: ReturnType<typeof grant> }) => void;
+    jest.mocked(userRealtimeGrant).mockImplementationOnce(() => new Promise(resolve => { resolveGrant = resolve; }));
+    const changed = jest.fn(() => isUserRealtimeReady(client, IDENTITY));
+    const un = subscribeUserRealtime(client, changed);
+    try {
+      stop = startUserRealtime(client, IDENTITY);
+      await flush();
+      expect(MockSocket.instances).toHaveLength(0);
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      resolveGrant({ data: grant() });
+      await flush();
+      const ws = latest();
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      ws.message({ type: 'ready' }); // An unsolicited frame before authenticate is not readiness.
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      ws.open();
+      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'authenticate', ticket: 'single-use-secret' }));
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      ws.message({ type: 'ready' });
+      await flush();
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+      expect(changed.mock.results.map(result => result.value)).toEqual([false, true]);
+      ws.message({ type: 'ready' });
+      await flush();
+      expect(changed.mock.results.map(result => result.value)).toEqual([false, true]);
+      expect(teamTasks).toHaveBeenCalledTimes(2);
+    } finally {
+      un();
+    }
+  });
+
+  it('keeps fallback after an open socket fails the handshake and rejects its saved late ready callback', async () => {
+    const ws = await start();
+    ws.open();
+    const lateMessage = ws.onmessage!;
+    await flush(9_999);
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+    expect(ws.close).not.toHaveBeenCalled();
+    await flush(1);
+    expect(ws.close).toHaveBeenCalledTimes(1);
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+    await flush(1_000);
+    expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(2);
+    expect(latest()).not.toBe(ws);
+    lateMessage({ data: JSON.stringify({ type: 'ready' }) });
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+    latest().ready();
+    await flush();
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+  });
+
+  it.each(['close', 'heartbeat timeout', 'ticket renewal'] as const)(
+    'restores fallback before %s and requires a new authenticated connection', async cause => {
+      const ws = await start();
+      ws.ready();
+      await flush();
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+      const lateMessage = ws.onmessage!;
+      const lateClose = ws.onclose!;
+      ws.close.mockImplementation(() => { expect(isUserRealtimeReady(client, IDENTITY)).toBe(false); });
+      if (cause === 'close') {
+        ws.onclose!();
+      } else if (cause === 'heartbeat timeout') {
+        await flush(20_000);
+        expect(ws.send).toHaveBeenLastCalledWith(JSON.stringify({ type: 'ping' }));
+        expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+        await flush(10_000);
+      } else {
+        for (let i = 0; i < 2; i++) {
+          await flush(20_000);
+          ws.message({ type: 'pong' });
+        }
+        await flush(9_999);
+        expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+        await flush(1);
+      }
+      expect(ws.close).toHaveBeenCalledTimes(1);
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      if (cause !== 'ticket renewal') { await flush(1_000); }
+      const replacement = latest();
+      expect(replacement).not.toBe(ws);
+      replacement.open();
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      lateMessage({ data: JSON.stringify({ type: 'ready' }) });
+      lateClose();
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      replacement.message({ type: 'ready' });
+      await flush();
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+      lateClose();
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+      expect(replacement.close).not.toHaveBeenCalled();
+    },
+  );
+
+  it('isolates leases by client and identity, ignoring replaced and released callbacks', () => {
+    const otherClient = new QueryClient();
+    const otherIdentity = { tenantId: 8, userId: 43 };
+    const old = ownUserRealtime(client, IDENTITY);
+    const other = ownUserRealtime(otherClient, IDENTITY);
+    const changed = jest.fn();
+    const un = subscribeUserRealtime(client, changed);
+    try {
+      expect(isUserRealtimeReady(client, null)).toBe(false);
+      expect(isUserRealtimeReady(client, { tenantId: 0, userId: 42 })).toBe(false);
+      old.setReady(true);
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+      expect(isUserRealtimeReady(otherClient, IDENTITY)).toBe(false);
+      other.setReady(true);
+      const replacement = ownUserRealtime(client, otherIdentity);
+      expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+      expect(isUserRealtimeReady(client, otherIdentity)).toBe(false);
+      old.setReady(true); old.release();
+      expect(isUserRealtimeReady(client, otherIdentity)).toBe(false);
+      replacement.setReady(true);
+      old.setReady(false); old.release();
+      expect(isUserRealtimeReady(client, otherIdentity)).toBe(true);
+      replacement.release();
+      replacement.setReady(true);
+      expect(isUserRealtimeReady(client, otherIdentity)).toBe(false);
+      expect(isUserRealtimeReady(otherClient, IDENTITY)).toBe(true);
+      expect(changed).toHaveBeenCalledTimes(4);
+      un();
+      other.release();
+      const next = ownUserRealtime(client, IDENTITY);
+      next.setReady(true); next.release();
+      expect(changed).toHaveBeenCalledTimes(4);
+    } finally {
+      un();
+      other.release();
+      otherClient.clear();
+    }
+  });
+});
+
 describe('reconciliation and cleanup', () => {
   it('rechecks a disabled grant every 120 seconds and connects when reconfigured', async () => {
     jest.mocked(userRealtimeGrant).mockImplementation(async () => ({ data: { enabled: false } }));
     stop = startUserRealtime(client, IDENTITY);
     await flush();
     expect(MockSocket.instances).toHaveLength(0);
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
     expect(notifications).toHaveBeenCalledTimes(1);
     expect(notificationHistory).toHaveBeenCalledTimes(1);
     await flush(120_000);
@@ -362,7 +563,7 @@ describe('reconciliation and cleanup', () => {
     expect(notificationHistory).toHaveBeenCalledTimes(4);
   });
 
-  it('also reconciles a healthy connection every 120 seconds without touching staff boards', async () => {
+  it('repairs all covered queries including staff boards every 120 seconds on a healthy connection', async () => {
     jest.mocked(userRealtimeGrant).mockImplementation(
       async () => ({ data: grant({ expires_at: Math.floor(Date.now() / 1000) + 300 }) }));
     const ws = await start();
@@ -378,11 +579,15 @@ describe('reconciliation and cleanup', () => {
     expect(queue).toHaveBeenCalledTimes(3);
     expect(appointmentList).toHaveBeenCalledTimes(3);
     expect(appointmentDetail).toHaveBeenCalledTimes(3);
-    expect(staffClinic).toHaveBeenCalledTimes(0);
-    expect(staffGuidance).toHaveBeenCalledTimes(0);
-    expect(staffAll).toHaveBeenCalledTimes(0);
+    expect(staffClinic).toHaveBeenCalledTimes(3);
+    expect(staffGuidance).toHaveBeenCalledTimes(3);
+    expect(staffAll).toHaveBeenCalledTimes(3);
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(1);
     expect(ws.close).toHaveBeenCalledTimes(0);
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+    expect(teamTasks).toHaveBeenCalledTimes(3);
+    expect(teamCalendar).toHaveBeenCalledTimes(3);
+    expect(teamChat).toHaveBeenCalledTimes(3);
   });
 
   it('detaches handlers and cancels all timers, ignoring completions after stop', async () => {
@@ -422,21 +627,37 @@ describe('hook gating', () => {
     await act(async () => { renderer = create(tree()); await flush(); });
     const ws = latest();
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(1);
+    await act(async () => { ws.ready(); await flush(); });
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+    const lateMessage = ws.onmessage!;
+    const lateClose = ws.onclose!;
+    ws.close.mockImplementation(() => { expect(isUserRealtimeReady(client, IDENTITY)).toBe(false); });
     await act(async () => { onlineManager.setOnline(false); await flush(); });
     expect(ws.close).toHaveBeenCalledTimes(1);
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
     await act(async () => { await flush(300_000); });
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(1);
     await act(async () => { onlineManager.setOnline(true); await flush(); });
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(2);
     // React Query's online reconnect and the fresh socket lifetime each repair active data.
-    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(notifications).toHaveBeenCalledTimes(4);
     // Workspace queries use the fresh socket reconciliation; React Query's reconnect
     // did not independently refetch these scoped active observers in this lifetime.
-    expect(teamTasks).toHaveBeenCalledTimes(2);
-    expect(teamCalendar).toHaveBeenCalledTimes(2);
-    expect(teamChat).toHaveBeenCalledTimes(2);
+    expect(teamTasks).toHaveBeenCalledTimes(3);
+    expect(teamCalendar).toHaveBeenCalledTimes(3);
+    expect(teamChat).toHaveBeenCalledTimes(3);
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+    lateMessage({ data: JSON.stringify({ type: 'ready' }) });
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
+    const replacement = latest();
+    await act(async () => { replacement.ready(); await flush(); });
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+    lateClose();
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(true);
+    expect(replacement.close).not.toHaveBeenCalled();
     expect(jest.getTimerCount()).toBeGreaterThan(0);
     act(() => renderer!.unmount()); renderer = undefined;
+    expect(isUserRealtimeReady(client, IDENTITY)).toBe(false);
     expect(latest().close).toHaveBeenCalledTimes(1);
     onlineManager.setOnline(false); onlineManager.setOnline(true);
     await flush(300_000);

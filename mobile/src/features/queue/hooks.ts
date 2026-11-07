@@ -2,11 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { poll } from '../../api/poll';
 import * as queueApi from '../../api/endpoints/queue';
 import { queryKeys } from '../../api/queryKeys';
-import { useFocusPoll } from '../../lib/useFocusPoll';
+import { useRealtimePoll } from '../../lib/useRealtimePoll';
 
-/** Live personal tickets; 15s polling is the same cadence the web cards use. */
+/** Live personal tickets; socket hints take priority over the 15s polling fallback. */
 export function useQueueSnapshot() {
-  const refetchInterval = useFocusPoll(poll.queueMs);
+  const refetchInterval = useRealtimePoll(poll.queueMs);
   return useQuery({
     queryKey: queryKeys.queue,
     queryFn: () => queueApi.snapshot(),

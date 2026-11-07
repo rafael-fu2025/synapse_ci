@@ -10,6 +10,7 @@ import { ContextTabsParamList } from './types';
 import { PersonalTabs } from './PersonalTabs';
 import { WorkspaceTabs } from './WorkspaceTabs';
 import { useTabMotionOptions } from './useTabMotionOptions';
+import { ContextTabBarHost, ContextTabBarProvider } from './ContextTabBarBinding';
 
 const Tab = createBottomTabNavigator<ContextTabsParamList>();
 
@@ -25,7 +26,7 @@ function ContextModeSync({ navigation, state }: BottomTabBarProps) {
   useEffect(() => {
     if (state.routes[state.index]?.name !== route) { navigation.dispatch(TabActions.jumpTo(route)); }
   }, [navigation, route, state.index, state.routes]);
-  return null;
+  return <ContextTabBarHost mode={mode === 'workspace' || !personalEnabled ? 'workspace' : 'personal'} />;
 }
 
 function WorkspaceContextScreen() {
@@ -50,21 +51,26 @@ function WorkspaceContextScreen() {
 
 /** Both contexts retain their same-unit history; only accepted transitions change focus. */
 export function ContextTabs() {
-  const { mode, personalEnabled, workEnabled } = useWorkspace();
+  const { mode, personalEnabled, workEnabled, activeUnit } = useWorkspace();
   const motion = useTabMotionOptions();
   const route = mode === 'workspace' || !personalEnabled ? 'WorkspaceContext' : 'PersonalContext';
   if (!personalEnabled && !workEnabled) {
     return <Screen><Text accessibilityRole="alert">No mobile portal access is available for this account.</Text></Screen>;
   }
   return (
-    <Tab.Navigator
-      initialRouteName={route}
-      backBehavior="none"
-      tabBar={(props) => <ContextModeSync {...props} />}
-      screenOptions={motion}>
-      {personalEnabled ? <Tab.Screen name="PersonalContext" component={PersonalContextScreen} /> : null}
-      {workEnabled ? <Tab.Screen name="WorkspaceContext" component={WorkspaceContextScreen} /> : null}
-    </Tab.Navigator>
+    <ContextTabBarProvider>
+      <Tab.Navigator
+        initialRouteName={route}
+        backBehavior="none"
+        tabBar={(props) => <ContextModeSync {...props} />}
+        screenOptions={motion}>
+        {personalEnabled ? <Tab.Screen name="PersonalContext" component={PersonalContextScreen} /> : null}
+        {workEnabled ? (
+          // Reset parent-owned Work state across units without replacing Personal or the shared host.
+          <Tab.Screen name="WorkspaceContext" navigationKey={activeUnit?.unit ?? 'no-unit'} component={WorkspaceContextScreen} />
+        ) : null}
+      </Tab.Navigator>
+    </ContextTabBarProvider>
   );
 }
 

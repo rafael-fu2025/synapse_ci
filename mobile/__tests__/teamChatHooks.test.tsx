@@ -1,9 +1,10 @@
 import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager, onlineManager } from '@tanstack/react-query';
 import { ApiError, NetworkError } from '../src/api/client';
 import * as api from '../src/api/endpoints/teamChat';
 import type { TeamUnit } from '../src/api/types';
+import { ownUserRealtime } from '../src/lib/realtime/transportState';
 import { teamChatKeys, useSendTeamChatMessage, useTeamChatChannel, useTeamChatMemberSearch, useTeamChatTaskSearch, type TeamChatChannelState } from '../src/features/team-chat/hooks';
 
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
@@ -59,7 +60,7 @@ async function tick(ms: number) {
 beforeEach(() => {
   jest.useFakeTimers(); jest.setSystemTime(new Date('2026-11-07T01:00:00Z')); jest.clearAllMocks();
   mockFocused = true; mockForegroundOnline = true; mockOverlay = false; mockIdentity = { id: 12, tenant_id: 9 };
-  onlineManager.setOnline(true);
+  onlineManager.setOnline(true); focusManager.setFocused(true);
   props = { unit: 'clinic' };
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
   jest.mocked(api.history).mockReset().mockResolvedValue(page([10, 11], { has_more: true }));
@@ -70,7 +71,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(async () => { renderer?.unmount(); }); renderer = undefined;
-  client.clear(); onlineManager.setOnline(true); jest.useRealTimers();
+  client.clear(); onlineManager.setOnline(true); focusManager.setFocused(undefined); jest.useRealTimers();
 });
 
 describe('mounted Team Chat channel coordination', () => {
@@ -95,6 +96,141 @@ describe('mounted Team Chat channel coordination', () => {
     mockOverlay = true; await rerender(); await tick(15_000); expect(api.history).toHaveBeenCalledTimes(4);
     mockOverlay = false; await rerender(); expect(api.history).toHaveBeenCalledTimes(5);
     props.paused = true; await rerender(); await tick(15_000); expect(api.history).toHaveBeenCalledTimes(5);
+  });
+
+  it('keeps hints active while healthy and resumes only one fallback read after reconnect', async () => {
+    const transport = ownUserRealtime(client, { tenantId: 9, userId: 12 });
+    transport.setReady(true);
+    try {
+      await mount();
+      expect(api.history).toHaveBeenCalledTimes(1);
+      await tick(15_000);
+      expect(api.history).toHaveBeenCalledTimes(1);
+      jest.mocked(api.history).mockResolvedValueOnce(page([12]));
+      await act(async () => { await client.invalidateQueries({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') }); });
+      expect(api.history).toHaveBeenCalledTimes(2);
+      expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 11 });
+      expect(channel.messages.map(item => item.id)).toEqual([10, 11, 12]);
+      const read = deferred<{ data: api.TeamChatReadSummary }>();
+      jest.mocked(api.markRead).mockReturnValueOnce(read.promise);
+      act(() => { channel.acknowledge(12); channel.acknowledge(12); });
+      expect(api.markRead).toHaveBeenCalledTimes(1);
+      await act(async () => transport.setReady(false));
+      await tick(5_000);
+      expect(api.history).toHaveBeenCalledTimes(2); // The read still owns the physical HTTP lock.
+      await act(async () => transport.setReady(true));
+      await act(async () => read.resolve({ data: { last_read_id: 12, unread_count: 0, latest_id: 12 } }));
+      expect(channel.summary.last_read_id).toBe(12);
+      act(() => channel.acknowledge(12));
+      expect(api.markRead).toHaveBeenCalledTimes(1);
+      expect(api.history).toHaveBeenCalledTimes(2);
+      await act(async () => transport.setReady(false));
+      await tick(4_999);
+      expect(api.history).toHaveBeenCalledTimes(2);
+      jest.mocked(api.history).mockResolvedValueOnce(page([13]));
+      await tick(1);
+      expect(api.history).toHaveBeenCalledTimes(3);
+      expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 12 });
+      expect(channel.messages.map(item => item.id)).toEqual([10, 11, 12, 13]);
+      expect(api.markRead).toHaveBeenCalledTimes(1);
+    } finally {
+      await act(async () => transport.release());
+    }
+  });
+
+  it('re-arms healthy hint signaling after a failed read without marking the retained snapshot fresh', async () => {
+    const identity = { tenantId: 9, userId: 12 };
+    const transport = ownUserRealtime(client, identity);
+    transport.setReady(true);
+    try {
+      await mount();
+      const messages = channel.messages;
+      const updatedAt = channel.updatedAt;
+      const signalKey = teamChatKeys.history(identity, 'clinic', {});
+      const dataUpdatedAt = client.getQueryState(signalKey)!.dataUpdatedAt;
+      await tick(1_000);
+      jest.mocked(api.history).mockRejectedValueOnce(new NetworkError());
+      await act(async () => { await client.invalidateQueries({ queryKey: teamChatKeys.unit(identity, 'clinic') }); });
+      expect(api.history).toHaveBeenCalledTimes(2);
+      expect(channel.messages).toBe(messages);
+      expect(channel.updatedAt).toBe(updatedAt);
+      expect(channel.updateError).toBeInstanceOf(NetworkError);
+      expect(client.getQueryState(signalKey)!.isInvalidated).toBe(false);
+      expect(client.getQueryState(signalKey)!.dataUpdatedAt).toBe(dataUpdatedAt);
+      await tick(15_000);
+      expect(api.history).toHaveBeenCalledTimes(2);
+      jest.mocked(api.history).mockResolvedValueOnce(page([12]));
+      await act(async () => { await client.invalidateQueries({ queryKey: teamChatKeys.unit(identity, 'clinic') }); });
+      expect(api.history).toHaveBeenCalledTimes(3);
+      expect(channel.messages.map(item => item.id)).toEqual([10, 11, 12]);
+      expect(channel.updatedAt).toBeGreaterThan(updatedAt);
+      expect(channel.updateError).toBeNull();
+      await tick(15_000);
+      expect(api.history).toHaveBeenCalledTimes(3);
+      expect(api.markRead).not.toHaveBeenCalled();
+    } finally { await act(async () => transport.release()); }
+  });
+
+  it('coalesces repeated healthy hints behind the physical read lock into one trailing history read', async () => {
+    const identity = { tenantId: 9, userId: 12 };
+    const transport = ownUserRealtime(client, identity);
+    transport.setReady(true);
+    try {
+      await mount();
+      const read = deferred<{ data: api.TeamChatReadSummary }>();
+      jest.mocked(api.markRead).mockReturnValueOnce(read.promise);
+      act(() => channel.acknowledge(11));
+      for (let i = 0; i < 3; i++) {
+        await act(async () => { await client.invalidateQueries({ queryKey: teamChatKeys.unit(identity, 'clinic') }); });
+      }
+      expect(api.history).toHaveBeenCalledTimes(1);
+      expect(api.markRead).toHaveBeenCalledTimes(1);
+      jest.mocked(api.history).mockResolvedValueOnce(page([12]));
+      await act(async () => read.resolve({ data: { last_read_id: 11, unread_count: 0, latest_id: 11 } }));
+      expect(api.history).toHaveBeenCalledTimes(2);
+      expect(channel.messages.map(item => item.id)).toEqual([10, 11, 12]);
+      await tick(15_000);
+      expect(api.history).toHaveBeenCalledTimes(2);
+      expect(api.markRead).toHaveBeenCalledTimes(1);
+    } finally { await act(async () => transport.release()); }
+  });
+
+  it('preserves a historical window across readiness loss, replacement, hints, and a unit switch', async () => {
+    props.targetMessageId = 11;
+    const oldTransport = ownUserRealtime(client, { tenantId: 9, userId: 12 });
+    oldTransport.setReady(true);
+    let replacement: ReturnType<typeof ownUserRealtime> | undefined;
+    try {
+      await mount();
+      jest.mocked(api.history).mockResolvedValueOnce(page([8, 9], { has_more: true }));
+      await act(async () => { await channel.loadOlder(); });
+      const history = channel.messages;
+      expect(history.map(item => item.id)).toEqual([8, 9, 10, 11]);
+      await act(async () => { replacement = ownUserRealtime(client, { tenantId: 9, userId: 12 }); });
+      await tick(15_000);
+      await act(async () => replacement!.setReady(true));
+      await act(async () => { oldTransport.setReady(false); oldTransport.release(); });
+      await act(async () => { await client.invalidateQueries({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') }); });
+      expect(api.history).toHaveBeenCalledTimes(2);
+      expect(channel.messages).toBe(history);
+      expect(channel.mode).toBe('history'); expect(channel.targetMessageId).toBe(11);
+      expect(channel.hasOlder).toBe(true); expect(api.markRead).not.toHaveBeenCalled();
+      props = { unit: 'guidance' };
+      jest.mocked(api.history).mockResolvedValueOnce(page([1]));
+      await rerender();
+      expect(api.history).toHaveBeenCalledTimes(3);
+      expect(api.history).toHaveBeenLastCalledWith('guidance', {});
+      expect(channel.messages.map(item => item.id)).toEqual([1]);
+      await tick(15_000);
+      expect(api.history).toHaveBeenCalledTimes(3);
+      jest.mocked(api.history).mockResolvedValueOnce(page([2]));
+      await act(async () => replacement!.release());
+      await tick(5_000);
+      expect(api.history).toHaveBeenCalledTimes(4);
+      expect(api.history).toHaveBeenLastCalledWith('guidance', { after: 1 });
+    } finally {
+      await act(async () => { replacement?.release(); oldTransport.release(); });
+    }
   });
 
   it('queues manual history behind an in-flight poll, deduplicates same-tick taps, and ignores stale poll content', async () => {

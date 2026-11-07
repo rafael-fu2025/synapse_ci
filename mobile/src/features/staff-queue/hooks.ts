@@ -2,11 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { poll } from '../../api/poll';
 import * as staffQueueApi from '../../api/endpoints/staffQueue';
 import { queryKeys } from '../../api/queryKeys';
-import { useFocusPoll } from '../../lib/useFocusPoll';
+import { useRealtimePoll } from '../../lib/useRealtimePoll';
 
-/** Live read-only board; same 15s cadence as the web dashboard counts. */
+/** Live read-only board; socket hints take priority over the 15s fallback. */
 export function useStaffQueueSummary() {
-  const refetchInterval = useFocusPoll(poll.queueMs);
+  const refetchInterval = useRealtimePoll(poll.queueMs);
   return useQuery({
     queryKey: queryKeys.staffQueue('all'),
     queryFn: () => staffQueueApi.summary(),

@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Animated, BackHandler, Dimensions, Keyboard } from 'react-native';
+import { Animated, BackHandler, Dimensions, Keyboard, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ContextTabs } from '../src/navigation/ContextTabs';
 import { useReducedMotion } from '../src/lib/useReducedMotion';
@@ -44,6 +44,7 @@ jest.mock('@react-navigation/bottom-tabs', () => {
   const ReactRuntime = jest.requireActual('react');
   const { View } = jest.requireActual('react-native');
   return {
+    BottomTabBarHeightCallbackContext: ReactRuntime.createContext(undefined),
     createBottomTabNavigator: () => ({
       Navigator: (props: { children: React.ReactNode }) => ReactRuntime.createElement(View, { ...props, testID: 'navigator' }),
       Screen: () => null,
@@ -134,8 +135,8 @@ it('inserts a standalone center action with approved labels', () => {
   act(() => { renderer = create(<SharedContextTabBar {...props} />); });
   const work = renderer!.root.findByProps({ accessibilityLabel: 'Switch to Team Workspace' });
   expect(work.props.accessibilityRole).toBe('button');
-  const style = work.props.style({ pressed: false });
-  expect(style.flat().some((entry: { minHeight?: number }) => (entry?.minHeight ?? 0) >= 44)).toBe(true);
+  const style = typeof work.props.style === 'function' ? work.props.style({ pressed: false }) : work.props.style;
+  expect(StyleSheet.flatten(style).minHeight).toBeGreaterThanOrEqual(44);
   act(() => work.props.onPress());
   expect(requestDiscard).not.toHaveBeenCalled(); // Entry guards actual switching, not picker opening.
   expect(enterWorkspace).toHaveBeenCalledTimes(1);
