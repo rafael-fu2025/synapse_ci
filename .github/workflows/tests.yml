@@ -37,6 +37,10 @@ jobs:
           extensions: intl, mbstring, mysqli, openssl, sqlite3, pdo_sqlite
           coverage: none
           tools: composer:v2
+        env:
+          update: 'true'
+      - name: Verify patched PHP runtime
+        run: php tools/php-security-baseline.php
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -99,6 +103,10 @@ jobs:
           extensions: intl, mbstring, mysqli, openssl, sqlite3, pdo_sqlite, curl, pcntl
           coverage: none
           tools: composer:v2
+        env:
+          update: 'true'
+      - name: Verify patched PHP runtime
+        run: php tools/php-security-baseline.php
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -155,6 +163,10 @@ jobs:
           extensions: intl, mbstring, mysqli, openssl, sqlite3, pdo_sqlite
           coverage: none
           tools: composer:v2
+        env:
+          update: 'true'
+      - name: Verify patched PHP runtime
+        run: php tools/php-security-baseline.php
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

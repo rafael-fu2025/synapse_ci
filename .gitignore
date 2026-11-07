@@ -228,6 +228,18 @@ vendor/
 !/public/assets/vendor/esptool-js/**
 !/public/assets/vendor/bmg-gear/
 !/public/assets/vendor/bmg-gear/**
+# Bootstrap runtime files used by the real views and isolated browser fixtures.
+!/public/assets/vendor/bootstrap/
+/public/assets/vendor/bootstrap/*
+!/public/assets/vendor/bootstrap/LICENSE
+!/public/assets/vendor/bootstrap/LICENSE-POPPER
+!/public/assets/vendor/bootstrap/README.md
+!/public/assets/vendor/bootstrap/css/
+/public/assets/vendor/bootstrap/css/*
+!/public/assets/vendor/bootstrap/css/bootstrap.min.css
+!/public/assets/vendor/bootstrap/js/
+/public/assets/vendor/bootstrap/js/*
+!/public/assets/vendor/bootstrap/js/bootstrap.bundle.min.js
 
 #-------------------------
 # Local Tool State

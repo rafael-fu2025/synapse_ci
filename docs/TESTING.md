@@ -7,7 +7,10 @@ it does not silently exclude failures from a purported full-suite run.
 
 ## Requirements
 
-- PHP 8.2+ and Composer dependencies installed from `composer.lock`.
+- A security-patched PHP runtime and Composer dependencies installed from
+  `composer.lock`. Current branch floors are PHP 8.2.35 / 8.3.36 / 8.4.27 /
+  8.5.12, as checked by `php tools/php-security-baseline.php`. Keep taking later
+  security patches rather than treating these floors as permanent version pins.
 - `intl`, `mbstring`, `mysqli`, and OpenSSL; SQLite extensions for the separate
   disposable SQLite service fixtures.
 - Python 3.10+ for the fresh-schema runner; Node 22+ for queue JS tests.
@@ -60,6 +63,13 @@ Playwright version. Keep Chromium's `--with-deps` installation in CI; an
 platforms. Terminal-job browser assertions distinguish fast pending-job polling
 from the intentional 30-second status fallback when realtime is unavailable;
 that fallback must never replay a mutation.
+
+The real Bootstrap 5.3.3 bundle and stylesheet are tracked under
+`public/assets/vendor/bootstrap/`, with upstream hashes and MIT licenses. Do not
+replace the real runtime with mocks or rely on ignored vendor files: browser
+fixtures must work from a clean checkout. Literal response-source assertions
+must read `TestResponse::response()->getBody()` rather than DOM-reserialized
+HTML, whose entity spelling can differ by libxml/platform.
 
 The browser tests load real presentation views and JavaScript with intercepted synthetic responses; they are not a live authenticated provider/worker/database end-to-end test. Platform skips must be reported, not treated as production certification. Additive recovery migrations and MySQL behavior use the separately guarded fixture:
 
@@ -128,10 +138,22 @@ a PHP lint sweep over `app`, `tests` and `tools`, the tenant-scope lint, runner
 safety tests, the DB-free baseline, the five fresh-migration service files, and
 queue JS tests. It uses read-only repository permissions.
 
-The workflow has been authored and its commands validated locally, but has not
-been executed on GitHub from this workspace. GitHub execution requires the project
-to be tracked and pushed as a repository with the workflow at its root. No Git
-repository was initialized, no files staged, and no commit/push performed here.
+The workflow requests the latest patch for each PHP minor with setup-php's
+`update: 'true'` environment flag, then runs the security-baseline check before
+installing dependencies. The 21 October 2026 PHP advisory fixes critical
+web-request RCEs CVE-2026-109618 and CVE-2026-109619; the 26 October Windows
+`-1` rebuilds also update Brotli for CVE-2026-111497. Windows package rebuild
+suffixes do not change `PHP_VERSION`, so verify package integrity separately.
+
+Sources: <https://www.php.net/archive/2026.php#2026-10-21-5> and
+<https://www.php.net/archive/2026.php#2026-10-26-1>.
+
+Hosted run `42326508499` at commit `3dfc393` confirmed Chromium installation and
+the DB-free PHP baseline pass, but exposed the missing tracked Bootstrap runtime
+and the carousel entity-serialization assertion. Neither failure indicates a PHP
+exploit. A later remediation run must pass before merging; local success alone
+is not hosted-CI certification. Test migrations continue to use only guarded
+fresh disposable schemas, never a development/operational schema.
 
 ## Tenant-scope lint
 

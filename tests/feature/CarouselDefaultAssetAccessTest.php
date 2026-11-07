@@ -376,7 +376,7 @@ final class CarouselDefaultAssetAccessTest extends CIUnitTestCase
         $res = $this->withSession($this->sessionFor($guidanceId, 'guidance_admin'))->get('admin/carousel');
 
         $res->assertStatus(200);
-        $body = $res->getBody();
+        $body = (string) $res->response()->getBody();
         $this->assertStringContainsString('Default image &middot; protected', $body);
         $this->assertStringContainsString('Only a superadmin may delete the permanent default image', $body);
     }
