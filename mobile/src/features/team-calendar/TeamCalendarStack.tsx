@@ -1,5 +1,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useNativeStackMotionOptions } from '../../navigation/useNativeStackMotionOptions';
 import { TeamCalendarHomeScreen } from './screens/TeamCalendarHomeScreen';
 import { TeamCalendarEventDetailScreen } from './screens/TeamCalendarEventDetailScreen';
 import { TeamCalendarEventFormScreen } from './screens/TeamCalendarEventFormScreen';
@@ -16,9 +17,10 @@ export function TeamCalendarStack({
 }: {
   onOpenTaskDeadline?: OpenTaskDeadline;
 } = {}) {
+  const motion = useNativeStackMotionOptions();
   return (
     <TaskDeadlineNavigationProvider onOpenTaskDeadline={onOpenTaskDeadline}>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator screenOptions={motion}>
         <Stack.Screen name="TeamCalendarHome" component={TeamCalendarHomeScreen} />
         <Stack.Screen name="TeamCalendarEventDetail" component={TeamCalendarEventDetailScreen} />
         <Stack.Screen

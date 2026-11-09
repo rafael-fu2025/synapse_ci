@@ -9,6 +9,7 @@ import { PageHeader } from '../../../components/PageHeader';
 import { Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { useSignOutConfirmation } from '../../auth/useSignOutConfirmation';
+import { ServerConnectionControl } from '../../connection/ServerConnectionControl';
 import { ProfileStackParamList } from '../../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'Settings'>;
@@ -31,6 +32,8 @@ export function SettingsScreen() {
         <Text style={styles.groupLabel}>PRIVACY</Text>
         <SettingsRow icon={<ShieldCheck size={16} color={theme.brandIcon} />} title="Privacy & security" caption="Data handling and session control" onPress={() => navigation.navigate('PrivacySecurity')} />
       </View>
+
+      <ServerConnectionControl presentation="settings" requiresSignIn />
 
       <Pressable accessibilityRole="button" accessibilityLabel="Sign out" style={styles.signOut} onPress={requestSignOut}>
         <LogOut size={15} color="#ffffff" />

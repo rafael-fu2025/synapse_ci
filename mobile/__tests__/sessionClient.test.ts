@@ -8,12 +8,23 @@ import {
   refreshSession,
   request,
   revokeSession,
+  activateApiRuntime,
+  bindApiClient,
+  captureApiSession,
+  captureRuntimeCleanup,
+  createApiRuntime,
+  getApiRuntime,
+  isApiSessionCurrent,
+  retireApiRuntime,
   setAccessToken,
   setSessionExpiredHandler,
 } from '../src/api/client';
+import { login, loginCarouselRealtime } from '../src/api/endpoints/auth';
+import { create as createAppointment } from '../src/api/endpoints/appointments';
+import { config } from '../src/lib/config';
 import { getRefreshToken, setRefreshToken } from '../src/lib/keychain';
 
-jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
+jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test', lanTest: false } }));
 jest.mock('../src/lib/keychain', () => ({
   getRefreshToken: jest.fn(),
   setRefreshToken: jest.fn(),
@@ -329,5 +340,205 @@ describe('sign-out revocation', () => {
     setAccessToken(null);
     await revokeSession();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('immutable environment runtimes', () => {
+  const universityBase = 'http://172.16.153.237:8080';
+  const homeBase = 'http://192.168.1.11:8080';
+  function lan(profileId: 'university' | 'home') {
+    const apiBaseUrl = profileId === 'university' ? universityBase : homeBase;
+    return createApiRuntime({ apiBaseUrl, profileId, credentialBinding: JSON.stringify([profileId, apiBaseUrl, 'fixture-generation']), lanTest: true });
+  }
+  function select(profileId: 'university' | 'home', token = tokens.oldAccess) {
+    const runtime = lan(profileId);
+    activateApiRuntime(runtime);
+    setAccessToken(token, runtime);
+    return runtime;
+  }
+
+  it('creates without activation, freezes destination identity, and never reuses a retired runtime ID', async () => {
+    const previous = getApiRuntime();
+    const runtime = lan('university');
+    expect(getApiRuntime()).toBe(previous);
+    expect(runtime.active).toBe(false);
+    expect(Object.isFrozen(runtime)).toBe(true);
+    await expect(bindApiClient(runtime).request('api/v1/me')).rejects.toBeInstanceOf(SessionChangedError);
+    expect(fetchMock).not.toHaveBeenCalled();
+    activateApiRuntime(runtime);
+    expect(previous.active).toBe(false);
+    expect(runtime.active).toBe(true);
+    retireApiRuntime(runtime);
+    expect(() => activateApiRuntime(runtime)).toThrow(SessionChangedError);
+    __resetClientForTests();
+    expect(lan('home').id).toBeGreaterThan(runtime.id);
+  });
+
+  it('has no lazy startup or post-retirement LAN fallback', async () => {
+    __resetClientForTests();
+    jest.replaceProperty(config, 'lanTest', true);
+    expect(() => getApiRuntime()).toThrow(SessionChangedError);
+    await expect(request('api/v1/auth/carousel', { authenticated: false })).rejects.toBeInstanceOf(SessionChangedError);
+    const runtime = select('university');
+    expect(getApiRuntime()).toBe(runtime);
+    retireApiRuntime(runtime);
+    expect(() => getApiRuntime()).toThrow(SessionChangedError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([200, 401, 'network'] as const)('aborts anonymous login and discards old %s results after environment retirement', async status => {
+    const runtime = select('university');
+    const client = bindApiClient(runtime);
+    const response = deferred<Response>();
+    fetchMock.mockReturnValueOnce(response.promise);
+    const rejected = captureRejection(login('fixture-identifier', 'fixture-password', client));
+    expect(String(fetchMock.mock.calls[0][0])).toBe(`${universityBase}/api/v1/auth/login`);
+    expect(bearer(0)).toBeNull();
+    const signal = fetchMock.mock.calls[0][1]!.signal!;
+    const next = select('home', tokens.newAccess);
+    expect(signal.aborted).toBe(true);
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    if (status === 'network') { response.reject(new Error('old offline transport')); }
+    else { response.resolve(json(status, { data: 'old environment' })); }
+    await Promise.resolve();
+    expect(getAccessToken(next)).toBe(tokens.newAccess);
+    expect(getRefreshToken).not.toHaveBeenCalled();
+    expect(setRefreshToken).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates captured anonymous work at a same-runtime account boundary too', async () => {
+    const runtime = select('university');
+    const response = deferred<Response>();
+    fetchMock.mockReturnValueOnce(response.promise);
+    const rejected = captureRejection(bindApiClient(runtime).request('api/v1/auth/carousel', { authenticated: false }));
+    setAccessToken(tokens.newAccess, runtime);
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    response.resolve(json(200, { data: 'old anonymous body' }));
+    expect(getAccessToken(runtime)).toBe(tokens.newAccess);
+  });
+
+  it('binds grant Origin and path to the captured runtime, not later config', async () => {
+    const runtime = select('university');
+    const client = bindApiClient(runtime);
+    jest.replaceProperty(config as { apiBaseUrl: string }, 'apiBaseUrl', homeBase);
+    fetchMock.mockResolvedValueOnce(json(200, { data: { enabled: false } }));
+    await loginCarouselRealtime(client);
+    expect(fetchMock.mock.calls[0][0]).toBe(`${universityBase}/api/v1/auth/carousel/realtime`);
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get('Origin')).toBe(universityBase);
+    expect(bearer(0)).toBeNull();
+  });
+
+  it('keeps all retries, refresh credentials, and access rotation in the captured environment', async () => {
+    const runtime = select('university');
+    const client = bindApiClient(runtime);
+    jest.replaceProperty(config as { apiBaseUrl: string }, 'apiBaseUrl', homeBase);
+    fetchMock.mockResolvedValueOnce(json(401)).mockResolvedValueOnce(rotated()).mockResolvedValueOnce(json(200, { data: 'same environment retry' }));
+    await client.request('api/v1/private');
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      `${universityBase}/api/v1/private`, `${universityBase}/api/v1/auth/refresh`, `${universityBase}/api/v1/private`,
+    ]);
+    expect(getRefreshToken).toHaveBeenCalledWith(runtime.credentialBinding);
+    expect(setRefreshToken).toHaveBeenCalledWith(tokens.rotatedRefresh, runtime.credentialBinding);
+    expect(getAccessToken(runtime)).toBe(tokens.rotatedAccess);
+    expect(client.isCurrent()).toBe(true);
+  });
+
+  it('promptly rejects a retired refresh while its keychain read is still pending', async () => {
+    const runtime = select('university');
+    const credential = deferred<string | null>();
+    jest.mocked(getRefreshToken).mockReturnValueOnce(credential.promise);
+    const rejected = captureRejection(refreshSession(runtime));
+    const next = select('home', tokens.newAccess);
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    credential.resolve(tokens.oldRefresh);
+    await Promise.resolve();
+    expect(getRefreshToken).toHaveBeenCalledWith(runtime.credentialBinding);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(setRefreshToken).not.toHaveBeenCalled();
+    expect(getAccessToken(next)).toBe(tokens.newAccess);
+  });
+
+  it.each(['JSON', '204', 'upload'] as const)('registers every %s request for runtime cancellation', async surface => {
+    const runtime = select('university');
+    const response = deferred<Response>();
+    fetchMock.mockReturnValueOnce(response.promise);
+    const client = bindApiClient(runtime);
+    const pending = surface === 'upload' ? client.authorizedFetch('api/v1/me/photo', { method: 'POST', body: 'fixture upload' })
+      : client.request('api/v1/private');
+    const rejected = captureRejection(pending);
+    const signal = fetchMock.mock.calls[0][1]!.signal!;
+    retireApiRuntime(runtime);
+    expect(signal.aborted).toBe(true);
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    response.resolve(surface === '204' ? new Response(null, { status: 204 }) : json(200, { data: 'late' }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('guards delayed authorized body decoding through final success and failure', async () => {
+    const runtime = select('university');
+    const client = bindApiClient(runtime);
+    const started = deferred<void>();
+    const body = deferred<string>();
+    const rejected = captureRejection(client.run(async () => { started.resolve(); return body.promise; }));
+    await started.promise;
+    const next = select('home', tokens.newAccess);
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    body.reject(new Error('late decode failure'));
+    await Promise.resolve();
+    expect(getAccessToken(next)).toBe(tokens.newAccess);
+  });
+
+  it('never dispatches an endpoint captured before retirement or a same-account sign-in', async () => {
+    const runtime = select('university');
+    const client = bindApiClient(runtime);
+    const session = captureApiSession(runtime);
+    const input = { unit: 'clinic' as const, date: '2026-12-10', preferred_time: '09:00', type: 'routine' };
+    const queued = () => createAppointment(input, client);
+    expect(isApiSessionCurrent(session)).toBe(true);
+    setAccessToken(null, runtime);
+    setAccessToken(tokens.oldAccess, runtime);
+    expect(isApiSessionCurrent(session)).toBe(false);
+    await expect(queued()).rejects.toBeInstanceOf(SessionChangedError);
+    const replacement = select('home', tokens.newAccess);
+    await expect(client.authorizedFetch('api/v1/me/photo', { method: 'POST' })).rejects.toBeInstanceOf(SessionChangedError);
+    expect(getAccessToken(replacement)).toBe(tokens.newAccess);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uses only an old captured bearer/base for explicit logout and push cleanup after retirement', async () => {
+    const runtime = select('university');
+    const cleanup = captureRuntimeCleanup(runtime);
+    const next = select('home', tokens.newAccess);
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 })).mockResolvedValueOnce(json(401));
+    const body = { token: 'fixture-push', binding: 'fixture-installation' };
+    await cleanup.request('api/v1/push/token', { method: 'DELETE', body });
+    await cleanup.revokeSession();
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      `${universityBase}/api/v1/push/token`, `${universityBase}/api/v1/auth/logout`,
+    ]);
+    expect(fetchMock.mock.calls[0][1]?.body).toBe(JSON.stringify(body));
+    expect(bearer(0)).toBe(`Bearer ${tokens.oldAccess}`);
+    expect(bearer(1)).toBe(`Bearer ${tokens.oldAccess}`);
+    expect(getAccessToken(next)).toBe(tokens.newAccess);
+    expect(getRefreshToken).not.toHaveBeenCalled();
+    expect(setRefreshToken).not.toHaveBeenCalled();
+  });
+
+  it('bounds cleanup at five seconds even if a transport ignores abort and requests a longer timeout', async () => {
+    jest.useFakeTimers();
+    const runtime = select('university');
+    const cleanup = captureRuntimeCleanup(runtime);
+    retireApiRuntime(runtime);
+    fetchMock.mockReturnValueOnce(new Promise(() => undefined));
+    const pending = cleanup.request('api/v1/push/token', { method: 'DELETE', timeoutMs: 60_000 });
+    const signal = fetchMock.mock.calls[0][1]!.signal!;
+    await jest.advanceTimersByTimeAsync(4999);
+    expect(signal.aborted).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+    await expect(pending).resolves.toBeUndefined();
+    expect(signal.aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

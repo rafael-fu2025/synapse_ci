@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, TextInput } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { ApiError, NetworkError } from '../src/api/client';
 import { Action } from '../src/components/Action';
@@ -26,14 +26,14 @@ function CooldownHarness() {
   return null;
 }
 
-function render(element: React.ReactElement) {
-  act(() => {
+async function render(element: React.ReactElement) {
+  await act(async () => {
     renderer = create(element);
   });
 }
 
-function renderSignIn() {
-  render(<SignInScreen />);
+async function renderSignIn() {
+  await render(<SignInScreen />);
   act(() => {
     const fields = renderer!.root.findAllByType(TextInput);
     fields[0].props.onChangeText(' student@university.edu ');
@@ -60,6 +60,7 @@ function rateLimit(retryAfterSeconds: number | null) {
 beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
   jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
   signIn.mockReset().mockResolvedValue(undefined);
   jest.mocked(useAuth).mockReturnValue({
     status: 'signedOut',
@@ -76,6 +77,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => renderer?.unmount());
   renderer = undefined;
+  jest.restoreAllMocks();
   jest.useRealTimers();
 });
 
@@ -87,8 +89,8 @@ describe('useSignInCooldown', () => {
     [-1, 300],
     [NaN, 300],
     [Infinity, 300],
-  ])('uses a safe wait for Retry-After %s', (seconds, expected) => {
-    render(<CooldownHarness />);
+  ])('uses a safe wait for Retry-After %s', async (seconds, expected) => {
+    await render(<CooldownHarness />);
     act(() => {
       cooldown.startCooldown(seconds);
       expect(cooldown.isCoolingDown()).toBe(expected > 0);
@@ -101,8 +103,8 @@ describe('useSignInCooldown', () => {
     expect(signIn).not.toHaveBeenCalled();
   });
 
-  it('derives remaining time from the deadline after forward and backward clock jumps', () => {
-    render(<CooldownHarness />);
+  it('derives remaining time from the deadline after forward and backward clock jumps', async () => {
+    await render(<CooldownHarness />);
     act(() => cooldown.startCooldown(10));
     act(() => jest.advanceTimersByTime(1000));
     expect(cooldown.remainingSeconds).toBe(9);
@@ -123,8 +125,8 @@ describe('useSignInCooldown', () => {
     expect(signIn).not.toHaveBeenCalled();
   });
 
-  it('cleans up its timer on unmount', () => {
-    render(<CooldownHarness />);
+  it('cleans up its timer on unmount', async () => {
+    await render(<CooldownHarness />);
     act(() => cooldown.startCooldown(300));
     expect(jest.getTimerCount()).toBe(1);
     act(() => renderer!.unmount());
@@ -136,8 +138,8 @@ describe('useSignInCooldown', () => {
 });
 
 describe('SignInScreen', () => {
-  it('labels the login field as ID number without mentioning email', () => {
-    render(<SignInScreen />);
+  it('labels the login field as ID number without mentioning email', async () => {
+    await render(<SignInScreen />);
     expect(hasText('ID number')).toBe(true);
     expect(hasText('ID number or email')).toBe(false);
     expect(renderer!.root.findAllByType(TextInput)[0].props.placeholder).toBe('Enter your ID number');
@@ -147,7 +149,7 @@ describe('SignInScreen', () => {
     signIn.mockImplementationOnce(() => new Promise<void>(resolve => {
       resolveSignIn = resolve;
     }));
-    renderSignIn();
+    await renderSignIn();
     const submit = action().props.onPress;
     act(() => {
       submit();
@@ -166,7 +168,7 @@ describe('SignInScreen', () => {
 
   it('keeps the 429 countdown across identifier edits and only retries on a new tap after expiry', async () => {
     signIn.mockRejectedValueOnce(rateLimit(2));
-    renderSignIn();
+    await renderSignIn();
     const submit = action().props.onPress;
     await act(async () => {
       await submit();
@@ -196,7 +198,7 @@ describe('SignInScreen', () => {
 
   it('uses a five-minute fallback without Retry-After and never authenticates automatically', async () => {
     signIn.mockRejectedValueOnce(rateLimit(null));
-    renderSignIn();
+    await renderSignIn();
     await act(async () => action().props.onPress());
     expect(hasText('Too many sign-in attempts. Please try again in 5:00.')).toBe(true);
     act(() => jest.advanceTimersByTime(299000));
@@ -215,7 +217,7 @@ describe('SignInScreen', () => {
     [new Error('unexpected'), 'Sign-in is unavailable right now. Please try again.'],
   ])('preserves error semantics and releases the guard (case %#)', async (error, message) => {
     signIn.mockRejectedValueOnce(error);
-    renderSignIn();
+    await renderSignIn();
     await act(async () => action().props.onPress());
     expect(hasText(message)).toBe(true);
     expect(action().props.disabled).toBe(false);
@@ -230,7 +232,7 @@ describe('SignInScreen', () => {
     signIn.mockImplementationOnce(() => new Promise<void>((_, reject) => {
       rejectSignIn = reject;
     }));
-    renderSignIn();
+    await renderSignIn();
     act(() => { action().props.onPress(); });
     act(() => renderer!.unmount());
     renderer = undefined;
@@ -241,9 +243,9 @@ describe('SignInScreen', () => {
 });
 
 describe('Action', () => {
-  it('preserves default visuals and exposes disabled/busy states', () => {
+  it('preserves default visuals and exposes disabled/busy states', async () => {
     const onPress = jest.fn();
-    render(<Action onPress={onPress}>Sign in</Action>);
+    await render(<Action onPress={onPress}>Sign in</Action>);
     const button = () => renderer!.root.findByProps({ accessible: true });
     const style = () => StyleSheet.flatten(button().props.style);
     expect(button().props.accessibilityState).toMatchObject({ disabled: false, busy: false });

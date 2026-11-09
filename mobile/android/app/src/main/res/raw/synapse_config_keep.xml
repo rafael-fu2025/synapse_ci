@@ -1,0 +1,2 @@
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@string/build_config_package,@string/SYNAPSE_BUILD_PROFILE,@string/SYNAPSE_ALLOW_LAN_HTTP" />

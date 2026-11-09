@@ -11,6 +11,7 @@ import { useTheme } from '../../../theme/ThemeProvider';
 import { LoginCarousel } from '../components/LoginCarousel';
 import { LOGIN_SOCIAL_LINKS } from '../loginContent';
 import { useSignInCooldown } from '../useSignInCooldown';
+import { ServerConnectionControl } from '../../connection/ServerConnectionControl';
 
 export function SignInScreen() {
   const { theme, setPreference } = useTheme();
@@ -132,6 +133,8 @@ export function SignInScreen() {
                 <Text style={styles.subtitle}>Sign in with your university ID and MIS password.</Text>
               </View>
             </View>
+
+            <ServerConnectionControl />
 
             {displayedNotice !== null ? (
               <View style={styles.errorBox}>

@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 import { config } from '../../lib/config';
 
 export type UserRealtimeGrant = { enabled: false } | {
@@ -11,8 +11,10 @@ export type UserRealtimeGrant = { enabled: false } | {
 };
 
 /** Bearer-authenticated private-channel grant; identity comes from the token, never selectors. */
-export function userRealtimeGrant(): Promise<{ data: UserRealtimeGrant }> {
-  return request('api/v1/realtime/grant', {
-    headers: { Origin: new URL(config.apiBaseUrl).origin },
+export function userRealtimeGrant(binding?: ApiBinding): Promise<{ data: UserRealtimeGrant }> {
+  const client = binding ? bindApiClient(binding) : null;
+  const baseUrl = client ? client.runtime.apiBaseUrl : config.apiBaseUrl;
+  return (client ? client.request : request)('api/v1/realtime/grant', {
+    headers: { Origin: new URL(baseUrl).origin },
   });
 }

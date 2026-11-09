@@ -1,15 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
+import { bindApiQueryResult, useApiClient } from '../../api/runtime';
 import { poll } from '../../api/poll';
 import * as queueApi from '../../api/endpoints/queue';
 import { queryKeys } from '../../api/queryKeys';
-import { useRealtimePoll } from '../../lib/useRealtimePoll';
+import { useActiveScreen } from '../../lib/useActiveScreen';
+import { useRealtimeReady } from '../../lib/useRealtimeReady';
 
-/** Live personal tickets; socket hints take priority over the 15s polling fallback. */
+/** Personal hints replace polling except while waiting on peers' queue progress. */
 export function useQueueSnapshot() {
-  const refetchInterval = useRealtimePoll(poll.queueMs);
-  return useQuery({
+  const apiClient = useApiClient();
+  const active = useActiveScreen();
+  const realtime = useRealtimeReady();
+  return bindApiQueryResult(apiClient, useQuery({
     queryKey: queryKeys.queue,
-    queryFn: () => queueApi.snapshot(),
-    refetchInterval,
-  });
+    queryFn: () => queueApi.snapshot(apiClient),
+    enabled: active,
+    // Peers' transitions do not hint this user's channel, but change position/ETA.
+    refetchInterval: query => active && (!realtime || query.state.data?.data.tickets.some(ticket => ticket.status === 'waiting'))
+      ? poll.queueMs
+      : false,
+  }));
 }

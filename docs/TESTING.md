@@ -46,6 +46,21 @@ in teardown. They create no tables and run no migrations. Compiling a MySQL
 query can initialize its connection for value escaping even without executing
 SQL, so these tests must never use the ambient application/test database.
 
+## Isolated queue realtime invalidation regressions
+
+```sh
+php vendor/phpunit/phpunit/phpunit --configuration tests/_support/queue-invalidation-phpunit.xml --no-coverage
+```
+
+This named suite uses the existing no-dotenv framework bootstrap, a guarded
+SQLite `:memory:` identity fixture and mocked queue database operations. It
+performs no migrations, operational database reads/writes or external publishing.
+It covers person-before-staff hint delivery, independent best-effort failures,
+legacy four-value queue hints, and appointment-only no-show hints captured and
+delivered after the outermost commit. Failed writes/commits, rollback, stale or
+revoked authority and uncaptured caller-owned transactions cannot publish.
+These tests verify transaction/notification behavior, not measured LAN latency.
+
 ## Isolated AI regression gate
 
 The dedicated `phpunit.ai.xml` uses `tests/_support/ai-runtime-bootstrap.php`: a temporary writable directory, no dotenv, and disposable SQLite fixtures. It explicitly lists AI test classes rather than relying on the unrelated baseline suite; CI verifies that every AI-prefixed test is listed, except the separately guarded MariaDB fixture. Tests use synthetic evidence and fake/loopback transports, not configured provider credentials or operational records.

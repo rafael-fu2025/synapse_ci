@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppState, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput } from 'react-native';
+import { AppState, Dimensions, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { act, create, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import { useIsFocused, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -9,6 +9,8 @@ import { ApiError, NetworkError } from '../src/api/client';
 import type { MeResponse } from '../src/api/types';
 import type { TeamCalendarEventDetail, TeamCalendarFilters } from '../src/api/endpoints/teamCalendar';
 import { Action } from '../src/components/Action';
+import { BottomSheet } from '../src/components/BottomSheet';
+import { darkTheme, lightTheme } from '../src/theme/tokens';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { IconAction } from '../src/components/IconAction';
 import { OverlayProvider } from '../src/components/OverlayProvider';
@@ -42,11 +44,13 @@ jest.mock('../src/features/team-calendar/navigation', () => ({ ...jest.requireAc
 jest.mock('@react-navigation/native', () => ({ useNavigation: jest.fn(), useRoute: jest.fn(), usePreventRemove: jest.fn(), useIsFocused: jest.fn() }));
 jest.mock('@react-native-community/netinfo', () => ({ useNetInfo: jest.fn() }));
 jest.mock('@react-native-community/datetimepicker', () => ({ __esModule: true, default: 'DateTimePicker' }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }) }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: mockTheme }) }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 20, left: 0 }) }));
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 
 const originalAppState = AppState.currentState;
+const originalWindow = Dimensions.get('window');
+let mockTheme = lightTheme;
 const member = { id: 7, name: 'Alex Member', role: 'staff' };
 const other = { id: 8, name: 'Bea Member', role: 'staff' };
 const event: TeamCalendarEventDetail = {
@@ -121,6 +125,8 @@ function input(label: string, value: string) { act(() => field(label).props.onCh
 function text(value: string) { return renderer!.root.findAllByType(Text).some(node => typeof node.props.children === 'string' && node.props.children.includes(value)); }
 function dialog(title: string) { return renderer!.root.findAllByType(ConfirmDialog).find(node => node.props.title === title)!; }
 function lastFilters(): TeamCalendarFilters { const calls = jest.mocked(hooks.useTeamCalendar).mock.calls; return calls[calls.length - 1][1]; }
+function calendarFilterSheet() { return renderer!.root.findAllByType(BottomSheet).find(node => node.props.title === 'Calendar filters')!; }
+function calendarRadioGroups() { return renderer!.root.findAllByType(View).filter(node => node.props.accessibilityRole === 'radiogroup').map(node => node.props.accessibilityLabel); }
 function setRoute(name: string, params?: object) { jest.mocked(useRoute).mockReturnValue({ key: 'calendar-route', name, params }); }
 async function settle(ms = 0) {
   // Commit write promises and their hidden-modal render before advancing the
@@ -146,6 +152,7 @@ beforeEach(() => {
   focusManager.setFocused(true);
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   profile = makeProfile();
+  mockTheme = lightTheme;
   jest.mocked(useAuth).mockImplementation(() => ({ user: profile.user, profile, refreshProfile } as unknown as ReturnType<typeof useAuth>));
   refreshProfile.mockReset().mockResolvedValue(undefined);
   jest.mocked(useNavigation).mockReturnValue(navigation as unknown as ReturnType<typeof useNavigation>);
@@ -173,6 +180,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => renderer?.unmount());
   renderer = undefined;
+  Dimensions.set({ window: originalWindow });
   AppState.currentState = originalAppState;
   client.clear();
   act(() => jest.runOnlyPendingTimers());
@@ -222,8 +230,10 @@ describe('mounted calendar home', () => {
 
   it('preserves range/view/filter/scope when opening task deadlines and events', () => {
     render(<TeamCalendarHomeScreen />);
+    press('Open calendar filters');
     press('Calendar scope: Mine');
     press('Event status: All events');
+    press('Done filtering calendar');
     press('Calendar view: Week');
     const expected = { date: '2026-12-10', view: 'week', scope: 'mine', status: 'all' };
     expect(lastFilters()).toEqual(expected);
@@ -243,13 +253,150 @@ describe('mounted calendar home', () => {
     listQuery.data!.meta.truncated = true;
     listQuery.data!.meta.total_events = 310;
     render(<TeamCalendarHomeScreen />);
-    expect(text('250 events and 250 task deadlines')).toBe(true);
+    expect(text('250 events and 250 task deadlines')).toBe(false);
     expect(text('Results are truncated')).toBe(true);
     pressAction('Show selected week');
     expect(lastFilters().view).toBe('week');
     pressAction('Show only mine');
     expect(lastFilters().scope).toBe('mine');
     expect(text('narrowest available range')).toBe(true);
+  });
+
+  it.each([lightTheme, darkTheme])('keeps only the view switcher in a compact themed toolbar in $mode mode', theme => {
+    mockTheme = theme;
+    Dimensions.set({ window: { width: 360, height: 800, scale: 3, fontScale: 1 } });
+    render(<TeamCalendarHomeScreen />);
+    const toolbar = renderer!.root.findByProps({ testID: 'calendar-toolbar' });
+    expect(StyleSheet.flatten(toolbar.props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
+    expect(calendarRadioGroups()).toEqual(['Calendar view']);
+    expect(text('Team · Scheduled events')).toBe(true);
+    expect(text('250 events and 250 task deadlines')).toBe(false);
+    const viewControl = renderer!.root.findByProps({ testID: 'calendar-view-control' });
+    expect(StyleSheet.flatten(viewControl.props.style)).toMatchObject({ flex: 1, minWidth: 210 });
+    const button = control('Open calendar filters');
+    const buttonStyle = StyleSheet.flatten(button.props.style({ pressed: false }));
+    expect(buttonStyle).toMatchObject({ minWidth: 50, minHeight: 52, backgroundColor: theme.surface });
+    expect(StyleSheet.flatten(control('Calendar view: Agenda').props.style)).toMatchObject({ minHeight: 44, backgroundColor: theme.brand });
+    press('Open calendar filters');
+    expect(calendarFilterSheet().props.visible).toBe(true);
+    expect(text('250 events and 250 task deadlines')).toBe(true);
+    expect(calendarRadioGroups()).toEqual(['Calendar view', 'Calendar scope', 'Event status']);
+    expect(control('Calendar scope: Team').props.accessibilityState.checked).toBe(true);
+    expect(control('Event status: Scheduled').props.accessibilityState.checked).toBe(true);
+    expect(StyleSheet.flatten(control('Event status: Cancelled').props.style).minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it('lets larger text use a separate toolbar line rather than overflow or shrink the targets', () => {
+    Dimensions.set({ window: { width: 320, height: 700, scale: 3, fontScale: 2 } });
+    render(<TeamCalendarHomeScreen />);
+    const viewControl = renderer!.root.findByProps({ testID: 'calendar-view-control' });
+    expect(StyleSheet.flatten(viewControl.props.style).minWidth).toBe(284);
+    const toolbar = renderer!.root.findByProps({ testID: 'calendar-toolbar' });
+    expect(StyleSheet.flatten(toolbar.props.style).flexWrap).toBe('wrap');
+    expect(StyleSheet.flatten(control('Calendar view: Month').props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(control('Open calendar filters').props.style({ pressed: false })).minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it('keeps sheet selections on dismissal and resets only filters without moving the calendar', async () => {
+    render(<TeamCalendarHomeScreen />);
+    press('Calendar view: Month'); press('Next calendar period');
+    const browsed = lastFilters();
+    expect(browsed).toMatchObject({ view: 'month', date: '2027-01-10' });
+    press('Open calendar filters');
+    press('Calendar scope: Mine'); press('Event status: Cancelled');
+    expect(lastFilters()).toEqual({ ...browsed, scope: 'mine', status: 'cancelled' });
+    expect(text('Mine · Cancelled events')).toBe(true);
+    expect(control('Open calendar filters').props.accessibilityHint).toBe('Mine · Cancelled events');
+    expect(StyleSheet.flatten(control('Open calendar filters').props.style({ pressed: false })).backgroundColor).toBe(lightTheme.brand50);
+    const staleChoice = control('Calendar scope: Team').props.onPress;
+    act(() => renderer!.root.findByType(Modal).props.onRequestClose());
+    expect(calendarFilterSheet().props.visible).toBe(false);
+    act(() => staleChoice());
+    expect(lastFilters()).toEqual({ ...browsed, scope: 'mine', status: 'cancelled' });
+    await settle(40);
+    press('Open calendar filters');
+    expect(control('Calendar scope: Mine').props.accessibilityState.checked).toBe(true);
+    expect(control('Event status: Cancelled').props.accessibilityState.checked).toBe(true);
+    press('Reset calendar filters');
+    expect(lastFilters()).toEqual(browsed);
+    expect(calendarFilterSheet().props.visible).toBe(true);
+    expect(text('Team · Scheduled events')).toBe(true);
+    press('Done filtering calendar');
+    expect(refetch).not.toHaveBeenCalled();
+    expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Agenda', 'agenda', '2027-01-09'],
+    ['Week', 'week', '2026-12-17'],
+    ['Month', 'month', '2027-01-10'],
+  ] as const)('preserves secondary filters through %s period arrows and Today', async (label, view, nextDate) => {
+    render(<TeamCalendarHomeScreen />);
+    press('Open calendar filters'); press('Calendar scope: Mine'); press('Event status: All events'); press('Done filtering calendar');
+    await settle(40);
+    press(`Calendar view: ${label}`);
+    press('Next calendar period');
+    expect(lastFilters()).toEqual({ date: nextDate, view, scope: 'mine', status: 'all' });
+    press('Previous calendar period');
+    expect(lastFilters()).toEqual({ date: '2026-12-10', view, scope: 'mine', status: 'all' });
+    press('Next calendar period'); press('Go to today');
+    expect(lastFilters()).toEqual({ date: '2026-12-10', view, scope: 'mine', status: 'all' });
+  });
+
+  it('rejects old sheet callbacks after closing and reopening', async () => {
+    render(<TeamCalendarHomeScreen />);
+    press('Open calendar filters');
+    const select = control('Event status: Cancelled').props.onPress;
+    const close = calendarFilterSheet().props.onClose;
+    const reset = control('Reset calendar filters').props.onPress;
+    press('Close calendar filters');
+    await settle(40);
+    press('Open calendar filters'); press('Calendar scope: Mine');
+    act(() => { select(); close(); reset(); });
+    expect(lastFilters()).toMatchObject({ scope: 'mine', status: 'scheduled' });
+    expect(calendarFilterSheet().props.visible).toBe(true);
+  });
+
+  it('closes and retires filter actions on blur without losing the browsed period or filters', () => {
+    render(<TeamCalendarHomeScreen />);
+    press('Calendar view: Week'); press('Next calendar period');
+    press('Open calendar filters'); press('Calendar scope: Mine');
+    const select = control('Event status: Cancelled').props.onPress;
+    const expected = lastFilters();
+    jest.mocked(useIsFocused).mockReturnValue(false);
+    rerender();
+    expect(calendarFilterSheet().props.visible).toBe(false);
+    act(() => select());
+    expect(lastFilters()).toEqual(expected);
+    jest.mocked(useIsFocused).mockReturnValue(true);
+    rerender();
+    expect(lastFilters()).toEqual(expected);
+    expect(calendarFilterSheet().props.visible).toBe(false);
+  });
+
+  it.each(['account', 'unit', 'access'] as const)('retires an open sheet after a %s change', async change => {
+    render(<TeamCalendarHomeScreen />);
+    press('Open calendar filters');
+    const select = control('Event status: Cancelled').props.onPress;
+    const close = calendarFilterSheet().props.onClose;
+    if (change === 'account') {
+      profile = { ...profile, user: { ...profile.user, id: 99 } };
+    } else if (change === 'unit') {
+      profile = { ...profile, entitlements: { ...profile.entitlements, work: { ...profile.entitlements.work,
+        units: [{ ...profile.entitlements.work.units[0], unit: 'guidance', label: 'Guidance' }] } } };
+    } else {
+      listQuery = { ...listQuery, isError: true, error: new ApiError(403, { code: 'forbidden', message: 'No membership' }) };
+    }
+    rerender();
+    await settle(40);
+    act(() => { select(); close(); });
+    expect(lastFilters().status).toBe('scheduled');
+    if (change === 'access') {
+      expect(calendarFilterSheet()).toBeUndefined();
+      expect(text('Calendar access changed')).toBe(true);
+    } else {
+      expect(calendarFilterSheet().props.visible).toBe(false);
+    }
   });
 
   it('keeps cached data after refresh errors and distinguishes quiet polling from manual refresh', async () => {

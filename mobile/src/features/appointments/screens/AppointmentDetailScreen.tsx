@@ -24,6 +24,9 @@ import { useAppointment } from '../hooks';
 import { progressStep, statusPresentation, unitLabel } from '../status';
 import { VisitsStackParamList } from '../../../navigation/types';
 import { AppointmentLoadError } from '../components/AppointmentLoadError';
+import { useKeyboardVisible } from '../../../lib/useKeyboardVisible';
+import { CONTEXT_BAR_ACTION_CLEARANCE } from '../../../navigation/contextTabBarMetrics';
+import { useOptionalWorkspace } from '../../workspace/WorkspaceContext';
 
 type Props = NativeStackScreenProps<VisitsStackParamList, 'AppointmentDetail'>;
 
@@ -115,6 +118,8 @@ export function AppointmentDetailScreen() {
   const appointment = query.data?.data;
   // Hooks must run before the early returns below.
   const reduceMotion = useReduceMotion();
+  const keyboardVisible = useKeyboardVisible();
+  const workspace = useOptionalWorkspace();
 
   if (query.isLoading) {
     return (
@@ -140,9 +145,10 @@ export function AppointmentDetailScreen() {
   const status = statusPresentation(appointment.status);
   const step = progressStep(appointment.status);
   const cancellable = ['requested', 'scheduled', 'confirmed'].includes(appointment.status);
+  const showAction = !appointment.cancellation_reason && cancellable;
 
   return (
-    <Screen scroll={false}>
+    <Screen scroll={false} bodyStyle={showAction && workspace?.canSwitchContext && !keyboardVisible ? styles.raisedActions : undefined}>
       <PageHeader title="Appointment details" onBack={navigation.goBack} />
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
@@ -213,7 +219,7 @@ export function AppointmentDetailScreen() {
       ) : null}
       </ScrollView>
 
-      {!appointment.cancellation_reason && cancellable ? (
+      {showAction ? (
         <View style={styles.actions}>
           <Action variant="danger" full onPress={() => navigation.navigate('CancelAppointment', { id: appointment.id })}>
             Cancel this appointment
@@ -256,6 +262,7 @@ function createStyles(theme: Theme) {
     cancelNoteText: { marginTop: 4, fontSize: 10.5, fontFamily: font.body, color: theme.ink700 },
     // Sibling of the ScrollView: flexShrink 0 keeps it pinned above the tab bar.
     actions: { flexShrink: 0, paddingTop: 24 },
+    raisedActions: { paddingBottom: CONTEXT_BAR_ACTION_CLEARANCE },
   });
 }
 

@@ -14,13 +14,21 @@ let mockFocused = true;
 let mockForegroundOnline = true;
 let mockOverlay = false;
 let mockIdentity = { id: 12, tenant_id: 9 };
-jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockFocused }));
+const mockNavigationListeners = { blur: new Set<() => void>(), focus: new Set<() => void>() };
+const mockNavigation = {
+  addListener: (event: 'blur' | 'focus', listener: () => void) => {
+    mockNavigationListeners[event].add(listener);
+    return () => { mockNavigationListeners[event].delete(listener); };
+  },
+};
+jest.mock('@react-navigation/native', () => ({ useIsFocused: () => mockFocused, useNavigation: () => mockNavigation }));
 jest.mock('../src/store/auth', () => ({ useAuth: () => ({ user: mockIdentity }) }));
 jest.mock('../src/lib/useActiveScreen', () => ({
   useActiveScreen: (enabled = true) => enabled && mockFocused && mockForegroundOnline && !mockOverlay,
   useForegroundOnline: () => mockForegroundOnline,
 }));
 
+const boundClient = expect.objectContaining({ runtime: expect.any(Object), sessionVersion: expect.any(Number), assertCurrent: expect.any(Function) });
 function message(id: number, changes: Partial<api.TeamChatMessage> = {}): api.TeamChatMessage {
   return { id, body: `Message ${id}`, sender: { id: 2, name: 'Member' }, created_at: '2026-11-07T00:00:00+00:00', client_nonce: null, tasks: [], mentions: [], reply_to: null, ...changes };
 }
@@ -60,6 +68,7 @@ async function tick(ms: number) {
 beforeEach(() => {
   jest.useFakeTimers(); jest.setSystemTime(new Date('2026-11-07T01:00:00Z')); jest.clearAllMocks();
   mockFocused = true; mockForegroundOnline = true; mockOverlay = false; mockIdentity = { id: 12, tenant_id: 9 };
+  mockNavigationListeners.blur.clear(); mockNavigationListeners.focus.clear();
   onlineManager.setOnline(true); focusManager.setFocused(true);
   props = { unit: 'clinic' };
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
@@ -75,15 +84,85 @@ afterEach(async () => {
 });
 
 describe('mounted Team Chat channel coordination', () => {
+  it('returns a retained historical window to the newest page on ordinary navigation reentry', async () => {
+    props.targetMessageId = 11;
+    await mount();
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 11 }, boundClient);
+    const revision = channel.latestRevision;
+    mockFocused = false; await rerender();
+    jest.mocked(api.history).mockResolvedValueOnce(page([30, 31]));
+    mockFocused = true; await rerender();
+    expect(api.history).toHaveBeenLastCalledWith('clinic', {}, boundClient);
+    expect(channel.messages.map(item => item.id)).toEqual([30, 31]);
+    expect(channel.mode).toBe('latest');
+    expect(channel.targetMessageId).toBeNull();
+    expect(channel.latestRevision).toBe(revision + 1);
+    expect(channel.navigationRevision).toBe(1);
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('pauses frozen blurred callbacks and returns latest through actual route events', async () => {
+    await mount();
+    const oldAcknowledge = channel.acknowledge;
+    act(() => { for (const listener of mockNavigationListeners.blur) { listener(); } });
+    await act(async () => client.invalidateQueries({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') }));
+    act(() => oldAcknowledge(11));
+    await tick(10_000);
+    // The frozen route never rendered false; even a same-focus render cannot revive it.
+    await rerender();
+    expect(api.history).toHaveBeenCalledTimes(1);
+    expect(api.markRead).not.toHaveBeenCalled();
+    jest.mocked(api.history).mockResolvedValueOnce(page([30, 31]));
+    await act(async () => { for (const listener of mockNavigationListeners.focus) { listener(); } });
+    expect(api.history).toHaveBeenLastCalledWith('clinic', {}, boundClient);
+    expect(channel.messages.map(item => item.id)).toEqual([30, 31]);
+    expect(channel.mode).toBe('latest');
+  });
+
+  it('gives a fresh explicit target priority over ordinary latest on reentry', async () => {
+    props.targetMessageId = 11;
+    await mount();
+    mockFocused = false; await rerender();
+    props.targetMessageId = 30;
+    await rerender();
+    jest.mocked(api.history).mockResolvedValueOnce(page([29, 30]));
+    mockFocused = true; await rerender();
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 30 }, boundClient);
+    expect(channel.messages.map(item => item.id)).toEqual([29, 30]);
+    expect(channel.mode).toBe('history');
+    expect(channel.targetMessageId).toBe(30);
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it.each(['overlay', 'background', 'pause'] as const)('preserves history on %s eligibility changes without navigation reentry', async reason => {
+    props.targetMessageId = 11;
+    await mount();
+    const messages = channel.messages;
+    if (reason === 'overlay') { mockOverlay = true; }
+    else if (reason === 'background') { mockForegroundOnline = false; }
+    else { props.paused = true; }
+    await rerender();
+    if (reason === 'overlay') { mockOverlay = false; }
+    else if (reason === 'background') { mockForegroundOnline = true; }
+    else { props.paused = false; }
+    await rerender();
+    await tick(10_000);
+    expect(api.history).toHaveBeenCalledTimes(1);
+    expect(channel.messages).toBe(messages);
+    expect(channel.mode).toBe('history');
+    expect(channel.targetMessageId).toBe(11);
+    expect(channel.navigationRevision).toBe(0);
+  });
+
   it('loads once, polls every five seconds only when active, and keeps background/manual feedback distinct', async () => {
     await mount();
     expect(api.history).toHaveBeenCalledTimes(1);
-    expect(api.history).toHaveBeenLastCalledWith('clinic', {});
+    expect(api.history).toHaveBeenLastCalledWith('clinic', {}, boundClient);
     await tick(4_999); expect(api.history).toHaveBeenCalledTimes(1);
     const waiting = deferred<ReturnType<typeof page>>();
     jest.mocked(api.history).mockReturnValueOnce(waiting.promise);
     await tick(1);
-    expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 11 });
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 11 }, boundClient);
     expect(channel.polling).toBe(true); expect(channel.refreshing).toBe(false);
     await tick(15_000); expect(api.history).toHaveBeenCalledTimes(2);
     await act(async () => waiting.resolve(page([])));
@@ -109,7 +188,7 @@ describe('mounted Team Chat channel coordination', () => {
       jest.mocked(api.history).mockResolvedValueOnce(page([12]));
       await act(async () => { await client.invalidateQueries({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') }); });
       expect(api.history).toHaveBeenCalledTimes(2);
-      expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 11 });
+      expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 11 }, boundClient);
       expect(channel.messages.map(item => item.id)).toEqual([10, 11, 12]);
       const read = deferred<{ data: api.TeamChatReadSummary }>();
       jest.mocked(api.markRead).mockReturnValueOnce(read.promise);
@@ -130,7 +209,7 @@ describe('mounted Team Chat channel coordination', () => {
       jest.mocked(api.history).mockResolvedValueOnce(page([13]));
       await tick(1);
       expect(api.history).toHaveBeenCalledTimes(3);
-      expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 12 });
+      expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 12 }, boundClient);
       expect(channel.messages.map(item => item.id)).toEqual([10, 11, 12, 13]);
       expect(api.markRead).toHaveBeenCalledTimes(1);
     } finally {
@@ -219,7 +298,7 @@ describe('mounted Team Chat channel coordination', () => {
       jest.mocked(api.history).mockResolvedValueOnce(page([1]));
       await rerender();
       expect(api.history).toHaveBeenCalledTimes(3);
-      expect(api.history).toHaveBeenLastCalledWith('guidance', {});
+      expect(api.history).toHaveBeenLastCalledWith('guidance', {}, boundClient);
       expect(channel.messages.map(item => item.id)).toEqual([1]);
       await tick(15_000);
       expect(api.history).toHaveBeenCalledTimes(3);
@@ -227,7 +306,7 @@ describe('mounted Team Chat channel coordination', () => {
       await act(async () => replacement!.release());
       await tick(5_000);
       expect(api.history).toHaveBeenCalledTimes(4);
-      expect(api.history).toHaveBeenLastCalledWith('guidance', { after: 1 });
+      expect(api.history).toHaveBeenLastCalledWith('guidance', { after: 1 }, boundClient);
     } finally {
       await act(async () => { replacement?.release(); oldTransport.release(); });
     }
@@ -244,7 +323,7 @@ describe('mounted Team Chat channel coordination', () => {
     await act(async () => poll.resolve(page([99])));
     expect(channel.messages.map(item => item.id)).toEqual([10, 11]);
     expect(api.history).toHaveBeenCalledTimes(3);
-    expect(api.history).toHaveBeenLastCalledWith('clinic', { before: 10 });
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { before: 10 }, boundClient);
     await act(async () => older.resolve(page([8, 9], { has_more: true })));
     expect(await first).toBe(true); expect(channel.mode).toBe('history');
     expect(channel.messages.map(item => item.id)).toEqual([8, 9, 10, 11]);
@@ -264,7 +343,7 @@ describe('mounted Team Chat channel coordination', () => {
     expect(channel.mode).toBe('latest'); expect(channel.targetMessageId).toBeNull();
     jest.mocked(api.history).mockResolvedValueOnce(page([22]));
     await act(async () => { await client.invalidateQueries({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') }); });
-    expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 21 });
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { after: 21 }, boundClient);
     expect(channel.messages.map(item => item.id)).toEqual([20, 21, 22]);
     await rerender(); expect(channel.mode).toBe('latest'); expect(channel.targetMessageId).toBeNull();
   });
@@ -279,7 +358,7 @@ describe('mounted Team Chat channel coordination', () => {
     await mount();
     jest.mocked(api.history).mockResolvedValueOnce(page([4, 5]));
     await act(async () => { expect(await channel.openMessage(5)).toBe(true); });
-    expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 5 });
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 5 }, boundClient);
     expect(channel.mode).toBe('history'); expect(channel.targetMessageId).toBe(5);
     const saved = channel.messages;
     jest.mocked(api.history).mockRejectedValueOnce(new Error('Unavailable'));
@@ -296,7 +375,7 @@ describe('mounted Team Chat channel coordination', () => {
     await act(async () => { await channel.loadOlder(); });
     jest.mocked(api.history).mockResolvedValueOnce(page([10, 11]));
     await act(async () => { await channel.refresh(); });
-    expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 11 });
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 11 }, boundClient);
     expect(channel.messages.map(item => item.id)).toEqual([8, 9, 10, 11]); expect(channel.hasOlder).toBe(true);
   });
 
@@ -310,7 +389,7 @@ describe('mounted Team Chat channel coordination', () => {
     expect(channel.messages).toEqual([]); expect(api.history).toHaveBeenCalledTimes(1);
     jest.mocked(api.history).mockResolvedValueOnce(page([1], { latest_id: 1 }));
     await act(async () => read.resolve({ data: { last_read_id: 999, unread_count: 0, latest_id: 999 } }));
-    expect(api.history).toHaveBeenLastCalledWith('guidance', {});
+    expect(api.history).toHaveBeenLastCalledWith('guidance', {}, boundClient);
     expect(channel.messages.map(item => item.id)).toEqual([1]);
     expect(channel.summary.last_read_id).toBe(0); expect(channel.summary.latest_id).toBe(1);
     expect(client.getQueryCache().findAll({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') })).toHaveLength(0);

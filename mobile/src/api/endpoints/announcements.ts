@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 
 export interface AnnouncementListItem {
   id: number;
@@ -28,19 +28,19 @@ export interface AnnouncementListing {
   counts: { all: number; unread: number; read: number };
 }
 
-export function listing(filters: { unit?: string; status?: string; page?: number }): Promise<AnnouncementListing> {
+export function listing(filters: { unit?: string; status?: string; page?: number }, binding?: ApiBinding): Promise<AnnouncementListing> {
   const params = new URLSearchParams({
     unit: filters.unit ?? 'all',
     status: filters.status ?? 'all',
     page: String(filters.page ?? 1),
   });
-  return request<AnnouncementListing>(`api/v1/announcements?${params.toString()}`);
+  return (binding ? bindApiClient(binding).request : request)<AnnouncementListing>(`api/v1/announcements?${params.toString()}`);
 }
 
-export function detail(id: number): Promise<{ data: AnnouncementDetail }> {
-  return request<{ data: AnnouncementDetail }>(`api/v1/announcements/${id}`);
+export function detail(id: number, binding?: ApiBinding): Promise<{ data: AnnouncementDetail }> {
+  return (binding ? bindApiClient(binding).request : request)<{ data: AnnouncementDetail }>(`api/v1/announcements/${id}`);
 }
 
-export function markRead(id: number): Promise<unknown> {
-  return request(`api/v1/announcements/${id}/read`, { method: 'POST' });
+export function markRead(id: number, binding?: ApiBinding): Promise<unknown> {
+  return (binding ? bindApiClient(binding).request : request)(`api/v1/announcements/${id}/read`, { method: 'POST' });
 }

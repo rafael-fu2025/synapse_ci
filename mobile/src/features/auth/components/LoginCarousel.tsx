@@ -3,6 +3,7 @@ import { AccessibilityInfo, Animated, AppState, Easing, Image, Pressable, StyleS
 import LinearGradient from 'react-native-linear-gradient';
 import { useQuery } from '@tanstack/react-query';
 import { loginCarousel } from '../../../api/endpoints/auth';
+import { useApiClient } from '../../../api/runtime';
 import { Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { FALLBACK_LOGIN_SLIDES, loginSlides } from '../loginContent';
@@ -18,9 +19,10 @@ export function LoginCarousel({ active }: { active: boolean }) {
   const [reduceMotion, setReduceMotion] = useState(true);
   const [screenReader, setScreenReader] = useState(true);
   const [failedImage, setFailedImage] = useState<string | null>(null);
+  const api = useApiClient();
   const query = useQuery({
     queryKey: ['auth', 'carousel'],
-    queryFn: () => loginCarousel().then(loginSlides),
+    queryFn: () => loginCarousel(api).then(value => { api.assertCurrent(); return loginSlides(value, api.runtime.apiBaseUrl); }),
     staleTime: 5 * 60_000,
     retry: false,
     refetchOnWindowFocus: false,

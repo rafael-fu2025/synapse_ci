@@ -2,7 +2,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ApiError, authorizedFetch } from '../src/api/client';
+import { ApiError, authorizedFetch, activateApiRuntime, createApiRuntime, retireApiRuntime, setAccessToken, SessionChangedError } from '../src/api/client';
 import * as health from '../src/api/endpoints/health';
 import { queryKeys } from '../src/api/queryKeys';
 import type { User } from '../src/api/types';
@@ -18,6 +18,7 @@ jest.mock('../src/api/client', () => ({
 }));
 jest.mock('../src/store/auth', () => ({ useAuth: jest.fn() }));
 
+const boundClient = expect.objectContaining({ runtime: expect.any(Object), sessionVersion: expect.any(Number), assertCurrent: expect.any(Function) });
 const firstPhoto = 'data:image/png;base64,Zmlyc3Q=';
 const nextPhoto = 'data:image/jpeg;base64,bmV4dA==';
 
@@ -81,7 +82,7 @@ describe('profilePhoto API', () => {
     await expect(health.profilePhoto()).resolves.toBeNull();
 
     expect(authorizedFetch).toHaveBeenCalledTimes(1);
-    expect(authorizedFetch).toHaveBeenCalledWith('api/v1/me/photo', { method: 'GET' });
+    expect(authorizedFetch).toHaveBeenCalledWith('api/v1/me/photo', { method: 'GET' }, boundClient);
     expect(readBlob).not.toHaveBeenCalled();
     expect(fileReader).not.toHaveBeenCalled();
   });
@@ -97,7 +98,7 @@ describe('profilePhoto API', () => {
     const dataUri = `data:${mime};base64,cGhvdG8=`;
 
     expect(authorizedFetch).toHaveBeenCalledTimes(1);
-    expect(authorizedFetch).toHaveBeenCalledWith('api/v1/me/photo', { method: 'GET' });
+    expect(authorizedFetch).toHaveBeenCalledWith('api/v1/me/photo', { method: 'GET' }, boundClient);
     expect(readBlob).toHaveBeenCalledTimes(1);
     expect(fileReader).toHaveBeenCalledTimes(1);
     expect(reader.readAsDataURL).toHaveBeenCalledWith(blob);
@@ -158,6 +159,52 @@ describe('profilePhoto API', () => {
 
     await expect(health.profilePhoto()).rejects.toBe(error);
     expect(fileReader).not.toHaveBeenCalled();
+  });
+
+  it('discards a delayed blob after its LAN runtime retires', async () => {
+    const runtime = createApiRuntime({ apiBaseUrl: 'http://172.16.153.237:8080', profileId: 'university', credentialBinding: 'fixture-university', lanTest: true });
+    activateApiRuntime(runtime);
+    const value = response('image/png');
+    const blob = deferred<Blob>();
+    const started = deferred<void>();
+    value.readBlob.mockImplementationOnce(() => { started.resolve(); return blob.promise; });
+    const pending = health.profilePhoto(runtime);
+    const rejected = pending.then(() => undefined, error => error);
+    await started.promise;
+    retireApiRuntime(runtime);
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    blob.resolve(value.blob);
+    await Promise.resolve();
+    expect(fileReader).not.toHaveBeenCalled();
+  });
+
+  it('discards a delayed FileReader result across a same-runtime account boundary', async () => {
+    response('image/png');
+    const { pending } = await startRead();
+    const rejected = pending.then(() => undefined, error => error);
+    setAccessToken('fixture-next-account');
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    reader.result = firstPhoto;
+    reader.onload!();
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+  });
+
+  it('does not publish an upload error decoded after switching LAN servers', async () => {
+    const runtime = createApiRuntime({ apiBaseUrl: 'http://172.16.153.237:8080', profileId: 'university', credentialBinding: 'fixture-university', lanTest: true });
+    activateApiRuntime(runtime);
+    const body = deferred<unknown>();
+    const started = deferred<void>();
+    const value = new Response(null, { status: 422 });
+    jest.spyOn(value, 'json').mockImplementationOnce(() => { started.resolve(); return body.promise; });
+    jest.mocked(authorizedFetch).mockResolvedValueOnce(value);
+    const pending = health.uploadPhoto({ uri: 'file:///fixture-photo', name: 'photo.png', type: 'image/png' }, runtime);
+    const rejected = pending.then(() => undefined, error => error);
+    await started.promise;
+    retireApiRuntime(runtime);
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
+    body.resolve({ error: { code: 'old_validation', message: 'Old server validation' } });
+    await Promise.resolve();
+    await expect(rejected).resolves.toBeInstanceOf(SessionChangedError);
   });
 });
 

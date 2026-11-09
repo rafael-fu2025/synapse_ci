@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { onlineManager, useQueryClient } from '@tanstack/react-query';
+import { useApiClient } from '../../api/runtime';
 import { RealtimeIdentity, startUserRealtime } from './userRealtime';
 
 /**
@@ -8,12 +9,13 @@ import { RealtimeIdentity, startUserRealtime } from './userRealtime';
  */
 export function useUserRealtime(active: boolean, identity: RealtimeIdentity | null): void {
   const client = useQueryClient();
+  const api = useApiClient();
   useEffect(() => {
     if (!active || !identity) { return; }
     let stop: (() => void) | undefined;
     const update = () => {
       if (onlineManager.isOnline()) {
-        stop ??= startUserRealtime(client, identity);
+        stop ??= startUserRealtime(client, identity, api);
       } else {
         stop?.();
         stop = undefined;
@@ -26,5 +28,5 @@ export function useUserRealtime(active: boolean, identity: RealtimeIdentity | nu
       stop?.();
     };
     // The identity is stable while the gate is mounted; the effect re-runs per session.
-  }, [active, identity, client]);
+  }, [active, api, identity, client]);
 }

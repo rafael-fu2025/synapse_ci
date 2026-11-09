@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Services\Scheduling\PersonalQueueInvalidation;
 use App\Services\Scheduling\QueueInvalidation;
 use App\Services\Scheduling\QueueService;
 use CodeIgniter\Database\BaseConnection;
@@ -259,5 +260,118 @@ final class QueueInvalidationTest extends CIUnitTestCase
         $service = $this->transactionFixture(true, true, $order);
         self::assertNull((new ReflectionMethod(QueueService::class, 'transaction'))->invoke($service, static fn () => null));
         self::assertSame(['commit'], $order);
+    }
+
+    private function personalActor(int $id = 3): array
+    {
+        return ['id' => $id, 'tenant_id' => 7, 'person_id' => 88, 'logged_in' => true, 'role' => 'student',
+            'permissions' => ['portal.appointments.read', 'portal.records.read']];
+    }
+
+    public function testPersonalHintPrecedesStaffAndEitherDeliveryCanFailIndependently(): void
+    {
+        foreach (['none', 'personal', 'staff'] as $failure) {
+            $attempts = [];
+            $personal = new PersonalQueueInvalidation(
+                static function (int $tenant, int $person) {
+                    self::assertSame([7, 88], [$tenant, $person]);
+                    return [['id' => 3]];
+                },
+                fn () => $this->personalActor(),
+                static function (...$hint) use (&$attempts, $failure) {
+                    $attempts[] = ['personal', ...$hint];
+                    if ($failure === 'personal') throw new RuntimeException('personal transport failed');
+                }, true, static fn () => 0.0,
+            );
+            $staff = new QueueInvalidation(
+                static fn () => [['id' => 4]],
+                static fn () => ['id' => 4, 'tenant_id' => 7, 'logged_in' => true, 'role' => 'superadmin'],
+                static function (...$hint) use (&$attempts, $failure) {
+                    $attempts[] = ['staff', ...$hint];
+                    if ($failure === 'staff') throw new RuntimeException('staff transport failed');
+                }, true, static fn () => 0.0,
+            );
+            $service = new QueueService(db: $this->createMock(BaseConnection::class),
+                personalInvalidation: $personal, queueInvalidation: $staff);
+            $service->publishCommittedInvalidations([[7, 'clinic', '2020-01-02', 88]]);
+            self::assertSame([
+                ['personal', 'private.tenant.7.user.3', PersonalQueueInvalidation::QUEUE_EVENT, []],
+                ['staff', 'private.tenant.7.user.4', 'queue.invalidated', ['unit' => 'clinic', 'date' => '2020-01-02']],
+            ], $attempts, $failure);
+        }
+    }
+
+    public function testAppointmentOnlyEventHasEmptyPayloadAndNeverQueriesStaffAudience(): void
+    {
+        $sent = [];
+        $personal = new PersonalQueueInvalidation(
+            static fn () => [['id' => 3]], fn () => $this->personalActor(),
+            static function (...$hint) use (&$sent) { $sent[] = $hint; }, true, static fn () => 0.0,
+        );
+        $unexpected = static function () { self::fail('An appointment-only change cannot fan out to staff'); };
+        $staff = new QueueInvalidation($unexpected, $unexpected, $unexpected, true);
+        $service = new QueueService(db: $this->createMock(BaseConnection::class),
+            personalInvalidation: $personal, queueInvalidation: $staff);
+        $service->publishCommittedInvalidations([[7, 'guidance', '2020-01-02', 88, PersonalQueueInvalidation::APPOINTMENTS_EVENT]]);
+        self::assertSame([['private.tenant.7.user.3', PersonalQueueInvalidation::APPOINTMENTS_EVENT, []]], $sent);
+    }
+
+    public function testPersonalHintsRequireFreshSameTenantPersonAndPortalReadGrants(): void
+    {
+        $allowed = $this->personalActor();
+        $actors = [
+            $allowed,
+            array_replace($allowed, ['tenant_id' => 8]),
+            array_replace($allowed, ['person_id' => 89]),
+            array_replace($allowed, ['logged_in' => false]),
+            array_replace($allowed, ['id' => 4]),
+            array_replace($allowed, ['role' => 'other']),
+            array_replace($allowed, ['permissions' => ['portal.appointments.read']]),
+            array_replace($allowed, ['permissions' => ['portal.records.read']]),
+            null,
+        ];
+        foreach ([PersonalQueueInvalidation::QUEUE_EVENT, PersonalQueueInvalidation::APPOINTMENTS_EVENT] as $event) {
+            foreach ($actors as $actor) {
+                $sent = [];
+                (new PersonalQueueInvalidation(
+                    static fn () => [['id' => 3], ['id' => 3]], static fn () => $actor,
+                    static function (...$hint) use (&$sent) { $sent[] = $hint; }, true, static fn () => 0.0,
+                ))->publish(7, 88, $event);
+                self::assertSame($actor === $allowed ? [['private.tenant.7.user.3', $event, []]] : [], $sent);
+            }
+        }
+    }
+
+    public function testPersonalPublisherRetainsShortTimeoutAndBoundedFanout(): void
+    {
+        $shared = config(\Config\Realtime::class);
+        $timeout = $shared->publishTimeout;
+        $default = new PersonalQueueInvalidation(static fn () => [], static fn () => null, enabled: true);
+        $send = (new ReflectionClass($default))->getProperty('send')->getValue($default);
+        $publisher = (new \ReflectionFunction($send))->getClosureThis();
+        $private = (new ReflectionClass($publisher))->getProperty('config')->getValue($publisher);
+        self::assertNotSame($shared, $private);
+        self::assertSame(min($timeout, 0.25), $private->publishTimeout);
+        self::assertSame($timeout, $shared->publishTimeout);
+
+        $checked = $sent = [];
+        (new PersonalQueueInvalidation(
+            static fn () => array_map(static fn ($id) => ['id' => $id], range(1, 100)),
+            function ($id) use (&$checked) { $checked[] = $id; return $this->personalActor($id); },
+            static function ($channel) use (&$sent) { $sent[] = $channel; }, true, static fn () => 0.0,
+        ))->publish(7, 88, PersonalQueueInvalidation::APPOINTMENTS_EVENT);
+        self::assertSame([1, 2, 3, 4], $checked);
+        self::assertCount(4, $sent);
+
+        $now = 0.0;
+        $checked = $sent = [];
+        (new PersonalQueueInvalidation(
+            static function () use (&$now) { $now += 0.8; return [['id' => 3]]; },
+            static function ($id) use (&$checked) { $checked[] = $id; return null; },
+            static function ($channel) use (&$sent) { $sent[] = $channel; }, true,
+            static function () use (&$now) { return $now; },
+        ))->publish(7, 88);
+        self::assertSame([], $checked);
+        self::assertSame([], $sent);
     }
 }

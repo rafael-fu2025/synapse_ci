@@ -23,6 +23,7 @@ import { PlaceholderCard } from '../../../components/PlaceholderCard';
 import { StatusPill } from '../../../components/StatusPill';
 import { queryKeys } from '../../../api/queryKeys';
 import { me } from '../../../api/endpoints/me';
+import { useApiClient } from '../../../api/runtime';
 import { Theme, font, memoizeStyles, type } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { useAuth } from '../../../store/auth';
@@ -38,7 +39,8 @@ export function ProfileHomeScreen() {
   const navigation = useNavigation<ProfileNavigation>();
   const { user } = useAuth();
   const photoUri = useProfilePhoto();
-  const profileQuery = useQuery({ queryKey: queryKeys.me, queryFn: me });
+  const api = useApiClient();
+  const profileQuery = useQuery({ queryKey: queryKeys.me, queryFn: () => me(api) });
   const summaryQuery = useHealthSummary();
   const staffUnits = profileQuery.data?.entitlements.staff_queue_units ?? [];
   const isEmployee = user?.role !== 'student';

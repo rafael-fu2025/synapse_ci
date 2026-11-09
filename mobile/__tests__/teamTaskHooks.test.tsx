@@ -34,6 +34,7 @@ let updateResult: ReturnType<typeof useUpdateTeamTask>;
 let statusResult: ReturnType<typeof useChangeTeamTaskStatus>;
 let commentResult: ReturnType<typeof useCommentTeamTask>;
 
+const boundClient = expect.objectContaining({ runtime: expect.any(Object), sessionVersion: expect.any(Number), assertCurrent: expect.any(Function) });
 const input: api.TeamTaskCreateInput = { title: 'Task', description: '', status: 'todo', priority: 'normal', assignee_user_id: null, due_date: null, checklist: [{ text: 'Count', done: false }], client_nonce: '12345678-1234-4123-8123-123456789012' };
 function task(id = 12): api.TeamTaskDetail {
   return { id, title: `Task ${id}`, status: 'todo', priority: 'normal', assignee: null, due_date: null, checklist: [], checklist_progress: { done: 0, total: 0 }, version: 1, can_edit: true, description: '', created_at: '2026-11-07T08:00:00+08:00', updated_at: '2026-11-07T08:00:00+08:00', comments: [], comments_total: 0, comments_limit: 50, activity: [], activity_total: 0, activity_limit: 50 };
@@ -173,21 +174,21 @@ describe('Team task scoped query hooks', () => {
 
   it('paginates members with response metadata and permits an explicit retry after the next page fails', async () => {
     render(MemberProbe); await flush();
-    expect(api.members).toHaveBeenCalledWith('clinic', { q: '', page: 1 });
+    expect(api.members).toHaveBeenCalledWith('clinic', { q: '', page: 1 }, boundClient);
     expect(memberResult.hasNextPage).toBe(true);
     jest.mocked(api.members).mockRejectedValueOnce(new NetworkError());
     await act(async () => { await memberResult.fetchNextPage(); }); await flush();
     expect(memberResult.isFetchNextPageError).toBe(true);
     expect(memberResult.data?.pages).toHaveLength(1);
     await act(async () => { await memberResult.fetchNextPage(); }); await flush();
-    expect(api.members).toHaveBeenLastCalledWith('clinic', { q: '', page: 2 });
+    expect(api.members).toHaveBeenLastCalledWith('clinic', { q: '', page: 2 }, boundClient);
     expect(memberResult.data?.pages).toHaveLength(2);
     expect(memberResult.hasNextPage).toBe(false);
   });
 
   it('scopes and normalizes member search; query invalidation cannot be bypassed by a stale ref cache', async () => {
     q = '  Alex  '; render(MemberProbe); await flush();
-    expect(api.members).toHaveBeenCalledWith('clinic', { q: 'Alex', page: 1 });
+    expect(api.members).toHaveBeenCalledWith('clinic', { q: 'Alex', page: 1 }, boundClient);
     await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.teamUnit(7, 5, 'clinic') }); }); await flush();
     expect(api.members).toHaveBeenCalledTimes(2);
     jest.mocked(api.members).mockImplementation(() => new Promise(() => undefined));
@@ -244,10 +245,10 @@ describe('Team task mutation hooks', () => {
       await statusResult.mutateAsync(status);
       await commentResult.mutateAsync(comment);
     });
-    expect(api.create).toHaveBeenCalledWith('clinic', input);
-    expect(api.update).toHaveBeenCalledWith('clinic', 12, update);
-    expect(api.changeStatus).toHaveBeenCalledWith('clinic', 12, status);
-    expect(api.comment).toHaveBeenCalledWith('clinic', 12, comment);
+    expect(api.create).toHaveBeenCalledWith('clinic', input, boundClient);
+    expect(api.update).toHaveBeenCalledWith('clinic', 12, update, boundClient);
+    expect(api.changeStatus).toHaveBeenCalledWith('clinic', 12, status, boundClient);
+    expect(api.comment).toHaveBeenCalledWith('clinic', 12, comment, boundClient);
     expect(invalidateTeamTasks).toHaveBeenCalledTimes(4);
     for (const call of jest.mocked(invalidateTeamTasks).mock.calls) { expect(call).toEqual([client, { tenantId: 7, userId: 5 }, 'clinic']); }
   });

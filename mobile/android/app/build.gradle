@@ -1,3 +1,6 @@
+import com.android.build.api.variant.BuildConfigField
+import com.android.build.api.variant.ResValue
+
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
@@ -78,18 +81,9 @@ def uploadKeyAlias = releaseValue('SYNAPSE_UPLOAD_KEY_ALIAS', 'SYNAPSE_UPLOAD_KE
 def uploadKeyPassword = releaseValue('SYNAPSE_UPLOAD_KEY_PASSWORD', 'SYNAPSE_UPLOAD_KEY_PASSWORD')
 def hasReleaseSigning = uploadStoreFile != null && uploadStorePassword != null
         && uploadKeyAlias != null && uploadKeyPassword != null
-// A release artifact must never be signed with the public debug key.
+// Retain the existing explicit local-smoke opt-in, never a silent fallback.
+// The release APK inspection gate always rejects a debug certificate, even with this opt-in.
 def allowDebugSigning = (releaseValue('SYNAPSE_ALLOW_DEBUG_SIGNING', 'SYNAPSE_ALLOW_DEBUG_SIGNING') ?: 'false').toBoolean()
-def releaseRequested = gradle.startParameter.taskNames.any { task ->
-    def name = task.toLowerCase(Locale.ROOT)
-    name.contains('release') || name == 'assemble' || name == 'build'
-}
-if (releaseRequested && !hasReleaseSigning && !allowDebugSigning) {
-    throw new GradleException(
-            "Release signing is not configured. Provide SYNAPSE_UPLOAD_STORE_FILE, SYNAPSE_UPLOAD_STORE_PASSWORD, "
-            + "SYNAPSE_UPLOAD_KEY_ALIAS and SYNAPSE_UPLOAD_KEY_PASSWORD as Gradle properties or environment variables. "
-            + "Set SYNAPSE_ALLOW_DEBUG_SIGNING=true only for a local smoke build that will never be distributed.")
-}
 
 /**
  * Set to true to run ProGuard on Release builds to minify the Java bytecode.
@@ -121,6 +115,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode
         versionName appVersionName
+        // RNC reflects the namespace, not the suffixed applicationId.
+        resValue "string", "build_config_package", "com.humus.synapse"
     }
     signingConfigs {
         debug {
@@ -146,13 +142,19 @@ android {
             manifestPlaceholders = [usesCleartextTraffic: "true"]
         }
         release {
+            debuggable false
             manifestPlaceholders = [usesCleartextTraffic: "false"]
-            // Never fall back to the public debug key silently: the release guard above
-            // stops the build unless real signing is configured or explicitly waived.
-            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
+            signingConfig hasReleaseSigning ? signingConfigs.release : (allowDebugSigning ? signingConfigs.debug : null)
             minifyEnabled enableProguardInReleaseBuilds
             shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+        lanTestRelease {
+            initWith release
+            debuggable false
+            matchingFallbacks = ["release"]
+            applicationIdSuffix ".lantest"
+            versionNameSuffix "-lan-test"
         }
     }
 }
@@ -168,10 +170,107 @@ dependencies {
     }
 }
 
-// Firebase is applied only when the project configuration is present. The plugin
-// fails the build without google-services.json, and the app must stay buildable
-// for anyone who has not created a Firebase project yet. Without the file the
-// client reports "push unavailable" and no device is ever registered.
-if (file("google-services.json").exists()) {
+// dotenv.gradle eagerly writes BuildConfig fields and resources to defaultConfig.
+// Clean the mutable DSL before AGP creates variant providers; querying those
+// providers inside onVariants is too early on AGP 9.
+androidComponents {
+    finalizeDsl { dsl ->
+        def markerNames = ["SYNAPSE_BUILD_PROFILE", "SYNAPSE_ALLOW_LAN_HTTP"]
+        def nativeNames = ["APPLICATION_ID", "BUILD_TYPE", "DEBUG", "VERSION_CODE", "VERSION_NAME"]
+        def inheritedNativeFields = dsl.defaultConfig.buildConfigFields.findAll { name, field -> nativeNames.contains(name) }
+        def inheritedLabels = dsl.defaultConfig.resValues.findAll { key, field -> field.type == "string" && field.name == "app_name" }
+
+        // Release native identity cannot be shadowed by dotenv. Keep the old
+        // debug values at build-type scope instead of changing debug behavior.
+        nativeNames.each { dsl.defaultConfig.buildConfigFields.remove(it) }
+        inheritedLabels.keySet().each { dsl.defaultConfig.resValues.remove(it) }
+        dsl.buildTypes.each { buildType ->
+            if (buildType.name == "release" || buildType.name == "lanTestRelease") {
+                nativeNames.each { buildType.buildConfigFields.remove(it) }
+            } else {
+                inheritedNativeFields.each { name, field -> buildType.buildConfigFields.putIfAbsent(name, field) }
+            }
+            if (buildType.name == "lanTestRelease") {
+                buildType.resValues.entrySet().removeAll { it.value.type == "string" && it.value.name == "app_name" }
+            } else {
+                inheritedLabels.each { key, field -> buildType.resValues.putIfAbsent(key, field) }
+            }
+        }
+
+        // Authorization names are reserved in every build, including debug.
+        ([dsl.defaultConfig] + dsl.buildTypes.toList()).each { dimension ->
+            markerNames.each { dimension.buildConfigFields.remove(it) }
+            dimension.resValues.entrySet().removeAll { it.value.type == "string" && markerNames.contains(it.value.name) }
+        }
+    }
+    onVariants(selector().all()) { variant ->
+        variant.resValues.put(variant.makeResValueKey("string", "build_config_package"),
+                new ResValue("com.humus.synapse", "RNC namespace, including suffixed packages"))
+        if (variant.buildType == "release" || variant.buildType == "lanTestRelease") {
+            def isLanTest = variant.buildType == "lanTestRelease"
+            def nativeMarkers = [
+                    SYNAPSE_BUILD_PROFILE: isLanTest ? "lan-test" : "production",
+                    SYNAPSE_ALLOW_LAN_HTTP: isLanTest ? "true" : "false"
+            ]
+            nativeMarkers.each { key, value ->
+                variant.buildConfigFields.put(key,
+                        new BuildConfigField("String", "\"${value}\"".toString(), "Native build profile; never from dotenv"))
+                variant.resValues.put(variant.makeResValueKey("string", key),
+                        new ResValue(value, "Native build profile; never from dotenv"))
+            }
+        }
+    }
+}
+
+// Gate actual release artifact-producing tasks, including qualified/aggregate/abbreviated
+// invocations, rather than guessing from gradle.startParameter.taskNames. A JVM unit test
+// does not need a signing key. Unsigned distribution artifacts are not a fallback.
+def releasePrerequisiteTasks = []
+["release", "lanTestRelease"].each { buildType ->
+    def capitalized = buildType.substring(0, 1).toUpperCase(Locale.ROOT) + buildType.substring(1)
+    def prerequisites = tasks.register("verify${capitalized}ArtifactPrerequisites") {
+        group = "verification"
+        description = "Verify signer and Firebase prerequisites without exposing credentials"
+        doLast {
+            if (!hasReleaseSigning && !allowDebugSigning) {
+                throw new GradleException("Release signing is not configured. Provide SYNAPSE_UPLOAD_STORE_FILE, "
+                        + "SYNAPSE_UPLOAD_STORE_PASSWORD, SYNAPSE_UPLOAD_KEY_ALIAS and SYNAPSE_UPLOAD_KEY_PASSWORD "
+                        + "via local Gradle properties or environment variables. No debug signing fallback was used.")
+            }
+            if (hasReleaseSigning && !file(uploadStoreFile).isFile()) {
+                throw new GradleException("The configured release signing file is missing. No artifact will be produced.")
+            }
+            def firebaseCandidates = [file("src/${buildType}/google-services.json"), file("google-services.json")]
+            if (!firebaseCandidates.any { it.isFile() }) {
+                throw new GradleException("Firebase configuration is required for ${buildType}. Provide a matching "
+                        + "google-services.json for ${buildType == 'lanTestRelease' ? 'com.humus.synapse.lantest' : 'com.humus.synapse'} "
+                        + "in app/src/${buildType}/ or app/. Firebase was not disabled or fabricated.")
+            }
+            if (allowDebugSigning && !hasReleaseSigning) {
+                logger.warn("Explicit local-smoke debug signing selected; release APK inspection will reject this artifact.")
+            }
+        }
+    }
+    releasePrerequisiteTasks.add(prerequisites)
+    // Task names are Strings, not Groovy GStrings: List.contains/in would not
+    // match an interpolated GString list and could leave package tasks ungated.
+    def artifactTaskNames = ["assemble${capitalized}", "bundle${capitalized}",
+            "package${capitalized}", "package${capitalized}Bundle", "sign${capitalized}Bundle",
+            "validateSigning${capitalized}"].collect { it.toString() }
+    tasks.configureEach { task ->
+        if (artifactTaskNames.contains(task.name)) {
+            task.dependsOn(prerequisites)
+        }
+    }
+}
+tasks.register("verifyReleasePrerequisites") {
+    group = "verification"
+    dependsOn(releasePrerequisiteTasks)
+}
+
+// Keep the existing optional debug bootstrap, but release preflight requires Firebase.
+// Applying for variant-only files is essential for the independent .lantest package.
+if ([file("google-services.json"), file("src/debug/google-services.json"),
+        file("src/release/google-services.json"), file("src/lanTestRelease/google-services.json")].any { it.isFile() }) {
     apply plugin: "com.google.gms.google-services"
 }

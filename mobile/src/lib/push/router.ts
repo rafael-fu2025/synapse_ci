@@ -1,18 +1,13 @@
-import { navigationRef, navigateToAppointmentDetail } from '../../navigation/navigationRef';
 import { pushNavigationIntent, queueNavigationIntent } from '../../features/workspace/navigationIntent';
 import { type PushMessage } from './fcm';
+import { acceptsPushMessage, currentPushOwner, type PushOwner } from './scope';
 
-/** A push tap is only a pending navigation hint; entitlement-aware routing owns execution. */
-export function routePushTap(message: PushMessage | null): void {
+/** A tap is only an owner-scoped pending hint; the entitlement-aware navigation gate executes it. */
+export function routePushTap(message: PushMessage | null, owner?: PushOwner | null): void {
+  const captured = owner === undefined ? currentPushOwner() : owner;
+  if (!acceptsPushMessage(message, captured)) { return; }
   const intent = pushNavigationIntent(message);
   if (!intent) { return; }
-  if (!navigationRef.isReady()) {
-    queueNavigationIntent(intent);
-    return;
-  }
-  // Existing personal routes stay immediately available even before the gate subscribes.
-  if (intent.kind === 'appointment') { navigateToAppointmentDetail(intent.id); return; }
-  if (intent.kind === 'announcement') { navigationRef.navigate('AnnouncementDetail', { id: intent.id }); return; }
-  if (intent.kind === 'survey') { navigationRef.navigate('Surveys'); return; }
-  queueNavigationIntent(intent);
+  // Personal routes use the same gate as team routes: no bypass for a ready navigator.
+  queueNavigationIntent(intent, captured?.runtimeId ?? undefined);
 }

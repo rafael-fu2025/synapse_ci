@@ -1,6 +1,6 @@
 # Mobile Team Workspace implementation tracker
 
-Last updated: 2026-11-07
+Last updated: 2026-11-09
 
 This is the durable implementation and release checklist for the dual-context Synapse mobile experience.
 
@@ -390,6 +390,68 @@ the user-confirmed device evidence. No device/account/server actions were perfor
 
 The ignore review found existing rules already exclude local APK/build/cache output, environment
 files, keystores, Firebase configuration and crash logs; no ignore-rule change was necessary.
+
+## LAN release feedback corrections — 2026-11-09
+
+The user confirmed the signed LAN APK starts and runs smoothly, then reported
+open-screen queue/appointment delay, chat positioning/keyboard anchoring, transient
+ordinary-tab outlines, and Appointment Details action overlap with the raised CTA.
+This correction preserves the separate server/account runtime, existing CTA/context
+motion and the intentional peer-tab fade.
+
+- Queue and appointment updates still use payload-free socket hints followed by
+  authorized HTTP. Independent query refreshes no longer block behind an unrelated
+  read; hints coalesce per concrete query with a trailing stale/read repair for
+  overlapping fetching or paused requests. Retired runtimes cannot start new work.
+- Personal queue hints invalidate linked appointments too. Queue/appointment
+  observers are eligible only when focused, foreground, online and overlay-free.
+  Appointments have a 15-second disconnected fallback. Waiting personal tickets
+  reconcile position/ETA every 15 seconds even when ready, since peer movement does
+  not emit a personal hint. No other patients' records or broad channels are added.
+- No-ticket appointment no-show emits its person-owned appointment hint after the
+  outermost commit. Ordinary queue tuples remain four-valued; appointment-only
+  capture adds the event. Personal and staff fanout failures are isolated, with
+  personal publication attempted first. Rollbacks/failed writes do not publish.
+- Normal Chat entry and actual navigation re-entry load latest and bottom after
+  usable layout; fresh explicit targets still win. Follow-latest intent survives
+  keyboard/composer measurement changes, while deliberate older reading stays put.
+  Frozen-route blur suppresses work synchronously. Input/list and drafts remain
+  mounted; old read/scroll callbacks and obsolete latest completions are rejected.
+- Appointment Details uses chat's shared 34-unit total clearance only when an
+  action and raised CTA are present; ordinary/keyboard layouts retain 20. The action
+  stays outside the ScrollView, and loading/noncancellable views gain no blank footer.
+
+**Automated gate:** full serialized Jest with `--detectOpenHandles` passed
+**67 suites / 1,318 tests**, no skipped tests or reported open handles. TypeScript
+passed; ESLint passed with only four existing `secureNonce` no-bitwise warnings;
+whitespace checks passed. Android policy/tooling regressions passed **61 tests**.
+The no-dotenv queue invalidation PHP gate passed **57 tests / 323 assertions** and
+the isolated LAN notification gate passed **60 tests / 368 assertions**, using
+only guarded in-memory/mocked fixtures. Android LAN release bundle/resource generation
+and Kotlin compilation also passed offline, without signing or installation. These
+are not physical timing/GPU proofs.
+
+**Publication review:** cold-start rejection now queues credential deletion before
+publishing signed-out state or awaiting its durable marker, so an old cleanup cannot
+erase a newer login or skip deletion when settings storage fails. A server switch
+rechecks ownership after its final storage write before activating a runtime. Newer
+notification-open events take precedence over the earlier initial-message promise,
+including when scope validation is still pending. Only explicitly acknowledged
+notification bindings can be restored; provisional/rejected entries and old entries
+without an acknowledgment marker remain untrusted until registration succeeds.
+Focused regressions cover these races. Git ignore rules allowlist the LAN guide and named isolated PHP fixtures;
+Firebase configuration, release signers, APKs and generated output remain excluded.
+CI runs both isolated PHP gates from their tracked no-dotenv configurations.
+
+**Release/device boundaries:** the known-good signed APK was reverified and backed
+up without changing the installed app. A successor signed build needs the existing
+passwords in the user's private PowerShell session; no new signer/Firebase setup is
+needed. Neither device installation nor live read/message/status operations were
+performed in this pass. The ordinary-tab outline report remains **unresolved pending
+Android release visual evidence**; no speculative border/shadow/animation workaround
+was added. Check both LANs after rebuilding, including keyboard, long messages,
+retained re-entry and current backend hint coverage; do not infer subsecond latency
+from passing tests.
 
 ## Deployment record
 

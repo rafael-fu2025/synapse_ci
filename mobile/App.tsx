@@ -1,9 +1,9 @@
 import React from 'react';
 import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { ConnectionProvider } from './src/features/connection/ConnectionProvider';
+import { useOptionalConnection } from './src/features/connection/ConnectionContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
-import { queryClient } from './src/lib/queryClient';
 import { QueryLifecycle } from './src/lib/QueryLifecycle';
 import { AuthProvider, useAuth } from './src/store/auth';
 import { WorkspaceProvider } from './src/features/workspace/WorkspaceContext';
@@ -19,7 +19,8 @@ function ThemedStatusBar() {
 
 function SessionScreens() {
   const { profile } = useAuth();
-  const sessionKey = profile ? `${profile.user.tenant_id}:${profile.user.id}` : 'signed-out';
+  const owner = useOptionalConnection()?.owner ?? 0;
+  const sessionKey = `${owner}:${profile ? `${profile.user.tenant_id}:${profile.user.id}` : 'signed-out'}`;
   return (
     <WorkspaceProvider key={sessionKey}>
       <OverlayProvider>
@@ -36,12 +37,12 @@ export default function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
+        <ConnectionProvider>
           <QueryLifecycle />
           <AuthProvider>
             <SessionScreens />
           </AuthProvider>
-        </QueryClientProvider>
+        </ConnectionProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

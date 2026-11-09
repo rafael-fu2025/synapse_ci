@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import {
   matchQuery,
   onlineManager,
-  useMutation,
   useQuery,
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
+import { bindApiQueryResult, useApiClient, useApiMutation, type ApiClient } from '../../api/runtime';
 import * as api from '../../api/endpoints/teamChat';
 import { NetworkError } from '../../api/client';
 import type { TeamUnit } from '../../api/types';
@@ -84,6 +84,10 @@ interface ChannelSnapshot {
   error: unknown;
   updateError: unknown;
   updatedAt: number;
+  /** Successful latest replacements, even when the message objects/height match. */
+  latestRevision: number;
+  /** Actual navigation returns, not foreground/online/overlay eligibility. */
+  navigationRevision: number;
 }
 
 export interface TeamChatChannelState extends Omit<ChannelSnapshot, 'request'> {
@@ -107,7 +111,7 @@ function emptyChannel(target: number | null): ChannelSnapshot {
   return {
     mode: target === null ? 'latest' : 'history', targetMessageId: target,
     messages: [], summary: EMPTY_SUMMARY, hasOlder: false, loaded: false,
-    request: null, error: null, updateError: null, updatedAt: 0,
+    request: null, error: null, updateError: null, updatedAt: 0, latestRevision: 0, navigationRevision: 0,
   };
 }
 
@@ -116,6 +120,7 @@ interface ChannelJob {
   target?: number;
   unit: TeamUnit;
   identity: TeamChatIdentity;
+  apiClient: ApiClient;
   scope: string;
   generation: number;
   invalidation: number;
@@ -130,17 +135,20 @@ interface ChannelJob {
  * manual navigation supersedes background work without racing another fetch.
  */
 export function useTeamChatChannel({ unit, targetMessageId, paused = false }: UseTeamChatChannelOptions): TeamChatChannelState {
+  const apiClient = useApiClient();
   const identity = useTeamChatIdentity();
   const client = useQueryClient();
   const realtime = useRealtimeReady();
+  const navigation = useNavigation();
+  const focused = useIsFocused();
   const enabled = unit !== null && identity.tenantId > 0 && identity.userId > 0;
   const active = useActiveScreen(enabled && !paused);
   const target = Number.isSafeInteger(targetMessageId) && (targetMessageId ?? 0) > 0 ? targetMessageId! : null;
-  const scope = `${identity.tenantId}:${identity.userId}:${unit ?? 'none'}`;
+  const scope = `${apiClient.runtime.id}:${apiClient.sessionVersion}:${identity.tenantId}:${identity.userId}:${unit ?? 'none'}`;
   const [snapshot, setSnapshot] = useState<ChannelSnapshot>(() => emptyChannel(target));
   const state = useRef(snapshot);
-  const context = useRef({ scope, unit, identity, active });
-  context.current = { scope, unit, identity, active };
+  const context = useRef({ scope, unit, identity, active, apiClient });
+  context.current = { scope, unit, identity, active, apiClient };
   const mounted = useRef(false);
   const generation = useRef(0);
   const blocked = useRef(false);
@@ -150,6 +158,13 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
   const invalidation = useRef(0);
   const reconciled = useRef(0);
   const routeTarget = useRef(target);
+  const navigationFocus = useRef(focused);
+  const renderedFocus = useRef(focused);
+  const navigationReturned = useRef(false);
+  const [navigationEvent, setNavigationEvent] = useState(0);
+  const consumedTarget = useRef<number | null>(null);
+  const pendingRouteTarget = useRef<number | null>(null);
+  const activity = useRef<{ scope: string | null; active: boolean }>({ scope: null, active: false });
   const resumeWindow = useRef<{ kind: 'latest' | 'around'; target?: number } | null>(null);
   const requestRef = useRef<(kind: WindowRequest, id?: number) => Promise<boolean>>(() => Promise.resolve(false));
   const executeRef = useRef<(job: ChannelJob) => Promise<void>>(async () => undefined);
@@ -172,8 +187,8 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
     if (mounted.current) { setSnapshot(next); }
   }, []);
 
-  const current = useCallback((job: ChannelJob) => mounted.current &&
-    context.current.active && context.current.scope === job.scope &&
+  const current = useCallback((job: ChannelJob) => job.apiClient.isCurrent() && mounted.current &&
+    context.current.active && navigationFocus.current && context.current.scope === job.scope &&
     generation.current === job.generation && !blocked.current, []);
 
   const cancelQueued = useCallback(() => {
@@ -209,17 +224,17 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
 
   const makeJob = useCallback((kind: RequestKind, id?: number): ChannelJob | null => {
     const owner = context.current;
-    if (!owner.unit) { return null; }
+    if (!owner.unit || !owner.apiClient.isCurrent()) { return null; }
     let resolve!: (succeeded: boolean) => void;
     const promise = new Promise<boolean>(done => { resolve = done; });
     return {
-      kind, target: id, unit: owner.unit, identity: owner.identity, scope: owner.scope,
+      kind, target: id, unit: owner.unit, identity: owner.identity, apiClient: owner.apiClient, scope: owner.scope,
       generation: generation.current, invalidation: invalidation.current, promise, resolve,
     };
   }, []);
 
   drainRef.current = () => {
-    if (flight.current || !mounted.current || !context.current.active || blocked.current) { return; }
+    if (flight.current || !mounted.current || !context.current.apiClient.isCurrent() || !context.current.active || !navigationFocus.current || blocked.current) { return; }
     let job = queued.current;
     queued.current = null;
     if (job && !current(job)) { job.resolve(false); job = null; }
@@ -238,7 +253,7 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
     try {
       if (!current(job)) { return; }
       if (job.kind === 'read') {
-        const response = await api.markRead(job.unit, job.target!);
+        const response = await api.markRead(job.unit, job.target!, job.apiClient);
         if (!current(job) || state.current.mode !== 'latest') { return; }
         publish({ summary: applySummary(response.data) });
         // Do not turn a successful read into a false claim that a failed refresh recovered.
@@ -247,7 +262,7 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
                  state.current.mode === 'latest' && state.current.loaded) {
         let cursor = state.current.messages.at(-1)?.id ?? 0;
         for (let pageNumber = 0; pageNumber < 10; pageNumber += 1) {
-          const response = await api.history(job.unit, { after: cursor });
+          const response = await api.history(job.unit, { after: cursor }, job.apiClient);
           if (!current(job) || state.current.mode !== 'latest') { return; }
           applyPage(response.data, 'newer');
           const next = Math.max(cursor, ...response.data.messages.map(message => message.id));
@@ -263,7 +278,7 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
         if (job.kind === 'older' && (!before || !state.current.hasOlder)) { return; }
         const cursor: api.TeamChatHistoryCursor = job.kind === 'older' ? { before: before! }
           : around ? { around } : {};
-        const response = await api.history(job.unit, cursor);
+        const response = await api.history(job.unit, cursor, job.apiClient);
         if (!current(job)) { return; }
         if (around && !response.data.messages.some(message => message.id === around)) {
           throw new Error('The original message is no longer available in this Team Workspace.');
@@ -279,12 +294,17 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
         } else {
           applyPage(response.data, 'latest', true);
           if (job.kind === 'around') { publish({ mode: 'history', targetMessageId: job.target! }); }
-          if (job.kind === 'latest') { publish({ mode: 'latest', targetMessageId: null }); }
+          if (job.kind === 'latest' || (job.kind === 'initial' && !around)) {
+            publish({ mode: 'latest', targetMessageId: null, latestRevision: state.current.latestRevision + 1 });
+          }
         }
       }
       if (!current(job)) { return; }
       succeeded = true;
       if (job.kind !== 'read') {
+        if ((job.kind === 'around' && job.target === pendingRouteTarget.current) || job.kind === 'initial' || job.kind === 'latest') {
+          pendingRouteTarget.current = null;
+        }
         reconciled.current = job.invalidation;
         client.setQueryData(teamChatKeys.history(job.identity, job.unit, {}), { updatedAt: state.current.updatedAt });
         if (job.kind === 'around' || job.kind === 'latest') { resumeWindow.current = null; }
@@ -309,7 +329,7 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
       const valid = current(job);
       if (valid && job.kind !== 'read') { publish({ request: null }); }
       job.resolve(succeeded && valid);
-      if (mounted.current && context.current.active && !blocked.current) {
+      if (mounted.current && context.current.active && navigationFocus.current && !blocked.current) {
         if (queued.current) { drainRef.current(); }
         else if (succeeded && state.current.mode === 'latest' && invalidation.current > reconciled.current) {
           requestRef.current('poll');
@@ -319,10 +339,10 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
   };
 
   requestRef.current = (kind, id) => {
-    if (!mounted.current || !context.current.unit || blocked.current) { return Promise.resolve(false); }
+    if (!mounted.current || !context.current.apiClient.isCurrent() || !context.current.unit || blocked.current) { return Promise.resolve(false); }
     if (kind === 'around' && (!Number.isSafeInteger(id) || id! <= 0)) { return Promise.resolve(false); }
     if (kind === 'latest' || kind === 'around') { resumeWindow.current = { kind, target: id }; }
-    if (!context.current.active) { return Promise.resolve(false); }
+    if (!context.current.active || !navigationFocus.current) { return Promise.resolve(false); }
     if (kind === 'poll' && (!state.current.loaded || state.current.mode !== 'latest')) { return Promise.resolve(false); }
     if (kind === 'older' && (!state.current.hasOlder || state.current.messages.length === 0)) { return Promise.resolve(false); }
     const duplicate = [queued.current, flight.current].find(job => job && current(job) && job.kind === kind && job.target === id);
@@ -348,6 +368,12 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
     reconciled.current = 0;
     resumeWindow.current = null;
     routeTarget.current = target;
+    consumedTarget.current = target;
+    pendingRouteTarget.current = target;
+    navigationFocus.current = focused;
+    renderedFocus.current = focused;
+    navigationReturned.current = false;
+    activity.current = { scope: null, active: false };
     publish(emptyChannel(target));
     return () => {
       mounted.current = false;
@@ -360,23 +386,61 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, scope, cancelQueued, publish]);
 
+  useEffect(() => {
+    // A frozen tab may not render its false useIsFocused value. Native route
+    // events still distinguish a real return from overlay/network/app changes.
+    const blur = navigation.addListener?.('blur', () => {
+      navigationFocus.current = false;
+      if (!mounted.current) { return; }
+      generation.current += 1;
+      cancelQueued();
+    });
+    const focus = navigation.addListener?.('focus', () => {
+      if (navigationFocus.current || !mounted.current) { return; }
+      navigationFocus.current = true;
+      navigationReturned.current = true;
+      setNavigationEvent(value => value + 1);
+    });
+    return () => { blur?.(); focus?.(); };
+  }, [cancelQueued, navigation]);
+
   useLayoutEffect(() => {
+    if (renderedFocus.current !== focused) {
+      renderedFocus.current = focused;
+      navigationFocus.current = focused;
+      if (focused) { navigationReturned.current = true; }
+    }
+    const activityChanged = activity.current.scope !== scope || activity.current.active !== active;
+    activity.current = { scope, active };
+    const targetChanged = routeTarget.current !== target;
+    if (targetChanged) {
+      routeTarget.current = target;
+      if (target === null) { consumedTarget.current = null; pendingRouteTarget.current = null; }
+    }
+    const freshTarget = target !== null && targetChanged && target !== consumedTarget.current;
+    if (freshTarget) {
+      consumedTarget.current = target;
+      pendingRouteTarget.current = target;
+      resumeWindow.current = { kind: 'around', target };
+    }
+    const returned = focused && navigationReturned.current;
+    if (returned) {
+      navigationReturned.current = false;
+      publish({ navigationRevision: state.current.navigationRevision + 1 });
+      // A genuinely new explicit target wins. An old retained parameter does not.
+      resumeWindow.current = pendingRouteTarget.current !== null
+        ? { kind: 'around', target: pendingRouteTarget.current } : { kind: 'latest' };
+    }
+    if (!activityChanged && !freshTarget && !returned) { return; }
     generation.current += 1;
     cancelQueued();
     publish({ request: null });
-    if (!active || blocked.current) { return; }
+    if (!active || !focused || blocked.current) { return; }
     const resume = resumeWindow.current;
     if (resume) { requestRef.current(resume.kind, resume.target); }
     else if (!state.current.loaded && !state.current.error) { requestRef.current('initial'); }
-    else if (state.current.loaded && state.current.mode === 'latest') { requestRef.current('poll'); }
-  }, [active, scope, cancelQueued, publish]);
-
-  useEffect(() => {
-    if (routeTarget.current === target) { return; }
-    routeTarget.current = target;
-    // Clearing a consumed navigation parameter must not start another latest fetch.
-    if (target !== null) { requestRef.current('around', target); }
-  }, [scope, target]);
+    else if (activityChanged && state.current.loaded && state.current.mode === 'latest') { requestRef.current('poll'); }
+  }, [active, focused, navigationEvent, scope, target, cancelQueued, publish]);
 
   useEffect(() => client.getQueryCache().subscribe(event => {
     if (event.type !== 'updated' || event.action.type !== 'invalidate' ||
@@ -396,25 +460,26 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
 
   const acknowledge = useCallback((messageId: number) => {
     const value = state.current;
-    if (!mounted.current || !context.current.active || blocked.current || !value.loaded ||
+    if (!apiClient.isCurrent() || !mounted.current || !context.current.active || !navigationFocus.current || blocked.current || !value.loaded ||
         value.mode !== 'latest' || (value.request !== null && value.request !== 'poll') ||
         !Number.isSafeInteger(messageId) || messageId <= value.summary.last_read_id ||
         !value.messages.some(message => message.id === messageId)) { return; }
     readQueued.current = Math.max(readQueued.current, messageId);
     drainRef.current();
-  }, []);
+  }, [apiClient]);
 
   const clear = useCallback(() => {
+    if (!apiClient.isCurrent()) { return; }
     generation.current += 1;
     blocked.current = true;
     cancelQueued();
     resumeWindow.current = null;
     publish({ ...emptyChannel(null), error: state.current.error });
-  }, [cancelQueued, publish]);
-  const loadOlder = useCallback(() => requestRef.current('older'), []);
-  const showLatest = useCallback(() => requestRef.current('latest'), []);
-  const openMessage = useCallback((id: number) => requestRef.current('around', id), []);
-  const refresh = useCallback(() => requestRef.current('refresh'), []);
+  }, [apiClient, cancelQueued, publish]);
+  const loadOlder = useCallback(() => apiClient.isCurrent() ? requestRef.current('older') : Promise.resolve(false), [apiClient]);
+  const showLatest = useCallback(() => apiClient.isCurrent() ? requestRef.current('latest') : Promise.resolve(false), [apiClient]);
+  const openMessage = useCallback((id: number) => apiClient.isCurrent() ? requestRef.current('around', id) : Promise.resolve(false), [apiClient]);
+  const refresh = useCallback(() => apiClient.isCurrent() ? requestRef.current('refresh') : Promise.resolve(false), [apiClient]);
 
   return {
     ...snapshot, active, busy: snapshot.request !== null,
@@ -425,33 +490,35 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
 }
 
 export function useTeamChatTaskSearch(unit: TeamUnit | null, q: string, open: boolean) {
+  const apiClient = useApiClient();
   const identity = useTeamChatIdentity();
   // This search lives INSIDE an overlay, so excluding all overlays would disable it.
   const focused = useIsFocused();
   const foregroundOnline = useForegroundOnline();
-  return useQuery({
+  return bindApiQueryResult(apiClient, useQuery({
     queryKey: unit === null ? [...teamChatKeys.root(identity), 'tasks-disabled'] as const : teamChatKeys.tasks(identity, unit, q),
-    queryFn: () => api.tasks(unit!, q),
+    queryFn: () => api.tasks(unit!, q, apiClient),
     enabled: open && focused && foregroundOnline && unit !== null && identity.tenantId > 0 && identity.userId > 0,
     staleTime: 15_000, retry: false,
-  });
+  }));
 }
 
 export function useTeamChatMemberSearch(unit: TeamUnit | null, q: string, open: boolean) {
+  const apiClient = useApiClient();
   const identity = useTeamChatIdentity();
   const active = useActiveScreen(open && unit !== null && identity.tenantId > 0 && identity.userId > 0);
-  return useQuery({
+  return bindApiQueryResult(apiClient, useQuery({
     queryKey: unit === null ? [...teamChatKeys.root(identity), 'members-disabled'] as const : teamChatKeys.members(identity, unit, q),
-    queryFn: () => api.members(unit!, q), enabled: active,
+    queryFn: () => api.members(unit!, q, apiClient), enabled: active,
     staleTime: 30_000, retry: false,
-  });
+  }));
 }
 
 export function useSendTeamChatMessage(unit: TeamUnit | null) {
-  return useMutation({
-    mutationFn: (input: api.TeamChatSendInput) => {
+  return useApiMutation({
+    mutationFn: (input: api.TeamChatSendInput, apiClient) => {
       if (!onlineManager.isOnline()) { throw new NetworkError(); }
-      return api.send(requireUnit(unit), input);
+      return api.send(requireUnit(unit), input, apiClient);
     },
     retry: false,
     networkMode: 'always', // Never park a send for automatic reconnect replay.

@@ -17,6 +17,8 @@ export const TeamChatMessageBubble = memo(function MessageBubble({
   message,
   own,
   targeted,
+  startsGroup = true,
+  endsGroup = true,
   replyDisabled,
   navigationDisabled = false,
   onReply,
@@ -26,6 +28,8 @@ export const TeamChatMessageBubble = memo(function MessageBubble({
   message: TeamChatMessage;
   own: boolean;
   targeted: boolean;
+  startsGroup?: boolean;
+  endsGroup?: boolean;
   replyDisabled: boolean;
   navigationDisabled?: boolean;
   onReply: (message: TeamChatMessage) => void;
@@ -60,16 +64,33 @@ export const TeamChatMessageBubble = memo(function MessageBubble({
     <View
       testID={`team-chat-message-${message.id}`}
       accessibilityLabel={`${message.sender.name}, ${formatChatTime(message.created_at)}. ${message.body}`}
-      style={[styles.row, own && styles.ownRow, targeted && styles.targeted]}>
-      <View style={[styles.bubble, own && styles.ownBubble]}>
-        <View style={styles.heading}>
-          <Text numberOfLines={1} style={[styles.sender, own && styles.ownText]}>
-            {own ? 'You' : message.sender.name}
-          </Text>
-          <Text style={[styles.time, own && styles.ownMuted]}>
-            {formatChatTime(message.created_at)}
-          </Text>
-        </View>
+      style={[
+        styles.row,
+        own && styles.ownRow,
+        !startsGroup && styles.connectedRowTop,
+        !endsGroup && styles.connectedRowBottom,
+        targeted && styles.targeted,
+      ]}>
+      <View style={[
+        styles.bubble,
+        own && styles.ownBubble,
+        !startsGroup && (own ? styles.ownConnectedTop : styles.connectedTop),
+        !endsGroup && (own ? styles.ownConnectedBottom : styles.connectedBottom),
+      ]}>
+        {startsGroup || endsGroup ? (
+          <View style={styles.heading}>
+            {startsGroup ? (
+              <Text numberOfLines={1} style={[styles.sender, own && styles.ownText]}>
+                {own ? 'You' : message.sender.name}
+              </Text>
+            ) : null}
+            {endsGroup ? (
+              <Text style={[styles.time, own && styles.ownMuted]}>
+                {formatChatTime(message.created_at)}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
         {message.reply_to ? (
           <Pressable
             accessibilityRole="button"
@@ -137,6 +158,8 @@ function createStyles(theme: Theme) {
       borderRadius: 16,
     },
     ownRow: { flexDirection: 'row-reverse' },
+    connectedRowTop: { paddingTop: 1 },
+    connectedRowBottom: { paddingBottom: 1 },
     targeted: { borderColor: '#d1972f', backgroundColor: '#faedcf' },
     bubble: {
       maxWidth: '84%',
@@ -155,9 +178,13 @@ function createStyles(theme: Theme) {
       borderColor: theme.brand,
       backgroundColor: theme.brand,
     },
+    connectedTop: { borderTopLeftRadius: 3 },
+    connectedBottom: { borderBottomLeftRadius: 3 },
+    ownConnectedTop: { borderTopRightRadius: 3 },
+    ownConnectedBottom: { borderBottomRightRadius: 3 },
     heading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
     sender: { ...type.caption, flexShrink: 1, color: theme.ink700 },
-    time: { fontFamily: font.body, fontSize: 9, flexShrink: 0, color: theme.ink500 },
+    time: { fontFamily: font.body, fontSize: 9, flexShrink: 0, marginLeft: 'auto', color: theme.ink500 },
     body: { ...type.body, color: theme.ink900, lineHeight: 18 },
     ownText: { color: '#ffffff' },
     ownMuted: { color: 'rgba(255,255,255,0.78)' },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Keyboard, KeyboardEvent, Linking, Platform, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { AccessibilityInfo, Keyboard, KeyboardEvent, Linking, Platform, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { ApiError } from '../src/api/client';
 import { Action } from '../src/components/Action';
@@ -44,14 +44,14 @@ const focusPassword = jest.fn();
 const keyboardListeners = new Map<string, { emit: () => void; remove: jest.Mock }>();
 let renderer: ReactTestRenderer | undefined;
 
-function renderSignIn() {
-  act(() => {
+async function renderSignIn() {
+  await act(async () => {
     renderer = create(<SignInScreen />);
   });
 }
 
-it('toggles the persisted app theme without resetting entered credentials', () => {
-  renderSignIn();
+it('toggles the persisted app theme without resetting entered credentials', async () => {
+  await renderSignIn();
   fillCredentials();
   const toggle = (label: string) => renderer!.root.findAll(node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function')[0];
   const darkButton = toggle('Switch to dark mode');
@@ -97,6 +97,7 @@ beforeEach(() => {
   mockDarkTheme = false;
   mockSetPreference.mockClear();
   jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
   keyboardListeners.clear();
   focusPassword.mockClear();
   signIn.mockReset().mockResolvedValue(undefined);
@@ -131,8 +132,8 @@ afterEach(() => {
 });
 
 describe('cardless sign-in layout and keyboard lifecycle', () => {
-  it('reserves 30% for the carousel independently of native ScrollView flex defaults', () => {
-    renderSignIn();
+  it('reserves 30% for the carousel independently of native ScrollView flex defaults', async () => {
+    await renderSignIn();
     const scroll = renderer!.root.findByType(ScrollView);
     const carouselLayout = StyleSheet.flatten(carouselRow().props.style);
     const formLayout = StyleSheet.flatten([
@@ -160,9 +161,9 @@ describe('cardless sign-in layout and keyboard lifecycle', () => {
     expect(renderer!.root.findByType(LoginCarousel).props.active).toBe(true);
   });
 
-  it.each(['android', 'ios'] as const)('hides and restores the carousel without losing credentials on %s', os => {
+  it.each(['android', 'ios'] as const)('hides and restores the carousel without losing credentials on %s', async os => {
     jest.replaceProperty(Platform, 'OS', os);
-    renderSignIn();
+    await renderSignIn();
     fillCredentials();
     act(() => eye().props.onPress());
     const showEvent = os === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -188,18 +189,18 @@ describe('cardless sign-in layout and keyboard lifecycle', () => {
     expect(signIn).not.toHaveBeenCalled();
   });
 
-  it('starts with a paused, hidden carousel if the keyboard is already visible', () => {
+  it('starts with a paused, hidden carousel if the keyboard is already visible', async () => {
     jest.mocked(Keyboard.isVisible).mockReturnValue(true);
-    renderSignIn();
+    await renderSignIn();
     expect(StyleSheet.flatten(carouselRow().props.style).display).toBe('none');
     expect(renderer!.root.findByType(LoginCarousel).props.active).toBe(false);
     act(() => keyboardListeners.get('keyboardDidHide')!.emit());
     expect(renderer!.root.findByType(LoginCarousel).props.active).toBe(true);
   });
 
-  it.each(['android', 'ios'] as const)('removes both keyboard subscriptions on %s unmount', os => {
+  it.each(['android', 'ios'] as const)('removes both keyboard subscriptions on %s unmount', async os => {
     jest.replaceProperty(Platform, 'OS', os);
-    renderSignIn();
+    await renderSignIn();
     const subscriptions = [...keyboardListeners.values()];
     expect(subscriptions).toHaveLength(2);
     act(() => renderer!.unmount());
@@ -209,8 +210,8 @@ describe('cardless sign-in layout and keyboard lifecycle', () => {
 });
 
 describe('password visibility and submission', () => {
-  it('toggles Show/Hide through the real TextField without changing either value', () => {
-    renderSignIn();
+  it('toggles Show/Hide through the real TextField without changing either value', async () => {
+    await renderSignIn();
     fillCredentials();
     expect(fields()[1].props.secureTextEntry).toBe(true);
     expect(eye().props.disabled).toBe(false);
@@ -236,7 +237,7 @@ describe('password visibility and submission', () => {
   it('submits once from the password keyboard and disables the eye and inputs while pending', async () => {
     let resolveSignIn!: () => void;
     signIn.mockImplementationOnce(() => new Promise<void>(resolve => { resolveSignIn = resolve; }));
-    renderSignIn();
+    await renderSignIn();
     fillCredentials();
     expect(fields()[1].props.returnKeyType).toBe('go');
     const submitFromKeyboard = fields()[1].props.onSubmitEditing;
@@ -264,7 +265,7 @@ describe('password visibility and submission', () => {
   });
 
   it('retains required-field guards for keyboard submission', async () => {
-    renderSignIn();
+    await renderSignIn();
     await act(async () => fields()[1].props.onSubmitEditing());
     expect(signIn).not.toHaveBeenCalled();
     expect(hasText('Enter your ID number or university email.')).toBe(true);
@@ -273,7 +274,7 @@ describe('password visibility and submission', () => {
 
   it('does not bypass a 429 cooldown through the password keyboard or a visibility toggle', async () => {
     signIn.mockRejectedValueOnce(new ApiError(429, { code: 'rate_limited', message: 'Please wait.' }, 2));
-    renderSignIn();
+    await renderSignIn();
     fillCredentials();
     const originalSubmit = fields()[1].props.onSubmitEditing;
     await act(async () => originalSubmit());
@@ -294,7 +295,7 @@ describe('password visibility and submission', () => {
 
 describe('public social destinations', () => {
   it.each(destinations)('opens the exact HTTPS destination for %s', async (label, url) => {
-    renderSignIn();
+    await renderSignIn();
     const link = social(label);
     expect(link.props.accessibilityRole).toBe('link');
     expect(url.startsWith('https://')).toBe(true);
@@ -310,7 +311,7 @@ describe('public social destinations', () => {
     } else {
       jest.mocked(Linking.openURL).mockImplementationOnce(() => { throw new Error('Native linking failure'); });
     }
-    renderSignIn();
+    await renderSignIn();
     fillCredentials();
     await act(async () => social(destinations[0][0]).props.onPress());
     const alert = renderer!.root.findAllByType(Text).find(node => node.props.accessibilityRole === 'alert');
@@ -325,7 +326,7 @@ describe('public social destinations', () => {
   it('handles a link rejection after the screen has unmounted', async () => {
     let rejectLink!: (error: Error) => void;
     jest.mocked(Linking.openURL).mockImplementationOnce(() => new Promise((_, reject) => { rejectLink = reject; }));
-    renderSignIn();
+    await renderSignIn();
     act(() => social(destinations[0][0]).props.onPress());
     act(() => renderer!.unmount());
     renderer = undefined;

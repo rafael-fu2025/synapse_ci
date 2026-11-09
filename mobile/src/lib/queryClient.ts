@@ -1,11 +1,9 @@
 import { QueryClient } from '@tanstack/react-query';
 import { ApiError, SessionChangedError } from '../api/client';
 
-/**
- * Single app-wide cache. It lives outside React so sign-out and session expiry can
- * wipe it: health, queue and appointment data must never outlive the session that fetched it.
- */
-export const queryClient = new QueryClient({
+/** Each server activation owns its cache, including callbacks still settling after teardown. */
+export function createQueryClient(): QueryClient {
+  return new QueryClient({
   defaultOptions: {
     queries: {
       // Show cached data immediately on return visits; live queue/notification queries
@@ -25,4 +23,8 @@ export const queryClient = new QueryClient({
     },
     mutations: { retry: false },
   },
-});
+  });
+}
+
+// Standalone fixtures/legacy consumers remain supported; App always owns a fresh cache.
+export const queryClient = createQueryClient();

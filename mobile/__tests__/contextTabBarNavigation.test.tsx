@@ -517,6 +517,22 @@ it('reconciles account/rollout loss and rejects callbacks captured from the prev
   expect(current.pendingDiscard).toBe(false);
 });
 
+it('mounts peer tabs only on first visit while keeping route bindings and visited state', async () => {
+  await mount();
+  expect(mockMounted.mock.calls.map(([name]) => name)).toEqual(expect.arrayContaining(['Home', 'TeamTaskList']));
+  expect(mockMounted.mock.calls.map(([name]) => name)).not.toEqual(expect.arrayContaining(['Visits', 'Queue', 'TeamChat', 'TeamCalendar']));
+  expect(tabs('PersonalContext').routeNames).toEqual(['Home', 'Visits', 'Queue', 'Profile']);
+  expect(bar().props.contextBindings.workspace!.state.routeNames).toEqual(['TeamBoard', 'MyTasks', 'TeamChat', 'TeamCalendar']);
+  await pressTab('Queue');
+  await changeInput('Queue-value', 'retained value');
+  await pressTab('Home');
+  await pressTab('Queue');
+  expect(input('Queue-value').props.value).toBe('retained value');
+  expect(mockMounted.mock.calls.filter(([name]) => name === 'Queue')).toHaveLength(1);
+  expect(mockUnmounted.mock.calls.filter(([name]) => name === 'Queue')).toHaveLength(0);
+  expectOneAnchoredBar();
+});
+
 it('cleans up bar/binding and form submission/draft leases on navigation unmount without discarding the form', async () => {
   await mount();
   await pressTab('Visits');
@@ -541,6 +557,8 @@ it('cleans up bar/binding and form submission/draft leases on navigation unmount
   expect(accepted).toHaveBeenCalledTimes(1);
   showNavigation = true;
   await act(async () => renderer!.update(tree()));
+  expect(input('Visits-draft')).toBeUndefined();
+  await pressTab('Visits');
   expect(input('Visits-draft').props.value).toBe('');
   await pressContext();
   expect(current.mode).toBe('workspace');

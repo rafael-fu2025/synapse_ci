@@ -11,7 +11,7 @@ import { useTheme } from '../theme/ThemeProvider';
 /** ScreenShell equivalent: canvas background, safe-area padding, scrollable content. */
 export function Screen({
   children, scroll = true, header, bodyStyle, keyboardAware = false,
-  footer, bottomSafeArea = false, refreshControl,
+  footer, footerStyle, bottomSafeArea = false, refreshControl,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
@@ -22,6 +22,8 @@ export function Screen({
   keyboardAware?: boolean;
   /** Pinned below the viewport, above the keyboard and optional bottom safe area. */
   footer?: React.ReactNode;
+  /** Overrides the pinned footer's surface and spacing without affecting the body. */
+  footerStyle?: StyleProp<ViewStyle>;
   bottomSafeArea?: boolean;
   refreshControl?: ScrollViewProps['refreshControl'];
 }) {
@@ -48,7 +50,7 @@ export function Screen({
           {body}
         </ScrollView>
       ) : body}
-      {footer != null ? <View style={styles.footer}>{footer}</View> : null}
+      {footer != null ? <View style={[styles.footer, footerStyle]}>{footer}</View> : null}
     </>
   );
   return (

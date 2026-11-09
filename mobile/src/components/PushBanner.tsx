@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { BellRing } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { font, memoizeStyles, Theme } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { onPushMessage } from '../lib/push/fcm';
+import { acceptsPushMessage, currentPushOwner, pushScopeRevision, subscribePushScope } from '../lib/push/scope';
 
 interface PushNotice {
   title: string;
@@ -22,11 +23,18 @@ const NOTICE_MS = 5000;
  * the content underneath.
  */
 export function usePushNotice(): PushNotice | null {
-  const [notice, setNotice] = useState<PushNotice | null>(null);
+  const scopeRevision = useSyncExternalStore(subscribePushScope, pushScopeRevision, pushScopeRevision);
+  const [notice, setNotice] = useState<{ value: PushNotice; revision: number } | null>(null);
   useEffect(() => onPushMessage(message => {
+    if (!acceptsPushMessage(message)) { return; }
+    const lanTest = currentPushOwner()?.lanTest === true;
     setNotice({
-      title: message.notification?.title ?? 'Portal notification',
-      body: message.notification?.body ?? '',
+      revision: pushScopeRevision(),
+      value: {
+        // Defense in depth: do not display a server-supplied personal title/body in a LAN build.
+        title: lanTest ? 'Synapse LAN Test' : message.notification?.title ?? 'Portal notification',
+        body: lanTest ? 'Open the app to check for updates' : message.notification?.body ?? '',
+      },
     });
   }), []);
   useEffect(() => {
@@ -36,7 +44,9 @@ export function usePushNotice(): PushNotice | null {
     const timer = setTimeout(() => setNotice(null), NOTICE_MS);
     return () => clearTimeout(timer);
   }, [notice]);
-  return notice;
+  // Scope retirement changes the external snapshot synchronously; an old account's
+  // notice is hidden during the next render, without waiting for an effect to clear it.
+  return notice?.revision === scopeRevision && currentPushOwner()?.isActive() !== false ? notice.value : null;
 }
 
 /** The in-app stand-in for the system banner while the app is in the foreground. */

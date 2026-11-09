@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { TeamUnit } from '../../api/types';
 import { useAuth } from '../../store/auth';
+import { useOptionalConnection } from '../connection/ConnectionContext';
 import { navigationRef, navigateToAppointmentDetail, navigateToWorkspaceIntent } from '../../navigation/navigationRef';
 import { useWorkspace } from './WorkspaceContext';
 import { queueNavigationIntent, subscribeNavigationIntent, takePendingNavigationIntent, type NavigationIntent, workUnitForIntent } from './navigationIntent';
@@ -61,9 +62,10 @@ export function navigateAuthorizedIntent(
 /** Flush one pending target after auth and navigation are ready, without replay loops. */
 export function NavigationIntentGate() {
   const { status, profile } = useAuth();
-  const current = useRef({ status, profile });
+  const owner = useOptionalConnection()?.owner ?? null;
+  const current = useRef({ status, profile, owner });
   const mounted = useRef(true);
-  current.current = { status, profile };
+  current.current = { status, profile, owner };
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
@@ -77,7 +79,7 @@ export function NavigationIntentGate() {
         if (mounted.current) { showNotice('This item is no longer available to your account, or an action is still finishing.'); }
       };
       if (!navigateAuthorizedIntent(intent, profile, openAuthorizedUnit, requestDiscard, enterPersonal, {
-        getProfile: () => mounted.current && current.current.status === 'signedIn' ? current.current.profile : null,
+        getProfile: () => mounted.current && current.current.owner === owner && current.current.status === 'signedIn' ? current.current.profile : null,
         onUnavailable: unavailable,
       })) {
         unavailable();
@@ -85,10 +87,10 @@ export function NavigationIntentGate() {
       // A rejected authorized-session target is consumed, not replayed on every refresh.
       return true;
     };
-    const unsubscribe = subscribeNavigationIntent(navigate);
-    const intent = takePendingNavigationIntent();
-    if (intent && !navigate(intent)) { queueNavigationIntent(intent); }
+    const unsubscribe = subscribeNavigationIntent(navigate, owner);
+    const intent = takePendingNavigationIntent(owner);
+    if (intent && !navigate(intent)) { queueNavigationIntent(intent, owner); }
     return unsubscribe;
-  }, [enterPersonal, openAuthorizedUnit, profile, requestDiscard, showNotice, status]);
+  }, [enterPersonal, openAuthorizedUnit, owner, profile, requestDiscard, showNotice, status]);
   return null;
 }

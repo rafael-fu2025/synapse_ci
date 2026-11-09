@@ -9,7 +9,10 @@ import { PrivacySecurityScreen } from '../src/features/profile/screens/PrivacySe
 import { SettingsScreen } from '../src/features/profile/screens/SettingsScreen';
 import { HealthProfileScreen } from '../src/features/profile/screens/HealthProfileScreen';
 import { useHealthSummary } from '../src/features/profile/hooks';
+import { lightTheme } from '../src/theme/tokens';
 
+jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test', lanTest: false } }));
+jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme, mode: 'light', preference: 'system', setPreference: jest.fn() }) }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) }));
@@ -63,6 +66,26 @@ it('preserves legacy body/header gutters and ignores bodyStyle for scroll shells
   expect(StyleSheet.flatten(header.props.style)).toMatchObject({ marginHorizontal: -18, marginBottom: 18 });
   const body = viewport.findAllByType(View).find(node => StyleSheet.flatten(node.props.style)?.paddingHorizontal === 18)!;
   expect(StyleSheet.flatten(body.props.style)).toEqual({ flex: 1, paddingHorizontal: 18, paddingBottom: 20 });
+});
+
+it('overrides footer spacing and surface without changing the body or shared defaults', () => {
+  const tree = (custom: boolean) => <Screen footer={<View testID="pinned-footer" />}
+    footerStyle={custom ? { paddingBottom: 34, backgroundColor: lightTheme.canvas } : undefined}><Text>Body</Text></Screen>;
+  const root = render(tree(false));
+  const footer = root.findByProps({ testID: 'pinned-footer' }).parent!;
+  const defaults = { flexShrink: 0, paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: 1, borderTopColor: lightTheme.line, backgroundColor: lightTheme.surface };
+  expect(StyleSheet.flatten(footer.props.style)).toEqual(defaults);
+  const viewport = root.findByType(ScrollView);
+  const body = viewport.findAllByType(View).find(node => StyleSheet.flatten(node.props.style)?.paddingHorizontal === 18)!;
+  const bodyStyle = StyleSheet.flatten(body.props.style);
+  expect(viewport.findAllByProps({ testID: 'pinned-footer' })).toHaveLength(0);
+
+  act(() => renderer.update(tree(true)));
+  expect(root.findByProps({ testID: 'pinned-footer' }).parent).toBe(footer);
+  expect(StyleSheet.flatten(footer.props.style)).toEqual({ ...defaults, paddingBottom: 34, backgroundColor: lightTheme.canvas });
+  expect(StyleSheet.flatten(body.props.style)).toEqual(bodyStyle);
+  act(() => renderer.update(tree(false)));
+  expect(StyleSheet.flatten(footer.props.style)).toEqual(defaults);
 });
 
 it.each([ProfileHomeScreen, AppearanceScreen, PrivacySecurityScreen, SettingsScreen])('%p fixes only the page header and leaves content scrolling', Component => {

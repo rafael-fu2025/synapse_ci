@@ -10,6 +10,7 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
+import com.facebook.react.modules.network.OkHttpClientProvider
 
 class MainApplication : Application(), ReactApplication {
 
@@ -27,6 +28,13 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     createNotificationChannel()
+    // BUILD_TYPE is a native variant decision, never a dotenv transport opt-in.
+    // Install before RN can create its HTTP/WebSocket clients.
+    // Check the actual installed package as well as the native build type;
+    // dotenv cannot spoof Application.packageName to activate this in debug/prod.
+    if (packageName == "com.humus.synapse.lantest" && BuildConfig.BUILD_TYPE == "lanTestRelease") {
+      OkHttpClientProvider.setOkHttpClientFactory(LanTestOkHttpClientFactory())
+    }
     loadReactNative(this)
   }
 

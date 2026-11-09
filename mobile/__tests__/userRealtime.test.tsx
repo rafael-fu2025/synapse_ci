@@ -2,17 +2,19 @@ import React from 'react';
 import { QueryClient, QueryClientProvider, QueryObserver, focusManager, onlineManager } from '@tanstack/react-query';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { userRealtimeGrant } from '../src/api/endpoints/realtime';
-import { __resetClientForTests, setAccessToken } from '../src/api/client';
+import { __resetClientForTests, activateApiRuntime, bindApiClient, createApiRuntime, retireApiRuntime, setAccessToken } from '../src/api/client';
 import { RealtimeIdentity, startUserRealtime, validateUserGrant } from '../src/features/realtime/userRealtime';
 import { useUserRealtime } from '../src/features/realtime/useUserRealtime';
 import { queryKeys } from '../src/api/queryKeys';
 import { config } from '../src/lib/config';
 import { isUserRealtimeReady, ownUserRealtime, subscribeUserRealtime } from '../src/lib/realtime/transportState';
+import { startSocketRealtime } from '../src/lib/realtime/socketEngine';
 
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test/subpath' } }));
 jest.mock('../src/api/endpoints/realtime', () => ({ userRealtimeGrant: jest.fn() }));
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 
+const mockConfig = config as { apiBaseUrl: string };
 const IDENTITY: RealtimeIdentity = { tenantId: 7, userId: 42 };
 const CHANNEL = 'private.tenant.7.user.42';
 const originalWebSocket = globalThis.WebSocket;
@@ -70,7 +72,7 @@ beforeEach(() => {
   jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
   onlineManager.setOnline(true);
   focusManager.setFocused(true);
-  config.apiBaseUrl = 'https://api.test/subpath';
+  mockConfig.apiBaseUrl = 'https://api.test/subpath';
   MockSocket.instances = [];
   globalThis.WebSocket = MockSocket as unknown as typeof WebSocket;
   jest.mocked(userRealtimeGrant).mockReset().mockImplementation(async () => ({ data: grant() }));
@@ -130,7 +132,7 @@ async function start() {
 describe('private user grant validation', () => {
   it('accepts the identity channel on a separate socket host and http origin', () => {
     expect(validateUserGrant(grant(), IDENTITY)).toEqual(grant());
-    config.apiBaseUrl = 'http://api.test/path';
+    mockConfig.apiBaseUrl = 'http://api.test/path';
     expect(validateUserGrant(grant({ origin: 'http://api.test', url: 'ws://socket.test/path' }), IDENTITY)).not.toBeNull();
   });
   it('rejects channels that do not name exactly this identity', () => {
@@ -220,11 +222,13 @@ describe('socket protocol and hint dispatch', () => {
     await flush(100);
     expect(queue).toHaveBeenCalledTimes(3);
     expect(notifications).toHaveBeenCalledTimes(3);
+    expect(appointmentList).toHaveBeenCalledTimes(3);
+    expect(appointmentDetail).toHaveBeenCalledTimes(3);
 
     hint(ws, 'portal.appointments.changed');
     await flush(100);
-    expect(appointmentList).toHaveBeenCalledTimes(3);
-    expect(appointmentDetail).toHaveBeenCalledTimes(3);
+    expect(appointmentList).toHaveBeenCalledTimes(4);
+    expect(appointmentDetail).toHaveBeenCalledTimes(4);
     expect(notifications).toHaveBeenCalledTimes(3);
     expect(queue).toHaveBeenCalledTimes(3);
 
@@ -258,14 +262,17 @@ describe('socket protocol and hint dispatch', () => {
     hint(ws, 'login.carousel.changed');
     hint(ws, 'notifications.changed', {});
     hint(ws, 'notifications.changed', [1]);
+    hint(ws, 'portal.queue.changed', {});
+    hint(ws, 'portal.queue.changed', [1]);
+    hint(ws, 'portal.queue.changed', [], 'private.tenant.7.user.43');
     hint(ws, 'notifications.changed', [], 'private.tenant.7.user.43');
     ws.onmessage?.({ data: 'not JSON' });
     await flush(200);
     expect(notifications).toHaveBeenCalledTimes(3);
     expect(notificationHistory).toHaveBeenCalledTimes(3);
     expect(queue).toHaveBeenCalledTimes(3);
-    expect(appointmentList).toHaveBeenCalledTimes(3);
-    expect(appointmentDetail).toHaveBeenCalledTimes(3);
+    expect(appointmentList).toHaveBeenCalledTimes(4);
+    expect(appointmentDetail).toHaveBeenCalledTimes(4);
     expect(staffClinic).toHaveBeenCalledTimes(3);
     expect(staffGuidance).toHaveBeenCalledTimes(3);
     expect(staffAll).toHaveBeenCalledTimes(4);
@@ -329,6 +336,118 @@ describe('socket protocol and hint dispatch', () => {
     }
   });
 
+  it('does not block queue or appointment hints behind an unrelated slow inbox read', async () => {
+    const ws = await start();
+    ws.ready();
+    await flush();
+    let resolveInbox!: (value: string[]) => void;
+    notifications.mockImplementationOnce(() => new Promise(resolve => { resolveInbox = resolve; }));
+    hint(ws, 'notifications.changed');
+    await flush(100);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(notificationHistory).toHaveBeenCalledTimes(3);
+    hint(ws, 'portal.queue.changed');
+    await flush(100);
+    expect(queue).toHaveBeenCalledTimes(3);
+    expect(appointmentList).toHaveBeenCalledTimes(3);
+    expect(appointmentDetail).toHaveBeenCalledTimes(3);
+    expect(client.getQueryState(queryKeys.notifications)?.fetchStatus).toBe('fetching');
+    hint(ws, 'portal.appointments.changed');
+    await flush(100);
+    expect(appointmentList).toHaveBeenCalledTimes(4);
+    resolveInbox(['late inbox']);
+    await flush(100);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(queue).toHaveBeenCalledTimes(3);
+  });
+
+  it('reconciles independent queries without waiting for the first initial read', async () => {
+    let resolveInbox!: (value: string[]) => void;
+    notifications.mockImplementationOnce(() => new Promise(resolve => { resolveInbox = resolve; }));
+    await start();
+    expect(notifications).toHaveBeenCalledTimes(1);
+    expect(notificationHistory).toHaveBeenCalledTimes(1);
+    expect(queue).toHaveBeenCalledTimes(1);
+    expect(appointmentList).toHaveBeenCalledTimes(1);
+    expect(staffAll).toHaveBeenCalledTimes(1);
+    resolveInbox(['late first inbox']);
+    await flush();
+  });
+
+  it('isolates failed reads and still processes later hints for the failed key', async () => {
+    const ws = await start();
+    ws.ready();
+    await flush();
+    notifications.mockRejectedValueOnce(new Error('inbox unavailable'));
+    hint(ws, 'notifications.changed');
+    hint(ws, 'portal.queue.changed');
+    await flush(100);
+    expect(queue).toHaveBeenCalledTimes(3);
+    expect(appointmentList).toHaveBeenCalledTimes(3);
+    expect(client.getQueryData(queryKeys.notifications)).toEqual(['fresh']);
+    hint(ws, 'notifications.changed');
+    await flush(100);
+    expect(notifications).toHaveBeenCalledTimes(4);
+    expect(client.getQueryState(queryKeys.notifications)?.status).toBe('success');
+  });
+
+  it('invalidates overlapping exact and prefix targets only once per concrete query', async () => {
+    stop = startSocketRealtime(client, {
+      reconcileMs: 120_000,
+      fetchGrant: async () => ({ data: grant() }),
+      validateGrant: value => validateUserGrant(value, IDENTITY),
+      reconcileTargets: () => [],
+      targetsFor: () => [
+        { key: ['appointments'], exact: false },
+        { key: queryKeys.appointment(5), exact: true },
+        { key: ['appointments'], exact: false },
+      ],
+    });
+    await flush();
+    const ws = latest();
+    ws.ready();
+    await flush();
+    const invalidations: string[] = [];
+    const un = client.getQueryCache().subscribe(event => {
+      if (event.type === 'updated' && event.action.type === 'invalidate') { invalidations.push(event.query.queryHash); }
+    });
+    try {
+      hint(ws, 'overlapping.targets');
+      await flush(100);
+      expect(appointmentList).toHaveBeenCalledTimes(1);
+      expect(appointmentDetail).toHaveBeenCalledTimes(1);
+      expect(invalidations).toHaveLength(2);
+      expect(new Set(invalidations).size).toBe(2);
+    } finally { un(); }
+  });
+
+  it('delivers disabled signal invalidations without refetching the signal observer', async () => {
+    const key = ['team-chat', IDENTITY.tenantId, IDENTITY.userId, 'guidance', 'channel'];
+    client.setQueryData(key, ['signal']);
+    const read = jest.fn().mockResolvedValue(['must not fetch']);
+    const observer = new QueryObserver(client, { queryKey: key, queryFn: read, enabled: false });
+    const unObserver = observer.subscribe(() => undefined);
+    const signal = jest.fn();
+    const unCache = client.getQueryCache().subscribe(event => {
+      if (event.type === 'updated' && event.action.type === 'invalidate' && event.query.queryHash === observer.getCurrentQuery().queryHash) {
+        signal();
+        event.query.setState({ isInvalidated: false });
+      }
+    });
+    try {
+      const ws = await start();
+      ws.ready();
+      await flush();
+      signal.mockClear();
+      hint(ws, 'team.chat.changed', { unit: 'guidance' });
+      await flush(100);
+      hint(ws, 'team.chat.changed', { unit: 'guidance' });
+      await flush(100);
+      expect(signal).toHaveBeenCalledTimes(2);
+      expect(read).not.toHaveBeenCalled();
+    } finally { unCache(); unObserver(); }
+  });
+
   it('retains a lone hint that overlaps an existing HTTP read for exactly one trailing fetch', async () => {
     const ws = await start();
     ws.ready();
@@ -367,6 +486,36 @@ describe('socket protocol and hint dispatch', () => {
     expect(notificationHistory).toHaveBeenCalledTimes(historyReadsBeforeStop);
   });
 
+  it('rejects old socket hints and trailing work immediately when the API runtime retires', async () => {
+    const runtime = createApiRuntime({ apiBaseUrl: 'https://api.test/subpath' });
+    activateApiRuntime(runtime);
+    const binding = bindApiClient(runtime);
+    stop = startUserRealtime(client, IDENTITY, binding);
+    await flush();
+    const ws = latest();
+    ws.ready();
+    await flush();
+    let resolveOld!: (value: string[]) => void;
+    notifications.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const external = client.refetchQueries({ queryKey: queryKeys.notifications, exact: true });
+    hint(ws, 'notifications.changed');
+    await flush(100);
+    retireApiRuntime(runtime);
+    const replacement = createApiRuntime({ apiBaseUrl: 'https://other.test' });
+    activateApiRuntime(replacement);
+    // Effect cleanup has not run yet; no old hint may even invalidate the cache.
+    hint(ws, 'portal.queue.changed');
+    resolveOld(['old read finished']);
+    await external;
+    await flush(1000);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(queue).toHaveBeenCalledTimes(2);
+    expect(appointmentList).toHaveBeenCalledTimes(2);
+    expect(client.getQueryState(queryKeys.queue)?.isInvalidated).toBe(false);
+    expect(userRealtimeGrant).toHaveBeenCalledTimes(1);
+    retireApiRuntime(replacement);
+  });
+
   it('does not schedule trailing reads for a disabled observer with an external fetch', async () => {
     const ws = await start();
     ws.ready();
@@ -384,6 +533,145 @@ describe('socket protocol and hint dispatch', () => {
       await external;
       await flush(5_000);
       expect(read).toHaveBeenCalledTimes(1);
+    } finally { un(); }
+  });
+
+  it('coalesces repeated in-flight hints per query while other keys keep refreshing', async () => {
+    const ws = await start();
+    ws.ready();
+    await flush();
+    let resolveQueue!: (value: string[]) => void;
+    queue.mockImplementationOnce(() => new Promise(resolve => { resolveQueue = resolve; }));
+    hint(ws, 'portal.queue.changed');
+    await flush(100);
+    for (let index = 0; index < 50; index++) { hint(ws, 'portal.queue.changed'); }
+    hint(ws, 'notifications.changed');
+    await flush(100);
+    expect(queue).toHaveBeenCalledTimes(3);
+    expect(notifications).toHaveBeenCalledTimes(3);
+    expect(appointmentList).toHaveBeenCalledTimes(4);
+    resolveQueue(['before later hints']);
+    await flush(100);
+    expect(queue).toHaveBeenCalledTimes(4);
+    await flush(1000);
+    expect(queue).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps an already-disabled in-flight query stale after its old response without fetching again', async () => {
+    const key = ['appointments', 'already-covered'];
+    let resolveOld!: (value: string[]) => void;
+    const read = jest.fn(() => new Promise<string[]>(resolve => { resolveOld = resolve; }));
+    client.setQueryData(key, ['cached']);
+    const observer = new QueryObserver(client, { queryKey: key, queryFn: read, enabled: false });
+    const un = observer.subscribe(() => undefined);
+    try {
+      const ws = await start();
+      ws.ready();
+      await flush();
+      const external = client.fetchQuery({ queryKey: key, queryFn: read });
+      hint(ws, 'portal.appointments.changed');
+      await flush(100);
+      resolveOld(['before hint']);
+      await external;
+      await flush(100);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    } finally { un(); }
+  });
+
+  it('marks a covered query stale after an overlapped read without fetching it while disabled', async () => {
+    const key = ['appointments', 'covered'];
+    const read = jest.fn().mockResolvedValue(['fresh']);
+    client.setQueryData(key, ['cached']);
+    const observer = new QueryObserver(client, { queryKey: key, queryFn: read });
+    const un = observer.subscribe(() => undefined);
+    try {
+      const ws = await start();
+      ws.ready();
+      await flush();
+      let resolveOld!: (value: string[]) => void;
+      read.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+      const external = observer.refetch();
+      hint(ws, 'portal.appointments.changed');
+      await flush(100);
+      observer.setOptions({ queryKey: key, queryFn: read, enabled: false });
+      resolveOld(['before hint']);
+      await external;
+      await flush(100);
+      expect(read).toHaveBeenCalledTimes(3);
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+      observer.setOptions({ queryKey: key, queryFn: read, enabled: true });
+      await flush();
+      expect(read).toHaveBeenCalledTimes(4);
+      expect(client.getQueryData(key)).toEqual(['fresh']);
+    } finally { un(); }
+  });
+
+  it('waits for a paused physical request without spinning trailing refreshes', async () => {
+    const ws = await start();
+    ws.ready();
+    await flush();
+    onlineManager.setOnline(false);
+    hint(ws, 'notifications.changed');
+    await flush(100);
+    expect(notifications).toHaveBeenCalledTimes(2);
+    expect(client.getQueryState(queryKeys.notifications)?.fetchStatus).toBe('paused');
+    for (let index = 0; index < 50; index++) { hint(ws, 'notifications.changed'); }
+    await flush(1000);
+    expect(notifications).toHaveBeenCalledTimes(2);
+    stop!(); stop = undefined;
+    await client.cancelQueries({ queryKey: queryKeys.notifications });
+    await flush(1000);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('retains invalidation across an already-paused external request on a disabled query', async () => {
+    const key = ['appointments', 'parked-covered'];
+    client.mount();
+    const read = jest.fn().mockResolvedValue(['old parked response']);
+    client.setQueryData(key, ['cached']);
+    const observer = new QueryObserver(client, { queryKey: key, queryFn: read, enabled: false });
+    const un = observer.subscribe(() => undefined);
+    try {
+      const ws = await start();
+      ws.ready();
+      await flush();
+      onlineManager.setOnline(false);
+      const external = client.fetchQuery({ queryKey: key, queryFn: read, staleTime: 0 });
+      expect(client.getQueryState(key)?.fetchStatus).toBe('paused');
+      hint(ws, 'portal.appointments.changed');
+      await flush(100);
+      expect(read).not.toHaveBeenCalled();
+      onlineManager.setOnline(true);
+      await external;
+      await flush(100);
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    } finally { un(); client.unmount(); }
+  });
+
+  it('does not refresh a removed query or replacement instance from stale trailing work', async () => {
+    const key = ['appointments', 'removed'];
+    let resolveOld!: (value: string[]) => void;
+    const read = jest.fn().mockResolvedValue(['fresh']);
+    client.setQueryData(key, ['cached']);
+    const observer = new QueryObserver(client, { queryKey: key, queryFn: read });
+    const un = observer.subscribe(() => undefined);
+    try {
+      const ws = await start();
+      ws.ready();
+      await flush();
+      read.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+      const external = observer.refetch();
+      hint(ws, 'portal.appointments.changed');
+      await flush(100);
+      client.removeQueries({ queryKey: key, exact: true });
+      client.setQueryData(key, ['replacement']);
+      resolveOld(['obsolete']);
+      await external;
+      await flush(1000);
+      expect(read).toHaveBeenCalledTimes(3);
+      expect(client.getQueryData(key)).toEqual(['replacement']);
     } finally { un(); }
   });
 
@@ -639,10 +927,9 @@ describe('hook gating', () => {
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(1);
     await act(async () => { onlineManager.setOnline(true); await flush(); });
     expect(jest.mocked(userRealtimeGrant)).toHaveBeenCalledTimes(2);
-    // React Query's online reconnect and the fresh socket lifetime each repair active data.
-    expect(notifications).toHaveBeenCalledTimes(4);
-    // Workspace queries use the fresh socket reconciliation; React Query's reconnect
-    // did not independently refetch these scoped active observers in this lifetime.
+    // Reconnect and the new lifetime share each already-running authorized read.
+    expect(notifications).toHaveBeenCalledTimes(3);
+    // Every scoped resource is repaired without waiting for unrelated HTTP reads.
     expect(teamTasks).toHaveBeenCalledTimes(3);
     expect(teamCalendar).toHaveBeenCalledTimes(3);
     expect(teamChat).toHaveBeenCalledTimes(3);

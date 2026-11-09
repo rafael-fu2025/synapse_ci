@@ -2,11 +2,14 @@ import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import {
   __resetClientForTests,
+  activateApiRuntime,
+  createApiRuntime,
   getAccessToken,
   request,
   SessionChangedError,
 } from '../src/api/client';
 import { LoginResponse, MeResponse } from '../src/api/types';
+import { ConnectionSessionContext, type ConnectionSessionValue } from '../src/features/connection/ConnectionContext';
 import { clearRefreshToken, getRefreshToken, setRefreshToken } from '../src/lib/keychain';
 import { queryClient } from '../src/lib/queryClient';
 import { AuthProvider, useAuth } from '../src/store/auth';
@@ -23,8 +26,9 @@ jest.mock('../src/lib/queryClient', () => ({
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>(yes => { resolve = yes; });
-  return { promise, resolve };
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
 }
 
 // Attach a rejection handler before advancing a race's deferred responses.
@@ -75,6 +79,26 @@ function Probe() {
 
 async function mount() {
   await act(async () => { renderer = create(<AuthProvider><Probe /></AuthProvider>); });
+}
+
+async function mountConnection(setSessionRestorable: ConnectionSessionValue['setSessionRestorable']) {
+  const runtime = createApiRuntime({
+    apiBaseUrl: 'http://192.168.1.11:8080', profileId: 'home',
+    credentialBinding: 'test-home-session', lanTest: true,
+  });
+  activateApiRuntime(runtime);
+  const session: ConnectionSessionValue = {
+    runtime, restoreSession: true, setSessionRestorable,
+    registerRetirement: () => () => undefined,
+  };
+  await act(async () => {
+    renderer = create(
+      <ConnectionSessionContext.Provider value={session}>
+        <AuthProvider client={queryClient}><Probe /></AuthProvider>
+      </ConnectionSessionContext.Provider>,
+    );
+  });
+  return runtime;
 }
 
 async function signIn(id = 1) {
@@ -299,6 +323,52 @@ it('keeps the stored refresh credential on a transient cold-start outage', async
   expect(getAccessToken()).toBeNull();
   expect(clearRefreshToken).not.toHaveBeenCalled();
   expect(setRefreshToken).not.toHaveBeenCalled();
+});
+
+it.each(['resolve', 'reject'] as const)('deletes a failed cold-start credential before a stalled marker can %s after a new login', async completion => {
+  const marker = deferred<void>();
+  const remember = jest.fn<Promise<void>, [boolean]>(active => active ? Promise.resolve() : marker.promise);
+  let stored: string | null = 'stored-refresh';
+  jest.mocked(getRefreshToken).mockImplementation(async () => stored);
+  jest.mocked(clearRefreshToken).mockImplementation(async () => { stored = null; });
+  jest.mocked(setRefreshToken).mockImplementation(async token => { stored = token; });
+  fetchMock.mockResolvedValueOnce(json(401));
+  const runtime = await mountConnection(remember);
+
+  expect(auth.status).toBe('signedOut');
+  expect(clearRefreshToken).toHaveBeenCalledTimes(1);
+  expect(clearRefreshToken).toHaveBeenCalledWith(runtime.credentialBinding);
+  expect(remember).toHaveBeenCalledWith(false);
+  expect(jest.mocked(clearRefreshToken).mock.invocationCallOrder[0]).toBeLessThan(remember.mock.invocationCallOrder[0]);
+  expect(stored).toBeNull();
+
+  await signIn(2);
+  expect(stored).toBe('refresh-2');
+  await act(async () => {
+    if (completion === 'resolve') { marker.resolve(); }
+    else { marker.reject(new Error('settings unavailable')); }
+    await marker.promise.catch(() => undefined);
+  });
+
+  expect(clearRefreshToken).toHaveBeenCalledTimes(1);
+  expect(stored).toBe('refresh-2');
+  expect(auth.status).toBe('signedIn');
+  expect(auth.user?.id).toBe(2);
+  expect(getAccessToken(runtime)).toBe('access-2');
+});
+
+it('removes a rejected cold-start credential even when the signed-out marker cannot be saved', async () => {
+  jest.mocked(getRefreshToken).mockResolvedValue('stored-refresh');
+  fetchMock.mockResolvedValueOnce(json(401));
+  const remember = jest.fn<Promise<void>, [boolean]>().mockRejectedValue(new Error('settings unavailable'));
+  const runtime = await mountConnection(remember);
+
+  expect(clearRefreshToken).toHaveBeenCalledTimes(1);
+  expect(clearRefreshToken).toHaveBeenCalledWith(runtime.credentialBinding);
+  expect(remember).toHaveBeenCalledWith(false);
+  expect(auth.status).toBe('signedOut');
+  expect(auth.profile).toBeNull();
+  expect(getAccessToken(runtime)).toBeNull();
 });
 
 it('leaves restoring when the restored profile request and its refresh both return 401', async () => {

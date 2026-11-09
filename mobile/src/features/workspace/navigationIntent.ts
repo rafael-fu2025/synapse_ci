@@ -33,29 +33,43 @@ export function pushNavigationIntent(message: PushMessage | null): NavigationInt
   return { kind, unit: unit as TeamUnit, id };
 }
 
-let pending: NavigationIntent | null = null;
-const listeners = new Set<(intent: NavigationIntent) => boolean>();
+type ScopedIntent = { intent: NavigationIntent; owner: number | null };
+let activeOwner: number | null = null;
+let pending: ScopedIntent | null = null;
+const listeners = new Set<{ owner: number | null; listener: (intent: NavigationIntent) => boolean }>();
 
-export function queueNavigationIntent(intent: NavigationIntent | null): void {
-  if (!intent) { return; }
-  for (const listener of listeners) {
-    if (listener(intent)) { pending = null; return; }
-  }
-  pending = intent;
-}
-
-export function subscribeNavigationIntent(listener: (intent: NavigationIntent) => boolean): () => void {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
-
-export function takePendingNavigationIntent(): NavigationIntent | null {
-  const value = pending;
+export function clearNavigationIntents(): void {
   pending = null;
-  return value;
+  listeners.clear();
+  activeOwner = null;
+}
+
+export function setNavigationIntentOwner(owner: number): void {
+  if (owner !== activeOwner) { clearNavigationIntents(); }
+  activeOwner = owner;
+}
+
+export function queueNavigationIntent(intent: NavigationIntent | null, owner = activeOwner): void {
+  if (!intent || owner !== activeOwner) { return; }
+  for (const entry of listeners) {
+    if (entry.owner === owner && entry.listener(intent)) { pending = null; return; }
+  }
+  pending = { intent, owner };
+}
+
+export function subscribeNavigationIntent(listener: (intent: NavigationIntent) => boolean, owner = activeOwner): () => void {
+  const entry = { owner, listener };
+  listeners.add(entry);
+  return () => { listeners.delete(entry); };
+}
+
+export function takePendingNavigationIntent(owner = activeOwner): NavigationIntent | null {
+  const value = pending;
+  if (owner !== activeOwner) { return null; }
+  pending = null;
+  return value?.owner === owner ? value.intent : null;
 }
 
 export function __resetNavigationIntentForTests(): void {
-  pending = null;
-  listeners.clear();
+  clearNavigationIntents();
 }

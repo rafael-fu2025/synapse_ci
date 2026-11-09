@@ -17,14 +17,20 @@ final class QueueService
     private array $invalidations = [];
     private ?\Closure $invalidate;
     private ?\Closure $captureInvalidation = null;
+    private ?PersonalQueueInvalidation $personalInvalidation = null;
+    private ?QueueInvalidation $queueInvalidation = null;
 
     public function __construct(
         ?QueueEntryModel $queueModel = null,
         ?AppointmentModel $appointmentModel = null,
         ?BaseConnection $db = null,
-        ?callable $invalidate = null
+        ?callable $invalidate = null,
+        ?PersonalQueueInvalidation $personalInvalidation = null,
+        ?QueueInvalidation $queueInvalidation = null
     ) {
         $this->invalidate = $invalidate === null ? null : \Closure::fromCallable($invalidate);
+        $this->personalInvalidation = $personalInvalidation;
+        $this->queueInvalidation = $queueInvalidation;
         $this->db = $db ?? \Config\Database::connect();
         $this->queueModel = $queueModel ?? new QueueEntryModel($this->db);
         $this->appointmentModel = $appointmentModel ?? new AppointmentModel($this->db);
@@ -371,6 +377,13 @@ final class QueueService
                 || $this->db->affectedRows() !== 1) {
                 throw new \RuntimeException('Appointment changed. Reload before marking no-show.', 409);
             }
+            if ($entries === []) {
+                // Linked tickets already produce the queue hint used to refresh appointments.
+                $this->recordInvalidation([
+                    'tenant_id' => $appt['tenant_id'], 'unit' => $appt['unit'],
+                    'queue_date' => $appt['local_date'], 'person_id' => $appt['person_id'],
+                ], PersonalQueueInvalidation::APPOINTMENTS_EVENT);
+            }
             return array_replace($appt, ['status' => 'no_show', 'version' => $version + 1]);
         });
     }
@@ -486,14 +499,19 @@ final class QueueService
      * Capture successful joined mutations for an owning transaction. Hints are not
      * delivery work: the caller must discard them on rollback and publish after commit.
      *
-     * @param array<string, array{int, string, string, int}> $hints
+     * Queue hints retain their four-value tuple; appointment-only hints append the event.
+     *
+     * @param array<string, array{int, string, string, int, 4?: string}> $hints
      */
     public function captureInvalidations(callable $operation, array &$hints): mixed
     {
         $hints = [];
         $previous = $this->captureInvalidation;
-        $this->captureInvalidation = static function (int $tenant, string $unit, string $date, int $person = 0) use (&$hints): void {
+        $this->captureInvalidation = static function (int $tenant, string $unit, string $date, int $person = 0, ?string $event = null) use (&$hints): void {
             $hint = [$tenant, $unit, $date, $person];
+            if ($event !== null) {
+                $hint[] = $event;
+            }
             $hints[implode(':', $hint)] = $hint;
         };
         try {
@@ -514,21 +532,41 @@ final class QueueService
         }
     }
 
-    private function recordInvalidation(array $entry): void
+    private function recordInvalidation(array $entry, ?string $event = null): void
     {
         $hint = [(int) $entry['tenant_id'], $entry['unit'], $entry['queue_date'], (int) ($entry['person_id'] ?? 0)];
+        if ($event !== null) {
+            $hint[] = $event;
+        }
         $this->invalidations[implode(':', $hint)] = $hint;
     }
 
-    private function publishInvalidation(int $tenant, string $unit, string $date, int $person = 0): void
+    private function publishInvalidation(int $tenant, string $unit, string $date, int $person = 0, ?string $event = null): void
     {
-        try {
-            if ($this->invalidate !== null) {
-                ($this->invalidate)($tenant, $unit, $date, $person);
-            } else {
-                (new QueueInvalidation())->publish($tenant, $unit, $date);
-                                (new PersonalQueueInvalidation())->publish($tenant, $person);
+        if ($this->invalidate !== null) {
+            try {
+                $hint = [$tenant, $unit, $date, $person];
+                if ($event !== null) {
+                    $hint[] = $event;
+                }
+                ($this->invalidate)(...$hint);
+            } catch (\Throwable) {
+                // Preserve the injectable hint sink's legacy four-value queue contract.
             }
+            return;
+        }
+        try {
+            $this->personalInvalidation ??= new PersonalQueueInvalidation();
+            $this->personalInvalidation->publish($tenant, $person, $event ?? PersonalQueueInvalidation::QUEUE_EVENT);
+        } catch (\Throwable) {
+            // Personal delivery is independent of optional staff fanout, including setup failures.
+        }
+        if ($event !== null && $event !== PersonalQueueInvalidation::QUEUE_EVENT) {
+            return;
+        }
+        try {
+            $this->queueInvalidation ??= new QueueInvalidation();
+            $this->queueInvalidation->publish($tenant, $unit, $date);
         } catch (\Throwable) {
             // This runs after commit: even construction/configuration failures are best-effort.
         }

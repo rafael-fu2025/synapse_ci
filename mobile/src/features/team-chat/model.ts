@@ -42,6 +42,8 @@ export interface ChatMessageRow {
   kind: 'message';
   key: string;
   message: TeamChatMessage;
+  startsGroup: boolean;
+  endsGroup: boolean;
 }
 
 export interface ChatReadMarkerRow {
@@ -88,6 +90,8 @@ export function buildChatRows(
   const rows: TeamChatRow[] = [];
   let day = '';
   let unreadInserted = false;
+  let previous: ChatMessageRow | null = null;
+  let previousDate: Date | null = null;
   for (const message of [...messages].sort((a, b) => a.id - b.id)) {
     const date = parseChatTimestamp(message.created_at);
     const key = date === null ? 'unknown' : manilaDayKey.format(date);
@@ -98,6 +102,7 @@ export function buildChatRows(
         label: date === null ? 'Date unavailable' : manilaDayLabel.format(date),
       });
       day = key;
+      previous = null;
     }
     if (
       includeUnread &&
@@ -107,8 +112,28 @@ export function buildChatRows(
     ) {
       rows.push({ kind: 'unread', key: `unread:${message.id}` });
       unreadInserted = true;
+      previous = null;
     }
-    rows.push({ kind: 'message', key: `message:${message.id}`, message });
+    const gap = date !== null && previousDate !== null
+      ? date.getTime() - previousDate.getTime()
+      : -1;
+    const continuesGroup = previous !== null &&
+      previous.message.sender.id === message.sender.id &&
+      previous.message.reply_to === null && message.reply_to === null &&
+      previous.message.tasks.length === 0 && message.tasks.length === 0 &&
+      gap >= 0 && gap <= 5 * 60_000;
+    const row: ChatMessageRow = {
+      kind: 'message',
+      key: `message:${message.id}`,
+      message,
+      startsGroup: !continuesGroup,
+      endsGroup: true,
+    };
+    if (continuesGroup && previous !== null) { previous.endsGroup = false; }
+    rows.push(row);
+    // Markers track individual visibility, not visual group boundaries.
+    previous = row;
+    previousDate = date;
     if (includeReadMarkers) {
       // A bounded-height row after the bubble also works for viewport-tall text:
       // the cursor advances only once the message's actual bottom is visible.

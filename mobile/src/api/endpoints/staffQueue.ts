@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 
 export type QueueUnit = 'clinic' | 'guidance';
 export type QueueStage = 'waiting' | 'called' | 'in_consultation' | 'skipped';
@@ -48,6 +48,6 @@ export interface StaffQueueResponse {
 }
 
 /** Fetch every authorized unit; mobile has no queue mutation endpoints. */
-export function summary(unit?: QueueUnit): Promise<StaffQueueResponse> {
-  return request<StaffQueueResponse>(`api/v1/staff/queue-summary${unit ? `?unit=${unit}` : ''}`);
+export function summary(unit?: QueueUnit, binding?: ApiBinding): Promise<StaffQueueResponse> {
+  return (binding ? bindApiClient(binding).request : request)<StaffQueueResponse>(`api/v1/staff/queue-summary${unit ? `?unit=${unit}` : ''}`);
 }

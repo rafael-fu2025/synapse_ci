@@ -24,6 +24,7 @@ import { PlaceholderCard } from '../../../components/PlaceholderCard';
 import { CardOutline } from '../../../components/CardOutline';
 import { queryKeys } from '../../../api/queryKeys';
 import { me } from '../../../api/endpoints/me';
+import { useApiClient } from '../../../api/runtime';
 import { useAppointments } from '../../appointments/hooks';
 import { useNotificationInbox } from '../../notifications/hooks';
 import { useAnnouncements } from '../../announcements/hooks';
@@ -65,7 +66,8 @@ export function DashboardScreen() {
   const cardColors = theme.mode === 'dark' ? ['#1c1c1c', '#0f0f0f'] : [palette.brand900, palette.brand700];
 
   const profileRefetch = useFocusPoll(poll.dashboardMs);
-  const profileQuery = useQuery({ queryKey: queryKeys.me, queryFn: me, refetchInterval: profileRefetch });
+  const api = useApiClient();
+  const profileQuery = useQuery({ queryKey: queryKeys.me, queryFn: () => me(api), refetchInterval: profileRefetch });
   const appointmentsQuery = useAppointments({ service: 'all', status: 'active', sort: 'upcoming' });
   const inboxQuery = useNotificationInbox();
   const queueQuery = useQueueSnapshot();

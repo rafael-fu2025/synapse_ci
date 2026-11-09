@@ -1,9 +1,9 @@
-import { request, revokeSession } from '../client';
+import { bindApiClient, request, revokeSession, type ApiBinding } from '../client';
 import { LoginResponse } from '../types';
 import { config } from '../../lib/config';
 
-export function login(identifier: string, password: string): Promise<LoginResponse> {
-  return request<LoginResponse>('api/v1/auth/login', {
+export function login(identifier: string, password: string, binding?: ApiBinding): Promise<LoginResponse> {
+  return (binding ? bindApiClient(binding).request : request)<LoginResponse>('api/v1/auth/login', {
     method: 'POST',
     body: { identifier, password },
     authenticated: false,
@@ -19,8 +19,8 @@ export interface LoginCarouselSlide {
   fit_mode: 'cover' | 'contain_blur';
 }
 
-export function loginCarousel(): Promise<{ data: { slides: LoginCarouselSlide[] } }> {
-  return request('api/v1/auth/carousel', { authenticated: false });
+export function loginCarousel(binding?: ApiBinding): Promise<{ data: { slides: LoginCarouselSlide[] } }> {
+  return (binding ? bindApiClient(binding).request : request)('api/v1/auth/carousel', { authenticated: false });
 }
 
 export type LoginCarouselRealtimeGrant = { enabled: false } | {
@@ -32,13 +32,15 @@ export type LoginCarouselRealtimeGrant = { enabled: false } | {
   expires_at: number;
 };
 
-export function loginCarouselRealtime(): Promise<{ data: LoginCarouselRealtimeGrant }> {
-  return request('api/v1/auth/carousel/realtime', {
+export function loginCarouselRealtime(binding?: ApiBinding): Promise<{ data: LoginCarouselRealtimeGrant }> {
+  const client = binding ? bindApiClient(binding) : null;
+  const baseUrl = client ? client.runtime.apiBaseUrl : config.apiBaseUrl;
+  return (client ? client.request : request)('api/v1/auth/carousel/realtime', {
     authenticated: false,
-    headers: { Origin: new URL(config.apiBaseUrl).origin },
+    headers: { Origin: new URL(baseUrl).origin },
   });
 }
 
-export function logout(): Promise<void> {
-  return revokeSession();
+export function logout(binding?: ApiBinding): Promise<void> {
+  return revokeSession(binding && 'runtime' in binding ? binding.runtime : binding);
 }

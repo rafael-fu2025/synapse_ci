@@ -6,7 +6,7 @@ import { TeamCalendarRoot } from '../features/team-calendar/TeamCalendarStack';
 import { MyTasksStack, TeamBoardStack } from '../features/team-tasks/TeamTaskStacks';
 import { WorkspaceTabsParamList } from './types';
 import { ContextTabBarBinding } from './ContextTabBarBinding';
-import { useTabMotionOptions } from './useTabMotionOptions';
+import { usePeerTabMotionOptions } from './useTabMotionOptions';
 import { useWorkspace } from '../features/workspace/WorkspaceContext';
 
 const Tab = createBottomTabNavigator<WorkspaceTabsParamList>();
@@ -14,7 +14,7 @@ const ICONS = { TeamBoard: ClipboardList, MyTasks: ListTodo, TeamChat: MessageCi
 const LABELS = { TeamBoard: 'Team Board', MyTasks: 'My Tasks', TeamChat: 'Team Chat', TeamCalendar: 'Team Calendar' } as const;
 
 export function WorkspaceTabs() {
-  const motion = useTabMotionOptions();
+  const motion = usePeerTabMotionOptions();
   const { activeUnit, workEnabled } = useWorkspace();
   const enabled = activeUnit?.features;
   if (workEnabled === false) { return null; }

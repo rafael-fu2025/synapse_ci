@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { CalendarDays, Clock3, MessageSquareText, Stethoscope } from 'lucide-react-native';
 import type { Appointment } from '../src/api/endpoints/appointments';
 import { Action } from '../src/components/Action';
@@ -33,8 +33,8 @@ const appointment: Appointment = {
 
 let renderer: ReactTestRenderer | undefined;
 
-function render(element: React.ReactElement) {
-  act(() => { renderer = create(element); });
+async function render(element: React.ReactElement) {
+  await act(async () => { renderer = create(element); });
 }
 
 function expectPlainSlot(style: StyleProp<ViewStyle>) {
@@ -53,16 +53,18 @@ function artTint(): string {
 afterEach(() => {
   act(() => renderer?.unmount());
   renderer = undefined;
+  jest.restoreAllMocks();
 });
 
 describe.each([lightTheme, darkTheme])('plain icon presentation in $mode mode', theme => {
   beforeEach(() => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
     jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference: jest.fn() });
   });
 
-  it('keeps placeholder icons unboxed without removing the content slot or its action', () => {
+  it('keeps placeholder icons unboxed without removing the content slot or its action', async () => {
     const onPress = jest.fn();
-    render(<PlaceholderCard icon={<View testID="plain-icon" />} title="No ticket" body="Check in first." onPress={onPress} />);
+    await render(<PlaceholderCard icon={<View testID="plain-icon" />} title="No ticket" body="Check in first." onPress={onPress} />);
     const icon = renderer!.root.findByProps({ testID: 'plain-icon' });
     expectPlainSlot(icon.parent!.props.style);
     const button = renderer!.root.findAll(node => node.props.accessibilityRole === 'button' && typeof node.props.onPress === 'function')[0];
@@ -70,15 +72,15 @@ describe.each([lightTheme, darkTheme])('plain icon presentation in $mode mode', 
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the loading spinner without a colored tile', () => {
-    render(<PlaceholderCard icon={<View />} title="Loading queue…" body="Please wait." loading />);
+  it('shows the loading spinner without a colored tile', async () => {
+    await render(<PlaceholderCard icon={<View />} title="Loading queue…" body="Please wait." loading />);
     const spinner = renderer!.root.findByType(ActivityIndicator);
     expectPlainSlot(spinner.parent!.props.style);
     expect(spinner.props.color).toBe(theme.mode === 'dark' ? '#ffffff' : '#800000');
   });
 
-  it('adapts brand text and secondary actions without changing primary fills', () => {
-    render(<>
+  it('adapts brand text and secondary actions without changing primary fills', async () => {
+    await render(<>
       <Eyebrow>UPDATES</Eyebrow>
       <Action variant="secondary" loading>Retry</Action>
       <Action>Sign in</Action>
@@ -99,8 +101,8 @@ describe.each([lightTheme, darkTheme])('plain icon presentation in $mode mode', 
     expect(background(1)).toBe('#800000');
   });
 
-  it('adapts clinic and schedule icons but preserves the guidance color', () => {
-    render(<AppointmentCard appointment={appointment} onOpen={jest.fn()} />);
+  it('adapts clinic and schedule icons but preserves the guidance color', async () => {
+    await render(<AppointmentCard appointment={appointment} onOpen={jest.fn()} />);
     const expected = theme.mode === 'dark' ? '#ffffff' : '#800000';
     expect(renderer!.root.findByType(Stethoscope).props.color).toBe(expected);
     expect(renderer!.root.findByType(CalendarDays).props.color).toBe(expected);
@@ -109,10 +111,10 @@ describe.each([lightTheme, darkTheme])('plain icon presentation in $mode mode', 
     expect(renderer!.root.findByType(MessageSquareText).props.color).toBe('#7356a2');
   });
 
-  it('tints each card illustration with its unit colour, turning white on dark surfaces', () => {
+  it('tints each card illustration with its unit colour, turning white on dark surfaces', async () => {
     const expectedClinic = theme.mode === 'dark' ? '#ffffff' : '#800000';
     const expectedGuidance = theme.mode === 'dark' ? '#ffffff' : '#7356a2';
-    render(<AppointmentCard appointment={appointment} onOpen={jest.fn()} />);
+    await render(<AppointmentCard appointment={appointment} onOpen={jest.fn()} />);
     expect(artTint()).toBe(expectedClinic);
     act(() => { renderer!.update(<AppointmentCard appointment={{ ...appointment, unit: 'guidance' }} onOpen={jest.fn()} />); });
     expect(artTint()).toBe(expectedGuidance);
@@ -124,13 +126,13 @@ describe.each([lightTheme, darkTheme])('plain icon presentation in $mode mode', 
     expect(StyleSheet.flatten(wrapper.props.style).opacity).toBeLessThan(0.2);
   });
 
-  it('keeps empty-state icons plain', () => {
-    render(<EmptyState icon={<View testID="plain-icon" />} title="No updates" />);
+  it('keeps empty-state icons plain', async () => {
+    await render(<EmptyState icon={<View testID="plain-icon" />} title="No updates" />);
     expectPlainSlot(renderer!.root.findByProps({ testID: 'plain-icon' }).parent!.props.style);
   });
 
-  it('keeps detail-row icons plain', () => {
-    render(<DetailRow icon={<View testID="plain-icon" />} label="Date" value="29 October" />);
+  it('keeps detail-row icons plain', async () => {
+    await render(<DetailRow icon={<View testID="plain-icon" />} label="Date" value="29 October" />);
     expectPlainSlot(renderer!.root.findByProps({ testID: 'plain-icon' }).parent!.props.style);
   });
 });

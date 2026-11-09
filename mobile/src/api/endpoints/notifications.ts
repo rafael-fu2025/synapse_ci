@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 import type { TeamUnit } from '../types';
 
 /** The record a native client can open. Team targets remain server-authoritative. */
@@ -33,18 +33,18 @@ export interface NotificationHistoryPage extends NotificationInbox {
   per_page: number;
 }
 
-export function inbox(): Promise<{ data: NotificationInbox }> {
-  return request<{ data: NotificationInbox }>('api/v1/notifications');
+export function inbox(binding?: ApiBinding): Promise<{ data: NotificationInbox }> {
+  return (binding ? bindApiClient(binding).request : request)<{ data: NotificationInbox }>('api/v1/notifications');
 }
 
-export function history(page: number, filter: 'all' | 'unread'): Promise<{ data: NotificationHistoryPage }> {
-  return request<{ data: NotificationHistoryPage }>(`api/v1/notifications/history?page=${page}&filter=${filter}`);
+export function history(page: number, filter: 'all' | 'unread', binding?: ApiBinding): Promise<{ data: NotificationHistoryPage }> {
+  return (binding ? bindApiClient(binding).request : request)<{ data: NotificationHistoryPage }>(`api/v1/notifications/history?page=${page}&filter=${filter}`);
 }
 
-export function markRead(id: number): Promise<void> {
-  return request<void>(`api/v1/notifications/${id}/read`, { method: 'POST' });
+export function markRead(id: number, binding?: ApiBinding): Promise<void> {
+  return (binding ? bindApiClient(binding).request : request)<void>(`api/v1/notifications/${id}/read`, { method: 'POST' });
 }
 
-export function markAllRead(): Promise<void> {
-  return request<void>('api/v1/notifications/read-all', { method: 'POST' });
+export function markAllRead(binding?: ApiBinding): Promise<void> {
+  return (binding ? bindApiClient(binding).request : request)<void>('api/v1/notifications/read-all', { method: 'POST' });
 }

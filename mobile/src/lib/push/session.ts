@@ -1,53 +1,91 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { pushNavigationIntent } from '../../features/workspace/navigationIntent';
 import { queryKeys } from '../../api/queryKeys';
-import { queryClient } from '../queryClient';
-import { initialPushMessage, onPushMessage, onPushOpened } from './fcm';
-import { registerDevice, revokeDevice, watchPushToken } from './registration';
+import { initialPushMessage, onPushMessage, onPushOpened, type PushMessage } from './fcm';
+import { pausePushSession, registerDevice, revokeDevice, watchPushToken, type PushRegistrationOptions } from './registration';
 import { routePushTap } from './router';
+import { acceptsPushMessage, currentPushOwner, isPushOwnerCurrent, subscribePushScope } from './scope';
+
+export { getPushSetupStatus, subscribePushSetupStatus, usePushSetupStatus } from './setupStatus';
+export type { PushSetupStatus } from './setupStatus';
 
 export type PushSessionStatus = 'restoring' | 'signedOut' | 'signedIn' | 'bootstrapError' | 'expired';
+export interface PushSessionOptions extends PushRegistrationOptions {
+  /** Legacy auth fixtures can pass their client without mounting a query provider. */
+  queryClient?: QueryClient;
+}
 
-/**
- * Keep the server's record of this device in step with the session.
- *
- * A device is registered when a session starts and withdrawn when it ends, so a
- * notice never reaches a device that has moved on to another account.
- */
-export function usePushSession(status: PushSessionStatus): void {
+/** Push callbacks, cache hints and taps all belong to one captured runtime/auth activation. */
+export function usePushSession(status: PushSessionStatus, options: PushSessionOptions = {}): void {
+  const queryClient = useQueryClient(options.queryClient);
+  const runtime = options.runtime;
+  const tenantId = options.user?.tenant_id;
+  const userId = options.user?.id;
+  const latest = useRef({ status, runtime, tenantId, userId, isCurrent: options.isCurrent });
+  latest.current = { status, runtime, tenantId, userId, isCurrent: options.isCurrent };
+
   useEffect(() => {
-    if (status === 'signedIn') {
-      registerDevice().catch(() => undefined);
+    if (status !== 'signedIn') {
+      if (status === 'signedOut' || status === 'expired') {
+        revokeDevice({ runtime }).catch(() => undefined);
+      } else {
+        // Bootstrap errors/restoring are not signout. Keep saved scope for a safe retry.
+        pausePushSession(runtime);
+      }
+      return undefined;
     }
-  }, [status]);
-
-  useEffect(() => {
-    if (status === 'signedOut' || status === 'expired') {
-      revokeDevice().catch(() => undefined);
-    }
-  }, [status]);
-
-  useEffect(() => watchPushToken(), []);
-
-  useEffect(() => {
-    // A foreground push is a hint that something changed. The server stays the
-    // source of truth; the realtime channel says the same thing when it is up.
-    return onPushMessage((message) => {
+    let active = true;
+    const stillSignedIn = () => active && latest.current.status === 'signedIn' &&
+      latest.current.runtime === runtime && latest.current.tenantId === tenantId &&
+      latest.current.userId === userId && (latest.current.isCurrent?.() ?? true);
+    const user = tenantId === undefined || userId === undefined ? undefined : { tenant_id: tenantId, id: userId };
+    const capturedOptions = { runtime, user, isCurrent: stillSignedIn };
+    registerDevice(capturedOptions).catch(() => undefined);
+    const owner = currentPushOwner();
+    if (!owner) { return undefined; }
+    const current = () => stillSignedIn() && isPushOwnerCurrent(owner);
+    const stopTokens = watchPushToken(capturedOptions);
+    const stopMessages = onPushMessage(message => {
+      if (!current() || !acceptsPushMessage(message, owner)) { return; }
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications, exact: false }).catch(() => undefined);
       const intent = pushNavigationIntent(message);
       if (!intent || !('unit' in intent)) { return; }
       const resource = intent.kind === 'team_task' ? 'team' : intent.kind === 'team_event' ? 'team-calendar' : 'team-chat';
       queryClient.invalidateQueries({ queryKey: [resource], exact: false }).catch(() => undefined);
     });
-  }, []);
 
-  useEffect(() => {
-    // Taps only route into a signed-in session: the protected screens do not
-    // exist while signed out, so the tap falls back to the inbox on sign-in.
-    if (status !== 'signedIn') {
-      return undefined;
-    }
-    initialPushMessage().then(routePushTap).catch(() => undefined);
-    return onPushOpened(routePushTap);
-  }, [status]);
+    // The native cold-start hint can resolve before the secure binding/capability check.
+    // Hold just this owner's tap until a matching scope is restored or acknowledged.
+    let pendingTap: PushMessage | null = null;
+    let opened = false;
+    const flushTap = () => {
+      if (!current() || !pendingTap || !acceptsPushMessage(pendingTap, owner)) { return; }
+      const message = pendingTap;
+      pendingTap = null;
+      routePushTap(message, owner);
+    };
+    const stopScope = subscribePushScope(flushTap);
+    const stopOpened = onPushOpened(message => {
+      if (!current()) { return; }
+      opened = true;
+      pendingTap = message;
+      flushTap();
+    });
+    initialPushMessage().then(message => {
+      if (!current() || opened || !message) { return; }
+      pendingTap = message;
+      flushTap();
+    }).catch(() => undefined);
+
+    return () => {
+      active = false;
+      pendingTap = null;
+      stopTokens();
+      stopMessages();
+      stopOpened();
+      stopScope();
+      pausePushSession(runtime);
+    };
+  }, [status, runtime, runtime?.sessionVersion, tenantId, userId, queryClient]);
 }

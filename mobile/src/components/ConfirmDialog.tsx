@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
+import { motion } from '../lib/motion';
 import { useTheme } from '../theme/ThemeProvider';
 import { Theme, memoizeStyles, type } from '../theme/tokens';
 import { Action } from './Action';
@@ -31,7 +32,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
       onNativeDismiss={presentation.onNativeDismiss}
       abandoned={presentation.abandoned}
     />
-  ));
+  ), { timing: motion.dialog });
 }
 
 type SurfaceProps = ConfirmDialogProps & {
@@ -85,7 +86,7 @@ function ConfirmDialogSurface({ visible, nativeVisible, progress, onNativeDismis
           enabled={Platform.OS === 'ios'}
           pointerEvents="box-none">
           <View style={[styles.available, frameInsets]} pointerEvents="box-none">
-            <Animated.View style={[styles.dialog, { opacity: progress, transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) }] }]}>
+            <Animated.View style={[styles.dialog, { opacity: progress, transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [motion.dialog.fromScale, 1] }) }] }]}>
               <ScrollView style={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false} contentContainerStyle={styles.content}>
                 <Text ref={heading} accessible accessibilityRole="header" style={styles.title}>{title}</Text>
                 <Text style={styles.message}>{message}</Text>

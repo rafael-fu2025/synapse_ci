@@ -36,10 +36,10 @@ jobs:
       - name: Unit and component tests
         # Serialized: the suite drives fake timers and real timers in the same files.
         run: npm test -- --runInBand
-      - name: Developer tooling tests
-        run: node --test scripts/dev-tooling.test.cjs scripts/check-android-apk.test.cjs
-      - name: Native refresh-rate policy tests
-        run: node --test android/app/src/test/refresh-rate-policy.test.cjs
+      - name: Developer tooling and release build contract tests
+        run: node --test scripts/dev-tooling.test.cjs scripts/check-android-apk.test.cjs scripts/android-build-contract.test.cjs
+      - name: Native refresh-rate and LAN registration contracts
+        run: node --test android/app/src/test/refresh-rate-policy.test.cjs scripts/android-lan-native.test.cjs
 
   android-packaging:
     name: Android native packaging
@@ -68,3 +68,5 @@ jobs:
         run: bash gradlew :app:assembleDebug -PreactNativeDevServerPort=8083 --console=plain
       - name: Verify native class definitions in the APK
         run: node scripts/check-android-apk.cjs android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Test real LAN policy and binary inspector fixtures using provisioned tools
+        run: node --test scripts/android-lan-native.test.cjs scripts/android-binary-tooling.test.cjs

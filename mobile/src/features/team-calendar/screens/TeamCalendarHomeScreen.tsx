@@ -7,9 +7,10 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useNetInfo } from '@react-native-community/netinfo';
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   CalendarDays,
@@ -17,6 +18,7 @@ import {
   ChevronRight,
   Plus,
   RefreshCw,
+  SlidersHorizontal,
 } from 'lucide-react-native';
 import type {
   TeamCalendarItem,
@@ -25,10 +27,12 @@ import type {
   TeamCalendarView,
 } from '../../../api/endpoints/teamCalendar';
 import { Action } from '../../../components/Action';
+import { BottomSheet } from '../../../components/BottomSheet';
 import { EmptyState } from '../../../components/EmptyState';
 import { IconAction } from '../../../components/IconAction';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { useAuth } from '../../../store/auth';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Theme, font, memoizeStyles, type } from '../../../theme/tokens';
 import { useWorkspace } from '../../workspace/WorkspaceContext';
@@ -57,6 +61,9 @@ const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export function TeamCalendarHomeScreen() {
   const navigation = useNavigation<Navigation>();
+  const focused = useIsFocused();
+  const { user } = useAuth();
+  const { fontScale, width } = useWindowDimensions();
   const openTask = useOpenTaskDeadline();
   const { activeUnit, openUnitPicker } = useWorkspace();
   const network = useNetInfo();
@@ -69,6 +76,8 @@ export function TeamCalendarHomeScreen() {
   const [status, setStatus] = useState<TeamCalendarStatusFilter>('scheduled');
   const [date, setDate] = useState(today);
   const [selectedDate, setSelectedDate] = useState(today);
+  const [filterSession, setFilterSession] = useState<object | null>(null);
+  const filterLease = useRef<object | null>(null);
   const unit = activeUnit?.features.team_calendar === true ? activeUnit.unit : null;
   const filters = useMemo(() => ({ date, view, scope, status }), [date, scope, status, view]);
   const { accessDenied, refreshingAccess, recoverAccess, retryAccess } = useTeamCalendarAccess(unit);
@@ -79,6 +88,47 @@ export function TeamCalendarHomeScreen() {
   const items = useMemo(() => forbidden ? [] : query.data?.data ?? [], [forbidden, query.data]);
   const meta = forbidden ? undefined : query.data?.meta;
   const offline = network.isConnected === false || query.fetchStatus === 'paused';
+  const filterCount = Number(scope !== 'team') + Number(status !== 'scheduled');
+  const filterSummary = `${scope === 'mine' ? 'Mine' : 'Team'} · ${status === 'all' ? 'All events' : status === 'cancelled' ? 'Cancelled events' : 'Scheduled events'}`;
+  const scopeKey = `${user?.tenant_id ?? 0}:${user?.id ?? 0}:${unit ?? 'none'}`;
+  const lifetime = useRef({ key: scopeKey, mounted: true, focused, forbidden });
+  lifetime.current.key = scopeKey;
+  lifetime.current.focused = focused;
+  lifetime.current.forbidden = forbidden;
+
+  useEffect(() => {
+    const screen = lifetime.current;
+    screen.mounted = true;
+    return () => { screen.mounted = false; filterLease.current = null; };
+  }, []);
+
+  useEffect(() => {
+    filterLease.current = null;
+    setFilterSession(null);
+  }, [scopeKey, focused, forbidden]);
+
+  function isCurrentFilterScope() {
+    return lifetime.current.mounted && lifetime.current.key === scopeKey && lifetime.current.focused && !lifetime.current.forbidden && unit !== null;
+  }
+  function isCurrentFilterSession() {
+    return isCurrentFilterScope() && filterSession !== null && filterLease.current === filterSession;
+  }
+  function openFilters() {
+    if (!isCurrentFilterScope()) { return; }
+    const lease = {};
+    filterLease.current = lease;
+    setFilterSession(lease);
+  }
+  function closeFilters() {
+    if (!isCurrentFilterSession()) { return; }
+    filterLease.current = null;
+    setFilterSession(null);
+  }
+  function resetFilters() {
+    if (!isCurrentFilterSession()) { return; }
+    setScope('team');
+    setStatus('scheduled');
+  }
 
   useEffect(() => {
     if (errorKind === 'forbidden') { recoverAccess().catch(() => undefined); }
@@ -169,31 +219,24 @@ export function TeamCalendarHomeScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} enabled={query.eligible} tintColor={theme.brandIcon} colors={[theme.brandIcon]} onRefresh={() => { refresh().catch(() => undefined); }} />}>
-        <SegmentedControl
-          label="Calendar view"
-          values={VIEWS}
-          selected={view}
-          labelFor={value => value[0].toUpperCase() + value.slice(1)}
-          onChange={selectView}
-        />
-        <View style={styles.secondaryFilters}>
-          <SegmentedControl
-            compact
-            label="Calendar scope"
-            values={SCOPES}
-            selected={scope}
-            labelFor={value => value === 'team' ? 'Team' : 'Mine'}
-            onChange={setScope}
-          />
-          <SegmentedControl
-            compact
-            label="Event status"
-            values={STATUSES}
-            selected={status}
-            labelFor={value => value === 'all' ? 'All events' : value[0].toUpperCase() + value.slice(1)}
-            onChange={setStatus}
-          />
+        <View testID="calendar-toolbar" style={styles.toolbar}>
+          <View testID="calendar-view-control" style={[styles.viewControl, { minWidth: Math.min(Math.max(0, width - 36), Math.ceil(210 * fontScale)) }]}>
+            <SegmentedControl
+              label="Calendar view"
+              values={VIEWS}
+              selected={view}
+              labelFor={value => value[0].toUpperCase() + value.slice(1)}
+              onChange={selectView}
+            />
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open calendar filters" accessibilityHint={filterSummary}
+            accessibilityState={{ expanded: filterSession !== null }} onPress={openFilters}
+            style={({ pressed }) => [styles.filterButton, filterCount > 0 && styles.filterButtonActive, pressed && styles.pressed]}>
+            <SlidersHorizontal size={20} color={filterCount > 0 ? theme.brandText : theme.ink700} />
+            {filterCount > 0 ? <View style={styles.filterBadge}><Text style={styles.filterBadgeText}>{filterCount}</Text></View> : null}
+          </Pressable>
         </View>
+        <Text testID="calendar-filter-summary" accessibilityLiveRegion="polite" style={styles.filterSummary}>{filterSummary}</Text>
 
         <View style={styles.periodBar}>
           <Pressable accessibilityRole="button" accessibilityLabel="Previous calendar period" onPress={() => move(-1)} style={styles.periodButton}>
@@ -220,7 +263,6 @@ export function TeamCalendarHomeScreen() {
             {errorKind !== 'unauthorized' ? <Action variant="secondary" loading={refreshing} disabled={!query.eligible} onPress={() => { refresh().catch(() => undefined); }}>Retry</Action> : null}
           </View>
         ) : null}
-        {meta ? <Text style={styles.capHint}>Per period: up to 250 events and 250 task deadlines.</Text> : null}
         {meta?.truncated ? (
           <View style={styles.errorBlock}>
             <Notice text={`Results are truncated (${meta.total_events} events, ${meta.total_tasks} task deadlines). Narrow the range or scope to review more.`} tone="warning" />
@@ -250,22 +292,40 @@ export function TeamCalendarHomeScreen() {
           <MonthView items={items} anchor={date} selected={selectedDate} onSelect={setSelectedDate} onOpen={openItem} />
         ) : null}
       </ScrollView>
+      <BottomSheet visible={filterSession !== null && focused} title="Calendar filters" description="Choose whose schedule to see and which events to include. Selections are kept when you close."
+        closeLabel="Close calendar filters" onClose={closeFilters} footer={<View style={styles.filterFooter}>
+          <Action variant="ghost" accessibilityLabel="Reset calendar filters" onPress={resetFilters}>Reset filters</Action>
+          <Action style={styles.filterDone} accessibilityLabel="Done filtering calendar" onPress={closeFilters}>Done</Action>
+        </View>}>
+        <View style={styles.filterGroup}>
+          <Text accessibilityRole="header" style={styles.filterHeading}>Whose schedule</Text>
+          <SegmentedControl label="Calendar scope" values={SCOPES} selected={scope}
+            labelFor={value => value === 'team' ? 'Team' : 'Mine'}
+            onChange={value => { if (isCurrentFilterSession()) { setScope(value); } }} />
+        </View>
+        <View style={styles.filterGroup}>
+          <Text accessibilityRole="header" style={styles.filterHeading}>Event status</Text>
+          <SegmentedControl label="Event status" values={STATUSES} selected={status}
+            labelFor={value => value === 'all' ? 'All events' : value[0].toUpperCase() + value.slice(1)}
+            onChange={value => { if (isCurrentFilterSession()) { setStatus(value); } }} />
+        </View>
+        <Text style={styles.capHint}>Per period: up to 250 events and 250 task deadlines.</Text>
+      </BottomSheet>
     </Screen>
   );
 }
 
-function SegmentedControl<T extends string>({ label, values, selected, labelFor, onChange, compact = false }: {
+function SegmentedControl<T extends string>({ label, values, selected, labelFor, onChange }: {
   label: string;
   values: readonly T[];
   selected: T;
   labelFor: (value: T) => string;
   onChange: (value: T) => void;
-  compact?: boolean;
 }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={[styles.segments, compact && styles.segmentsCompact]}>
+    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={styles.segments}>
       {values.map(value => {
         const active = value === selected;
         return (
@@ -419,13 +479,20 @@ function createStyles(theme: Theme) {
     content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 30 },
     capHint: { ...type.caption, color: theme.ink500, marginTop: 8 },
     segments: { minHeight: 44, flexDirection: 'row', padding: 3, borderRadius: 13, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.surface },
-    segmentsCompact: { minWidth: 0 },
     segment: { minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 8, borderRadius: 10 },
     segmentActive: { backgroundColor: theme.brand },
     segmentText: { ...type.caption, textAlign: 'center', color: theme.ink500, textTransform: 'capitalize' },
     segmentTextActive: { color: '#ffffff' },
-    secondaryFilters: { gap: 8, marginTop: 8 },
-    periodBar: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 11 },
+    toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+    viewControl: { flex: 1 },
+    filterButton: { minWidth: 50, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 13, backgroundColor: theme.surface },
+    filterButtonActive: { backgroundColor: theme.brand50 },
+    filterBadge: { minWidth: 18, minHeight: 18, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', borderRadius: 9, backgroundColor: theme.brand },
+    filterBadgeText: { fontFamily: font.body, fontSize: 10, fontWeight: '800', color: '#ffffff' },
+    filterSummary: { ...type.caption, color: theme.ink500, marginTop: 8, marginBottom: 2 },
+    filterGroup: { gap: 10, marginBottom: 22 }, filterHeading: { ...type.action, color: theme.ink900 },
+    filterFooter: { flexDirection: 'row', alignItems: 'center', gap: 12 }, filterDone: { flex: 1 }, pressed: { opacity: 0.72 },
+    periodBar: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
     periodButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.surface },
     periodLabelButton: { minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center' },
     periodLabel: { ...type.cardTitle, color: theme.ink900 },

@@ -15,7 +15,18 @@ import { useNotificationInbox } from '../src/features/notifications/hooks';
 
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
-jest.mock('../src/api/client', () => ({ ...jest.requireActual('../src/api/client'), request: jest.fn() }));
+jest.mock('../src/api/client', () => {
+  const actual = jest.requireActual('../src/api/client');
+  const mockedRequest = jest.fn();
+  return {
+    ...actual,
+    request: mockedRequest,
+    bindApiClient: (binding?: unknown, version?: number) => {
+      const client = actual.bindApiClient(binding, version);
+      return { ...client, request: (...args: unknown[]) => { client.assertCurrent(); return mockedRequest(...args); } };
+    },
+  };
+});
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }),
 }));

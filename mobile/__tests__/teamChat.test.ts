@@ -3,6 +3,7 @@ import * as teamChatApi from '../src/api/endpoints/teamChat';
 import type { TeamChatMessage } from '../src/api/endpoints/teamChat';
 import {
   buildChatRows,
+  type ChatMessageRow,
   insertMention,
   isAmbiguousSendFailure,
   mentionQueryAt,
@@ -139,6 +140,252 @@ describe('Team Chat cursor and display helpers', () => {
 
   it('uses the exact local realtime invalidation root', () => {
     expect(teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic')).toEqual(['team-chat', 9, 12, 'clinic']);
+  });
+});
+
+describe('Team Chat message grouping', () => {
+  function messageRows(
+    messages: readonly TeamChatMessage[],
+    lastReadId = 0,
+    actorId = 1,
+    includeUnread = true,
+    includeReadMarkers = false,
+  ): ChatMessageRow[] {
+    return buildChatRows(messages, lastReadId, actorId, includeUnread, includeReadMarkers)
+      .filter((row): row is ChatMessageRow => row.kind === 'message');
+  }
+
+  function grouping(rows: readonly ChatMessageRow[]) {
+    return rows.map(row => ({
+      id: row.message.id,
+      startsGroup: row.startsGroup,
+      endsGroup: row.endsGroup,
+    }));
+  }
+
+  it('handles empty and single-message windows as standalone without changing row identities', () => {
+    expect(buildChatRows([], 0, 1)).toEqual([]);
+    const value = message(1);
+    const rows = messageRows([value]);
+    expect(rows).toEqual([{
+      kind: 'message', key: 'message:1', message: value, startsGroup: true, endsGroup: true,
+    }]);
+    expect(rows[0].message).toBe(value);
+  });
+
+  it('groups adjacent sender ids across name changes and mentions through exactly five minutes', () => {
+    const rows = messageRows([
+      message(1, { created_at: '2026-11-06T00:00:00.000Z' }),
+      message(2, { created_at: '2026-11-06T00:05:00.000Z', sender: { id: 2, name: 'Renamed' } }),
+      message(3, {
+        created_at: '2026-11-06T00:05:00.000Z',
+        body: '@Person 2',
+        mentions: [{ user_id: 2, name: 'Person 2', start: 0, length: 9 }],
+      }),
+      message(4, { created_at: '2026-11-06T00:10:00.001Z' }),
+    ]);
+    expect(grouping(rows)).toEqual([
+      { id: 1, startsGroup: true, endsGroup: false },
+      { id: 2, startsGroup: false, endsGroup: false },
+      { id: 3, startsGroup: false, endsGroup: true },
+      { id: 4, startsGroup: true, endsGroup: true },
+    ]);
+  });
+
+  it('breaks both connections at a sender change even when names match', () => {
+    const rows = messageRows([
+      message(1),
+      message(2, { sender: { id: 3, name: 'Person 2' } }),
+      message(3, { created_at: message(1).created_at }),
+    ]);
+    expect(grouping(rows)).toEqual([
+      { id: 1, startsGroup: true, endsGroup: true },
+      { id: 2, startsGroup: true, endsGroup: true },
+      { id: 3, startsGroup: true, endsGroup: true },
+    ]);
+  });
+
+  it('breaks at Manila midnight even within the same UTC day and five-minute interval', () => {
+    const rows = buildChatRows([
+      message(1, { created_at: '2026-11-06T15:59:00Z' }),
+      message(2, { created_at: '2026-11-06T16:00:00Z' }),
+    ], 0, 1);
+    expect(rows.map(row => row.key)).toEqual([
+      'day:2026-11-06:1', 'unread:1', 'message:1', 'day:2026-11-07:2', 'message:2',
+    ]);
+    expect(grouping(rows.filter((row): row is ChatMessageRow => row.kind === 'message'))).toEqual([
+      { id: 1, startsGroup: true, endsGroup: true },
+      { id: 2, startsGroup: true, endsGroup: true },
+    ]);
+  });
+
+  it('groups equivalent timestamps across offsets and UTC days when the Manila day matches', () => {
+    const rows = messageRows([
+      message(1, { created_at: '2026-11-06T23:59:00Z' }),
+      message(2, { created_at: '2026-11-07T08:00:00+08:00' }),
+    ]);
+    expect(grouping(rows)).toEqual([
+      { id: 1, startsGroup: true, endsGroup: false },
+      { id: 2, startsGroup: false, endsGroup: true },
+    ]);
+  });
+
+  it('breaks at the unread divider and regroups when that divider is hidden', () => {
+    const values = [message(1), message(2), message(3, { created_at: message(1).created_at })];
+    const rows = buildChatRows(values, 1, 1);
+    expect(rows.map(row => row.key)).toEqual([
+      'day:2026-11-06:1', 'message:1', 'unread:2', 'message:2', 'message:3',
+    ]);
+    expect(grouping(messageRows(values, 1))).toEqual([
+      { id: 1, startsGroup: true, endsGroup: true },
+      { id: 2, startsGroup: true, endsGroup: false },
+      { id: 3, startsGroup: false, endsGroup: true },
+    ]);
+    const connected = [
+      { id: 1, startsGroup: true, endsGroup: false },
+      { id: 2, startsGroup: false, endsGroup: false },
+      { id: 3, startsGroup: false, endsGroup: true },
+    ];
+    expect(grouping(messageRows(values, 1, 1, false))).toEqual(connected);
+    expect(grouping(messageRows(values, 3))).toEqual(connected);
+    expect(grouping(messageRows(values, 1, 2))).toEqual(connected);
+  });
+
+  it('does not reorder backwards timestamps and starts a new forward group after the break', () => {
+    const rows = messageRows([
+      message(1, { created_at: '2026-11-06T00:02:00Z' }),
+      message(2, { created_at: '2026-11-06T00:01:00Z' }),
+      message(3, { created_at: '2026-11-06T00:02:00Z' }),
+    ]);
+    expect(grouping(rows)).toEqual([
+      { id: 1, startsGroup: true, endsGroup: true },
+      { id: 2, startsGroup: true, endsGroup: false },
+      { id: 3, startsGroup: false, endsGroup: true },
+    ]);
+  });
+
+  it.each(['not-a-date', '', '2026-13-06T00:00:00Z'])(
+    'makes invalid timestamps standalone and breaks either connection (%p)',
+    created_at => {
+      const rows = messageRows([
+        message(1),
+        message(2, { created_at }),
+        message(3, { created_at }),
+        message(4, { created_at: message(1).created_at }),
+      ]);
+      expect(grouping(rows)).toEqual([
+        { id: 1, startsGroup: true, endsGroup: true },
+        { id: 2, startsGroup: true, endsGroup: true },
+        { id: 3, startsGroup: true, endsGroup: true },
+        { id: 4, startsGroup: true, endsGroup: true },
+      ]);
+    },
+  );
+
+  it.each<{ label: string; changes: Partial<TeamChatMessage> }>([
+    { label: 'reply', changes: { reply_to: { id: 9, sender_name: 'Person 9', body: 'Original' } } },
+    { label: 'task reference', changes: { tasks: [{ id: 7, title: 'Task 7' }] } },
+    {
+      label: 'reply with task reference',
+      changes: {
+        reply_to: { id: 9, sender_name: 'Person 9', body: 'Original' },
+        tasks: [{ id: 7, title: 'Task 7' }],
+      },
+    },
+  ])('keeps a $label standalone while grouping its unaffected neighbors', ({ changes }) => {
+    const created_at = message(1).created_at;
+    const values = [
+      message(1), message(2), message(3, { ...changes, created_at }),
+      message(4, { created_at }), message(5, { created_at }),
+    ];
+    expect(grouping(messageRows(values))).toEqual([
+      { id: 1, startsGroup: true, endsGroup: false },
+      { id: 2, startsGroup: false, endsGroup: true },
+      { id: 3, startsGroup: true, endsGroup: true },
+      { id: 4, startsGroup: true, endsGroup: false },
+      { id: 5, startsGroup: false, endsGroup: true },
+    ]);
+    expect(messageRows(values)[2].message).toBe(values[2]);
+  });
+
+  it('keeps ordered ids, keys, objects and structural rows stable with or without read markers', () => {
+    const first = Object.freeze(message(1));
+    const second = Object.freeze(message(2));
+    const third = Object.freeze(message(3));
+    const values = Object.freeze([third, first, second]);
+    const withoutMarkers = buildChatRows(values, 1, 1);
+    const withMarkers = buildChatRows(values, 1, 1, true, true);
+    expect(withoutMarkers.map(row => row.key)).toEqual([
+      'day:2026-11-06:1', 'message:1', 'unread:2', 'message:2', 'day:2026-11-07:3', 'message:3',
+    ]);
+    expect(withMarkers.map(row => row.key)).toEqual([
+      'day:2026-11-06:1', 'message:1', 'read-marker:1', 'unread:2',
+      'message:2', 'read-marker:2', 'day:2026-11-07:3', 'message:3', 'read-marker:3',
+    ]);
+    expect(withMarkers.filter(row => row.kind !== 'read-marker')).toEqual(withoutMarkers);
+    const rows = withMarkers.filter((row): row is ChatMessageRow => row.kind === 'message');
+    expect(rows.map(row => row.message.id)).toEqual([1, 2, 3]);
+    [first, second, third].forEach((value, index) => {
+      expect(rows[index].message).toBe(value);
+      expect(value).not.toHaveProperty('startsGroup');
+      expect(value).not.toHaveProperty('endsGroup');
+    });
+    expect(values[0]).toBe(third);
+    expect(values[1]).toBe(first);
+    expect(values[2]).toBe(second);
+    withMarkers.forEach((row, index) => {
+      if (row.kind !== 'message') { return; }
+      expect(withMarkers[index + 1]).toEqual({
+        kind: 'read-marker', key: `read-marker:${row.message.id}`, messageId: row.message.id,
+      });
+    });
+    expect(new Set(withMarkers.map(row => row.key)).size).toBe(withMarkers.length);
+  });
+
+  it.each([true, false])('ignores read markers inside groups with includeUnread=%p', includeUnread => {
+    const values = [message(1), message(2), message(3, { created_at: message(1).created_at })];
+    const withMarkers = buildChatRows(values, 0, 1, includeUnread, true);
+    expect(withMarkers.filter(row => row.kind !== 'read-marker'))
+      .toEqual(buildChatRows(values, 0, 1, includeUnread));
+    expect(grouping(messageRows(values, 0, 1, includeUnread, true))).toEqual([
+      { id: 1, startsGroup: true, endsGroup: false },
+      { id: 2, startsGroup: false, endsGroup: false },
+      { id: 3, startsGroup: false, endsGroup: true },
+    ]);
+    expect(withMarkers.filter(row => row.kind === 'read-marker')).toEqual([
+      { kind: 'read-marker', key: 'read-marker:1', messageId: 1 },
+      { kind: 'read-marker', key: 'read-marker:2', messageId: 2 },
+      { kind: 'read-marker', key: 'read-marker:3', messageId: 3 },
+    ]);
+  });
+
+  it.each([true, false])('regroups an appended message without mutating previous rows or objects (markers=%p)', includeReadMarkers => {
+    const first = Object.freeze(message(1));
+    const second = Object.freeze(message(2));
+    const current = [first];
+    const previous = buildChatRows(current, 0, 1, true, includeReadMarkers);
+    previous.forEach(row => Object.freeze(row));
+    const next = mergeChatMessages(current, [second], 'newer');
+    const appended = buildChatRows(next, 0, 1, true, includeReadMarkers);
+    const appendedMessages = appended.filter((row): row is ChatMessageRow => row.kind === 'message');
+    expect(grouping(appendedMessages)).toEqual([
+      { id: 1, startsGroup: true, endsGroup: false },
+      { id: 2, startsGroup: false, endsGroup: true },
+    ]);
+    expect(grouping(previous.filter((row): row is ChatMessageRow => row.kind === 'message'))).toEqual([
+      { id: 1, startsGroup: true, endsGroup: true },
+    ]);
+    expect(appendedMessages[0].key).toBe('message:1');
+    expect(appendedMessages[0].message).toBe(first);
+    expect(appendedMessages[1].message).toBe(second);
+    expect(appended.filter(row => row.kind !== 'message' && row.key !== 'read-marker:2'))
+      .toEqual(previous.filter(row => row.kind !== 'message'));
+    const later = mergeChatMessages(next, [message(3, { created_at: '2026-11-06T00:05:00.001Z' })], 'newer');
+    expect(grouping(messageRows(later, 0, 1, true, includeReadMarkers))).toEqual([
+      { id: 1, startsGroup: true, endsGroup: false },
+      { id: 2, startsGroup: false, endsGroup: true },
+      { id: 3, startsGroup: true, endsGroup: true },
+    ]);
   });
 });
 

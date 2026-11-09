@@ -154,7 +154,7 @@ it('keeps unauthorized users on an ordinary four-tab bar without a center CTA', 
   expect(renderer!.root.findAll(node => node.props.accessibilityRole === 'tab' && typeof node.props.onPress === 'function')).toHaveLength(4);
 });
 
-it.each([PersonalTabs, WorkspaceTabs, ContextTabs])('uses matching opaque native motion in production %p', Component => {
+it.each([PersonalTabs, WorkspaceTabs, ContextTabs])('separates peer fades from outer context motion in production %p', Component => {
   jest.mocked(useWorkspace).mockReturnValue(workspace({ personalEnabled: true, workEnabled: true }));
   jest.mocked(useReducedMotion).mockReturnValue(false);
   Dimensions.set({ window: { width: 360, height: 800, scale: 3, fontScale: 1 } });
@@ -163,12 +163,21 @@ it.each([PersonalTabs, WorkspaceTabs, ContextTabs])('uses matching opaque native
     const raw = renderer!.root.findByProps({ testID: 'navigator' }).props.screenOptions;
     return typeof raw === 'function' ? raw({ route: { name: 'Home' } }) : raw;
   };
-  expect(getOptions()).toMatchObject({ animation: 'shift', lazy: false, freezeOnBlur: true, transitionSpec: { config: { duration: 240 } } });
+  const context = Component === ContextTabs;
+  expect(getOptions()).toMatchObject({ animation: context ? 'shift' : 'fade', lazy: !context, freezeOnBlur: true, transitionSpec: { config: { duration: context ? 240 : 160 } } });
   const scene = getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(0.5) } }).sceneStyle;
-  expect(scene.opacity).toBeUndefined();
-  expect(scene.transform[0].translateX.__getValue()).toBe(180);
-  act(() => Dimensions.set({ window: { width: 800, height: 360, scale: 3, fontScale: 1 } }));
-  expect(getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(1) } }).sceneStyle.transform[0].translateX.__getValue()).toBe(800);
+  if (context) {
+    expect(scene.opacity).toBeUndefined();
+    expect(scene.transform[0].translateX.__getValue()).toBe(180);
+    act(() => Dimensions.set({ window: { width: 800, height: 360, scale: 3, fontScale: 1 } }));
+    expect(getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(1) } }).sceneStyle.transform[0].translateX.__getValue()).toBe(800);
+  } else {
+    expect(scene.transform).toBeUndefined();
+    expect(scene.opacity.__getValue()).toBe(0.5);
+    for (const value of [-1, 0, 1]) {
+      expect(getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(value) } }).sceneStyle.opacity.__getValue()).toBe(value === 0 ? 1 : 0);
+    }
+  }
   jest.mocked(useReducedMotion).mockReturnValue(true);
   act(() => renderer!.update(<Component />));
   expect(getOptions()).toMatchObject({ animation: 'none', transitionSpec: { config: { duration: 0 } } });

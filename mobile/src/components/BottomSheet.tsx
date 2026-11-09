@@ -1,7 +1,9 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
+import { motion } from '../lib/motion';
+import { useSheetDrag } from './useSheetDrag';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { useReducedMotion } from '../lib/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
@@ -32,19 +34,23 @@ export function BottomSheet(props: BottomSheetProps) {
       nativeVisible={presentation.nativeVisible}
       progress={presentation.progress}
       onNativeDismiss={presentation.onNativeDismiss}
+      onReady={presentation.onReady}
+      settled={presentation.settled}
       abandoned={presentation.abandoned}
     />
-  ));
+  ), { timing: motion.sheet, waitForLayout: true });
 }
 
 type SurfaceProps = BottomSheetProps & {
   nativeVisible: boolean;
   progress: Animated.Value;
   onNativeDismiss: () => void;
+  onReady: () => void;
+  settled: boolean;
   abandoned: boolean;
 };
 
-function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss, abandoned, title, description, children, footer, onClose, dismissible = true, closeLabel = 'Close sheet', testID }: SurfaceProps) {
+function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss, onReady, settled, abandoned, title, description, children, footer, onClose, dismissible = true, closeLabel = 'Close sheet', testID }: SurfaceProps) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const insets = useSafeAreaInsets();
@@ -53,52 +59,38 @@ function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss,
   const reveal = useKeyboardViewport({ enabled: visible && !abandoned, keyboardVisible: keyboard, overlay: true });
   const reduced = useReducedMotion();
   const [availableHeight, setAvailableHeight] = useState(height);
+  const [travelHeight, setTravelHeight] = useState(Math.max(1, height - insets.top - 24));
+  const measuredHeight = useRef(travelHeight);
+  const entryAvailable = useRef(false);
+  const ready = useRef(false);
+  const fallbackFrame = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  const alive = useRef(false);
   const { heading, capture, onShow, requestRestore } = useOverlayFocus(visible, undefined, abandoned);
-  const drag = useRef(new Animated.Value(0)).current;
-  const dragAnimation = useRef<Animated.CompositeAnimation | null>(null);
-  const closeRequested = useRef(false);
-  const latest = useRef({ onClose, dismissible, visible });
-  latest.current = { onClose, dismissible, visible };
-  // Capture only when granted a real presentation, not while queued. Restoration
-  // is completed by the retained native host, not by an abandoned requester.
+  const latest = useRef({ visible, abandoned, onReady });
+  latest.current = { visible, abandoned, onReady };
+  const releaseEntry = useCallback(() => {
+    if (!alive.current || !entryAvailable.current || ready.current || !latest.current.visible || latest.current.abandoned) { return; }
+    ready.current = true;
+    setTravelHeight(measuredHeight.current);
+    latest.current.onReady();
+  }, []);
   useLayoutEffect(() => {
+    alive.current = true;
     capture();
-    return () => { dragAnimation.current?.stop(); drag.stopAnimation(); };
-  }, [drag, capture]);
+    return () => {
+      alive.current = false;
+      if (fallbackFrame.current !== null) { cancelAnimationFrame(fallbackFrame.current); }
+    };
+  }, [capture]);
+  // A pre-hide reversal can reuse readiness without another native show/layout.
   useLayoutEffect(() => {
-    if (!visible) { closeRequested.current = false; }
-  }, [visible]);
-
-  function requestClose() {
-    if (!latest.current.visible || !latest.current.dismissible || closeRequested.current) { return; }
-    closeRequested.current = true;
-    requestRestore();
-    latest.current.onClose();
-  }
-
-  const responder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => latest.current.visible && latest.current.dismissible && !closeRequested.current && !keyboard && gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
-    onPanResponderGrant: () => { dragAnimation.current?.stop(); drag.stopAnimation(); },
-    onPanResponderMove: (_, gesture) => {
-      if (latest.current.visible && latest.current.dismissible && !keyboard) { drag.setValue(Math.max(0, gesture.dy)); }
-    },
-    onPanResponderRelease: (_, gesture) => {
-      if (!latest.current.visible || !latest.current.dismissible || closeRequested.current) { drag.setValue(0); return; }
-      if (!keyboard && (gesture.dy > 80 || gesture.vy > 0.8)) {
-        closeRequested.current = true;
-        requestRestore();
-        // Reset the optional gesture offset if the controlled parent rejects a
-        // close; the presentation exit still supplies its own slide distance.
-        drag.setValue(0);
-        latest.current.onClose();
-      } else if (reduced || keyboard) { drag.setValue(0); }
-      else {
-        dragAnimation.current = Animated.spring(drag, { toValue: 0, useNativeDriver: true, overshootClamping: true });
-        dragAnimation.current.start();
-      }
-    },
-    onPanResponderTerminate: () => { dragAnimation.current?.stop(); drag.setValue(0); },
-  }), [drag, requestRestore, keyboard, reduced]);
+    if (visible && !abandoned) { releaseEntry(); }
+  }, [abandoned, releaseEntry, visible]);
+  // Geometry may change while open, but an active entry/exit keeps its travel.
+  useLayoutEffect(() => {
+    if (visible && settled) { setTravelHeight(measuredHeight.current); }
+  }, [settled, visible]);
+  const { drag, responder, requestClose } = useSheetDrag({ visible, settled, dismissible, abandoned, keyboard, reduced, travelHeight, onClose, requestRestore });
 
   const topGap = insets.top + 24;
   const layout = { maxHeight: Math.max(0, Math.min(height, availableHeight) - topGap), paddingBottom: keyboard ? 8 : Math.max(12, insets.bottom) };
@@ -111,10 +103,20 @@ function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss,
       navigationBarTranslucent
       onRequestClose={requestClose}
       onDismiss={() => { onNativeDismiss(); }}
-      onShow={onShow}>
+      onShow={() => {
+        onShow();
+        if (!ready.current && fallbackFrame.current === null) {
+          fallbackFrame.current = requestAnimationFrame(() => {
+            fallbackFrame.current = null;
+            if (!alive.current || latest.current.abandoned) { return; }
+            entryAvailable.current = true;
+            releaseEntry();
+          });
+        }
+      }}>
       <View style={styles.overlay} accessibilityViewIsModal importantForAccessibility="yes" testID={testID}>
         <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: progress }]}>
-          <Pressable accessible={false} importantForAccessibility="no" disabled={!dismissible || !visible || closeRequested.current} onPress={requestClose} style={StyleSheet.absoluteFill} />
+          <Pressable accessible={false} importantForAccessibility="no" disabled={!dismissible || !visible || abandoned} onPress={requestClose} style={StyleSheet.absoluteFill} />
         </Animated.View>
         <KeyboardAvoidingView
           style={styles.position}
@@ -128,10 +130,17 @@ function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss,
             collapsable={false}
             onLayout={event => { setAvailableHeight(event.nativeEvent.layout.height); reveal.onRegionLayout(event); }}>
             <View style={[styles.available, reveal.overlapStyle]} pointerEvents="box-none">
-            <Animated.View style={[
+            <Animated.View onLayout={event => {
+              const next = event.nativeEvent.layout.height;
+              if (!alive.current || latest.current.abandoned || !Number.isFinite(next) || next <= 0) { return; }
+              measuredHeight.current = next;
+              entryAvailable.current = true;
+              if (!ready.current) { releaseEntry(); }
+              else if (latest.current.visible && settled) { setTravelHeight(next); }
+            }} style={[
               styles.sheet,
               layout,
-              { transform: [{ translateY: Animated.add(progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] }), drag) }] },
+              { transform: [{ translateY: Animated.add(progress.interpolate({ inputRange: [0, 1], outputRange: [travelHeight, 0] }), Animated.multiply(progress, drag)) }] },
             ]}>
               {dismissible ? (
                 <View {...responder.panHandlers} style={styles.handleTarget} accessible={false} importantForAccessibility="no">
@@ -143,7 +152,7 @@ function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss,
                   <Text ref={heading} accessible accessibilityRole="header" style={styles.title}>{title}</Text>
                   {description ? <Text style={styles.description}>{description}</Text> : null}
                 </View>
-                {dismissible ? <IconAction label={closeLabel} icon={<X size={20} color={theme.ink700} />} disabled={!visible} onPress={requestClose} /> : null}
+                {dismissible ? <IconAction label={closeLabel} icon={<X size={20} color={theme.ink700} />} disabled={!visible || abandoned} onPress={requestClose} /> : null}
               </View>
               <KeyboardRevealContext.Provider value={reveal.context}>
                 <ScrollView style={styles.body} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false} {...reveal.scrollProps}>
