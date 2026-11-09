@@ -1,4 +1,4 @@
-import { useWindowDimensions } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import { useTheme } from '../theme/ThemeProvider';
 import { motion, motionEasing } from '../lib/motion';
@@ -26,19 +26,20 @@ export function useTabMotionOptions(): BottomTabNavigationOptions {
   };
 }
 
-/** Peer destinations fade without inheriting the outer context slide. */
+/** Android peers switch opaquely; iOS keeps the independent peer fade. */
 export function usePeerTabMotionOptions(): BottomTabNavigationOptions {
   const { theme } = useTheme();
   const reduced = useReducedMotion();
+  const animated = Platform.OS !== 'android' && !reduced;
   return {
     headerShown: false,
     lazy: true,
     freezeOnBlur: true,
-    animation: reduced ? 'none' : 'fade',
+    animation: animated ? 'fade' : 'none',
     sceneStyle: { flex: 1, backgroundColor: theme.canvas, overflow: 'hidden' },
-    sceneStyleInterpolator: reduced ? undefined : ({ current }) => ({
+    sceneStyleInterpolator: animated ? ({ current }) => ({
       sceneStyle: { opacity: current.progress.interpolate({ inputRange: [-1, 0, 1], outputRange: [0, 1, 0], extrapolate: 'clamp' }) },
-    }),
-    transitionSpec: { animation: 'timing', config: { duration: reduced ? 0 : motion.tabs.durationMs, easing: motionEasing } },
+    }) : undefined,
+    transitionSpec: { animation: 'timing', config: { duration: animated ? motion.tabs.durationMs : 0, easing: motionEasing } },
   };
 }

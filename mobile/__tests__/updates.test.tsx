@@ -1,17 +1,22 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { Bell, CalendarCheck2, ClipboardList, Megaphone } from 'lucide-react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { useIsFocused } from '@react-navigation/native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { ApiError, request } from '../src/api/client';
 import { queryKeys } from '../src/api/queryKeys';
 import { Action } from '../src/components/Action';
 import { PageHeader } from '../src/components/PageHeader';
+import { Skeleton } from '../src/components/Skeleton';
 import { AnnouncementsScreen } from '../src/features/announcements/screens/AnnouncementsScreen';
 import { AnnouncementDetailScreen } from '../src/features/announcements/screens/AnnouncementDetailScreen';
 import { announcementDetail, announcementListing } from '../src/features/announcements/model';
 import { NotificationsScreen } from '../src/features/notifications/screens/NotificationsScreen';
 import { useNotificationInbox } from '../src/features/notifications/hooks';
+import { useTheme } from '../src/theme/ThemeProvider';
+import { darkTheme, lightTheme, palette } from '../src/theme/tokens';
+import { formatDate, formatTime } from '../src/lib/format';
 
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
@@ -27,9 +32,7 @@ jest.mock('../src/api/client', () => {
     },
   };
 });
-jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }),
-}));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
 jest.mock('../src/features/workspace/WorkspaceContext', () => ({ useWorkspace: () => ({ openAuthorizedUnit: jest.fn() }) }));
@@ -132,6 +135,7 @@ beforeEach(() => {
   mockRequest.mockReset();
   mockGoBack.mockReset();
   mockNavigate.mockReset();
+  jest.mocked(useTheme).mockReturnValue({ theme: lightTheme, mode: 'light', preference: 'system', setPreference: jest.fn() });
   jest.mocked(useIsFocused).mockReturnValue(true);
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
 });
@@ -140,6 +144,7 @@ afterEach(() => {
   act(() => { renderer?.unmount(); });
   renderer = undefined;
   client.clear();
+  onlineManager.setOnline(true);
   jest.useRealTimers();
 });
 
@@ -149,6 +154,52 @@ describe('announcement API rows and list', () => {
     expect(response.data[0]).toEqual({ ...story, id: 41 });
     expect(response.meta).toEqual(announcementPage().meta);
     expect(announcementDetail({ data: article }).data).toEqual({ ...article, id: 41 });
+  });
+
+  it.each([
+    [AnnouncementsScreen, 'Loading announcements…'],
+    [NotificationsScreen, 'Loading notifications…'],
+  ])('shows a genuine initial region loader without a false empty result (%#)', async (Component, label) => {
+    mockRequest.mockImplementation(() => new Promise(() => {}));
+    await render(<Component />);
+    expect(renderer!.root.findByType(Skeleton).props.label).toBe(label);
+    expect(text('No announcements')).toBe(false);
+    expect(text('Nothing yet')).toBe(false);
+  });
+
+  it.each([
+    [AnnouncementsScreen, 'Waiting to load announcements'],
+    [NotificationsScreen, 'Waiting to load notifications'],
+  ])('waits truthfully when the current query is offline/paused (%#)', async (Component, title) => {
+    onlineManager.setOnline(false);
+    await render(<Component />);
+    expect(mockRequest).not.toHaveBeenCalled();
+    expect(text(title)).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(text('No announcements')).toBe(false);
+    expect(text('Nothing yet')).toBe(false);
+  });
+
+  it.each([
+    [AnnouncementsScreen, announcementPage(1, 1, []), 'No announcements'],
+    [NotificationsScreen, notificationPage(1, 1, [], 0), 'Nothing yet'],
+  ])('keeps successful empty data visible after a transient refresh error (%#)', async (Component, response, title) => {
+    mockRequest.mockResolvedValueOnce(response).mockRejectedValueOnce(new Error('Offline'));
+    await render(<Component />);
+    expect(text(title)).toBe(true);
+    await act(async () => { await client.refetchQueries({ type: 'active' }); }); await settle();
+    expect(text(title)).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(action('Retry')).toBeDefined();
+  });
+
+  it.each([401, 403, 404])('hides cached announcements after an authoritative %s response', async status => {
+    mockRequest.mockResolvedValueOnce(announcementPage()).mockRejectedValueOnce(new ApiError(status, { code: 'denied', message: 'Unavailable' }));
+    await render(<AnnouncementsScreen />);
+    act(() => renderer!.root.findByType(FlatList).props.onRefresh()); await settle();
+    expect(text(story.title)).toBe(false);
+    expect(text('Could not load announcements.')).toBe(true);
+    expect(renderer!.root.findAllByType(FlatList)).toHaveLength(0);
   });
 
   it('uses real featured/latest stories, pages in both directions, and resets filters', async () => {
@@ -218,7 +269,8 @@ describe('announcement detail navigation and state', () => {
   it('keeps the back header while loading', async () => {
     mockRequest.mockImplementation(() => new Promise(() => {}));
     await render(<AnnouncementDetailScreen />);
-    expect(renderer!.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+    expect(renderer!.root.findByType(Skeleton).props.label).toBe('Loading announcement…');
+    expect(renderer!.root.findAllByType(ActivityIndicator)).toHaveLength(0);
     act(() => { renderer!.root.findByType(PageHeader).props.onBack(); });
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
@@ -255,6 +307,13 @@ describe('announcement detail navigation and state', () => {
 });
 
 describe('notification history, polling and read state', () => {
+  const categories = [
+    { title: 'Appointment confirmed', icon: CalendarCheck2, color: undefined },
+    { title: 'New announcement', icon: Megaphone, color: palette.gold600 },
+    { title: 'New survey', icon: ClipboardList, color: palette.violet600 },
+    { title: 'Other update', icon: Bell, color: palette.blue600 },
+  ];
+
   it('uses only paged history, supports previous/next and unread filtering, and polls the displayed source', async () => {
     mockRequest.mockImplementation((path: string) => Promise.resolve(notificationPage(path.includes('page=2') ? 2 : 1)));
     await render(<NotificationsScreen />);
@@ -324,16 +383,68 @@ describe('notification history, polling and read state', () => {
     expect(renderer!.root.findAllByType(Action).some(node => node.props.children === 'Mark all read')).toBe(false);
   });
 
-  it('spans the unread highlight across the full device width', async () => {
-    mockRequest.mockResolvedValue(notificationPage(1, 1, [notification], 1));
+  it.each([lightTheme, darkTheme])('spans unread rows edge to edge with exact readable colors in $mode mode', async theme => {
+    jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference: jest.fn() });
+    const items = categories.map((category, index) => ({
+      ...notification, id: 81 + index, title: category.title, message: `${category.title} message`,
+    }));
+    mockRequest.mockResolvedValue(notificationPage(1, 1, items, items.length));
     await render(<NotificationsScreen />);
-    // The list itself must cancel the Screen's 18px gutter; otherwise the unread
-    // tint and its divider stop short of the device edges.
     const list = renderer!.root.findByType(FlatList);
     expect(StyleSheet.flatten(list.props.style)).toMatchObject({ marginHorizontal: -18 });
-    const row = renderer!.root.findAll(node =>
-      node.props.accessibilityLabel?.startsWith(notification.title) && typeof node.props.onPress === 'function')[0];
-    expect(StyleSheet.flatten(row.props.style).backgroundColor).toBeTruthy();
+    categories.forEach((category, index) => {
+      const row = list.findAll(node =>
+        node.props.accessibilityLabel?.startsWith(category.title) && typeof node.props.onPress === 'function')[0];
+      expect(row.props.disabled).toBe(false);
+      expect(row.props.accessibilityLabel).toContain('Mark as read');
+      expect(StyleSheet.flatten(row.props.style)).toMatchObject({
+        paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: theme.line,
+        backgroundColor: theme.mode === 'dark' ? '#ffffff' : theme.brand,
+      });
+      const descendants = row.findAllByType(Text);
+      expect(descendants).toHaveLength(3);
+      const [title, message, time] = descendants;
+      expect(title.props.children).toBe(category.title);
+      expect(message.props.children).toBe(items[index].message);
+      expect(React.Children.toArray(time.props.children).join('')).toBe(`${formatDate(notification.created_at)} · ${formatTime(notification.created_at)}`);
+      expect(StyleSheet.flatten(title.props.style).color).toBe(theme.mode === 'dark' ? lightTheme.ink900 : '#ffffff');
+      expect(StyleSheet.flatten(message.props.style).color).toBe(theme.mode === 'dark' ? lightTheme.ink500 : '#ffffff');
+      expect(StyleSheet.flatten(time.props.style).color).toBe(theme.mode === 'dark' ? lightTheme.ink500 : '#ffffff');
+      expect(row.findByType(category.icon).props).toMatchObject({
+        size: 18, color: theme.mode === 'dark' ? (category.color ?? lightTheme.brandIcon) : '#ffffff',
+      });
+      const dots = row.findAllByType(View).filter(node => {
+        const style = StyleSheet.flatten(node.props.style);
+        return style?.width === 7 && style?.height === 7;
+      });
+      expect(dots).toHaveLength(1);
+      expect(StyleSheet.flatten(dots[0].props.style)).toMatchObject({
+        borderRadius: 999, backgroundColor: theme.mode === 'dark' ? lightTheme.brand : '#ffffff',
+      });
+    });
+  });
+
+  it.each([lightTheme, darkTheme])('leaves read-row foregrounds and semantic category icons unchanged in $mode mode', async theme => {
+    jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference: jest.fn() });
+    const items = categories.map((category, index) => ({
+      ...notification, id: 81 + index, title: category.title, read_at: '2026-10-26T09:00:00Z',
+    }));
+    mockRequest.mockResolvedValue(notificationPage(1, 1, items, 0));
+    await render(<NotificationsScreen />);
+    categories.forEach(category => {
+      const row = renderer!.root.findAll(node =>
+        node.props.accessibilityLabel?.startsWith(category.title) && typeof node.props.onPress === 'function')[0];
+      expect(row.props.disabled).toBe(true);
+      expect(row.props.accessibilityLabel).toBe(`${category.title}. ${notification.message}. Read`);
+      expect(StyleSheet.flatten(row.props.style).backgroundColor).toBeUndefined();
+      expect(row.findAllByType(Text).map(node => StyleSheet.flatten(node.props.style).color)).toEqual([
+        theme.ink900, theme.ink500, theme.ink400,
+      ]);
+      expect(row.findByType(category.icon).props).toMatchObject({ size: 18, color: category.color ?? theme.brandIcon });
+      expect(row.findAllByType(View).filter(node => StyleSheet.flatten(node.props.style)?.width === 7)).toHaveLength(0);
+    });
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('distinguishes a history error from empty and retries the same source', async () => {    mockRequest.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(notificationPage(1, 1, [], 0));
@@ -467,13 +578,17 @@ describe('notification deep links', () => {
     expect(mockRequest).toHaveBeenCalledWith('api/v1/notifications/84/read', { method: 'POST' });
   });
 
-  it('keeps an already read notice openable without repeating the read mutation', async () => {
+  it.each([lightTheme, darkTheme])('keeps an already read notice openable without repeating the read mutation in $mode mode', async theme => {
+    jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference: jest.fn() });
     const read = { ...notification, id: 85, read_at: '2026-10-26T09:00:00Z', target: { kind: 'announcement', id: 41 } };
     mockRequest.mockResolvedValue(notificationPage(1, 1, [read], 0));
     await render(<NotificationsScreen />);
     const row = rowFor(notification.title);
     expect(row.props.disabled).toBe(false);
     expect(row.props.accessibilityLabel).toContain('Opens the related item');
+    expect(StyleSheet.flatten(row.props.style).backgroundColor).toBeUndefined();
+    expect(row.findAllByType(Text).map(node => StyleSheet.flatten(node.props.style).color)).toEqual([theme.ink900, theme.ink500, theme.ink400]);
+    expect(row.findByType(Megaphone).props.color).toBe(palette.gold600);
     act(() => { row.props.onPress(); });
     await settle();
     expect(mockNavigate).toHaveBeenCalledWith('AnnouncementDetail', { id: 41 });

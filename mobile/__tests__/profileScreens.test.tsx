@@ -13,6 +13,7 @@ import type { User } from '../src/api/types';
 import { Action } from '../src/components/Action';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
 import { EmptyState } from '../src/components/EmptyState';
+import { Skeleton } from '../src/components/Skeleton';
 import { ProfilePhotoScreen } from '../src/features/profile/screens/ProfilePhotoScreen';
 import { RecordsScreen } from '../src/features/profile/screens/RecordsScreen';
 import { SettingsScreen } from '../src/features/profile/screens/SettingsScreen';
@@ -345,7 +346,7 @@ describe('ProfilePhotoScreen', () => {
 
 describe('RecordsScreen', () => {
   it('distinguishes a real loading failure from empty data and offers retry', async () => {
-    appointments([], { isError: true });
+    appointments([], { data: undefined, isError: true, error: new Error('Offline') });
     render(<RecordsScreen />);
     expect(renderer!.root.findByType(EmptyState).props.title).toBe('Could not load appointment history');
     await act(async () => renderer!.root.findByType(Action).props.onPress());
@@ -353,6 +354,43 @@ describe('RecordsScreen', () => {
     appointments();
     act(() => renderer!.update(<RecordsScreen />));
     expect(renderer!.root.findByType(EmptyState).props.title).toBe('No completed appointments yet');
+  });
+
+  it.each(['fetching', 'paused', 'idle'] as const)('separates initial history %s from successful empty data', fetchStatus => {
+    appointments([], { data: undefined, isPending: true, fetchStatus });
+    render(<RecordsScreen />);
+    if (fetchStatus === 'fetching') {
+      expect(renderer!.root.findByType(Skeleton).props.label).toBe('Loading appointment history…');
+      expect(renderer!.root.findAllByType(EmptyState)).toHaveLength(0);
+    } else {
+      expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+      expect(renderer!.root.findByType(EmptyState).props.title).toBe('Waiting to load appointment history');
+    }
+  });
+
+  it.each([{ data: [] }, { data: [appointment(1, '2026-10-14')] }])('keeps cached history during loading and refresh failure (%#)', ({ data }) => {
+    appointments(data, { isLoading: true, isFetching: true });
+    render(<RecordsScreen />);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    const list = renderer!.root.findAllByType(SectionList)[0];
+    appointments(data, { isError: true, error: new Error('Offline') });
+    act(() => renderer!.update(<RecordsScreen />));
+    expect(hasText('Could not refresh appointment history. Showing saved history.')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    if (data.length) {
+      expect(renderer!.root.findByType(SectionList)).toBe(list);
+      expect(hasText('Clinic appointment')).toBe(true);
+    } else {
+      expect(renderer!.root.findByType(EmptyState).props.title).toBe('No completed appointments yet');
+    }
+  });
+
+  it.each([401, 403, 404])('hides cached history after an authoritative %s response', status => {
+    appointments([appointment(1, '2026-10-14')], { isError: true, error: new ApiError(status, { code: 'denied', message: 'Unavailable' }) });
+    render(<RecordsScreen />);
+    expect(renderer!.root.findAllByType(SectionList)).toHaveLength(0);
+    expect(hasText('Clinic appointment')).toBe(false);
+    expect(renderer!.root.findByType(EmptyState).props.title).toBe('Could not load appointment history');
   });
 
   it('groups completed appointments in memoized virtualized sections, not clinical summaries', () => {
@@ -432,6 +470,18 @@ describe('SettingsScreen and PrivacySecurityScreen', () => {
 });
 
 describe('AppearanceScreen', () => {
+  it.each([lightTheme, darkTheme])('omits the obsolete action-color note in $mode mode', theme => {
+    jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference });
+    render(<AppearanceScreen />);
+    expect(hasText('Maroon remains the primary action color in both themes, matching the SYNAPSE web portal.')).toBe(false);
+    expect(renderer!.root.findAllByType(Text).some(node =>
+      String(node.props.children).includes('Maroon remains the primary action color'))).toBe(false);
+    expect(button('Match system').props.accessibilityState).toEqual({ checked: true });
+    expect(button('Light')).toBeDefined();
+    expect(button('Dark')).toBeDefined();
+    expect(StyleSheet.flatten(image().parent!.props.style).backgroundColor).toBe(theme.surface);
+  });
+
   it('previews the resolved system theme and exposes working accessible radio choices', () => {
     jest.mocked(useTheme).mockReturnValue({ theme: darkTheme, mode: 'dark', preference: 'system', setPreference });
     render(<AppearanceScreen />);

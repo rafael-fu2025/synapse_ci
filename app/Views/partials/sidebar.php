@@ -119,7 +119,7 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <li class="nav-item"><a class="nav-link <?= $isActive('portal/surveys') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/surveys')) ?>"><span class="nav-icon"><i class="bi bi-clipboard-check"></i></span><span class="nav-text">My Surveys</span></a></li>
         <?php endif; ?>
         <?php if (!empty($currentUser['person_id']) && $role !== 'guest'): ?>
-          <li class="nav-item"><a class="nav-link <?= $isActive('portal/settings') ? 'active' : '' ?>" data-app-modal-open href="<?= esc(PortalContext::urlFor('main', 'portal/settings')) ?>"><span class="nav-icon"><i class="bi bi-person-gear" aria-hidden="true"></i></span><span class="nav-text">Profile &amp; Settings</span></a></li>
+          <li class="nav-item"><a class="nav-link <?= $isActive('portal/settings') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/settings')) ?>"><span class="nav-icon"><i class="bi bi-person-gear" aria-hidden="true"></i></span><span class="nav-text">Profile &amp; Settings</span></a></li>
         <?php endif; ?>
 
         <?php if ($canAuditNavigation || $canReportsDashboard || $canExportNavigation): ?>

@@ -44,7 +44,6 @@ final class ProfileSettingsController extends BaseController
             $health = (new \App\Models\HealthProfileModel())->findByPersonId($actor['person_id']) ?? [];
             return view('portal/settings', [
                 'title' => 'Profile & Settings', 'person' => $person, 'actor' => $actor,
-                'cancelUrl' => site_url('portal'), 'formModalPage' => true, 'modalSize' => '',
                 'hasPhoto' => $hasPhoto,
                 'health' => $health,
                 'defaultAvatar' => ProfileAvatar::dataUri($person),

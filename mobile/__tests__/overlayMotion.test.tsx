@@ -70,6 +70,68 @@ it.each([false, true])('waits for measured sheet height before native entry for 
   const exiting = offset(); layout(600); expect(offset()).toBe(exiting);
 });
 
+it.each([false, true])('applies an optional sheet timing only to its measured presenter for hosted=%s', hosted => {
+  const timing = { enterMs: 360, exitMs: 240 };
+  const tree = (visible: boolean, override = true) => {
+    const content = <BottomSheet visible={visible} timing={override ? timing : undefined} title="Calendar filters" onClose={jest.fn()}><Text>Body</Text></BottomSheet>;
+    return hosted ? <OverlayProvider>{content}</OverlayProvider> : content;
+  };
+  mount(tree(true));
+  expect(timings).toHaveLength(0);
+  layout(320);
+  const entry = timings.at(-1)!;
+  expect(entry.config).toMatchObject({ duration: 360, useNativeDriver: true, isInteraction: false });
+  act(() => entry.value.setValue(0.4));
+  const nativeOffset = offset();
+  update(tree(false));
+  const exit = timings.at(-1)!;
+  expect(exit.config).toMatchObject({ toValue: 0, duration: 240 });
+  expect(offset()).toBe(nativeOffset);
+  update(tree(true));
+  expect(exit.stop).toHaveBeenCalled();
+  const reopened = timings.at(-1)!;
+  expect(reopened.value).toBe(entry.value);
+  expect(reopened.config).toMatchObject({ toValue: 1, duration: 360 });
+  expect(offset()).toBe(nativeOffset);
+  act(() => exit.complete?.({ finished: true }));
+  expect(renderer!.root.findByType(Modal).props.visible).toBe(true);
+  finish(reopened);
+  update(tree(false)); finish(timings.at(-1)!);
+  act(() => jest.advanceTimersByTime(40));
+  update(tree(true, false)); layout(320);
+  expect(timings.at(-1)!.config.duration).toBe(240);
+  finish(timings.at(-1)!); update(tree(false, false));
+  expect(timings.at(-1)!.config.duration).toBe(180);
+});
+
+it.each(['android', 'ios'] as const)('keeps the custom filter exit lease ahead of queued default dialog presentation on %s', os => {
+  jest.replaceProperty(Platform, 'OS', os);
+  const closed = jest.fn();
+  const tree = (filters: boolean, confirm: boolean) => <OverlayProvider>
+    <BottomSheet visible={filters} timing={{ enterMs: 360, exitMs: 240 }} title="Calendar filters" onClose={jest.fn()} onDismiss={closed}><Text>Body</Text></BottomSheet>
+    <ConfirmDialog visible={confirm} title="Queued dialog" message="Waiting" confirmLabel="Done" onConfirm={jest.fn()} onCancel={jest.fn()} />
+  </OverlayProvider>;
+  mount(tree(true, false)); layout(320); finish(timings.at(-1)!);
+  const modal = renderer!.root.findByType(Modal); const dismissed = modal.props.onDismiss;
+  update(tree(false, true));
+  const exit = timings.at(-1)!;
+  expect(exit.config.duration).toBe(240);
+  expect(renderer!.root.findAllByType(Modal).filter(node => node.props.visible)).toHaveLength(1);
+  expect(renderer!.root.findAllByType(Text).some(node => node.props.children === 'Queued dialog')).toBe(false);
+  finish(exit);
+  expect(renderer!.root.findAllByType(Modal).filter(node => node.props.visible)).toHaveLength(0);
+  expect(closed).not.toHaveBeenCalled();
+  if (os === 'ios') { act(() => dismissed()); }
+  else { act(() => jest.advanceTimersByTime(40)); }
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(renderer!.root.findAllByType(Modal).filter(node => node.props.visible)).toHaveLength(1);
+  expect(renderer!.root.findAllByType(Text).some(node => node.props.children === 'Queued dialog')).toBe(true);
+  expect(timings.at(-1)!.config.duration).toBe(180);
+  act(() => { dismissed(); exit.complete?.({ finished: true }); });
+  expect(closed).toHaveBeenCalledTimes(1);
+  expect(renderer!.root.findByType(Modal).props.visible).toBe(true);
+});
+
 it('allows close before layout and rejects a stale readiness callback', () => {
   const tree = (visible: boolean) => <BottomSheet visible={visible} title="Filters" onClose={jest.fn()}><Text>Body</Text></BottomSheet>;
   mount(tree(true));

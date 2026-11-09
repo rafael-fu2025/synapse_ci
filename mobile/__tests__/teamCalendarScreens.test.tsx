@@ -1,5 +1,5 @@
 import React from 'react';
-import { AppState, Dimensions, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, AppState, Dimensions, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { act, create, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import { useIsFocused, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { useNetInfo } from '@react-native-community/netinfo';
@@ -16,8 +16,11 @@ import { IconAction } from '../src/components/IconAction';
 import { OverlayProvider } from '../src/components/OverlayProvider';
 import { PageHeader } from '../src/components/PageHeader';
 import { Screen } from '../src/components/Screen';
+import { Skeleton } from '../src/components/Skeleton';
 import { useAuth } from '../src/store/auth';
 import { secureClientNonce } from '../src/lib/secureNonce';
+import { useKeyboardVisible } from '../src/lib/useKeyboardVisible';
+import { useActiveScreen } from '../src/lib/useActiveScreen';
 import { WorkspaceProvider, useWorkspace } from '../src/features/workspace/WorkspaceContext';
 import { WorkspaceDiscardDialog } from '../src/features/workspace/WorkspaceDiscardDialog';
 import { WorkspaceHeaderActions } from '../src/features/workspace/WorkspaceHeaderActions';
@@ -32,7 +35,7 @@ jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' 
 jest.mock('../src/lib/secureNonce', () => ({ secureClientNonce: jest.fn() }));
 jest.mock('../src/store/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
-jest.mock('../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: () => false }));
+jest.mock('../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 jest.mock('../src/navigation/navigationRef', () => ({ navigationRef: { isReady: () => true, navigate: jest.fn() } }));
 jest.mock('../src/features/notifications/hooks', () => ({ useNotificationInbox: () => ({ data: { data: { unread_count: 0 } } }) }));
 jest.mock('../src/features/team-calendar/hooks', () => ({
@@ -76,7 +79,7 @@ let workspace: ReturnType<typeof useWorkspace>;
 let element: React.ReactElement;
 let profile: MeResponse;
 
-type QueryState<T> = { data?: T; error: unknown; isError: boolean; isLoading: boolean; isFetching: boolean; isRefetching: boolean; isSuccess: boolean; fetchStatus: 'idle' | 'paused'; eligible: boolean; refetch: jest.Mock };
+type QueryState<T> = { data?: T; error: unknown; isError: boolean; isLoading: boolean; isFetching: boolean; isRefetching: boolean; isSuccess: boolean; fetchStatus: 'idle' | 'paused' | 'fetching'; eligible: boolean; refetch: jest.Mock };
 function query<T>(data?: T): QueryState<T> {
   return { data, error: null, isError: false, isLoading: false, isFetching: false, isRefetching: false, isSuccess: true, fetchStatus: 'idle', eligible: true, refetch };
 }
@@ -153,6 +156,7 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   profile = makeProfile();
   mockTheme = lightTheme;
+  jest.mocked(useKeyboardVisible).mockReturnValue(false);
   jest.mocked(useAuth).mockImplementation(() => ({ user: profile.user, profile, refreshProfile } as unknown as ReturnType<typeof useAuth>));
   refreshProfile.mockReset().mockResolvedValue(undefined);
   jest.mocked(useNavigation).mockReturnValue(navigation as unknown as ReturnType<typeof useNavigation>);
@@ -214,6 +218,46 @@ describe('mounted task deadline navigation provider', () => {
 });
 
 describe('mounted calendar home', () => {
+  it('keeps the toolbar and period controls stable while an uncached calendar loads', () => {
+    listQuery = { ...listQuery, data: undefined, isLoading: false, isFetching: true, fetchStatus: 'fetching' };
+    render(<TeamCalendarHomeScreen />);
+    expect(renderer!.root.findByType(Skeleton).props).toMatchObject({ label: 'Loading calendar', variant: 'calendar' });
+    expect(renderer!.root.findAllByProps({ testID: 'calendar-toolbar' }).length).toBeGreaterThan(0);
+    expect(control('Next calendar period')).toBeDefined();
+    expect(text('Nothing scheduled')).toBe(false);
+    press('Calendar view: Week');
+    expect(renderer!.root.findByType(Skeleton)).toBeDefined();
+    expect(text('Nothing scheduled')).toBe(false);
+  });
+
+  it('shows idle and paused no-data calendar waiting states without inventing an empty period', () => {
+    listQuery = { ...listQuery, data: undefined, eligible: false };
+    render(<TeamCalendarHomeScreen />);
+    expect(text('Calendar is waiting to load')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(text('Nothing scheduled')).toBe(false);
+    listQuery = { ...listQuery, isLoading: true, fetchStatus: 'paused' };
+    rerender();
+    expect(text('Calendar is waiting for a connection')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    press('Calendar view: Month');
+    expect(text('Nothing scheduled')).toBe(false);
+  });
+
+  it('keeps cached empty agenda and week content through refetch and transient errors', () => {
+    listQuery = { ...listQuery, data: { ...listQuery.data!, data: [] }, isLoading: true, isFetching: true, fetchStatus: 'fetching' };
+    render(<TeamCalendarHomeScreen />);
+    expect(text('Nothing scheduled')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    listQuery = { ...listQuery, isLoading: false, isFetching: false, fetchStatus: 'idle', isError: true, error: new Error('refresh failed') };
+    rerender();
+    expect(text('Nothing scheduled')).toBe(true);
+    expect(text('Showing the last available calendar')).toBe(true);
+    press('Calendar view: Week');
+    expect(text('No events or task deadlines on this day.')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
   it('allows ordinary authorized members to create and uses the shared root header without an inert unit switch', () => {
     render(<TeamCalendarHomeScreen />);
     expect(workspace.activeUnit?.can_manage).toBe(false);
@@ -276,7 +320,11 @@ describe('mounted calendar home', () => {
     const button = control('Open calendar filters');
     const buttonStyle = StyleSheet.flatten(button.props.style({ pressed: false }));
     expect(buttonStyle).toMatchObject({ minWidth: 50, minHeight: 52, backgroundColor: theme.surface });
-    expect(StyleSheet.flatten(control('Calendar view: Agenda').props.style)).toMatchObject({ minHeight: 44, backgroundColor: theme.brand });
+    const selectedTarget = control('Calendar view: Agenda');
+    expect(StyleSheet.flatten(selectedTarget.props.style)).toMatchObject({ minHeight: 44 });
+    expect(StyleSheet.flatten(selectedTarget.props.style).transform).toBeUndefined();
+    const selectedPill = selectedTarget.findAllByType(Animated.View).find(node => StyleSheet.flatten(node.props.style)?.backgroundColor === theme.brand)!;
+    expect(StyleSheet.flatten(selectedPill.props.style).opacity.__getValue()).toBe(1);
     press('Open calendar filters');
     expect(calendarFilterSheet().props.visible).toBe(true);
     expect(text('250 events and 250 task deadlines')).toBe(true);
@@ -284,6 +332,31 @@ describe('mounted calendar home', () => {
     expect(control('Calendar scope: Team').props.accessibilityState.checked).toBe(true);
     expect(control('Event status: Scheduled').props.accessibilityState.checked).toBe(true);
     expect(StyleSheet.flatten(control('Event status: Cancelled').props.style).minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it('keeps filter timing stable and filter selections immediate while overlay query eligibility is paused', () => {
+    jest.mocked(hooks.useTeamCalendar).mockImplementation(() => ({
+      ...listQuery, eligible: useActiveScreen(),
+    }) as unknown as ReturnType<typeof hooks.useTeamCalendar>);
+    render(<TeamCalendarHomeScreen />);
+    const timing = calendarFilterSheet().props.timing;
+    expect(timing).toEqual({ enterMs: 360, exitMs: 240 });
+    press('Open calendar filters');
+    const refresh = renderer!.root.findAllByType(ScrollView)[0].props.refreshControl;
+    expect(refresh.props.enabled).toBe(false);
+    expect(control('Calendar scope: Mine').props.disabled).toBe(false);
+    press('Calendar scope: Mine');
+    press('Event status: All events');
+    expect(lastFilters()).toMatchObject({ scope: 'mine', status: 'all' });
+    expect(control('Calendar scope: Mine').props.accessibilityState.checked).toBe(true);
+    expect(control('Event status: All events').props.accessibilityState.checked).toBe(true);
+    listQuery = { ...listQuery, isRefetching: true, isFetching: true };
+    mockTheme = darkTheme;
+    rerender();
+    expect(calendarFilterSheet().props.timing).toBe(timing);
+    press('Reset calendar filters');
+    expect(lastFilters()).toMatchObject({ scope: 'team', status: 'scheduled' });
+    expect(calendarFilterSheet().props.visible).toBe(true);
   });
 
   it('lets larger text use a separate toolbar line rather than overflow or shrink the targets', () => {
@@ -446,6 +519,64 @@ describe('mounted calendar home', () => {
 });
 
 describe('mounted calendar form', () => {
+  it('skeletonizes only an uncached edit and leaves the local new-event shell ready', () => {
+    setRoute('TeamCalendarEventForm', { id: event.id });
+    detailQuery = { ...detailQuery, data: undefined, isLoading: false, isFetching: true, fetchStatus: 'fetching' };
+    render(<TeamCalendarEventFormScreen />);
+    expect(renderer!.root.findByType(Skeleton).props).toMatchObject({ label: 'Loading event form', variant: 'form' });
+    expect(field('Event title')).toBeUndefined();
+    expect(renderer!.root.findByType(PageHeader).props.title).toBe('Edit event');
+    act(() => renderer!.unmount()); renderer = undefined;
+    setRoute('TeamCalendarEventForm');
+    render(<TeamCalendarEventFormScreen />);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(field('Event title').props.value).toBe('');
+    expect(action('Create event')).toBeDefined();
+  });
+
+  it('initializes a warm edit on its first render without an unavailable frame or erasing later edits', () => {
+    setRoute('TeamCalendarEventForm', { id: event.id });
+    detailQuery = { ...detailQuery, isLoading: true, isFetching: true, fetchStatus: 'fetching' };
+    const frames: string[] = [];
+    const capture = () => {
+      if (renderer) { frames.push(renderer.root.findAllByType(Text).map(node => React.Children.toArray(node.props.children).join('')).join('\n')); }
+    };
+    element = <TeamCalendarEventFormScreen />;
+    act(() => { renderer = create(<React.Profiler id="warm-calendar-edit" onRender={capture}><Host screen={element} /></React.Profiler>); });
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames.every(frame => !frame.includes('Could not load event'))).toBe(true);
+    expect(field('Event title').props.value).toBe('Planning');
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    input('Event title', 'Kept warm edit');
+    detailQuery = { ...detailQuery, data: { data: { ...event, title: 'Server refresh', version: 3 } },
+      isLoading: false, isFetching: false, fetchStatus: 'idle', isError: true, error: new Error('refresh failed') };
+    act(() => renderer!.update(<React.Profiler id="warm-calendar-edit" onRender={capture}><Host screen={React.cloneElement(element)} /></React.Profiler>));
+    expect(field('Event title').props.value).toBe('Kept warm edit');
+    expect(text('Your draft and original version are kept.')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
+  it('hydrates a cold edit once when data arrives and distinguishes a paused wait', () => {
+    setRoute('TeamCalendarEventForm', { id: event.id });
+    detailQuery = { ...detailQuery, data: undefined, eligible: false, fetchStatus: 'idle' };
+    render(<TeamCalendarEventFormScreen />);
+    expect(text('Event is waiting to load')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    detailQuery = { ...detailQuery, isLoading: true, fetchStatus: 'paused' };
+    rerender();
+    expect(text('You are offline')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    detailQuery = query({ data: event });
+    rerender();
+    expect(field('Event title').props.value).toBe('Planning');
+    expect(text('Could not load event')).toBe(false);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    input('Event title', 'Cold edit');
+    detailQuery = query({ data: { ...event, title: 'Updated elsewhere', version: 4 } });
+    rerender();
+    expect(field('Event title').props.value).toBe('Cold edit');
+  });
+
   it('uses keyboard-aware scrolling with pinned save/cancel for ordinary team members', () => {
     render(<TeamCalendarEventFormScreen />);
     const screen = renderer!.root.findByType(Screen);
@@ -457,6 +588,53 @@ describe('mounted calendar form', () => {
     expect(action('Cancel')).toBeDefined();
     expect(field('Event title')).toBeDefined();
     expect(renderer!.root.findByType(WorkspaceHeaderActions).props.disabled).toBe(false);
+  });
+
+  it.each([
+    [lightTheme, 'android'], [darkTheme, 'android'], [lightTheme, 'ios'], [darkTheme, 'ios'],
+  ] as const)('keeps the %s calendar form footer safe-area owner and controls mounted across %s keyboard toggles', (theme, os) => {
+    mockTheme = theme;
+    jest.replaceProperty(Platform, 'OS', os);
+    render(<TeamCalendarEventFormScreen />);
+    input('Event title', 'Kept calendar draft');
+    const screen = renderer!.root.findByType(Screen);
+    const header = renderer!.root.findByType(PageHeader);
+    const title = field('Event title');
+    const save = action('Create event');
+    const cancel = action('Cancel');
+    const footer = screen.findAllByType(View).find(node => node.props.testID === 'screen-footer')!;
+    const outerSafeArea = screen.findAllByType(View).find(node => Array.isArray(node.props.edges))!;
+    const scroll = screen.findByType(ScrollView);
+    const footerStyle = StyleSheet.flatten(footer.props.style);
+    expect(screen.props.bottomSafeArea).toBe(true);
+    expect(screen.props.footerStyle).toBeUndefined();
+    expect(outerSafeArea.props.edges).toEqual(['top']);
+    expect(footer.props.edges).toEqual({ bottom: 'additive' });
+    expect(footerStyle).toMatchObject({ paddingHorizontal: 18, paddingVertical: 12, borderTopWidth: 1, borderTopColor: theme.line, backgroundColor: theme.surface });
+    expect(footer.findAllByType(Action)).toEqual([save, cancel]);
+    expect(scroll.findAllByType(Action).some(node => node === save || node === cancel)).toBe(false);
+    expect(screen.findByType(KeyboardAvoidingView).props.enabled).toBe(os === 'ios');
+    expect(screen.findByType(KeyboardAvoidingView).props.behavior).toBe(os === 'ios' ? 'padding' : undefined);
+
+    jest.mocked(useKeyboardVisible).mockReturnValue(true);
+    rerender();
+    expect(screen.findAllByType(View).find(node => node.props.testID === 'screen-footer')).toBe(footer);
+    expect(footer.props.edges).toEqual({ bottom: 'off' });
+    expect(StyleSheet.flatten(footer.props.style)).toEqual(footerStyle);
+    expect(renderer!.root.findByType(PageHeader)).toBe(header);
+    expect(field('Event title')).toBe(title);
+    expect(title.props.value).toBe('Kept calendar draft');
+    expect(action('Create event')).toBe(save);
+    expect(action('Cancel')).toBe(cancel);
+    expect(outerSafeArea.props.edges).toEqual(['top']);
+
+    jest.mocked(useKeyboardVisible).mockReturnValue(false);
+    rerender();
+    expect(screen.findAllByType(View).find(node => node.props.testID === 'screen-footer')).toBe(footer);
+    expect(footer.props.edges).toEqual({ bottom: 'additive' });
+    expect(field('Event title')).toBe(title);
+    expect(action('Create event')).toBe(save);
+    expect(action('Cancel')).toBe(cancel);
   });
 
   it('validates required title and native Manila schedule without sending invalid events', async () => {
@@ -723,6 +901,35 @@ describe('mounted calendar form', () => {
 });
 
 describe('mounted event cancellation', () => {
+  it('uses a detail skeleton for an uncached active event and a waiting state for paused reads', () => {
+    detailQuery = { ...detailQuery, data: undefined, isLoading: false, isFetching: true, fetchStatus: 'fetching' };
+    render(<TeamCalendarEventDetailScreen />);
+    expect(renderer!.root.findByType(Skeleton).props).toMatchObject({ label: 'Loading event', variant: 'detail' });
+    expect(renderer!.root.findByType(PageHeader).props.title).toBe('Event details');
+    detailQuery = { ...detailQuery, isLoading: true, fetchStatus: 'paused', eligible: false };
+    rerender();
+    expect(text('You are offline')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    detailQuery = { ...query({ data: event }), isLoading: true, isFetching: true, fetchStatus: 'fetching' };
+    rerender();
+    expect(text('Planning')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    detailQuery = { ...detailQuery, isLoading: false, isFetching: false, isError: true, error: new Error('refresh failed') };
+    rerender();
+    expect(text('Planning')).toBe(true);
+    expect(text('Showing the last available event details')).toBe(true);
+  });
+
+  it.each([401, 403, 404])('does not replace a protected %s read with cached event content or a skeleton', async status => {
+    detailQuery = { ...detailQuery, isLoading: true, isFetching: true, fetchStatus: 'fetching',
+      isError: true, error: new ApiError(status, { code: 'denied', message: 'Unavailable' }) };
+    render(<TeamCalendarEventDetailScreen />);
+    await settle();
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(text('Planning')).toBe(false);
+    expect(renderer!.root.findAllByType(IconAction).some(node => node.props.label === 'Edit event')).toBe(false);
+  });
+
   beforeEach(() => setRoute('TeamCalendarEventDetail', { id: event.id }));
 
   it('uses the shared cancel dialog, keeps event on dismiss, and blocks duplicate/pending actions', async () => {

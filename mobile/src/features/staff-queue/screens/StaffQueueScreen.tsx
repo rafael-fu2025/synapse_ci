@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useNetInfo } from '@react-native-community/netinfo';
 import LinearGradient from 'react-native-linear-gradient';
@@ -19,6 +19,8 @@ import {
   Users,
 } from 'lucide-react-native';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { PageHeader } from '../../../components/PageHeader';
 import { SectionHeading } from '../../../components/SectionHeading';
 import { IconAction } from '../../../components/IconAction';
@@ -74,6 +76,9 @@ export function StaffQueueScreen() {
   const snapshot = response?.meta.generated_at ?? '';
   const generated = timestamp(snapshot);
   const offline = network.isConnected === false || network.isInternetReachable === false || query.fetchStatus === 'paused';
+  const contentState = loadingState(query);
+  const initialLoading = !forbidden && contentState === 'loading' && !offline;
+  const waiting = !forbidden && response === undefined && !query.isError && !initialLoading;
   const stale = generated === null || generated > now || now - generated > 45000;
   const today = response?.meta.date === manilaBusinessDate(now);
   const refresh = () => { query.refetch().catch(() => undefined); };
@@ -86,7 +91,7 @@ export function StaffQueueScreen() {
       ? 'Offline / Saved Snapshot'
       : query.isError
         ? response ? 'Refresh Failed / Saved Snapshot' : 'Load Failed / Retry Refresh'
-        : stale ? 'Outdated Snapshot' : null;
+        : response && stale ? 'Outdated Snapshot' : null;
 
   return (
     <Screen scroll={false} bodyStyle={styles.screenBody} header={
@@ -116,12 +121,11 @@ export function StaffQueueScreen() {
           </View>
         ) : null}
 
-        {query.isLoading && !response ? (
-          <View style={styles.loading} accessibilityLabel="Loading authorized queues">
-            <ActivityIndicator color={theme.brandIcon} />
-            <Text style={styles.muted}>Loading queues…</Text>
-          </View>
-        ) : null}
+        {initialLoading ? <Skeleton label="Loading authorized queues" variant="queue" style={styles.loading} /> : null}
+        {waiting ? <View style={styles.loading}>
+          <Text accessibilityRole="header" style={styles.emptyText}>{offline ? 'Waiting for a connection' : 'Queues are waiting to load'}</Text>
+          <Text style={styles.muted}>{offline ? 'Reconnect to load authorized queues.' : 'Return to this screen while connected to load authorized queues.'}</Text>
+        </View> : null}
 
         {response ? (
           <>

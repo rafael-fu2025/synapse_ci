@@ -250,6 +250,43 @@ vendor/
 !/public/assets/vendor/bootstrap/js/
 /public/assets/vendor/bootstrap/js/*
 !/public/assets/vendor/bootstrap/js/bootstrap.bundle.min.js
+# MIT-licensed chart runtime used by the original dashboards and shared browser fixtures.
+!/public/assets/vendor/apexcharts/
+/public/assets/vendor/apexcharts/*
+!/public/assets/vendor/apexcharts/apexcharts.min.js
+!/public/assets/vendor/apexcharts/LICENSE
+!/public/assets/vendor/apexcharts/README.md
+# Existing application shell icons and enhancements used by shared browser fixtures.
+!/public/assets/vendor/phosphor/
+/public/assets/vendor/phosphor/*
+!/public/assets/vendor/phosphor/style.css
+!/public/assets/vendor/phosphor/Phosphor.woff
+!/public/assets/vendor/phosphor/Phosphor.woff2
+!/public/assets/vendor/phosphor/Phosphor-Light.woff
+!/public/assets/vendor/phosphor/Phosphor-Light.woff2
+!/public/assets/vendor/phosphor/Phosphor-Duotone.woff
+!/public/assets/vendor/phosphor/Phosphor-Duotone.woff2
+!/public/assets/vendor/phosphor/LICENSE
+!/public/assets/vendor/phosphor/README.md
+!/public/assets/vendor/bootstrap-icons/
+/public/assets/vendor/bootstrap-icons/*
+!/public/assets/vendor/bootstrap-icons/bootstrap-icons.css
+!/public/assets/vendor/bootstrap-icons/LICENSE
+!/public/assets/vendor/bootstrap-icons/README.md
+!/public/assets/vendor/bootstrap-icons/fonts/
+/public/assets/vendor/bootstrap-icons/fonts/*
+!/public/assets/vendor/bootstrap-icons/fonts/bootstrap-icons.woff
+!/public/assets/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2
+!/public/assets/vendor/htmx/
+/public/assets/vendor/htmx/*
+!/public/assets/vendor/htmx/htmx.min.js
+!/public/assets/vendor/htmx/LICENSE
+!/public/assets/vendor/htmx/README.md
+!/public/assets/vendor/alpine/
+/public/assets/vendor/alpine/*
+!/public/assets/vendor/alpine/alpine.min.js
+!/public/assets/vendor/alpine/LICENSE
+!/public/assets/vendor/alpine/README.md
 
 #-------------------------
 # Local Tool State

@@ -50,11 +50,17 @@ export function Screen({
           {body}
         </ScrollView>
       ) : body}
-      {footer != null ? <View style={[styles.footer, footerStyle]}>{footer}</View> : null}
+      {footer != null ? (
+        bottomSafeArea ? (
+          <SafeAreaView testID="screen-footer" style={[styles.footer, footerStyle]} edges={{ bottom: keyboardVisible ? 'off' : 'additive' }}>
+            {footer}
+          </SafeAreaView>
+        ) : <View testID="screen-footer" style={[styles.footer, footerStyle]}>{footer}</View>
+      ) : null}
     </>
   );
   return (
-    <SafeAreaView style={styles.safe} edges={bottomSafeArea && !keyboardVisible ? ['top', 'bottom'] : ['top']}>
+    <SafeAreaView style={styles.safe} edges={bottomSafeArea && footer == null && !keyboardVisible ? ['top', 'bottom'] : ['top']}>
       {header}
       {keyboardAware ? (
         <KeyboardAvoidingView

@@ -1,25 +1,43 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
-/** Be conservative until native preferences resolve; a live event always wins. */
-export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(true);
+const listeners = new Set<() => void>();
+let reduced = true;
+let revision = 0;
+let subscription: ReturnType<typeof AccessibilityInfo.addEventListener> | null = null;
 
-  useEffect(() => {
-    let mounted = true;
-    let changed = false;
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', enabled => {
-      changed = true;
-      if (mounted) { setReduced(enabled); }
+function subscribe(changed: () => void) {
+  listeners.add(changed);
+  if (listeners.size === 1) {
+    const epoch = ++revision;
+    let nativeChanged = false;
+    const update = (enabled: boolean) => {
+      if (epoch !== revision || listeners.size === 0 || reduced === enabled) { return; }
+      reduced = enabled;
+      for (const listener of [...listeners]) { listener(); }
+    };
+    subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', enabled => {
+      nativeChanged = true;
+      update(enabled);
     });
     AccessibilityInfo.isReduceMotionEnabled().then(enabled => {
-      if (mounted && !changed) { setReduced(enabled); }
+      if (!nativeChanged) { update(enabled); }
     }).catch(() => undefined);
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
+  }
+  return () => {
+    listeners.delete(changed);
+    if (listeners.size > 0) { return; }
+    revision += 1;
+    subscription?.remove();
+    subscription = null;
+    reduced = true;
+  };
+}
 
-  return reduced;
+const snapshot = () => reduced;
+const conservativeSnapshot = () => true;
+
+/** Share observed native preferences with new presenters; unknown preferences stay conservative. */
+export function useReducedMotion(): boolean {
+  return useSyncExternalStore(subscribe, snapshot, conservativeSnapshot);
 }

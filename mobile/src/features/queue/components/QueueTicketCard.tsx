@@ -6,6 +6,7 @@ import { QueueTicket } from '../../../api/endpoints/queue';
 import { unitLabel } from '../../appointments/status';
 import { PlaceholderCard } from '../../../components/PlaceholderCard';
 import { CardOutline } from '../../../components/CardOutline';
+import { Skeleton } from '../../../components/Skeleton';
 import { font, palette, type } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 
@@ -94,16 +95,17 @@ function Stat({ label, value, divider = false }: { label: string; value: string;
 }
 
 /** Shown whenever there is no ticket, so the slot never disappears from Home or Queue. */
-export function QueueTicketPlaceholder({ loading = false, error = false, onPress }: { loading?: boolean; error?: boolean; onPress?: () => void }) {
+export function QueueTicketPlaceholder({ loading = false, error = false, waiting = false, onPress }: { loading?: boolean; error?: boolean; waiting?: boolean; onPress?: () => void }) {
   const { theme } = useTheme();
+  if (loading) { return <Skeleton label="Loading queue…" variant="queue" testID="queue-ticket-skeleton" />; }
   return (
     <PlaceholderCard
       icon={<ListChecks size={22} color={theme.brandIcon} />}
-      title={loading ? 'Loading queue…' : error ? 'Queue unavailable' : 'No active queue ticket'}
+      title={error ? 'Queue unavailable' : waiting ? 'Waiting to load queue' : 'No active queue ticket'}
       body={error
         ? 'We couldn’t load your ticket. Open Queue to retry; your place is not affected.'
+        : waiting ? 'Your ticket has not loaded yet. Open Queue when this screen and your connection are active.'
         : 'Your live waiting room ticket appears here once the clinic or guidance center checks you in.'}
-      loading={loading}
       onPress={onPress}
       actionLabel="Open queue"
     />

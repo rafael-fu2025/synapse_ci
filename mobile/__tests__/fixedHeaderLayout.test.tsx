@@ -3,6 +3,9 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { Screen } from '../src/components/Screen';
 import { PageHeader } from '../src/components/PageHeader';
+import { Skeleton } from '../src/components/Skeleton';
+import { EmptyState } from '../src/components/EmptyState';
+import { ApiError } from '../src/api/client';
 import { ProfileHomeScreen } from '../src/features/profile/screens/ProfileHomeScreen';
 import { AppearanceScreen } from '../src/features/profile/screens/AppearanceScreen';
 import { PrivacySecurityScreen } from '../src/features/profile/screens/PrivacySecurityScreen';
@@ -99,6 +102,31 @@ it.each([ProfileHomeScreen, AppearanceScreen, PrivacySecurityScreen, SettingsScr
   if (Component === ProfileHomeScreen) {
     expect(viewport.findByProps({ accessibilityLabel: 'Change profile photo' })).toBeTruthy();
   }
+});
+
+it.each(['fetching', 'paused', 'idle'] as const)('shows truthful initial health profile %s with its header retained', fetchStatus => {
+  jest.mocked(useHealthSummary).mockReturnValue({ fetchStatus } as ReturnType<typeof useHealthSummary>);
+  const root = render(<HealthProfileScreen />);
+  expect(root.findByType(PageHeader).props.title).toBe('Health profile');
+  if (fetchStatus === 'fetching') {
+    expect(root.findByType(Skeleton).props.label).toBe('Loading health profile…');
+  } else {
+    expect(root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(root.findByType(EmptyState).props.title).toBe('Waiting to load health profile');
+  }
+});
+
+it('keeps cached health fields during refresh failure but hides them after access is removed', () => {
+  const data = { data: { person: { name: 'Alex', kind: 'student', identifier: '001' }, health: {} } };
+  jest.mocked(useHealthSummary).mockReturnValue({ data, isLoading: true } as unknown as ReturnType<typeof useHealthSummary>);
+  const root = render(<HealthProfileScreen />);
+  expect(root.findAllByType(Skeleton)).toHaveLength(0);
+  jest.mocked(useHealthSummary).mockReturnValue({ data, isError: true, error: new Error('Offline') } as unknown as ReturnType<typeof useHealthSummary>);
+  act(() => renderer.update(<HealthProfileScreen />));
+  expect(root.findAllByType(Text).some(node => node.props.children === 'Alex')).toBe(true);
+  jest.mocked(useHealthSummary).mockReturnValue({ data, isError: true, error: new ApiError(403, { code: 'denied', message: 'Unavailable' }) } as unknown as ReturnType<typeof useHealthSummary>);
+  act(() => renderer.update(<HealthProfileScreen />));
+  expect(root.findAllByType(Text).some(node => node.props.children === 'Alex')).toBe(false);
 });
 
 it.each(['loading', 'error', 'loaded'])('keeps the health profile header fixed in the %s branch', state => {

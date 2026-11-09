@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Bell, BellRing, CalendarCheck2, ClipboardList, Megaphone } from 'lucide-react-native';
@@ -9,7 +12,7 @@ import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
 import { NotificationItem } from '../../../api/endpoints/notifications';
 import { poll } from '../../../api/poll';
-import { Theme, font, palette, memoizeStyles } from '../../../theme/tokens';
+import { Theme, font, lightTheme, palette, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { formatDate, formatTime } from '../../../lib/format';
 import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotificationHistory } from '../hooks';
@@ -40,7 +43,9 @@ export function NotificationsScreen() {
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
 
-  const data = query.data?.data;
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const data = authorityRemoved ? undefined : query.data?.data;
   const items = data?.items ?? [];
   const unread = data?.unread_count;
   const currentPage = data?.page ?? page;
@@ -94,9 +99,12 @@ export function NotificationsScreen() {
             }}>Retry marking read</Action>
         </View>
       ) : null}
-      {query.isLoading ? (
-        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
-      ) : data && items.length === 0 && !query.isError ? (
+      {state === 'loading' ? (
+        <Skeleton label="Loading notifications…" variant="list" />
+      ) : state === 'waiting' ? (
+        <EmptyState icon={<BellRing size={30} color={theme.brandIcon} />} title="Waiting to load notifications"
+          body="Your updates have not loaded yet. They will load when this screen and your connection are active." />
+      ) : data && items.length === 0 ? (
         <EmptyState
           icon={<BellRing size={30} color={theme.brandIcon} />}
           title={filter === 'unread' ? 'No unread notifications' : 'Nothing yet'}
@@ -158,6 +166,9 @@ function NotificationRow({ item, disabled, onRead, onOpen }: {
   const unread = item.read_at === null;
   const openable = onOpen !== undefined;
   const visual: NotificationVisual = VISUALS[item.title] ?? { icon: Bell, color: palette.blue600 };
+  const iconColor = unread
+    ? (theme.mode === 'dark' ? (visual.color ?? lightTheme.brandIcon) : '#ffffff')
+    : (visual.color ?? theme.brandIcon);
 
   return (
     <Pressable
@@ -170,12 +181,12 @@ function NotificationRow({ item, disabled, onRead, onOpen }: {
       onPress={() => { if (unread) { onRead(); } onOpen?.(); }}
       style={[styles.row, unread && styles.rowUnread]}>
       <View style={styles.rowIcon}>
-        <visual.icon size={18} color={visual.color ?? theme.brandIcon} />
+        <visual.icon size={18} color={iconColor} />
       </View>
       <View style={styles.rowCopy}>
-        <Text style={styles.rowTitle}>{item.title}</Text>
-        <Text style={styles.rowMessage}>{item.message}</Text>
-        <Text style={styles.rowTime}>{formatDate(item.created_at)} · {formatTime(item.created_at)}</Text>
+        <Text style={[styles.rowTitle, unread && styles.rowTitleUnread]}>{item.title}</Text>
+        <Text style={[styles.rowMessage, unread && styles.rowMessageUnread]}>{item.message}</Text>
+        <Text style={[styles.rowTime, unread && styles.rowTimeUnread]}>{formatDate(item.created_at)} · {formatTime(item.created_at)}</Text>
       </View>
       {unread ? <View style={styles.unreadDot} /> : null}
     </Pressable>
@@ -196,7 +207,6 @@ const VISUALS: Record<string, NotificationVisual> = {
 
 function createStyles(theme: Theme) {
   return StyleSheet.create({
-    loader: { marginTop: 30 },
     list: { paddingBottom: 10 },
     listBleed: { marginHorizontal: -18 },
     filters: { flexDirection: 'row', gap: 7, marginBottom: 12 },
@@ -210,13 +220,16 @@ function createStyles(theme: Theme) {
     pageLabel: { color: theme.ink500, fontFamily: font.body, fontSize: 10 },
     // Rows fill the list, which is itself bled past the Screen gutter.
     row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: theme.line },
-    rowUnread: { backgroundColor: theme.brand50 },
+    rowUnread: { backgroundColor: theme.mode === 'dark' ? lightTheme.surface : theme.brand },
     rowIcon: { width: 24, height: 28, alignItems: 'center', justifyContent: 'center' },
     rowCopy: { flex: 1, minWidth: 0 },
     rowTitle: { fontSize: 10.5, fontWeight: '700', fontFamily: font.body, color: theme.ink900 },
+    rowTitleUnread: { color: theme.mode === 'dark' ? lightTheme.ink900 : '#ffffff' },
     rowMessage: { marginTop: 2, color: theme.ink500, fontSize: 9, lineHeight: 13, fontFamily: font.body },
+    rowMessageUnread: { color: theme.mode === 'dark' ? lightTheme.ink500 : '#ffffff' },
     rowTime: { marginTop: 5, color: theme.ink400, fontSize: 8, fontFamily: font.body },
-    unreadDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: theme.brand },
+    rowTimeUnread: { color: theme.mode === 'dark' ? lightTheme.ink500 : '#ffffff' },
+    unreadDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: theme.mode === 'dark' ? lightTheme.brand : '#ffffff' },
     footer: { paddingTop: 10, textAlign: 'center', color: theme.ink400, fontSize: 8.5, fontFamily: font.body },
   });
 }

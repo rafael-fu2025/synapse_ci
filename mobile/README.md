@@ -156,9 +156,10 @@ There is no automated distribution pipeline yet: builds are produced locally and
 ## Team Workspace interaction parity
 
 Production uses `ContextTabs`, with independent Personal and Team navigation histories. Context
-changes retain 240 ms opaque cubic-out **scene** transitions; peer tabs use a 160 ms native opacity
-fade and mount on first visit, retaining visited state. Native-stack screens keep platform transitions
-unless live Reduce Motion disables them. A single stationary navigation bar sits outside those
+changes retain 240 ms opaque cubic-out **scene** transitions. Ordinary Android peer tabs switch
+immediately with no scene opacity; iOS peers keep their 160 ms fade. Both mount on first visit and
+retain visited state. Android detail stacks use translation-only `slide_from_right`; iOS keeps its
+native default. Live Reduce Motion disables transitions. A single stationary navigation bar sits outside those
 scenes, with a raised, shadow-free circular center CTA and a coordinated 400 ms maroon reveal for
 Work/reverse reveal for Personal. The guarded action is not a fake tab; disabled Work features are
 omitted and changing units clears the old unit's navigator.
@@ -171,7 +172,7 @@ retry or enter an offline write queue. Team task changes also refresh same-unit 
 and Chat task-picker results without replacing browsed Chat history.
 
 The detailed screen/action checklist and **current-pass** evidence/remaining native gates live in
-[MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md](../docs/MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md#interaction-parity-pass--2026-11-07).
+[MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md](../docs/MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md#screenshot-confirmed-rendering-and-loading-correction--2026-11-09).
 Passing Jest or `assembleDebug` is not proof of Android keyboard geometry, iOS modal dismissal,
 screen-reader focus, or production animation frame rate. Use an explicitly selected native target;
 do not replace an installed app/account or perform server writes merely for visual testing.
@@ -183,6 +184,14 @@ at 180/140 ms with a 0.97-to-1 scale, action content scales to 0.98 at 80/120 ms
 chat down-arrow fades over 120 ms. All decorative motion uses native-driver transforms/opacity;
 button hit targets stay stationary and activation never waits for an animation.
 
+The appointment-request stepper uses a local **240 ms opaque horizontal slide** between accepted
+steps: forward from the right and Back from the left. Only the step bodies move; header, progress,
+pinned actions and the Work switcher stay stationary. Live Reduce Motion settles immediately.
+Typing, selections, validation, and keyboard-height changes do not replay it. Rapid reversals use
+the current native progress; rotation, blur, background, accepted discard and unmount cancel old
+motion. “Request received” slides in only after success, remains outside the four-step count, and
+never unlocks or repeats submission. Drafts and raised-switcher clearance are retained.
+
 Sheets measure their outer surface before entry, keep travel stable during entry/exit, and
 continue dismissal from a dragged offset. Rejected closes settle back and unlock another attempt.
 The shared queue still retains each outgoing native Modal until actual dismissal. Handle movement
@@ -191,15 +200,34 @@ uses PanResponder on the JS thread; this pass does not claim UI-thread gesture i
 Task cards retain stable render props during draft search changes, and queue/appointment reads
 respect focus, foreground/connectivity and overlay eligibility. Lists do not replay entrance
 animations on polling/refresh. Ordinary Chat entry and navigation re-entry request the latest
-window at the bottom; explicit message targets still take priority. While staying in chat, a
-reader who scrolls upward keeps their position. Bottom-follow intent keeps the newest message
-above keyboard/composer resizes and incoming messages only while already following latest.
-Read markers, grouped-message identity, drafts and layout-gated explicit return-to-latest remain
-intact. Appointment Details shares chat's raised-CTA clearance without changing ordinary accounts.
+window at the bottom; explicit message targets still take priority. The loaded list stays mounted
+behind an opaque themed preparation cover until the current viewport and actual newest marker/tail
+(or target) confirm its position. Issuing a scroll command is not readiness. Empty, short and
+already-bottomed windows can finish without a new scroll event. Warm ordinary returns reveal a
+measured retained latest window while the fresh latest read runs in the background, rather than
+hiding cached messages until HTTP finishes. An event-driven next-frame correction completes a
+no-op/inexact initial scroll estimate; it does not wait for a timer. First loads, new scopes and
+unloaded explicit/history targets still need their own data. Blur immediately covers retained
+native pixels before frozen-route thaw. Failed/offline re-entry shows the last good window with
+recovery feedback instead of waiting indefinitely. While staying in chat, a reader who scrolls
+upward keeps their position. Bottom-follow intent keeps the newest message above keyboard/composer
+resizes and incoming messages only while already following latest. Covered time cannot count toward
+the 500 ms read-marker dwell. Input/list identity, grouped messages, drafts and explicit return-to-latest
+remain intact. Appointment Details and pinned booking steps share chat's raised-CTA clearance
+without changing ordinary accounts, keyboard spacing or service-selection/success screens.
 
-The reported transient outlines during normal tab changes remain a physical-release visual
-acceptance item. The current peer fade and independent context/CTA animation are unchanged;
-there is no speculative global shadow, border or hardware-layer workaround.
+Chat shows one centered timestamp above each connected sender group, using the first message:
+`1:47 PM` today, `Wed 9:09 AM` for the previous six Manila days, and
+`Nov 1, 2026, 9:05 AM` for older dates. Bubble-end times and duplicate date headings are removed;
+individual message accessibility retains its own time. Sender/day/five-minute grouping and separate
+read markers remain. One foreground/uncovered midnight clock updates only headings, never the
+message window, input, preparation or network requests.
+
+The screenshot-confirmed ghosting is addressed centrally by removing Android whole-scene alpha,
+not by changing maroon colors, normal borders/shadows or the independent context/CTA animation.
+**Android visual acceptance remains pending on a matching rebuilt release APK.** Compare Home,
+Visits, Queue, Profile ID, all Team peers and detail pushes/pops, including rapid reversals and
+Reduce Motion. Passing mocked navigation tests is not native GPU proof.
 
 Native acceptance must use a release/profileable build on physical hardware. Compare cold and warm
 tab/context transitions, rapid reversals, sheet dragging and rejected dismissal, keyboard-to-sheet
@@ -208,6 +236,50 @@ handoffs, and populated lists during updates. Trace frame deadlines at the activ
 retained memory. Use Android Studio System Trace/Perfetto and iOS Instruments. Debug FPS counters
 and passing Jest/bundle compilation do not establish sustained FPS or zero jank.
 
+## Mobile loading presentation
+
+`Skeleton` supplies bounded, themed card/list/detail/form/queue/calendar/chat geometry. It is
+noninteractive and shadow-free, with one loading announcement per region and inaccessible
+shapes. The calm native-driver pulse stops on blur, background, overlay, inactive state or
+unmount, and is static under Reduce Motion. No extra dependency, forced minimum duration or
+JavaScript frame-production loop is used.
+
+`loadingState` prefers valid current-query data, including successful empty responses, over
+refresh/loading/error flags. Skeletons appear only for genuine no-data reads. Disabled or paused
+no-data states say they are waiting; cached populated and empty states stay visible on transient
+refresh failures. Authoritative access/removal responses hide protected content. Home sections
+load independently while greeting/Quick access remain usable. Profile identity/initials, static
+settings and new-form shells stay visible. Survey receipts and existing edit drafts survive
+background work; action/send/upload/save spinners remain local. Calendar does not borrow data
+from a previous range/filter.
+
+Research: [RN View alpha/layout](https://reactnative.dev/docs/view),
+[React Navigation tab animation](https://reactnavigation.org/docs/bottom-tab-navigator/#animation),
+[FlatList variable-size scrolling](https://reactnative.dev/docs/flatlist#scrolltoend), and
+[NN/G skeleton guidance](https://www.nngroup.com/articles/skeleton-screens/).
+Skeletons improve presentation; they do not make a slow HTTP request faster.
+
+## Screen polish
+
+New Event and Edit Task keep their pinned action surfaces continuous through the
+opted-in bottom safe-area padding. The footer owns that padding instead of leaving
+a separate canvas-colored strip; action positions, keyboard avoidance and Chat's
+explicit no-bottom-inset footer are unchanged. Task Details separates its comment
+field and Add comment action by 12 points.
+
+Calendar view and filter choices use subtle native-driven selection feedback with
+immediate radio selection and stationary touch targets. Only the Calendar filter
+sheet uses 360 ms entry / 240 ms exit. The existing default sheets and dialogs keep
+their timings and native dismissal/drag/focus lifecycle. Newly mounted presenters
+reuse the already-observed Reduce Motion preference from concurrent live consumers;
+unknown preferences stay conservative and stale native work is rejected.
+
+Unread notifications are white with dark content in dark mode, maroon with white
+content in light mode; read rows keep their ordinary appearance. Booking step two's
+Selected service summary is charcoal in dark mode and maroon in light mode. Its
+review/receipt banners are unchanged. Appearance omits the explanatory sentence
+about the primary action color.
+
 ## Checks and references
 
 ```sh
@@ -215,8 +287,22 @@ node --test scripts/dev-tooling.test.cjs scripts/check-android-apk.test.cjs  # n
 node --test android/app/src/test/refresh-rate-policy.test.cjs  # local JDK; no device
 npx tsc --noEmit
 npm run lint
-npm test -- --runInBand
+npm test -- --runInBand --detectOpenHandles
 ```
+
+The screenshot/loading correction passed **70 suites / 1,422 tests**, TypeScript,
+ESLint (only four existing `secureNonce` warnings), **62 Android/native tooling
+contracts**, and offline LAN release bundle/resource/Kotlin compilation. These
+checks did not build/sign/install a successor APK or establish physical visual acceptance.
+The subsequent Chat waiting correction passed **97 focused tests**, TypeScript and scoped lint.
+After booking-clearance and stepper-slide work, the full serialized run passed
+**71 suites / 1,442 tests** with no reported open handles; TypeScript and full lint passed
+with the same four existing warnings. After group timestamps, the full suite passed
+**72 suites / 1,463 tests**, TypeScript and full lint passed, and no open handles were reported.
+The subsequent screen-polish pass passed **73 suites / 1,535 tests** with no skipped
+tests or reported open handles. TypeScript, changed-file lint and whitespace passed;
+full lint had only the same four existing warnings. The later changes were not
+rebuilt into a signed APK.
 
 `.github/workflows/mobile.yml` runs these gates on every push and pull request, with a JDK for the
 native selector tests and a separate Android build/class-definition packaging gate. After a local

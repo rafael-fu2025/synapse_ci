@@ -22,6 +22,8 @@ import { Avatar } from '../../../components/Avatar';
 import { IconAction } from '../../../components/IconAction';
 import { PlaceholderCard } from '../../../components/PlaceholderCard';
 import { CardOutline } from '../../../components/CardOutline';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { queryKeys } from '../../../api/queryKeys';
 import { me } from '../../../api/endpoints/me';
 import { useApiClient } from '../../../api/runtime';
@@ -74,7 +76,11 @@ export function DashboardScreen() {
   const announcementsQuery = useAnnouncements({ unit: 'all', status: 'all', page: 1 });
   const surveysQuery = useSurveys({ status: 'available' });
 
-  const unreadCount = inboxQuery.data?.data.unread_count ?? 0;
+  const appointmentState = loadingState(appointmentsQuery);
+  const queueState = loadingState(queueQuery);
+  const announcementState = loadingState(announcementsQuery);
+  const surveyState = loadingState(surveysQuery);
+  const unreadCount = inboxQuery.data?.data.unread_count;
   const nextVisit = appointmentsQuery.data?.data?.[0];
   const staffUnits = profileQuery.data?.entitlements.staff_queue_units ?? [];
   const tickets = queueQuery.data?.data.tickets ?? [];
@@ -97,8 +103,8 @@ export function DashboardScreen() {
         </View>
         <View style={styles.headerActions}>
           <IconAction
-            label={`Notifications, ${unreadCount} unread`}
-            badge={unreadCount > 0}
+            label={unreadCount === undefined ? 'Notifications' : `Notifications, ${unreadCount} unread`}
+            badge={unreadCount !== undefined && unreadCount > 0}
             onPress={() => navigation.navigate('Notifications')}
             icon={<Bell size={20} color={theme.ink700} />}
           />
@@ -160,14 +166,16 @@ export function DashboardScreen() {
           </LinearGradient>
           {theme.mode === 'dark' ? <CardOutline testID="nextVisitOutline" /> : null}
         </Pressable>
+      ) : appointmentState === 'loading' ? (
+        <Skeleton label="Loading appointments…" variant="card" testID="home-appointments-skeleton" />
       ) : (
         <PlaceholderCard
           icon={<CalendarPlus size={22} color={theme.brandIcon} />}
-          title={appointmentsQuery.isLoading ? 'Loading appointments…' : appointmentsQuery.isError ? 'Appointments unavailable' : 'No upcoming appointment'}
-          body={appointmentsQuery.isError
+          title={appointmentState === 'error' ? 'Appointments unavailable' : appointmentState === 'waiting' ? 'Waiting to load appointments' : 'No upcoming appointment'}
+          body={appointmentState === 'error'
             ? 'We couldn’t load appointments. Open Visits to retry.'
+            : appointmentState === 'waiting' ? 'Appointments have not loaded yet. Open Visits when this screen and your connection are active.'
             : 'Request a clinic or guidance visit and it will show up here.'}
-          loading={appointmentsQuery.isLoading}
           onPress={() => navigation.navigate('Visits')}
           actionLabel="Open appointments"
         />
@@ -177,7 +185,7 @@ export function DashboardScreen() {
       {tickets.length > 0 ? (
         tickets.map((ticket) => <QueueTicketCard key={`${ticket.unit}-${ticket.ticket_code}`} ticket={ticket} />)
       ) : (
-        <QueueTicketPlaceholder loading={queueQuery.isLoading} error={queueQuery.isError} onPress={() => navigation.navigate('Queue')} />
+        <QueueTicketPlaceholder loading={queueState === 'loading'} error={queueState === 'error'} waiting={queueState === 'waiting'} onPress={() => navigation.navigate('Queue')} />
       )}
 
       <SectionHeading title="Quick access" caption="What would you like to do?" />
@@ -240,15 +248,16 @@ export function DashboardScreen() {
             <Text style={styles.newsTime}>{formatRelative(latestAnnouncement.published_at)}</Text>
           </View>
         </Pressable>
+      ) : announcementState === 'loading' ? (
+        <Skeleton label="Loading announcements…" variant="card" testID="home-announcements-skeleton" />
       ) : (
         <PlaceholderCard
           icon={<Megaphone size={22} color={palette.gold600} />}
-
-          title={announcementsQuery.isLoading ? 'Loading announcements…' : announcementsQuery.isError ? 'Announcements unavailable' : 'No announcements yet'}
-          body={announcementsQuery.isError
+          title={announcementState === 'error' ? 'Announcements unavailable' : announcementState === 'waiting' ? 'Waiting to load announcements' : 'No announcements yet'}
+          body={announcementState === 'error'
             ? 'We couldn’t load updates. Open Announcements to retry.'
+            : announcementState === 'waiting' ? 'Updates have not loaded yet. Open Announcements when your connection is available.'
             : 'Campus health and guidance updates will appear here when they are published.'}
-          loading={announcementsQuery.isLoading}
           onPress={() => navigation.navigate('Announcements')}
           actionLabel="Open announcements"
         />
@@ -278,15 +287,16 @@ export function DashboardScreen() {
               <Text style={styles.newsAction}>Start survey</Text>
             </View>
           </Pressable>
+        ) : surveyState === 'loading' ? (
+          <Skeleton label="Loading surveys…" variant="card" testID="home-surveys-skeleton" />
         ) : (
           <PlaceholderCard
             icon={<ClipboardList size={22} color={palette.violet600} />}
-
-            title={surveysQuery.isLoading ? 'Loading surveys…' : surveysQuery.isError ? 'Surveys unavailable' : 'No surveys waiting'}
-            body={surveysQuery.isError
+            title={surveyState === 'error' ? 'Surveys unavailable' : surveyState === 'waiting' ? 'Waiting to load surveys' : 'No surveys waiting'}
+            body={surveyState === 'error'
               ? 'We couldn’t load surveys. Open Surveys to retry.'
+              : surveyState === 'waiting' ? 'Surveys have not loaded yet. Open Surveys when your connection is available.'
               : 'You’re all caught up. New guidance surveys will appear here.'}
-            loading={surveysQuery.isLoading}
             onPress={() => navigation.navigate('Surveys')}
             actionLabel="Open surveys"
           />

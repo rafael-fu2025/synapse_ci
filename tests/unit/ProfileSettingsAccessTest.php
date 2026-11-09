@@ -31,6 +31,7 @@ final class ProfileSettingsAccessTest extends FreshDatabaseTestCase
     protected $seed = 'App\Database\Seeds\PermissionsAndRolesSeeder';
     private string $directory;
     private ProfilePhotoService $photos;
+    private View $renderer;
     private int $tenant;
 
     protected function setUp(): void
@@ -41,12 +42,19 @@ final class ProfileSettingsAccessTest extends FreshDatabaseTestCase
         $this->photos = new ProfilePhotoService($this->directory . '/photos');
         $this->db->table('tenants')->insert(['slug' => uniqid('photo_'), 'name' => 'Synthetic photo tenant', 'is_active' => 1, 'created_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')]);
         $this->tenant = (int) $this->db->insertID();
-        Services::injectMock('renderer', new class(config('View'), APPPATH . 'Views/') extends View {
+        $this->renderer = new class(config('View'), APPPATH . 'Views/') extends View {
+            public string $renderedLayout = '';
+
             public function render(string $view, ?array $options = null, ?bool $saveData = null): string
             {
-                return $view === 'layouts/app' ? $this->renderSection('content') : parent::render($view, $options, $saveData);
+                if ($view === 'layouts/app') {
+                    $this->renderedLayout = $view;
+                    return $this->renderSection('content');
+                }
+                return parent::render($view, $options, $saveData);
             }
-        });
+        };
+        Services::injectMock('renderer', $this->renderer);
     }
 
     protected function tearDown(): void
@@ -90,19 +98,48 @@ final class ProfileSettingsAccessTest extends FreshDatabaseTestCase
         return $file;
     }
 
-    private function controller(string $method = 'GET', array $post = [], ?UploadedFile $file = null, bool $ajax = true): ProfileSettingsController
+    private function controller(string $method = 'GET', array $post = [], ?UploadedFile $file = null, bool $ajax = true, array $get = []): ProfileSettingsController
     {
         $request = $this->getMockBuilder(IncomingRequest::class)->setConstructorArgs([config('App'), service('uri'), null, new UserAgent()])
             ->onlyMethods(['getFile'])->getMock();
         $request->method('getFile')->with('photo')->willReturn($file);
         $request->setMethod($method);
         $request->setGlobal('post', $post);
+        $request->setGlobal('get', $get);
         if ($ajax) $request->setHeader('X-Requested-With', 'XMLHttpRequest');
         Services::injectMock('request', $request);
         Services::injectMock('response', new Response(config('App')));
         $controller = new ProfileSettingsController($this->photos);
         $controller->initController($request, service('response'), new NullLogger());
         return $controller;
+    }
+
+    public function testDirectAndFragmentSettingsUseTheSameAppLayoutAndOnePageOwner(): void
+    {
+        foreach (['student', 'employee'] as $kind) {
+            $this->login($this->account($kind));
+            foreach ([[], ['fragment' => '1', 'return_url' => 'https://example.test/unsafe']] as $get) {
+                $this->renderer->renderedLayout = '';
+                $html = $this->controller('GET', [], null, $get !== [], $get)->index();
+                self::assertIsString($html);
+                self::assertSame('layouts/app', $this->renderer->renderedLayout, 'A fragment query must not select a modal layout.');
+                self::assertSame(1, preg_match_all('/\\bdata-profile-settings(?:\\s|>)/', $html));
+                foreach (['profilePhotoForm', 'profilePhotoUpload', 'profilePhotoTitle', 'profileAccountTitle', 'profileEmergencyTitle', 'emergencyContactForm', 'emergencyContactName', 'emergencyContactRelationship', 'emergencyContactPhone'] as $id) {
+                    self::assertStringContainsString('id="' . $id . '"', $html);
+                }
+                foreach (['appFormModal', 'data-app-modal-close', 'data-modal-error', 'modal-backdrop', 'aria-modal="true"'] as $modalMarker) {
+                    self::assertStringNotContainsString($modalMarker, $html);
+                }
+                $document = new \DOMDocument();
+                @$document->loadHTML('<?xml encoding="UTF-8">' . $html);
+                $xpath = new \DOMXPath($document);
+                self::assertSame(1, $xpath->query('//*[@data-profile-settings]')->length);
+                self::assertSame(1, $xpath->query('//*[@data-profile-settings]//*[@id="profilePhotoForm"]')->length);
+                self::assertSame(1, $xpath->query('//*[@data-profile-settings]//*[@id="emergencyContactForm"]')->length);
+                self::assertSame(1, $xpath->query('//*[@data-profile-settings]//*[@id="profileAccountTitle"]')->length);
+                // The browser fixture certifies the H1 and fixed Back action; this unit renderer strips the shell.
+            }
+        }
     }
 
     public function testStudentsAndEmployeesCanViewAndUploadOnlyTheirOwnPhoto(): void

@@ -13,7 +13,9 @@ it does not silently exclude failures from a purported full-suite run.
   security patches rather than treating these floors as permanent version pins.
 - `intl`, `mbstring`, `mysqli`, and OpenSSL; SQLite extensions for the separate
   disposable SQLite service fixtures.
-- Python 3.10+ for the fresh-schema runner; Node 22+ for queue JS tests.
+- Python 3.10+ for the fresh-schema runner; Node 22+ for queue JS and browser
+  tests. Browser suites use the Playwright version locked in
+  `tests/browser/package-lock.json` and require its Chromium installation.
 - For the fresh-schema tests: a local MySQL/MariaDB server on TCP
   `127.0.0.1:3306`, with the **test-only** root account and an empty password.
   The runner is intentionally restricted to that local test configuration;
@@ -93,6 +95,62 @@ python -I tests/_support/run-fresh-database-tests.py tests/unit/AiRecoveryMariaD
 ```
 
 This checks full migrations, lineage/root IDs, unique successors, encryption/generation recovery and reserved-attempt rejection on a new disposable schema. It is sequential coverage, not proof of all overlapping-worker interleavings. Never run migrations against the operational schema just to validate a test.
+
+## Focused web Profile & Settings regression gate
+
+Run from the repository root with locked Composer dependencies installed:
+
+```sh
+npm ci --prefix tests/browser
+npm exec --prefix tests/browser -- playwright install chromium
+npm run test:profile-settings --prefix tests/browser
+```
+
+The named gate runs `profile-settings.test.cjs`, `navigation.test.cjs`, and
+`confirm.test.cjs` sequentially. It uses `tests/browser`'s locked Playwright,
+not packages under the ignored `writable/widget-test-tools` directory.
+`npm test --prefix tests/browser` still runs only the four AI browser suites.
+The focused gate reuses the pinned `ubuntu-24.04` CI browser job after its
+existing Chromium `--with-deps` install; it adds no external provider service.
+
+These are browser/client regressions with synthetic HTTP fixtures and real PHP
+presentation views, JavaScript, and Bootstrap assets. They cover Profile &
+Settings as an ordinary page, the header's explicit `a[data-navigation]` inside
+`.user-dropdown[data-bs-toggle="tooltip"]`, same-document navigation/history,
+and continued exclusion of ordinary tooltip links, actual Bootstrap toggles,
+modal controls, local navigation opt-outs, HX handlers, and targeted links. The
+existing appointment-modal/date-picker regression ensures unrelated form modals
+still open and close after repeated soft navigation. Confirmation tests exercise
+the shared dialog and fixture POST responses, not real PHP session/flash or
+persistence behavior.
+
+Passing this browser gate is **not** a real authenticated database-backed
+end-to-end result: it does not prove photo storage, contact persistence, server
+CSRF enforcement, deployment-host routing, or operational-account access. Live
+E2E acceptance must use separately owned disposable data and an explicit setup,
+never the operational database or an unfiltered historical `composer test` run.
+
+For server-side access and photo regressions, use only the guarded runner below
+with the local test-only MySQL/MariaDB prerequisites listed above. PHP GD with
+JPEG/PNG/WebP support is also required. The runner creates, migrates, verifies,
+and drops its own empty disposable schema; do not run this class directly or
+add it blindly to the DB-free `phpunit.ci.xml` selection.
+
+```sh
+python -I tests/_support/run-fresh-database-tests.py tests/unit/ProfileSettingsAccessTest.php
+```
+
+The separate emergency-contact PHP fixture pins both database groups to private
+SQLite `:memory:` tables and runs no application migrations. To run only that
+class without loading `.env`, use the existing no-dotenv framework bootstrap:
+
+```sh
+php vendor/bin/phpunit --no-configuration --bootstrap tests/_support/fresh-framework-bootstrap.php --no-coverage --do-not-cache-result tests/unit/EmergencyContactSettingsTest.php
+```
+
+That explicit file argument does not add the class to the CI baseline or collect
+the historical suite. SQLite extensions are required; this fixture is still not
+proof of MySQL behavior or live end-to-end persistence.
 
 ## Fresh migrations and core service tests
 

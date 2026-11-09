@@ -1,5 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useNavigation } from '@react-navigation/native';
 import { BellRing, CircleHelp, ListChecks, RefreshCw, WifiOff } from 'lucide-react-native';
 import { Action } from '../../../components/Action';
@@ -20,8 +23,10 @@ export function QueueBoardScreen() {
   const styles = makeStyles(theme);
   const navigation = useNavigation<QueueNavigation>();
   const query = useQueueSnapshot();
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
   // A held ("skipped") ticket is still the patient's ticket; the web card shows it as On hold.
-  const tickets = query.data?.data.tickets ?? [];
+  const tickets = authorityRemoved ? [] : query.data?.data.tickets ?? [];
   const lastUpdated = query.dataUpdatedAt > 0 ? formatTime(new Date(query.dataUpdatedAt).toISOString()) : null;
   const refresh = (
     <IconAction
@@ -33,16 +38,16 @@ export function QueueBoardScreen() {
     />
   );
 
-  if (query.isLoading) {
+  if (state === 'loading') {
     return (
       <Screen scroll={false}>
         <PageHeader title="Queue status" subtitle="Live updates from your current visit" />
-        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
+        <Skeleton label="Loading queue…" variant="queue" />
       </Screen>
     );
   }
 
-  if (query.isError && !query.data) {
+  if (state === 'error' || authorityRemoved) {
     return (
       <Screen scroll={false}>
         <PageHeader title="Queue status" subtitle="Live updates from your current visit" />
@@ -56,6 +61,16 @@ export function QueueBoardScreen() {
             </Action>
           }
         />
+      </Screen>
+    );
+  }
+
+  if (state === 'waiting') {
+    return (
+      <Screen scroll={false}>
+        <PageHeader title="Queue status" subtitle="Live updates from your current visit" />
+        <EmptyState icon={<WifiOff size={30} color={theme.brandIcon} />} title="Waiting to load queue"
+          body="Your ticket has not loaded yet. It will load when this screen and your connection are active." />
       </Screen>
     );
   }
@@ -113,7 +128,6 @@ export function QueueBoardScreen() {
 
 function createStyles(theme: Theme) {
   return StyleSheet.create({
-    loader: { marginTop: 30 },
     lastUpdated: { marginTop: 4, color: theme.ink400, fontSize: 8.5, textAlign: 'center', fontFamily: font.body },
     notice: {
       flexDirection: 'row',

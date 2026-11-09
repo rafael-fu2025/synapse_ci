@@ -10,6 +10,8 @@ import { EmptyState } from '../../../components/EmptyState';
 import { IconAction } from '../../../components/IconAction';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useAuth } from '../../../store/auth';
 import { useWorkspace } from '../../workspace/WorkspaceContext';
 import { WorkspaceHeaderActions } from '../../workspace/WorkspaceHeaderActions';
@@ -47,6 +49,10 @@ export function TeamTaskListScreen({ scope }: Props) {
   const forbidden = query.isError && teamTaskErrorKind(query.error) === 'forbidden';
   const data = useMemo(() => forbidden ? [] : query.data?.data ?? [], [forbidden, query.data]);
   const meta = forbidden ? undefined : query.data?.meta;
+  const contentState = loadingState(query);
+  const paused = query.fetchStatus === 'paused';
+  const initialLoading = !forbidden && contentState === 'loading' && !paused && query.eligible !== false;
+  const waiting = !forbidden && query.data === undefined && !query.isError && !initialLoading;
   const sections = useMemo(() => groupTasks(data), [data]);
   const filtered = search !== '' || status !== 'all' || priority !== 'all';
   const canReset = filtered || draftSearch !== '' || page !== 1;
@@ -152,15 +158,19 @@ export function TeamTaskListScreen({ scope }: Props) {
       </View>
       {canReset ? <Action variant="ghost" accessibilityLabel="Reset task filters" style={styles.resetAction} onPress={resetFilters}>Reset filters</Action> : null}
     </View>
-    {query.isFetching && !query.isLoading && !refreshing ? <View style={styles.refreshStatus}><ActivityIndicator size="small" accessibilityLabel="Updating task results" color={theme.brandIcon} /><Text style={styles.resultText}>{query.isPlaceholderData ? 'Loading results…' : 'Updating…'}</Text></View> : null}
+    {contentState === 'content' && query.isFetching && !refreshing ? <View style={styles.refreshStatus}><ActivityIndicator size="small" accessibilityLabel="Updating task results" color={theme.brandIcon} /><Text style={styles.resultText}>{query.isPlaceholderData ? 'Loading results…' : 'Updating…'}</Text></View> : null}
     {query.isPlaceholderData ? <Text style={styles.previousResults}>Showing the previous results until this page finishes loading.</Text> : null}
     {query.isError ? <View style={styles.errorBox}>
-      <Text accessibilityRole="alert" style={styles.feedback}>{forbidden ? 'You no longer have access to this Team Workspace. Your access is being checked.' : teamTaskErrorMessage(query.error, data.length > 0 ? 'Could not refresh. Showing the last available tasks.' : 'Could not load tasks.')}</Text>
+      <Text accessibilityRole="alert" style={styles.feedback}>{forbidden ? 'You no longer have access to this Team Workspace. Your access is being checked.' : teamTaskErrorMessage(query.error, contentState === 'content' ? 'Could not refresh. Showing the last available tasks.' : 'Could not load tasks.')}</Text>
       <Action variant="secondary" disabled={query.eligible === false} loading={query.isFetching} onPress={() => { refresh().catch(() => undefined); }}>Retry</Action>
     </View> : null}
   </View>;
 
-  const empty = query.isLoading ? <ActivityIndicator accessibilityLabel="Loading tasks" style={styles.loader} color={theme.brandIcon} /> : !query.isError ? <EmptyState
+  const empty = initialLoading ? <Skeleton label="Loading tasks" variant="list" /> : waiting ? <EmptyState
+    icon={<CheckSquare2 size={30} color={theme.brandIcon} />}
+    title={paused ? 'You are offline' : 'Tasks are waiting to load'}
+    body={paused ? 'Reconnect to load this task list.' : 'Return to this Team Workspace while connected to load its tasks.'}
+    action={<Action full variant="secondary" disabled={query.eligible === false || paused} onPress={() => { refresh().catch(() => undefined); }}>Refresh tasks</Action>} /> : !forbidden && contentState === 'content' ? <EmptyState
     icon={<CheckSquare2 size={30} color={theme.brandIcon} />}
     title={filtered ? 'No matching tasks' : scope === 'mine' ? 'No tasks assigned to you' : 'No team tasks yet'}
     body={filtered ? 'Try another search or reset the filters to see all tasks.' : scope === 'mine' ? 'Tasks assigned to you will appear here. New tasks stay unassigned unless you choose an assignee.' : 'Create an operational task to keep your team aligned.'}

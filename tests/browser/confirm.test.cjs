@@ -20,13 +20,7 @@ const { execFileSync } = require('node:child_process');
 const { once } = require('node:events');
 
 const root = path.resolve(__dirname, '../..');
-const tools = path.join(root, 'writable/widget-test-tools/node_modules/playwright');
-let playwright;
-try { playwright = require(tools); }
-catch (error) {
-  if (error.code !== 'MODULE_NOT_FOUND') throw error;
-  playwright = require('playwright');
-}
+const playwright = require('playwright');
 const publicRoot = path.join(root, 'public');
 const confirmAsset = path.join(publicRoot, 'assets/js/confirm.js');
 const bootstrapJs = path.join(publicRoot, 'assets/vendor/bootstrap/js/bootstrap.bundle.min.js');
@@ -61,7 +55,7 @@ function executablePath() {
     .map(name => path.join(cache, name, 'chrome-win64/chrome.exe'))
     .find(file => fs.existsSync(file)) : undefined;
   if (cached) return cached;
-  const packageFile = require.resolve('playwright/package.json', { paths: [path.dirname(tools), root] });
+  const packageFile = require.resolve('playwright/package.json');
   execFileSync(process.execPath, [path.join(path.dirname(packageFile), 'cli.js'), 'install', 'chromium'], {
     stdio: 'inherit', timeout: 90_000
   });

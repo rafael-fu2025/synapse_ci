@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { CalendarX2 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { AppointmentFilters } from '../../../api/endpoints/appointments';
@@ -39,7 +42,9 @@ export function AppointmentsScreen() {
   const [status, setStatus] = useState('active');
 
   const query = useAppointments({ service, status, sort: 'upcoming' });
-  const appointments = query.data?.data ?? [];
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const appointments = authorityRemoved ? [] : query.data?.data ?? [];
 
   return (
     <Screen scroll={false}>
@@ -74,9 +79,12 @@ export function AppointmentsScreen() {
       </ScrollView>
 
       {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
-      {query.isLoading ? (
-        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
-      ) : appointments.length === 0 && query.isError ? null : appointments.length === 0 ? (
+      {state === 'loading' ? (
+        <Skeleton label="Loading appointments…" variant="list" />
+      ) : state === 'waiting' ? (
+        <EmptyState icon={<CalendarX2 size={30} color={theme.brandIcon} />} title="Waiting to load appointments"
+          body="Appointments have not loaded yet. They will load when this screen and your connection are active." />
+      ) : state === 'error' || authorityRemoved ? null : appointments.length === 0 ? (
         <EmptyState
           icon={<CalendarX2 size={30} color={theme.brandIcon} />}
           title={status === 'active' ? 'No upcoming visits' : 'Nothing here'}
@@ -121,7 +129,6 @@ function createStyles(theme: Theme) {
     chipActive: { backgroundColor: theme.brand, borderColor: theme.brand },
     chipText: { fontSize: 9.5, fontWeight: '700', fontFamily: font.body, color: theme.ink500 },
     chipTextActive: { color: '#ffffff' },
-    loader: { marginTop: 30 },
     list: { paddingBottom: 20 },
   });
 }

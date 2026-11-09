@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { Animated, Platform, StyleSheet, Text } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { Action } from '../src/components/Action';
 import { IconAction } from '../src/components/IconAction';
@@ -116,10 +116,11 @@ it('removes arrow motion immediately when live reduction is enabled', () => {
   expect(renderer!.toJSON()).toBeNull();
 });
 
-it('retains platform native-stack motion normally and removes it under Reduce Motion', () => {
+it.each(['android', 'ios'] as const)('keeps %s stack motion opaque where needed and removes it under Reduce Motion', os => {
+  jest.replaceProperty(Platform, 'OS', os);
   let options: ReturnType<typeof useNativeStackMotionOptions>;
   function Probe() { options = useNativeStackMotionOptions(); return null; }
-  mount(<Probe />); expect(options!).toEqual({ headerShown: false, animation: 'default' });
+  mount(<Probe />); expect(options!).toEqual({ headerShown: false, animation: os === 'android' ? 'slide_from_right' : 'default' });
   jest.mocked(useReducedMotion).mockReturnValue(true);
   update(<Probe />); expect(options!).toEqual({ headerShown: false, animation: 'none' });
 });

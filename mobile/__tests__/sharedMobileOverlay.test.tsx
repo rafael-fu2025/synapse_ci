@@ -130,11 +130,21 @@ it('keeps the form footer outside its scroll and avoids double Android keyboard 
   act(() => { renderer = create(<Screen keyboardAware bottomSafeArea footer={<Text>Save</Text>}><TextField label="Title" /></Screen>); });
   expect(renderer.root.findByType(KeyboardAvoidingView).props.enabled).toBe(false);
   expect(renderer.root.findByType(ScrollView).findAllByType(Text).some(node => node.props.children === 'Save')).toBe(false);
-  const safe = renderer.root.findAllByType(View).find(node => node.props.edges)!;
-  expect(safe.props.edges).toEqual(['top', 'bottom']);
+  const safe = renderer.root.findAllByType(View).find(node => Array.isArray(node.props.edges))!;
+  const footer = renderer.root.findAllByType(View).find(node => node.props.testID === 'screen-footer')!;
+  const input = renderer.root.findByType(TextInput);
+  const save = footer.findByType(Text);
+  expect(safe.props.edges).toEqual(['top']);
+  expect(footer.props.edges).toEqual({ bottom: 'additive' });
+  expect(StyleSheet.flatten(footer.props.style)).toMatchObject({ paddingVertical: 12, backgroundColor: '#ffffff' });
   jest.mocked(useKeyboardVisible).mockReturnValue(true);
   act(() => renderer.update(<Screen keyboardAware bottomSafeArea footer={<Text>Save</Text>}><TextField label="Title" /></Screen>));
-  expect(renderer.root.findAllByType(View).find(node => node.props.edges)!.props.edges).toEqual(['top']);
+  expect(safe.props.edges).toEqual(['top']);
+  expect(footer.props.edges).toEqual({ bottom: 'off' });
+  expect(renderer.root.findByType(TextInput)).toBe(input);
+  expect(footer.findByType(Text)).toBe(save);
+  expect(renderer.root.findAllByType(View).find(node => node.props.testID === 'screen-footer')).toBe(footer);
+  expect(renderer.root.findByType(ScrollView).findAllByType(Text).some(node => node.props.children === 'Save')).toBe(false);
 });
 
 it('keeps a disabled Back control visible with accessible state', () => {

@@ -11,7 +11,7 @@ const http = require('node:http');
 const { once } = require('node:events');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
-const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
+const { chromium } = require('playwright');
 let browser, server, origin;
 const cache = new Map();
 const parents = {
@@ -185,11 +185,16 @@ async function settled(page, route) {
 }
 
 async function traverse(page, direction, route) {
-  await page.evaluate(direction => new Promise(resolve => {
-    document.addEventListener('synapse:page-load', () => resolve(), { once: true });
+  // A page-local awaited Promise can be collected during a real main swap.
+  // Observe completion from Node while retaining native history traversal.
+  await page.evaluate(direction => {
+    const result = window.fixtureTraversal = { loaded: false };
+    document.addEventListener('synapse:page-load', () => { result.loaded = true; }, { once: true });
     history[direction]();
-  }), direction);
+  }, direction);
+  await page.waitForFunction(() => window.fixtureTraversal?.loaded);
   await settled(page, route);
+  await page.evaluate(() => { delete window.fixtureTraversal; });
 }
 
 test('single-host scopes are route-independent while dedicated host scopes stay isolated', () => {
@@ -210,6 +215,121 @@ test('single-host scopes are route-independent while dedicated host scopes stay 
   const guidance = scope('guidance.localhost', '/guidance/appointments', 'guidance-list');
   const main = scope('synapse.localhost', '/admin/carousel', 'manager');
   assert.equal(new Set([shared, clinic, guidance, main]).size, 4, 'Host-bound and single-host shells must not share scopes');
+});
+
+test('explicit header account link soft-navigates through a tooltip wrapper and retains the dropdown across history', { timeout: 20_000 }, async t => {
+  const { page, documents, requests } = await pageFor(t, '/navigation-fixture/a');
+  await page.addStyleTag({ url: origin + '/assets/vendor/bootstrap/css/bootstrap.min.css' });
+  await page.addScriptTag({ url: origin + '/assets/vendor/bootstrap/js/bootstrap.bundle.min.js' });
+  // Synthetic menu isolates eligibility; the profile suite owns real settings views.
+  await page.evaluate(() => {
+    const header = document.querySelector('#header');
+    header.style.zIndex = '1030';
+    header.insertAdjacentHTML('beforeend', `<div class="dropdown user-dropdown" data-bs-toggle="tooltip" data-bs-title="Your account">
+      <button type="button" class="dropdown-toggle user-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User account and profile menu">Account</button>
+      <div class="dropdown-menu"><a id="header-settings-link" class="dropdown-item user-menu-item" data-navigation href="/navigation-fixture/b"><span>Profile &amp; Settings</span></a></div>
+    </div>`);
+    window.accountMenuIdentity = [...header.querySelectorAll('.user-dropdown, .user-trigger, #header-settings-link')];
+  });
+  const trigger = page.locator('#header .user-trigger');
+  const settings = page.locator('.user-dropdown[data-bs-toggle="tooltip"] a[data-navigation]');
+  const historyLength = await page.evaluate(() => history.length);
+  await trigger.click();
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+  assert.equal(await settings.isVisible(), true);
+  await settings.locator('span').click();
+  await settled(page, '/navigation-fixture/b');
+  await assertShell(page);
+  assert.equal(await page.title(), 'Navigation b');
+  assert.equal(await page.locator('#main h1').textContent(), 'Navigation b');
+  assert.equal(await page.evaluate(() => window.initialMain.isConnected), false, 'The account link must replace main content, not open a modal');
+  assert.equal(await page.evaluate(() => history.length), historyLength + 1);
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false', 'Bootstrap must still close the account menu after selection');
+  for (const [direction, route] of [['back', '/navigation-fixture/a'], ['forward', '/navigation-fixture/b']]) {
+    await traverse(page, direction, route);
+    await assertShell(page);
+    assert.equal(await page.evaluate(() => window.accountMenuIdentity.every((element, index) =>
+      element === document.querySelectorAll('#header .user-dropdown, #header .user-trigger, #header-settings-link')[index])), true, 'Account menu nodes must survive same-document history');
+  }
+  await trigger.click();
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'true', 'The real dropdown must remain usable after navigation');
+  await trigger.click();
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+  assert.equal(documents.length, 1, 'The account link and Back/Forward must not load another document');
+  assert.deepEqual(requests.filter(request => request.resourceType() === 'fetch' && new URL(request.url()).pathname.startsWith('/navigation-fixture/'))
+    .map(request => new URL(request.url()).pathname), ['/navigation-fixture/b', '/navigation-fixture/a', '/navigation-fixture/b']);
+});
+
+test('explicit navigation preserves tooltip, Bootstrap toggle, modal, disabled, HX and target exclusions', { timeout: 15_000 }, async t => {
+  const { page, documents, requests } = await pageFor(t, '/navigation-fixture/a');
+  const explicit = { 'data-navigation': '' };
+  // Wrapper order is nearest-to-farthest: a permitted tooltip must not hide a
+  // non-tooltip toggle or another opt-out higher in the ancestor chain.
+  const cases = [
+    ['ordinary link inside tooltip', {}, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['actual tooltip trigger', { ...explicit, 'data-bs-toggle': 'tooltip' }, []],
+    ['actual dropdown trigger inside tooltip', { ...explicit, 'data-bs-toggle': 'dropdown' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['actual tab trigger inside tooltip', { ...explicit, 'data-bs-toggle': 'tab' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['tooltip inside dropdown ancestor', explicit, [{ 'data-bs-toggle': 'tooltip' }, { 'data-bs-toggle': 'dropdown' }]],
+    ['dropdown inside tooltip ancestor', explicit, [{ 'data-bs-toggle': 'dropdown' }, { 'data-bs-toggle': 'tooltip' }]],
+    ['disabled link', { 'data-navigation': 'false' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['disabled ancestor', explicit, [{ 'data-bs-toggle': 'tooltip' }, { 'data-navigation': 'false' }]],
+    ['form modal opener', { ...explicit, 'data-app-modal-open': '' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['form modal closer', { ...explicit, 'data-app-modal-close': '' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['form modal ancestor', explicit, [{ 'data-bs-toggle': 'tooltip' }, { 'data-app-modal': '' }]],
+    ['HX ancestor', explicit, [{ 'data-bs-toggle': 'tooltip' }, { 'hx-get': '/navigation-fixture/b' }]],
+    ['data-HX ancestor', explicit, [{ 'data-bs-toggle': 'tooltip' }, { 'data-hx-post': '/navigation-fixture/b' }]],
+    ['local boost opt-out', explicit, [{ 'data-bs-toggle': 'tooltip' }, { 'hx-boost': 'false' }]],
+    ['targeted link', { ...explicit, target: '_blank' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['targeted ancestor', explicit, [{ 'data-bs-toggle': 'tooltip' }, { target: '_self' }]],
+    ['download link', { ...explicit, download: '' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ['inline click handler', { ...explicit, onclick: 'void 0' }, [{ 'data-bs-toggle': 'tooltip' }]],
+    ...['hx-get', 'hx-post', 'hx-put', 'hx-patch', 'hx-delete', 'data-hx-get', 'data-hx-post', 'data-hx-put', 'data-hx-patch', 'data-hx-delete']
+      .map(attribute => [`${attribute} link`, { ...explicit, [attribute]: '/navigation-fixture/b' }, [{ 'data-bs-toggle': 'tooltip' }]]),
+    ['ordinary main link', {}, []]
+  ];
+  const results = await page.evaluate(cases => {
+    const fixture = document.createElement('div');
+    document.querySelector('#main').append(fixture);
+    const results = [];
+    // Observe AFTER production delegation, then cancel only native fallback.
+    // Bootstrap/HTMX are intentionally absent here: their handlers could mask
+    // which links SynapseNavigation itself chose to intercept.
+    const observe = event => {
+      const link = event.target.closest('a[data-navigation-probe]');
+      if (!link) return;
+      results.push([link.dataset.navigationProbe, event.defaultPrevented]);
+      event.preventDefault();
+    };
+    document.addEventListener('click', observe);
+    try {
+      for (const [label, attributes, wrappers] of cases) {
+        const link = document.createElement('a');
+        link.href = '/navigation-fixture/b';
+        link.dataset.navigationProbe = label;
+        for (const [name, value] of Object.entries(attributes)) link.setAttribute(name, value);
+        link.innerHTML = '<span>Eligibility probe</span>';
+        let node = link;
+        for (const attributes of wrappers) {
+          const wrapper = document.createElement('div');
+          for (const [name, value] of Object.entries(attributes)) wrapper.setAttribute(name, value);
+          wrapper.append(node);
+          node = wrapper;
+        }
+        fixture.append(node);
+        link.querySelector('span').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+      }
+    } finally {
+      document.removeEventListener('click', observe);
+      fixture.remove();
+    }
+    return results;
+  }, cases);
+  assert.deepEqual(results, cases.map(([label]) => [label, label === 'ordinary main link']), 'Only the unguarded positive control may be intercepted');
+  await settled(page, '/navigation-fixture/b');
+  await assertShell(page);
+  assert.equal(documents.length, 1);
+  assert.equal(requests.filter(request => request.resourceType() === 'fetch' && request.url().endsWith('/navigation-fixture/b')).length, 1, 'Excluded links must not fetch; the ordinary main link still must');
 });
 
 test('actual PHP shell wiring, sidebar identity, server active route, title and focus', { timeout: 30_000 }, async t => {

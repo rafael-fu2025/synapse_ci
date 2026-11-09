@@ -42,10 +42,13 @@ class LatexReportCompiler
             if (@file_put_contents($directory . '/report.tex', $source) !== strlen($source)) {
                 throw new RuntimeException();
             }
-            $seal = defined('ROOTPATH') ? ROOTPATH . 'public/assets/img/brand/FoundationU.png' : '';
-            if ($seal !== '' && is_file($seal)) {
-                if (filesize($seal) > self::MAX_LOG || !@copy($seal, $directory . '/university-seal.png')) {
-                    throw new RuntimeException();
+            foreach (['public/assets/img/brand/FoundationU.png' => 'university-seal.png',
+                'public/synapse-black.png' => 'synapse-black.png'] as $path => $filename) {
+                $asset = defined('ROOTPATH') ? ROOTPATH . $path : '';
+                if ($asset !== '' && is_file($asset)) {
+                    if (filesize($asset) > self::MAX_LOG || !@copy($asset, $directory . '/' . $filename)) {
+                        throw new RuntimeException();
+                    }
                 }
             }
 

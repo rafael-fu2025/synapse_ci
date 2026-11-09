@@ -5,14 +5,16 @@ import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native'
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Check, Search, Users, X } from 'lucide-react-native';
-import type { TeamCalendarEventCreateInput, TeamCalendarEventEditableInput } from '../../../api/endpoints/teamCalendar';
+import type { TeamCalendarEventCreateInput, TeamCalendarEventDetail, TeamCalendarEventEditableInput } from '../../../api/endpoints/teamCalendar';
 import type { TeamMember } from '../../../api/endpoints/teamTasks';
 import { Action } from '../../../components/Action';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { EmptyState } from '../../../components/EmptyState';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
 import { TextField } from '../../../components/TextField';
+import { loadingState } from '../../../lib/loadingState';
 import { secureClientNonce } from '../../../lib/secureNonce';
 import { useForegroundOnline } from '../../../lib/useActiveScreen';
 import { useTheme } from '../../../theme/ThemeProvider';
@@ -58,6 +60,17 @@ function newDraft(initialDate?: string): Draft {
   return { title: '', description: '', location: '', starts_at: walls.starts_at, ends_at: walls.ends_at, participant_ids: [] };
 }
 
+function eventDraft(event: TeamCalendarEventDetail): Draft {
+  return {
+    title: event.title,
+    description: event.description,
+    location: event.location,
+    starts_at: instantToManilaWall(event.starts_at) ?? defaultEventWalls().starts_at,
+    ends_at: instantToManilaWall(event.ends_at) ?? defaultEventWalls().ends_at,
+    participant_ids: normalizeParticipantIds(event.participants.map(member => member.id)),
+  };
+}
+
 export function TeamCalendarEventFormScreen() {
   const route = useRoute<FormRoute>();
   const { activeUnit } = useWorkspace();
@@ -77,14 +90,6 @@ function EventForm() {
   const network = useNetInfo();
   const focused = useIsFocused();
   const foregroundOnline = useForegroundOnline();
-  const [initialDraft] = useState(() => newDraft(route.params?.initialDate));
-  const [draft, setDraft] = useState<Draft>(initialDraft);
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
-  const baseline = useRef({ draft: initialDraft, members: [] as TeamMember[] });
-  const [loadedVersion, setLoadedVersion] = useState<number | null>(null);
-  const [initialSnapshot, setInitialSnapshot] = useState(JSON.stringify(initialDraft));
-  const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>([]);
   const [memberQuery, setMemberQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [memberPage, setMemberPage] = useState(1);
@@ -106,12 +111,22 @@ function EventForm() {
   const { refreshing, refresh } = useCalendarManualRefresh(detail);
   const loadedEvent = detail.data?.data;
   const detailKind = detail.isError ? teamCalendarErrorKind(detail.error) : null;
+  const readDenied = editing && ['unauthorized', 'forbidden', 'missing'].includes(detailKind ?? '');
+  const contentState = loadingState(detail);
+  const [initialDraft] = useState(() => editing && loadedEvent && !readDenied ? eventDraft(loadedEvent) : newDraft(route.params?.initialDate));
+  const [draft, setDraft] = useState<Draft>(initialDraft);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const [loadedVersion, setLoadedVersion] = useState<number | null>(() => editing && loadedEvent && !readDenied ? loadedEvent.version : null);
+  const [initialSnapshot, setInitialSnapshot] = useState(() => JSON.stringify(initialDraft));
+  const [selectedMembers, setSelectedMembers] = useState<TeamMember[]>(() => editing && loadedEvent && !readDenied ? loadedEvent.participants : []);
+  const baseline = useRef({ draft: initialDraft, members: selectedMembers });
   const deniedEdit = editing && !!loadedEvent && (!loadedEvent.can_edit || loadedEvent.status !== 'scheduled');
-  const locked = submitting || ambiguousRetry || deniedEdit || accessDenied;
+  const locked = submitting || ambiguousRetry || deniedEdit || accessDenied || readDenied;
   const members = useTeamCalendarMemberSearch(unit, debouncedQuery, memberPage,
     !locked && memberQuery.trim() === debouncedQuery && (!editing || loadedVersion !== null));
   const offline = network.isConnected === false || detail.fetchStatus === 'paused';
-  const canWrite = focused && foregroundOnline && !offline;
+  const canWrite = focused && foregroundOnline && !offline && !readDenied;
   const current = useRef({ locked, canWrite, loadedEvent, loadedVersion, needsReview });
   current.current = { locked, canWrite, loadedEvent, loadedVersion, needsReview };
 
@@ -121,22 +136,15 @@ function EventForm() {
   }, []);
   useEffect(() => {
     const event = detail.data?.data;
-    if (!editing || !event || loadedVersion !== null) { return; }
-    const loaded: Draft = {
-      title: event.title,
-      description: event.description,
-      location: event.location,
-      starts_at: instantToManilaWall(event.starts_at) ?? defaultEventWalls().starts_at,
-      ends_at: instantToManilaWall(event.ends_at) ?? defaultEventWalls().ends_at,
-      participant_ids: normalizeParticipantIds(event.participants.map(member => member.id)),
-    };
+    if (!editing || !event || loadedVersion !== null || readDenied || accessDenied) { return; }
+    const loaded = eventDraft(event);
     baseline.current = { draft: loaded, members: event.participants };
     draftRef.current = loaded;
     setDraft(loaded);
     setInitialSnapshot(JSON.stringify(loaded));
     setSelectedMembers(event.participants);
     setLoadedVersion(event.version);
-  }, [detail.data, editing, loadedVersion]);
+  }, [accessDenied, detail.data, editing, loadedVersion, readDenied]);
   useEffect(() => {
     if (detailKind === 'forbidden' || (members.isError && teamCalendarErrorKind(members.error) === 'forbidden')) {
       recoverAccess().catch(() => undefined);
@@ -303,17 +311,26 @@ function EventForm() {
       </Screen>
     );
   }
-  if (editing && loadedVersion === null && detail.isLoading) {
-    return <Screen scroll={false} bodyStyle={styles.center} header={header}><ActivityIndicator accessibilityLabel="Loading event form" color={theme.brandIcon} /></Screen>;
+  if (editing && !readDenied && loadedVersion === null && contentState === 'loading' && !offline && detail.eligible !== false) {
+    return <Screen header={header}><Skeleton label="Loading event form" variant="form" /></Screen>;
   }
-  if (editing && loadedVersion === null) {
+  if (editing && !readDenied && !loadedEvent && !detail.isError) {
+    return <Screen header={header}><EmptyState icon={<Users size={30} color={theme.brandIcon} />}
+      title={offline ? 'You are offline' : 'Event is waiting to load'}
+      body={offline ? 'Reconnect to load this event for editing.' : 'Return to this Team Workspace while connected to load the original event.'}
+      action={<Action full disabled={!detail.eligible || offline} onPress={() => { refresh().catch(() => undefined); }}>Try again</Action>} /></Screen>;
+  }
+  if (editing && !readDenied && loadedEvent && loadedVersion === null) {
+    return <Screen header={header}><Skeleton label="Preparing event form" variant="form" active={false} /></Screen>;
+  }
+  if (editing && (loadedVersion === null || readDenied)) {
     return (
       <Screen header={header}>
         <EmptyState
           icon={<Users size={30} color={theme.brandIcon} />}
-          title="Could not load event"
+          title={detailKind === 'missing' ? 'Event unavailable' : 'Could not load event'}
           body={teamCalendarErrorMessage(detail.error, offline ? 'Reconnect to load this event.' : 'Try loading the event again.')}
-          action={<Action full loading={refreshing} disabled={!detail.eligible} onPress={() => { refresh().catch(() => undefined); }}>Try again</Action>}
+          action={detailKind === 'unauthorized' ? undefined : <Action full loading={refreshing} disabled={!detail.eligible} onPress={() => { refresh().catch(() => undefined); }}>Try again</Action>}
         />
       </Screen>
     );

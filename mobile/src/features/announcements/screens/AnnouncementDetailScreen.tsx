@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -25,7 +27,9 @@ export function AnnouncementDetailScreen() {
   const query = useAnnouncement(route.params.id);
   const markRead = useMarkAnnouncementRead();
 
-  const announcement = query.data?.data;
+  const state = loadingState(query);
+  const unavailable = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const announcement = unavailable ? undefined : query.data?.data;
 
   // Opening the notice is the read signal, exactly like the web portal.
   useEffect(() => {
@@ -35,13 +39,12 @@ export function AnnouncementDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [announcement?.id, announcement?.read_at]);
 
-  const unavailable = query.error instanceof ApiError && query.error.status === 404;
   const Icon = announcement?.unit === 'guidance' ? BookOpenText : HeartPulse;
 
   return (
     <Screen scroll={false}>
       <PageHeader title="Announcement" onBack={navigation.goBack} />
-      {query.isLoading ? <ActivityIndicator color={theme.brandIcon} /> : null}
+      {state === 'loading' ? <Skeleton label="Loading announcement…" variant="detail" /> : null}
       {query.isError ? (
         <View style={styles.feedback}>
           <Text accessibilityRole="alert" style={styles.missing}>
@@ -50,7 +53,8 @@ export function AnnouncementDetailScreen() {
           <Action variant="secondary" onPress={() => { query.refetch().catch(() => undefined); }} loading={query.isFetching}>Retry</Action>
         </View>
       ) : null}
-      {!query.isLoading && !query.isError && !announcement ? <Text style={styles.missing}>This announcement is no longer available.</Text> : null}
+      {state === 'waiting' ? <Text style={styles.missing}>Waiting to load this announcement. It will load when your connection is available.</Text> : null}
+      {state === 'content' && !query.isError && !announcement ? <Text style={styles.missing}>This announcement is no longer available.</Text> : null}
       {announcement && !unavailable ? (
         <ScrollView contentContainerStyle={styles.article}>
           <LinearGradient colors={[palette.brand900, '#9d2020']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>

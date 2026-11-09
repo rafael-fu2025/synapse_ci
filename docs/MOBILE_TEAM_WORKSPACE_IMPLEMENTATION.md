@@ -453,6 +453,209 @@ was added. Check both LANs after rebuilding, including keyboard, long messages,
 retained re-entry and current backend hint coverage; do not infer subsecond latency
 from passing tests.
 
+## Screenshot-confirmed rendering and loading correction — 2026-11-09
+
+This supersedes the earlier decision to retain Android's peer fade. The phone
+screenshot shows Home/Visits pixels at the same time plus a heavy transient frame;
+the user confirms the symptom across Team peers and Profile ID. Code/document
+research identifies whole-scene opacity as a concrete blending path, not proof of
+a particular GPU shadow fault.
+
+### Implemented presentation policy
+
+- Ordinary Android Personal/Team peers use `none` with opaque themed scenes;
+  iOS retains the 160 ms fade. Native Android detail stacks use installed
+  translation-only `slide_from_right`; iOS retains `default`. Live Reduce Motion
+  disables transitions. Lazy/frozen routes, histories and the stationary bar stay.
+  The separate 240 ms opaque Personal/Work slide and 400 ms raised CTA reveal are
+  unchanged. No global shadow/border deletion, hardware texture, color workaround
+  or display-rate change is included.
+- Chat keeps the actual list/input mounted behind an opaque native cover until its
+  current entry/window and viewport, final marker/tail or explicit target are
+  measured in position. Command issuance and estimated virtualized height do not
+  reveal content. Empty, short and already-bottomed returns finish without a new
+  scroll event. Native blur immediately restores the retained cover before frozen
+  React commits; stale measures/refs and keyboard geometry are rejected. Fresh
+  targets received while blurred remain owned by that return; retained old targets
+  do not override ordinary latest entry. Failed/offline retained windows use existing
+  recovery feedback, including `updateError`, rather than endless preparation.
+  Revealed content does not re-cover for incoming/polling/keyboard or overlays.
+- Covered message interaction/accessibility and reads stay disabled. Current-session
+  100%-visible two-unit read markers still require 500 ms after reveal; preparation
+  cannot count toward dwell. History anchoring, original-version mutations, exact
+  ambiguous-send retries, drafts and composer/CTA clearance remain.
+- Shared `Skeleton`/`loadingState` adopt bounded themed initial layouts across Home,
+  personal queue/visits/history/health/resources, Tasks, Calendar and staff queues.
+  Shapes are noninteractive/accessibility-hidden with one loader announcement per
+  region and no shadows. The native noninteraction pulse pauses on blur, background,
+  overlay/inactive/unmount, and stays static under Reduce Motion. No new dependency,
+  minimum-duration loader or JavaScript frame-production loop is introduced.
+- Current cached data—including successful empty data—beats refresh/error flags;
+  disabled/paused no-data says waiting. Authoritative access/removal errors hide
+  protected records. Home greeting/Quick access and Profile signed-in identity/initials
+  remain immediate. Records retains cached history on transient failure; warm event
+  edits initialize their original draft/version before display. Calendar does not
+  borrow previous-range/filter data. Receipts/drafts and local action spinners stay.
+
+Research used: [React Native 0.88 View](https://reactnative.dev/docs/view),
+[React Navigation tabs](https://reactnavigation.org/docs/bottom-tab-navigator/#animation),
+[FlatList](https://reactnative.dev/docs/flatlist#scrolltoend), and
+[NN/G skeleton screens](https://www.nngroup.com/articles/skeleton-screens/).
+Offscreen alpha compositing/hardware textures are not enabled globally: the official
+View guidance notes their costs. Variable-height chat does not invent `getItemLayout`
+measurements. Skeletons improve presentation, not HTTP latency.
+
+### Correction verification
+
+Full serialized Jest with `--detectOpenHandles` passed **70 suites / 1,422 tests**,
+with no skipped tests or reported open handles. TypeScript passed; ESLint passed
+with only the four existing `secureNonce` no-bitwise warnings. Android build,
+native refresh-rate/LAN transport and actual binary-tooling fixtures passed
+**62 tests**, no skips. Whitespace checks passed. Offline LAN release bundle/Hermes
+asset generation and resource/Kotlin compilation passed (**177 tasks: 1 executed,
+176 up-to-date**), without signing, APK packaging, installation or dependency downloads.
+Existing AGP/KSP deprecation/version warnings remain; they did not fail these tasks.
+The documented PowerShell rebuild block was syntax-checked without execution.
+None of these checks certifies native ghosting, first-frame Chat presentation or FPS.
+
+### Chat preparation waiting correction
+
+Follow-up feedback reported a frustratingly long Chat skeleton. There is no hardcoded
+minimum: 700 ms is only the decorative pulse, and 500 ms is read-marker dwell after
+reveal. The former entry gate nevertheless required a new latest revision and idle
+request even when same-scope latest messages and native geometry were retained.
+An unchanged tail could also fail to produce a new layout/scroll event.
+
+Warm ordinary returns now confirm/reveal the retained latest window while its fresh
+latest HTTP read continues. The native window marker survives entry-only changes;
+entry keys still reject old callbacks. Event-driven next-frame measured correction
+handles an inexact/no-op `scrollToEnd` without waiting for another native event or a
+fixed delay. Fresh scopes, cold data and unfulfilled explicit targets do not borrow
+the old window. Covered/read/focus/identity guards stay; deliberate drag during a
+warm return prevents the delayed fresh page from forcing a new bottom jump.
+
+Verification: **97 tests / 4 focused suites** passed with open-handle detection;
+TypeScript and scoped Chat lint passed. This is follow-up evidence, separate from
+the earlier full-suite/offline compilation above. No successor APK or native timing
+measurement was produced for this correction.
+
+### Appointment stepper slide
+
+The request stepper changes local content rather than navigating routes. A local
+`BookingStepTransition` now slides accepted step bodies using the existing 240 ms
+cubic-out/native-driver translation. Forward enters from the right and all Back
+paths reverse from the left. Panels are opaque and clipped; header, progress,
+booking footer and context switcher remain outside the transform. No scene opacity
+or new dependency is introduced.
+
+The incoming/current body retains its identity during typing, validation and
+visual cleanup. The departing body loses touch/accessibility/editability immediately;
+stale field/action callbacks cannot change another step. At most two panels are
+retained. Same-pair reversals resume actual native progress, newer destinations
+supersede obsolete motion, and rotation, blur, background, live Reduce Motion,
+accepted discard and unmount stop stale callbacks. Success slides only after the
+request resolves and stays outside the four-step count. Submission remains locked,
+drafts remain screen-owned and raised-button clearance is unchanged.
+
+Verification: **93 focused tests / 5 suites** passed. The subsequent full serialized
+mobile run passed **71 suites / 1,442 tests**, with no skipped tests or reported open
+handles. TypeScript and full lint passed (only four existing `secureNonce` warnings);
+whitespace passed. These results include the recent Chat waiting and booking-clearance
+corrections. This follow-up did not build/install a signed APK or perform native
+visual acceptance. The initial integration test run exhausted Node's heap while
+formatting a changed renderer-ancestry assertion; the assertion was corrected to
+check the new stationary viewport hierarchy, with no increased heap or forced exit.
+
+### Group timestamp presentation
+
+The user chose a centered timestamp **above each existing connected message group**.
+Timestamp rows replace redundant day-only headings and use the first message's actual
+instant: `1:47 PM` today, `Wed 9:09 AM` for the previous six Manila calendar days,
+and `Nov 1, 2026, 9:05 AM` for older dates (also full date for future/unknown-age
+instants). Invalid timestamps say Date unavailable. Explicit 12-hour formatting is
+independent of device timezone; timestamp parsing and id ordering are unchanged.
+
+Sender names stay on first bubbles; no visual time remains on the last bubble.
+Connected-corner flags, sender/day/five-minute/unread/reference boundaries and
+individual message/read-marker keys remain. No grouped mega-row replaces individual
+visibility or source/reply interactions. Screen-reader message labels keep each
+message's own time. Target measurement stays on the actual bubble, not the heading.
+
+One date context owns a single visible/foreground/uncovered next-midnight timer.
+Only timestamp subscribers update; list data, input, entry readiness, HTTP reads and
+automatic scroll do not change. Blur/background/coverage/inactive/unmount release
+that timer and focus/return catches up. No minute-level whole-list clock or skeleton
+replay is introduced. Focused grouping/formatter/screen/hook/date-lifecycle coverage
+passed **142 tests / 4 suites** before the full follow-up gate. The final serialized
+mobile run passed **72 suites / 1,463 tests** with no skipped tests or reported open
+handles. TypeScript, full lint (four existing `secureNonce` warnings), and whitespace
+checks passed. No signed APK, installation, or native visual acceptance was performed
+for the timestamp change.
+
+### Mobile screen polish
+
+The form-footer screenshot showed the footer surface ending above a canvas-colored
+bottom safe-area strip. `Screen` now puts an opted-in pinned footer's bottom inset
+inside that same surface using additive padding. Existing content/action positions
+and footer-style overrides are retained; keyboard show/hide changes the edge mode,
+not the wrapper/input identity. Non-footer bottom-safe screens and Chat's explicit
+no-bottom-inset composer retain their behavior. New Event and Edit Task inherit the
+correction without extra caller padding. Task Details adds 12 points between the
+comment field and Add comment while preserving keyboard clearance and exact retries.
+
+Calendar's local segmented choices use a short native-driver selected-pill/label
+transition plus existing press feedback. Agenda/Week/Month and filter scope/status
+still select immediately, with stationary radio hit targets and unchanged filters,
+ranges, query keys and lease guards. Only Calendar filters opt into a 360 ms entry /
+240 ms exit; default sheets/dialogs retain their presets, measured travel and native
+modal dismissal/drag/focus lifecycle. Reduce Motion stays authoritative. An observed
+native preference is shared among concurrent live consumers, so a new presenter
+does not start from an invented unknown state; unknown preference remains conservative,
+live events beat old promises, and the last unmount removes the native subscription.
+
+Unread notifications now use white/dark content in dark mode and maroon/white
+content in light mode, including title, message, time, icon and unread indicator.
+Read rows and read/open actions retain their behavior. Booking step two's Selected
+service summary is charcoal in dark mode and maroon in light mode; only that
+summary's foregrounds change, not the review/receipt banners. Appearance removes
+the explanatory primary-action-color sentence without changing theme preferences.
+
+Focused checkpoints passed: **128 tests / 3 suites** for Appearance/notification/
+booking presentation, **97 tests / 2 suites** for footer/comment/keyboard behavior,
+**88 tests / 3 suites** for Calendar/overlay motion, and **21 native-preference
+lifecycle tests**. A separate **117 tests / 5 suites** Chat/stepper/skeleton regression
+run passed with open-handle detection. The integrated **436 tests / 12 suites**
+then passed with no skipped tests or reported open handles. Its first run caught
+one old outer-bottom-inset assertion; that test now checks the actual footer-owned
+additive inset, keyboard off mode, and retained input/action identity. The final
+serialized mobile suite passed **73 suites / 1,535 tests**, with no skipped tests or
+reported open handles. TypeScript, changed-file lint (zero warnings), full lint
+(four existing `secureNonce` warnings), and scoped whitespace checks passed. These
+are automated source checks, not release-device visual evidence. No successor APK,
+installation, live account action or Git publication was performed for this pass.
+
+### Release acceptance boundary
+
+The current output predecessor was signature/packaging-verified and preserved as
+`android/app/build/outputs/apk/verified-backups/synapse-lan-test-before-opaque-loading-fixes-736013815f38.apk`
+(file SHA-256 `736013815f381f7c6d51ee24423c782b4722bd097c8435a554f6fdbba4eb62dd`)
+without changing the installed app. The earlier backup is retained too. The current
+visual corrections remain uncommitted, so old HEAD/old APK hashes are not evidence
+of the new screen behavior. The [LAN rebuild guide](MOBILE_LAN_TEST.md#rebuild-from-a-fresh-powershell-terminal)
+verifies/preserves existing output, uses the same private signer, checks the actual
+successor and records package/version/file checksum plus source dirty state.
+
+**Physical visual acceptance is pending.** A matching rebuilt release recording must
+show no ghosted page/heavy frame across Home↔Visits↔Queue↔Profile and Team
+Board↔My Tasks↔Chat↔Calendar, including maroon controls/Profile ID/detail pushes,
+rapid reversals, cold/warm light/dark and Reduce Motion. The CTA remains intact and
+Chat's first exposed frame must already be positioned. Test explicit targets,
+long/grouped messages, multiline/keyboard, pinned incoming versus deliberate history,
+empty and error/offline recovery. Use disposable/user-owned accounts because opening
+Chat may acknowledge reads. If the native frame persists, inspect that specific new
+release surface rather than layering speculative global fixes. No device installation,
+live operations, new signing material, dependencies or publication is implied.
+
 ## Deployment record
 
 - Workspace rollout state: **disabled until implementation and acceptance gates pass**.

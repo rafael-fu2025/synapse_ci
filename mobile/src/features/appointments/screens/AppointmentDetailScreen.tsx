@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   AccessibilityInfo,
-  ActivityIndicator,
   Animated,
   Easing,
   ScrollView,
@@ -12,6 +11,9 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarDays, ChevronRight, Clock3, Stethoscope, UserRound } from 'lucide-react-native';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
+import { ApiError } from '../../../api/client';
 import { DetailRow } from '../../../components/DetailRow';
 import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
@@ -115,17 +117,19 @@ export function AppointmentDetailScreen() {
   const navigation = useNavigation<Props['navigation']>();
   const route = useRoute<Props['route']>();
   const query = useAppointment(route.params.id);
-  const appointment = query.data?.data;
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const appointment = authorityRemoved ? undefined : query.data?.data;
   // Hooks must run before the early returns below.
   const reduceMotion = useReduceMotion();
   const keyboardVisible = useKeyboardVisible();
   const workspace = useOptionalWorkspace();
 
-  if (query.isLoading) {
+  if (state === 'loading') {
     return (
       <Screen scroll={false}>
         <PageHeader title="Appointment" onBack={navigation.goBack} />
-        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
+        <Skeleton label="Loading appointment…" variant="detail" />
       </Screen>
     );
   }
@@ -136,7 +140,9 @@ export function AppointmentDetailScreen() {
         {query.isError ? (
           <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} />
         ) : (
-          <Text style={styles.missing}>This appointment is no longer available.</Text>
+          <Text style={styles.missing}>{state === 'waiting'
+            ? 'Waiting to load this appointment. It will load when this screen and your connection are active.'
+            : 'This appointment is no longer available.'}</Text>
         )}
       </Screen>
     );
@@ -232,7 +238,6 @@ export function AppointmentDetailScreen() {
 
 function createStyles(theme: Theme) {
   return StyleSheet.create({
-    loader: { marginTop: 30 },
     missing: { color: theme.ink500, fontFamily: font.body, fontSize: 11.5 },
     // The ScrollView owns the free space; the action bar below it stays pinned.
     scroll: { flex: 1 },

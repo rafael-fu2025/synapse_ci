@@ -49,7 +49,7 @@ final class OperationalReportPdfTest extends CIUnitTestCase
         foreach (['FOUNDATION UNIVERSITY', 'SYNAPSE', 'EXECUTIVE SUMMARY', 'Department results',
             'Performance summary', 'Daily activity', 'Daily counts and period totals',
             'Interpretation and counting basis', 'not unique patients', 'not unique people',
-            'separate lifecycle events', 'No names, diagnoses, or person-level records.'] as $label) {
+            'separate lifecycle events'] as $label) {
             self::assertStringContainsString($label, $source);
         }
         $this->assertPageNumbers($source, 7);
@@ -69,12 +69,39 @@ final class OperationalReportPdfTest extends CIUnitTestCase
     public function testEveryPageUsesHeaderWithEmbeddedUniversitySeal(): void
     {
         $source = OperationalReportPdf::source($this->rows(), '2026-10-01', '2026-10-01');
-        self::assertStringContainsString('\\includegraphics[width=20mm,height=20mm,keepaspectratio]{university-seal.png}', $source);
-        self::assertSame(1, substr_count($source, '\\includegraphics'));
+        self::assertStringContainsString('\\newsavebox{\\ReportBrand}', $source);
+        self::assertStringContainsString('\\setlength{\\ReportBrandHeight}{\\dimexpr\\ht\\ReportBrand+\\dp\\ReportBrand\\relax}', $source);
+        self::assertStringContainsString('\\includegraphics[trim=0 8.25bp 0 8.25bp,clip,height=\\ReportBrandHeight]{university-seal.png}\\hspace{3mm}', $source);
+        self::assertStringContainsString('\\textls[120]{FOUNDATION UNIVERSITY}', $source);
+        self::assertSame(2, substr_count($source, '\\includegraphics'));
         foreach ($this->pages($source) as $page) {
             self::assertStringStartsWith('\\ReportHeader{', $page);
             self::assertSame(1, substr_count($page, '\\ReportHeader{'));
         }
+    }
+
+    public function testUsesOneTimesCompatibleFontThroughoutTheReport(): void
+    {
+        $source = OperationalReportPdf::source($this->rows(), '2026-10-01', '2026-10-01');
+        self::assertStringContainsString('\\usepackage[T1]{fontenc}', $source);
+        self::assertStringContainsString('\\IfFileExists{t1ptm.fd}{\\renewcommand{\\rmdefault}{ptm}}{\\renewcommand{\\rmdefault}{utm}}', $source);
+        self::assertStringContainsString('\\DeclareSymbolFont{operators}{T1}{\\rmdefault}{m}{n}', $source);
+        self::assertStringNotContainsString('\\sffamily', $source);
+        self::assertStringNotContainsString('\\ttfamily', $source);
+    }
+
+    public function testFooterContainsOnlyBlackBrandingAndPageIndicator(): void
+    {
+        $source = OperationalReportPdf::source($this->rows(), '2026-10-01', '2026-10-01');
+        $footer = explode('\\let\\@evenfoot\\@oddfoot', explode('\\def\\@oddfoot', $source, 2)[1], 2)[0];
+        self::assertStringContainsString('\\rmfamily\\scriptsize\\color{black}', $footer);
+        self::assertStringContainsString('\\settoheight{\\SynapseLogoHeight}{\\textbf{SYNAPSE}}', $footer);
+        self::assertStringContainsString('\\includegraphics[trim=76bp 89bp 92bp 116bp,clip,height=\\SynapseLogoHeight]{synapse-black.png}', $footer);
+        self::assertStringContainsString('\\textbf{SYNAPSE}\\hfill Page \\thepage{} of 7\\par', $footer);
+        self::assertStringNotContainsString('\\hrule', $footer);
+        self::assertStringNotContainsString('Authorized aggregate report', $source);
+        self::assertStringNotContainsString('No names, diagnoses, or person-level records.', $source);
+        self::assertStringContainsString('\\let\\@evenfoot\\@oddfoot', $source);
     }
 
     public function testDepartmentPagesContainOnlyTheirOwnMetricsAndCharts(): void
@@ -150,6 +177,7 @@ final class OperationalReportPdfTest extends CIUnitTestCase
             }
             self::assertStringContainsString('\\textbf{Period total}' . str_repeat(' & \\textbf{496}', $columns), $pages[$pageIndex]);
             self::assertSame($columns, substr_count($pages[$pageIndex - 1], 'coordinates {' . implode(' ', $coordinates) . '};'));
+            self::assertStringContainsString('yticklabel style={/pgf/number format/fixed,/pgf/number format/precision=0,/pgf/number format/assume math mode=true}', $pages[$pageIndex - 1]);
             self::assertStringContainsString('xtick={1,11,21,31},xticklabels={{01 Oct},{11 Oct},{21 Oct},{31 Oct}}', $pages[$pageIndex - 1]);
             self::assertStringContainsString('ymin=0,ymax=32,ytick={0,16,32}', $pages[$pageIndex - 1]);
         }

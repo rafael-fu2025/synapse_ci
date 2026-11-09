@@ -52,7 +52,6 @@ export function AppearanceScreen() {
           );
         })}
       </View>
-      <Text style={styles.note}>Maroon remains the primary action color in both themes, matching the SYNAPSE web portal.</Text>
     </Screen>
   );
 }
@@ -74,7 +73,6 @@ function createStyles(theme: Theme) {
     previewLabel: { color: theme.ink500, fontSize: 8, letterSpacing: 1, fontWeight: '700', fontFamily: font.body },
     previewValue: { marginTop: 2, fontSize: 11, color: theme.ink900, fontWeight: '600', fontFamily: font.body },
     sectionLabel: { marginTop: 17, marginBottom: 8, color: theme.ink400, fontSize: 8.5, fontWeight: '800', letterSpacing: 1, fontFamily: font.body },
-    note: { marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: theme.surfaceWarm, color: theme.ink500, fontSize: 9, lineHeight: 14, fontFamily: font.body },
     options: {
       borderRadius: 14,
       borderWidth: 1,

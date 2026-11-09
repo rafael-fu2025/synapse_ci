@@ -54,7 +54,7 @@ beforeEach(() => {
   keyboardSubscriptions = new Map();
   animations = [];
   const preference = new Promise<boolean>((resolve, reject) => { resolvePreference = resolve; rejectPreference = reject; });
-  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockReturnValue(preference);
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockClear().mockReturnValue(preference);
   jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation((event, listener) => {
     const subscription = { remove: jest.fn(), emit: (value: boolean) => (listener as (next: boolean) => void)(value) };
     if (event === 'reduceMotionChanged') { preferenceSubscriptions.push(subscription); }
@@ -98,6 +98,102 @@ it('does not let a slow initial preference overwrite a newer native event', asyn
   act(() => preferenceSubscriptions[0].emit(false));
   await act(async () => resolvePreference(true));
   expect(reducedValue).toBe(false);
+});
+
+it('publishes a synchronous native event during subscription without replacing it with an older promise', async () => {
+  jest.mocked(AccessibilityInfo.addEventListener).mockImplementation((event, listener) => {
+    const emit = (value: boolean) => (listener as (next: boolean) => void)(value);
+    const subscription = { remove: jest.fn(), emit };
+    if (event === 'reduceMotionChanged') { preferenceSubscriptions.push(subscription); emit(false); }
+    return subscription;
+  });
+  act(() => { renderer = create(<PreferenceProbe />); });
+  expect(reducedValue).toBe(false);
+  await act(async () => resolvePreference(true));
+  expect(reducedValue).toBe(false);
+});
+
+it('preserves a newer enabled native event even when its value matches the conservative snapshot', async () => {
+  act(() => { renderer = create(<PreferenceProbe />); });
+  act(() => preferenceSubscriptions[0].emit(true));
+  await act(async () => resolvePreference(false));
+  expect(reducedValue).toBe(true);
+});
+
+it('starts a newly mounted consumer from the already-observed native preference', async () => {
+  const observe = jest.fn();
+  function NewConsumer() { observe(useReducedMotion()); return null; }
+  act(() => { renderer = create(<><PreferenceProbe /></>); });
+  await act(async () => resolvePreference(false));
+  act(() => { renderer!.update(<><PreferenceProbe /><NewConsumer /></>); });
+  expect(observe.mock.calls[0][0]).toBe(false);
+});
+
+it('shares one native subscription across live consumers and removes it only after the last leaves', async () => {
+  const observe = jest.fn();
+  function OtherConsumer() { observe(useReducedMotion()); return null; }
+  act(() => { renderer = create(<><PreferenceProbe /><OtherConsumer /></>); });
+  expect(preferenceSubscriptions).toHaveLength(1);
+  expect(AccessibilityInfo.isReduceMotionEnabled).toHaveBeenCalledTimes(1);
+  await act(async () => resolvePreference(false));
+  expect(observe).toHaveBeenLastCalledWith(false);
+  act(() => { renderer!.update(<>{null}<OtherConsumer /></>); });
+  expect(preferenceSubscriptions[0].remove).not.toHaveBeenCalled();
+  act(() => preferenceSubscriptions[0].emit(true));
+  expect(observe).toHaveBeenLastCalledWith(true);
+  act(() => renderer!.unmount());
+  renderer = undefined;
+  expect(preferenceSubscriptions[0].remove).toHaveBeenCalledTimes(1);
+});
+
+it('does not borrow a previous native preference after all consumers leave', async () => {
+  act(() => { renderer = create(<PreferenceProbe />); });
+  await act(async () => resolvePreference(false));
+  act(() => renderer!.unmount());
+  renderer = undefined;
+  let resolveNew!: (value: boolean) => void;
+  jest.mocked(AccessibilityInfo.isReduceMotionEnabled).mockReturnValue(new Promise(resolve => { resolveNew = resolve; }));
+  act(() => { renderer = create(<PreferenceProbe />); });
+  expect(reducedValue).toBe(true);
+  act(() => preferenceSubscriptions[0].emit(false));
+  expect(reducedValue).toBe(true);
+  await act(async () => resolveNew(false));
+  expect(reducedValue).toBe(false);
+});
+
+it('rejects an old subscription promise after a new observation starts', async () => {
+  act(() => { renderer = create(<PreferenceProbe />); });
+  act(() => renderer!.unmount());
+  renderer = undefined;
+  let resolveNew!: (value: boolean) => void;
+  jest.mocked(AccessibilityInfo.isReduceMotionEnabled).mockReturnValue(new Promise(resolve => { resolveNew = resolve; }));
+  act(() => { renderer = create(<PreferenceProbe />); });
+  await act(async () => resolveNew(false));
+  await act(async () => resolvePreference(true));
+  expect(reducedValue).toBe(false);
+});
+
+it('starts newly mounted consumers with a known enabled Reduce Motion preference', async () => {
+  const observe = jest.fn();
+  function NewConsumer() { observe(useReducedMotion()); return null; }
+  act(() => { renderer = create(<><PreferenceProbe /></>); });
+  await act(async () => resolvePreference(true));
+  act(() => { renderer!.update(<><PreferenceProbe /><NewConsumer /></>); });
+  expect(observe.mock.calls[0][0]).toBe(true);
+  expect(preferenceSubscriptions).toHaveLength(1);
+});
+
+it('animates a first hosted opening from a known preference instead of snapping before layout', async () => {
+  const closed = jest.fn();
+  act(() => { renderer = create(<><PreferenceProbe />{host(false, false, closed)}</>); });
+  await act(async () => resolvePreference(false));
+  jest.mocked(AccessibilityInfo.isReduceMotionEnabled).mockReturnValue(new Promise(() => undefined));
+  act(() => { renderer!.update(<><PreferenceProbe />{host(true, false, closed)}</>); });
+  expect(animations).toHaveLength(0);
+  measureSheet();
+  expect(animations).toHaveLength(1);
+  expect(animations[0].config).toMatchObject({ toValue: 1, duration: 240, useNativeDriver: true });
+  expect(closed).not.toHaveBeenCalled();
 });
 
 it('removes preference listener and ignores late native work after unmount', async () => {

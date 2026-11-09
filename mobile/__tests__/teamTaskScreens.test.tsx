@@ -4,6 +4,8 @@ import type { KeyboardEvent } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { act, create, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import { usePreventRemove } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import type { SafeAreaViewProps } from 'react-native-safe-area-context';
 import { ApiError, NetworkError } from '../src/api/client';
 import type { TeamTaskDetail, TeamTaskFilters } from '../src/api/endpoints/teamTasks';
 import { Action } from '../src/components/Action';
@@ -11,6 +13,7 @@ import { BottomSheet } from '../src/components/BottomSheet';
 import { darkTheme, lightTheme } from '../src/theme/tokens';
 import { PageHeader } from '../src/components/PageHeader';
 import { Screen } from '../src/components/Screen';
+import { Skeleton } from '../src/components/Skeleton';
 import { TextField } from '../src/components/TextField';
 import { secureClientNonce } from '../src/lib/secureNonce';
 import { WorkspaceHeaderActions } from '../src/features/workspace/WorkspaceHeaderActions';
@@ -29,7 +32,10 @@ jest.mock('../src/features/team-tasks/hooks', () => ({
 }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: mockTheme }) }));
 jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
-jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 20, left: 0 }) }));
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaView: (props: SafeAreaViewProps) => require('react').createElement(jest.requireActual('react-native').View, props),
+  useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 20, left: 0 }),
+}));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('lucide-react-native', () => ({
   ArrowLeft: () => null, CalendarDays: () => null, Check: () => null, Plus: () => null, Trash2: () => null,
@@ -136,6 +142,12 @@ function expectOutsideScroll(node: ReactTestInstance) {
   while (parent && parent.type !== Screen) { expect(parent.type).not.toBe(ScrollView); parent = parent.parent; }
   expect(parent?.type).toBe(Screen);
 }
+function footerSafeArea() { return renderer!.root.findAllByType(SafeAreaView).find(node => node.props.testID === 'screen-footer')!; }
+function commentActionGeometry() {
+  const buttonNode = action('Add comment').findAll(node => node.props.accessibilityRole === 'button' && typeof node.props.style === 'function')[0];
+  const style = StyleSheet.flatten(buttonNode.props.style({ pressed: false }));
+  return { gap: style.marginTop as number, height: style.minHeight as number };
+}
 
 /** Native measurements reproduce the edge-to-edge phone: keyboard covers an unresized root. */
 function keyboardViewport() {
@@ -174,6 +186,10 @@ function keyboardViewport() {
   return {
     scrollTo,
     measureViewport,
+    scrollBody(amount: number) {
+      scrollY = amount;
+      act(() => renderer!.root.findByType(ScrollView).props.onScroll?.({ nativeEvent: { contentOffset: { x: 0, y: scrollY } } }));
+    },
     listeners,
     keyboardTop,
     nativeInput(label: string, top: number, height: number) {
@@ -241,6 +257,52 @@ afterEach(() => {
 });
 
 describe('Team Task form rendered handlers', () => {
+  it('uses a form skeleton only for an uncached edit and keeps new local forms immediately available', () => {
+    mockRoute.params = { id: 12 };
+    detailQuery = { ...detailQuery, data: undefined, isLoading: false, isFetching: true, fetchStatus: 'fetching', eligible: true };
+    render(<TeamTaskFormScreen />);
+    expect(renderer!.root.findByType(Skeleton).props).toMatchObject({ label: 'Loading task for editing', variant: 'form' });
+    expect(renderer!.root.findByType(PageHeader).props.title).toBe('Edit Task');
+    expect(field('Task title')).toBeUndefined();
+    act(() => renderer!.unmount()); renderer = undefined;
+    mockRoute.params = {};
+    render(<TeamTaskFormScreen />);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(field('Task title').props.value).toBe('');
+    expect(action('Create Task')).toBeDefined();
+    expectOutsideScroll(action('Create Task'));
+  });
+
+  it('shows waiting for an ineligible or paused uncached edit instead of an endless skeleton', () => {
+    mockRoute.params = { id: 12 };
+    detailQuery = { ...detailQuery, data: undefined, isLoading: false, eligible: false, fetchStatus: 'idle' };
+    render(<TeamTaskFormScreen />);
+    expect(hasText('Task is waiting to load')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(action('Try again').props.disabled).toBe(true);
+    detailQuery = { ...detailQuery, isLoading: true, fetchStatus: 'paused' };
+    rerender();
+    expect(hasText('You are offline')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
+  it('keeps a warm edit draft and its original version through a cached refresh failure', async () => {
+    mockRoute.params = { id: 12 };
+    detailQuery = { ...detailQuery, isLoading: true, isFetching: true, fetchStatus: 'fetching' };
+    render(<TeamTaskFormScreen />);
+    expect(field('Task title').props.value).toBe('Check supplies');
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    change('Task title', 'Warm edit draft');
+    detailQuery = { ...detailQuery, isLoading: false, isFetching: false, fetchStatus: 'idle',
+      data: { data: task({ title: 'New server title', version: 9 }) }, isError: true, error: new Error('refresh failed') };
+    rerender();
+    expect(field('Task title').props.value).toBe('Warm edit draft');
+    expect(hasText('Could not refresh task details. Your original draft and version have been kept.')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    await tap('Save Changes');
+    expect(updateRequest).toHaveBeenCalledWith(expect.objectContaining({ title: 'Warm edit draft', version: 4 }));
+  });
+
   it('reveals the focused description through the shared keyboard viewport without moving or remounting the pinned actions', async () => {
     jest.replaceProperty(Platform, 'OS', 'android');
     const keyboard = keyboardViewport();
@@ -259,6 +321,72 @@ describe('Team Task form rendered handlers', () => {
     expectOutsideScroll(action('Cancel'));
     expect(createRequest).not.toHaveBeenCalled();
     expect(updateRequest).not.toHaveBeenCalled();
+  });
+
+  describe.each([lightTheme, darkTheme])('pinned form footer in $mode mode', theme => {
+    it.each([['create', undefined, 'Create Task'], ['edit', 12, 'Save Changes']] as const)('keeps %s actions stationary and the draft guarded through scrolling and keyboard toggles', async (_mode, id, primaryLabel) => {
+      mockTheme = theme;
+      mockRoute.params = id === undefined ? {} : { id };
+      jest.replaceProperty(Platform, 'OS', 'android');
+      const keyboard = keyboardViewport();
+      render(<TeamTaskFormScreen />);
+      const footer = footerSafeArea();
+      const primary = action(primaryLabel);
+      const cancel = action('Cancel');
+      const header = renderer!.root.findByType(PageHeader);
+      const body = renderer!.root.findByType(ScrollView);
+      const { input, bottom } = keyboard.nativeInput('Task description', 840, 100);
+      change('Task title', 'Keyboard title draft');
+      change('Task description', 'Keyboard description draft');
+      addItem('Draft checklist item');
+      const checklistLabel = id === undefined ? 'Checklist item 1' : 'Checklist item 2';
+      const checklist = field(checklistLabel);
+      expect(renderer!.root.findAllByType(SafeAreaView)[0].props.edges).toEqual(['top']);
+      expect(footer.props.edges).toEqual({ bottom: 'additive' });
+      const footerStyle = StyleSheet.flatten(footer.props.style);
+      expect(footerStyle).toMatchObject({ backgroundColor: theme.surface, paddingVertical: 12, paddingHorizontal: 18, borderTopColor: theme.line });
+      const bodyContent = body.findAllByType(View).find(node => StyleSheet.flatten(node.props.style)?.paddingHorizontal === 18)!;
+      expect(StyleSheet.flatten(bodyContent.props.style)).toMatchObject({ paddingHorizontal: 18, paddingTop: 18, paddingBottom: 20 });
+      expectOutsideScroll(primary); expectOutsideScroll(cancel); expectOutsideScroll(header);
+      expect(guard()[0]).toBe(true);
+      expect(mockDrafts.size).toBe(1);
+      keyboard.scrollBody(120);
+      expect(action(primaryLabel)).toBe(primary);
+      expect(action('Cancel')).toBe(cancel);
+      expect(footerSafeArea()).toBe(footer);
+      expect(footer.findAllByType(View)[0].findAllByType(Action)).toEqual([primary, cancel]);
+      act(() => input.props.onFocus({ nativeEvent: {} }));
+      keyboard.show();
+      await act(async () => jest.advanceTimersByTimeAsync(500));
+      expect(footerSafeArea()).toBe(footer);
+      expect(footer.props.edges).toEqual({ bottom: 'off' });
+      expect(StyleSheet.flatten(footer.props.style)).toEqual(footerStyle);
+      expect(action(primaryLabel)).toBe(primary);
+      expect(action('Cancel')).toBe(cancel);
+      expect(field('Task description')).toBe(input);
+      expect(bottom() + 16).toBeLessThanOrEqual(keyboard.keyboardTop);
+      expect(renderer!.root.findByType(PageHeader)).toBe(header);
+      expect(renderer!.root.findByType(ScrollView)).toBe(body);
+      keyboard.hide();
+      await act(async () => jest.advanceTimersByTimeAsync(100));
+      expect(footer.props.edges).toEqual({ bottom: 'additive' });
+      expect(action(primaryLabel)).toBe(primary);
+      expect(action('Cancel')).toBe(cancel);
+      expect(field('Task description')).toBe(input);
+      expect(field('Task description').props.value).toBe('Keyboard description draft');
+      expect(field('Task title').props.value).toBe('Keyboard title draft');
+      expect(field(checklistLabel)).toBe(checklist);
+      expect(field(checklistLabel).props.value).toBe('Draft checklist item');
+      expect(guard()[0]).toBe(true);
+      expect(mockDrafts.size).toBe(1);
+      expect(createRequest).not.toHaveBeenCalled();
+      expect(updateRequest).not.toHaveBeenCalled();
+      expect(statusRequest).not.toHaveBeenCalled();
+      expect(commentRequest).not.toHaveBeenCalled();
+      expect(mockNavigation.goBack).not.toHaveBeenCalled();
+      expect(mockNavigation.replace).not.toHaveBeenCalled();
+      expect(mockWorkspace.requestDiscard).not.toHaveBeenCalled();
+    });
   });
 
   it('pins actions outside the scroll in a keyboard-aware form and keeps create unassigned', async () => {
@@ -532,22 +660,77 @@ describe('Team Task form rendered handlers', () => {
 });
 
 describe('Team Task detail rendered handlers', () => {
+  it('skeletonizes an active first load without replacing a warm task on refetch', () => {
+    detailQuery = { ...detailQuery, data: undefined, isLoading: false, isFetching: true, fetchStatus: 'fetching', eligible: true };
+    render(<TeamTaskDetailScreen />);
+    expect(renderer!.root.findByType(Skeleton).props).toMatchObject({ label: 'Loading task', variant: 'detail' });
+    expect(renderer!.root.findByType(PageHeader).props.title).toBe('Task details');
+    detailQuery = { ...queryResult({ data: task() }), isLoading: true, isFetching: true, fetchStatus: 'fetching' };
+    rerender();
+    expect(hasText('Check supplies')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    detailQuery = { ...detailQuery, isLoading: false, isFetching: false, isError: true, error: new Error('refresh failed') };
+    rerender();
+    expect(hasText('Check supplies')).toBe(true);
+    expect(hasText('Could not refresh. Showing the last available task details.')).toBe(true);
+  });
+
+  it('shows explicit waiting for disabled or paused task details', () => {
+    detailQuery = { ...detailQuery, data: undefined, eligible: false, fetchStatus: 'idle' };
+    render(<TeamTaskDetailScreen />);
+    expect(hasText('Task is waiting to load')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    detailQuery = { ...detailQuery, isLoading: true, fetchStatus: 'paused' };
+    rerender();
+    expect(hasText('You are offline')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
   beforeEach(() => { mockRoute = { key: 'detail-route', name: 'TeamTaskDetail', params: { id: 12 } }; });
 
-  it('reveals the comment and its inline action on keyboard show and resize while preserving the unsent input', async () => {
+  it.each([lightTheme, darkTheme])('places a real 12-point gap after the comment control in $mode mode without input margin or a cumulative spacer', theme => {
+    mockTheme = theme;
+    render(<TeamTaskDetailScreen />);
+    const input = field('Comment');
+    const fieldComponent = renderer!.root.findAllByType(TextField).find(node => node.props.accessibilityLabel === 'Comment')!;
+    const addComment = action('Add comment');
+    const siblings = fieldComponent.parent!.children;
+    expect(addComment.parent).toBe(fieldComponent.parent);
+    expect(siblings.indexOf(addComment)).toBe(siblings.indexOf(fieldComponent) + 1);
+    expect(StyleSheet.flatten(input.props.style)).toMatchObject({ minHeight: 92, paddingTop: 12, textAlignVertical: 'top' });
+    expect(StyleSheet.flatten(input.props.style).marginBottom).toBeUndefined();
+    expect(StyleSheet.flatten(input.props.style).marginTop).toBeUndefined();
+    const geometry = commentActionGeometry();
+    expect(geometry).toEqual({ gap: 12, height: 44 });
+    expect(fieldComponent.props.keyboardRevealOffset).toBe(geometry.gap + geometry.height + 16);
+    expect(StyleSheet.flatten(fieldComponent.parent!.props.style)).toMatchObject({ backgroundColor: theme.surface, padding: 14 });
+    expect(action('Add comment').props.disabled).toBe(true);
+    change('Comment', 'Unsent spaced comment');
+    expect(field('Comment')).toBe(input);
+    expect(action('Add comment')).toBe(addComment);
+    expect(commentActionGeometry()).toEqual(geometry);
+    expect(guard()[0]).toBe(true);
+    expect(commentRequest).not.toHaveBeenCalled();
+  });
+
+  it.each([lightTheme, darkTheme])('reveals the comment and its spaced inline action in $mode mode on keyboard show and resize while preserving the unsent input', async theme => {
+    mockTheme = theme;
     jest.replaceProperty(Platform, 'OS', 'android');
     const keyboard = keyboardViewport();
     render(<TeamTaskDetailScreen />);
     const { input, bottom } = keyboard.nativeInput('Comment', 840, 92);
     const fieldComponent = renderer!.root.findAllByType(TextField).find(node => node.props.accessibilityLabel === 'Comment')!;
-    expect(fieldComponent.props.keyboardRevealOffset).toBe(72);
+    const geometry = commentActionGeometry();
+    const inlineActionBottom = () => bottom() + geometry.gap + geometry.height;
+    expect(geometry).toEqual({ gap: 12, height: 44 });
+    expect(fieldComponent.props.keyboardRevealOffset).toBe(geometry.gap + geometry.height + 16);
     change('Comment', 'Local UI check - unsent');
     act(() => input.props.onFocus({ nativeEvent: {} }));
     keyboard.show();
     await act(async () => jest.advanceTimersByTimeAsync(500));
     expect(keyboard.measureViewport).toHaveBeenCalled();
     expect(keyboard.scrollTo).toHaveBeenCalled();
-    expect(bottom() + 72).toBeLessThanOrEqual(keyboard.keyboardTop);
+    expect(inlineActionBottom() + 16).toBeLessThanOrEqual(keyboard.keyboardTop);
     expect(field('Comment')).toBe(input);
     expect(field('Comment').props.value).toBe('Local UI check - unsent');
     expect(guard()[0]).toBe(true);
@@ -559,7 +742,7 @@ describe('Team Task detail rendered handlers', () => {
     keyboard.resize(300);
     await act(async () => jest.advanceTimersByTimeAsync(500));
     expect(keyboard.scrollTo.mock.calls.length).toBeGreaterThan(calls);
-    expect(bottom() + 72).toBeLessThanOrEqual(410);
+    expect(inlineActionBottom() + 16).toBeLessThanOrEqual(410);
     keyboard.hide();
     act(() => input.props.onBlur({ nativeEvent: {} }));
     expect(field('Comment').props.value).toBe('Local UI check - unsent');
@@ -569,7 +752,7 @@ describe('Team Task detail rendered handlers', () => {
     keyboard.show();
     await act(async () => jest.advanceTimersByTimeAsync(500));
     expect(field('Comment')).toBe(input);
-    expect(bottom() + 72).toBeLessThanOrEqual(keyboard.keyboardTop);
+    expect(inlineActionBottom() + 16).toBeLessThanOrEqual(keyboard.keyboardTop);
     expect(commentRequest).not.toHaveBeenCalled();
     expect(mockNavigation.navigate).not.toHaveBeenCalled();
     expect(mockNavigation.goBack).not.toHaveBeenCalled();
@@ -829,6 +1012,42 @@ describe('Team Task detail rendered handlers', () => {
 });
 
 describe('Team Task list rendered handlers', () => {
+  it('replaces only the first-load list region while keeping the toolbar available', () => {
+    listQuery = { ...listQuery, data: undefined, isLoading: false, isFetching: true, fetchStatus: 'fetching', eligible: true };
+    render(<TeamTaskListScreen scope="team" />);
+    expect(renderer!.root.findByType(Skeleton).props).toMatchObject({ label: 'Loading tasks', variant: 'list' });
+    expect(field('Search tasks')).toBeDefined();
+    expect(button('Open task filters')).toBeDefined();
+    expect(renderer!.root.findByType(PageHeader).props.title).toBe('Team Board');
+    expect(hasText('No team tasks yet')).toBe(false);
+  });
+
+  it('distinguishes an idle or paused no-data query from a successful empty list', () => {
+    listQuery = { ...listQuery, data: undefined, eligible: false, fetchStatus: 'idle' };
+    render(<TeamTaskListScreen scope="team" />);
+    expect(hasText('Tasks are waiting to load')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(hasText('No team tasks yet')).toBe(false);
+    listQuery = { ...listQuery, isLoading: true, fetchStatus: 'paused' };
+    rerender();
+    expect(hasText('You are offline')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
+  it.each([false, true])('retains cached %s empty results and same-owner placeholders during refetch and refresh failure', empty => {
+    listQuery = { ...listQuery, data: { ...listQuery.data!, data: empty ? [] : [task()] },
+      isLoading: true, isFetching: true, fetchStatus: 'fetching', isPlaceholderData: true };
+    render(<TeamTaskListScreen scope="team" />);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(hasText(empty ? 'No team tasks yet' : 'Check supplies')).toBe(true);
+    expect(hasText('Showing the previous results until this page finishes loading.')).toBe(true);
+    listQuery = { ...listQuery, isLoading: false, isFetching: false, fetchStatus: 'idle', isError: true, error: new Error('refresh failed') };
+    rerender();
+    expect(hasText(empty ? 'No team tasks yet' : 'Check supplies')).toBe(true);
+    expect(hasText('Could not refresh. Showing the last available tasks.')).toBe(true);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
   it('wires search, clear/reset, pagination, card navigation and unassigned create entry', async () => {
     listQuery = { ...listQuery, data: { ...listQuery.data!, meta: { ...listQuery.data!.meta, pages: 3, total: 120 } } };
     render(<TeamTaskListScreen scope="mine" />);
@@ -979,7 +1198,7 @@ describe('Team Task list rendered handlers', () => {
     expect(filters().status).toBe('all');
     listQuery = { ...listQuery, isError: true, error: new NetworkError() } as typeof listQuery;
     rerender();
-    expect(hasText('No tasks assigned to you')).toBe(false);
+    expect(hasText('No tasks assigned to you')).toBe(true);
     await tap('Retry'); expect(refetch).toHaveBeenCalledTimes(1);
     listQuery = { ...listQuery, data: { ...listQuery.data!, data: [task()] } };
     rerender();
