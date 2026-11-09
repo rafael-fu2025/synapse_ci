@@ -1,5 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CalendarX2 } from 'lucide-react-native';
@@ -26,7 +29,9 @@ export function CancelAppointmentScreen() {
   const navigation = useNavigation<Props['navigation']>();
   const route = useRoute<Props['route']>();
   const query = useAppointment(route.params.id);
-  const appointment = query.data?.data;
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const appointment = authorityRemoved ? undefined : query.data?.data;
   const cancel = useCancelAppointment();
   const submitting = useRef(false);
   const [reason, setReason] = useState('');
@@ -66,9 +71,10 @@ export function CancelAppointmentScreen() {
   return (
     <Screen keyboardAware>
       <PageHeader title="Cancel appointment" backDisabled={cancel.isPending} onBack={() => { if (!submitting.current) { navigation.goBack(); } }} />
-      {query.isLoading ? <ActivityIndicator color={theme.brandIcon} /> : null}
+      {state === 'loading' ? <Skeleton label="Loading appointment…" variant="form" /> : null}
       {query.isError ? <AppointmentLoadError error={query.error} onRetry={() => { query.refetch().catch(() => undefined); }} /> : null}
-      {!query.isLoading && !query.isError && !appointment ? <Text style={styles.caption}>This appointment is no longer available.</Text> : null}
+      {state === 'waiting' ? <Text style={styles.caption}>Waiting to load this appointment. It will load when this screen and your connection are active.</Text> : null}
+      {state === 'content' && !query.isError && !appointment ? <Text style={styles.caption}>This appointment is no longer available.</Text> : null}
       {appointment ? (
         <>
           <View style={styles.warningIcon}><CalendarX2 size={28} color="#a33b3b" /></View>

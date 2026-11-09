@@ -1,7 +1,10 @@
 import React from 'react';
 import { AppState, AppStateStatus, Keyboard, KeyboardAvoidingView, KeyboardEvent, KeyboardMetrics, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { act, create, ReactTestRenderer } from 'react-test-renderer';
+import { act, create, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import type { EdgeRecord, SafeAreaViewProps } from 'react-native-safe-area-context';
+import { darkTheme, lightTheme } from '../src/theme/tokens';
 import { Action } from '../src/components/Action';
 import { BottomSheet } from '../src/components/BottomSheet';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
@@ -9,10 +12,35 @@ import { OverlayProvider } from '../src/components/OverlayProvider';
 import { Screen } from '../src/components/Screen';
 import { TextField } from '../src/components/TextField';
 
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }) }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: mockTheme }) }));
 jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
-jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 24, bottom: 20, left: 0, right: 0 }) }));
+jest.mock('react-native-safe-area-context', () => {
+  const ReactModule = require('react');
+  const { View: NativeView, StyleSheet: NativeStyleSheet } = jest.requireActual('react-native');
+  return {
+    // Model native additive padding so the assertions catch double or lost insets.
+    SafeAreaView: ({ edges, style, ...props }: SafeAreaViewProps) => {
+      const base = NativeStyleSheet.flatten(style) ?? {};
+      const modes = (Array.isArray(edges)
+        ? Object.fromEntries(edges.map(edge => [edge, 'additive']))
+        : edges ?? { top: 'additive', right: 'additive', bottom: 'additive', left: 'additive' }) as EdgeRecord;
+      const padding = (edge: keyof EdgeRecord, value: number) => modes[edge] === 'additive'
+        ? value + mockSafeAreaInsets[edge]
+        : modes[edge] === 'maximum' ? Math.max(value, mockSafeAreaInsets[edge]) : value;
+      return ReactModule.createElement(NativeView, { ...props, style: [style, {
+        paddingTop: padding('top', base.paddingTop ?? base.paddingVertical ?? base.padding ?? 0),
+        paddingRight: padding('right', base.paddingRight ?? base.paddingHorizontal ?? base.padding ?? 0),
+        paddingBottom: padding('bottom', base.paddingBottom ?? base.paddingVertical ?? base.padding ?? 0),
+        paddingLeft: padding('left', base.paddingLeft ?? base.paddingHorizontal ?? base.padding ?? 0),
+      }] });
+    },
+    useSafeAreaInsets: () => mockSafeAreaInsets,
+  };
+});
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
+
+let mockTheme = lightTheme;
+let mockSafeAreaInsets = { top: 24, bottom: 20, left: 0, right: 0 };
 
 type Input = NonNullable<ReturnType<typeof TextInput.State.currentlyFocusedInput>>;
 type Measure = Parameters<Input['measureInWindow']>[0];
@@ -39,6 +67,10 @@ let route: React.ContextType<typeof NavigationContext>;
 let appStateDescriptor: PropertyDescriptor | undefined;
 const layout = (height: number) => ({ nativeEvent: { layout: { width: 480, height, x: 0, y: 0 } } });
 
+function nativeStyle(node: ReactTestInstance) { return StyleSheet.flatten(node.findAllByType(View)[0].props.style); }
+function outerSafeArea() { return renderer!.root.findAllByType(SafeAreaView)[0]; }
+function footerSafeArea() { return renderer!.root.findAllByType(SafeAreaView).find(node => node.props.testID === 'screen-footer')!; }
+
 function field() { return renderer!.root.findByType(TextInput); }
 function viewport() { return renderer!.root.findAllByType(ScrollView)[0]; }
 function focusField(offset = 0) {
@@ -60,7 +92,10 @@ function emit(show: boolean) {
   keyboardShown = show;
   metrics = show ? { screenX: 0, screenY: 600, width: 480, height: 368 } : null;
   const event = { endCoordinates: metrics ?? { screenX: 0, screenY: 968, width: 480, height: 0 } } as KeyboardEvent;
-  act(() => keyboardListeners.get(show ? 'keyboardDidShow' : 'keyboardDidHide')!.forEach(listener => listener(event)));
+  act(() => {
+    if (show) { keyboardListeners.get('keyboardWillShow')?.forEach(listener => listener(event)); }
+    keyboardListeners.get(show ? 'keyboardDidShow' : 'keyboardDidHide')!.forEach(listener => listener(event));
+  });
 }
 function renderScreen(extraOffset = 16, dialog = false) {
   const host = <OverlayProvider><NavigationContext.Provider value={route}><Screen keyboardAware bottomSafeArea header={<Text>Header</Text>} footer={<Action onPress={jest.fn()}>Create task</Action>}><Text>Long content</Text><TextField label="Description" keyboardRevealOffset={extraOffset} /><Action onPress={jest.fn()}>Add comment</Action></Screen></NavigationContext.Provider><ConfirmDialog visible={dialog} title="Discard?" message="Message" confirmLabel="Discard" onConfirm={jest.fn()} onCancel={jest.fn()} /></OverlayProvider>;
@@ -75,6 +110,8 @@ function renderScreen(extraOffset = 16, dialog = false) {
 
 beforeEach(() => {
   jest.useFakeTimers();
+  mockTheme = lightTheme;
+  mockSafeAreaInsets = { top: 24, bottom: 20, left: 0, right: 0 };
   metrics = null;
   keyboardShown = false;
   focused = undefined;
@@ -114,6 +151,114 @@ afterEach(() => {
   if (appStateDescriptor) { Object.defineProperty(AppState, 'currentState', appStateDescriptor); }
   jest.restoreAllMocks();
   jest.useRealTimers();
+});
+
+describe.each([lightTheme, darkTheme])('Screen footer safe area in $mode mode', theme => {
+  beforeEach(() => { mockTheme = theme; });
+
+  it.each([20, 0])('moves the %s-point bottom inset onto the footer surface without changing total padding or the header/body', inset => {
+    mockSafeAreaInsets.bottom = inset;
+    renderScreen();
+    const outer = outerSafeArea();
+    const footer = footerSafeArea();
+    expect(renderer!.root.findAllByType(SafeAreaView)).toHaveLength(2);
+    expect(outer.props.edges).toEqual(['top']);
+    expect(nativeStyle(outer)).toMatchObject({ flex: 1, backgroundColor: theme.canvas, paddingTop: 24, paddingBottom: 0 });
+    expect(footer.props.edges).toEqual({ bottom: 'additive' });
+    expect(nativeStyle(footer)).toMatchObject({
+      flexShrink: 0, backgroundColor: theme.surface, borderTopWidth: 1, borderTopColor: theme.line,
+      paddingTop: 12, paddingBottom: 12 + inset, paddingLeft: 18, paddingRight: 18,
+    });
+    expect(nativeStyle(outer).paddingBottom + nativeStyle(footer).paddingBottom).toBe(12 + inset);
+    const header = renderer!.root.findAllByType(Text).find(node => node.props.children === 'Header')!;
+    let headerParent = header.parent;
+    while (headerParent && headerParent !== outer) {
+      expect(headerParent.type).not.toBe(ScrollView);
+      expect(headerParent.type).not.toBe(KeyboardAvoidingView);
+      headerParent = headerParent.parent;
+    }
+    expect(headerParent === outer).toBe(true);
+    expect(viewport().findAllByType(Text).some(node => node.props.children === 'Long content')).toBe(true);
+    expect(StyleSheet.flatten(viewport().props.contentContainerStyle)).toMatchObject({ flexGrow: 1 });
+    const body = viewport().findAllByType(View).find(node => StyleSheet.flatten(node.props.style)?.paddingHorizontal === 18)!;
+    expect(StyleSheet.flatten(body.props.style)).toMatchObject({ flex: 1, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 20 });
+    expect(viewport().findAllByType(Action).some(node => node.props.children === 'Create task')).toBe(false);
+  });
+
+  it('adds the inset after caller surface and per-edge spacing overrides instead of replacing them', () => {
+    act(() => { renderer = create(<Screen bottomSafeArea footer={<Text>Actions</Text>}
+      footerStyle={[{ backgroundColor: theme.surfaceWarm, paddingVertical: 16 }, { paddingBottom: 7, paddingHorizontal: 24 }]}><Text>Body</Text></Screen>); });
+    expect(nativeStyle(outerSafeArea()).paddingBottom).toBe(0);
+    expect(nativeStyle(footerSafeArea())).toMatchObject({ backgroundColor: theme.surfaceWarm, paddingTop: 16, paddingBottom: 27, paddingLeft: 24, paddingRight: 24 });
+    expect(footerSafeArea().props.edges).toEqual({ bottom: 'additive' });
+  });
+
+  it.each([true, false])('leaves non-opt-in footers unchanged with scroll=%s, including a fixed composer', scroll => {
+    act(() => { renderer = create(<Screen keyboardAware scroll={scroll} header={<Text>Header</Text>}
+      bodyStyle={{ backgroundColor: theme.surfaceWarm, paddingBottom: 5 }}
+      footer={<TextField label="Composer" value="Unsent message" />} footerStyle={{ backgroundColor: theme.surfaceWarm, paddingBottom: 9 }}><Text>List viewport</Text></Screen>); });
+    const footer = renderer!.root.findAllByType(View).find(node => node.props.testID === 'screen-footer')!;
+    const input = field();
+    const body = renderer!.root.findAllByType(Text).find(node => node.props.children === 'List viewport')!.parent!;
+    expect(renderer!.root.findAllByType(SafeAreaView)).toHaveLength(1);
+    expect(outerSafeArea().props.edges).toEqual(['top']);
+    expect(nativeStyle(outerSafeArea()).paddingBottom).toBe(0);
+    expect(footer.props.edges).toBeUndefined();
+    expect(StyleSheet.flatten(footer.props.style)).toMatchObject({ backgroundColor: theme.surfaceWarm, paddingVertical: 12, paddingBottom: 9 });
+    if (!scroll) { expect(StyleSheet.flatten(body.props.style)).toMatchObject({ backgroundColor: theme.surfaceWarm, paddingBottom: 5 }); }
+    emit(true); frames(); emit(false); frames();
+    expect(field()).toBe(input);
+    expect(field().props.value).toBe('Unsent message');
+    expect(renderer!.root.findAllByType(View).find(node => node.props.testID === 'screen-footer')).toBe(footer);
+    expect(nativeStyle(outerSafeArea()).paddingBottom).toBe(0);
+    expect(renderer!.root.findAllByType(Text).find(node => node.props.children === 'List viewport')!.parent).toBe(body);
+  });
+
+  it.each([true, false])('preserves no-footer bottomSafeArea=%s behavior before, during, and after the keyboard', bottomSafeArea => {
+    act(() => { renderer = create(<Screen keyboardAware bottomSafeArea={bottomSafeArea} header={<Text>Header</Text>}><TextField label="Description" /></Screen>); });
+    const input = field();
+    expect(renderer!.root.findAllByType(SafeAreaView)).toHaveLength(1);
+    expect(outerSafeArea().props.edges).toEqual(bottomSafeArea ? ['top', 'bottom'] : ['top']);
+    expect(nativeStyle(outerSafeArea())).toMatchObject({ backgroundColor: theme.canvas, paddingTop: 24, paddingBottom: bottomSafeArea ? 20 : 0 });
+    expect(renderer!.root.findAllByProps({ testID: 'screen-footer' })).toHaveLength(0);
+    emit(true); frames();
+    expect(outerSafeArea().props.edges).toEqual(['top']);
+    expect(nativeStyle(outerSafeArea()).paddingBottom).toBe(0);
+    expect(field()).toBe(input);
+    emit(false); frames();
+    expect(nativeStyle(outerSafeArea()).paddingBottom).toBe(bottomSafeArea ? 20 : 0);
+    expect(field()).toBe(input);
+  });
+
+  it.each(['android', 'ios'])('removes only the footer inset on %s keyboard show without remounting focused content or pinned actions', os => {
+    jest.replaceProperty(require('react-native').Platform, 'OS', os);
+    renderScreen(72);
+    const input = field();
+    const nativeInput = focusField();
+    const footer = footerSafeArea();
+    const pinnedAction = footer.findByType(Action);
+    const header = renderer!.root.findAllByType(Text).find(node => node.props.children === 'Header');
+    const scrollView = viewport();
+    emit(true); frames();
+    expect(outerSafeArea().props.edges).toEqual(['top']);
+    expect(nativeStyle(outerSafeArea()).paddingBottom).toBe(0);
+    expect(footerSafeArea()).toBe(footer);
+    expect(footer.props.edges).toEqual({ bottom: 'off' });
+    expect(nativeStyle(footer)).toMatchObject({ backgroundColor: theme.surface, paddingTop: 12, paddingBottom: 12 });
+    expect(field()).toBe(input);
+    expect(TextInput.State.currentlyFocusedInput()).toBe(nativeInput);
+    expect(viewport()).toBe(scrollView);
+    expect(renderer!.root.findAllByType(Text).find(node => node.props.children === 'Header')).toBe(header);
+    expect(footer.findByType(Action)).toBe(pinnedAction);
+    expect(scrollTo).toHaveBeenLastCalledWith({ x: 0, y: 312, animated: false });
+    emit(false); frames();
+    expect(footerSafeArea()).toBe(footer);
+    expect(footer.props.edges).toEqual({ bottom: 'additive' });
+    expect(nativeStyle(footer).paddingBottom).toBe(32);
+    expect(field()).toBe(input);
+    expect(TextInput.State.currentlyFocusedInput()).toBe(nativeInput);
+    expect(footer.findByType(Action)).toBe(pinnedAction);
+  });
 });
 
 it('reveals only actual input overflow using local viewport geometry and inline-action clearance', () => {

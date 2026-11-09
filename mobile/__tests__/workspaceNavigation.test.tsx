@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Animated, BackHandler, Dimensions, Keyboard, StyleSheet } from 'react-native';
+import { Animated, BackHandler, Dimensions, Keyboard, Platform, StyleSheet } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { ContextTabs } from '../src/navigation/ContextTabs';
 import { useReducedMotion } from '../src/lib/useReducedMotion';
@@ -154,7 +154,10 @@ it('keeps unauthorized users on an ordinary four-tab bar without a center CTA', 
   expect(renderer!.root.findAll(node => node.props.accessibilityRole === 'tab' && typeof node.props.onPress === 'function')).toHaveLength(4);
 });
 
-it.each([PersonalTabs, WorkspaceTabs, ContextTabs])('separates peer fades from outer context motion in production %p', Component => {
+it.each([PersonalTabs, WorkspaceTabs, ContextTabs].flatMap(Component =>
+  (['android', 'ios'] as const).map(os => ({ Component, os })),
+))('separates opaque Android peers from context motion and iOS fades ($os, $Component)', ({ Component, os }) => {
+  jest.replaceProperty(Platform, 'OS', os);
   jest.mocked(useWorkspace).mockReturnValue(workspace({ personalEnabled: true, workEnabled: true }));
   jest.mocked(useReducedMotion).mockReturnValue(false);
   Dimensions.set({ window: { width: 360, height: 800, scale: 3, fontScale: 1 } });
@@ -164,22 +167,25 @@ it.each([PersonalTabs, WorkspaceTabs, ContextTabs])('separates peer fades from o
     return typeof raw === 'function' ? raw({ route: { name: 'Home' } }) : raw;
   };
   const context = Component === ContextTabs;
-  expect(getOptions()).toMatchObject({ animation: context ? 'shift' : 'fade', lazy: !context, freezeOnBlur: true, transitionSpec: { config: { duration: context ? 240 : 160 } } });
-  const scene = getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(0.5) } }).sceneStyle;
+  const fades = !context && os === 'ios';
+  expect(getOptions()).toMatchObject({ animation: context ? 'shift' : fades ? 'fade' : 'none', lazy: !context, freezeOnBlur: true,
+    transitionSpec: { config: { duration: context ? 240 : fades ? 160 : 0 } } });
+  expect(getOptions().sceneStyle).toMatchObject({ backgroundColor: lightTheme.canvas, overflow: 'hidden' });
   if (context) {
+    const scene = getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(0.5) } }).sceneStyle;
     expect(scene.opacity).toBeUndefined();
     expect(scene.transform[0].translateX.__getValue()).toBe(180);
     act(() => Dimensions.set({ window: { width: 800, height: 360, scale: 3, fontScale: 1 } }));
     expect(getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(1) } }).sceneStyle.transform[0].translateX.__getValue()).toBe(800);
-  } else {
-    expect(scene.transform).toBeUndefined();
-    expect(scene.opacity.__getValue()).toBe(0.5);
-    for (const value of [-1, 0, 1]) {
-      expect(getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(value) } }).sceneStyle.opacity.__getValue()).toBe(value === 0 ? 1 : 0);
+  } else if (fades) {
+    for (const value of [-1, -0.5, 0, 0.5, 1]) {
+      const scene = getOptions().sceneStyleInterpolator({ current: { progress: new Animated.Value(value) } }).sceneStyle;
+      expect(scene.transform).toBeUndefined();
+      expect(scene.opacity.__getValue()).toBe(1 - Math.abs(value));
     }
-  }
+  } else { expect(getOptions().sceneStyleInterpolator).toBeUndefined(); }
   jest.mocked(useReducedMotion).mockReturnValue(true);
-  act(() => renderer!.update(<Component />));
+  act(() => { renderer!.update(<Component />); });
   expect(getOptions()).toMatchObject({ animation: 'none', transitionSpec: { config: { duration: 0 } } });
   expect(getOptions().sceneStyleInterpolator).toBeUndefined();
 });

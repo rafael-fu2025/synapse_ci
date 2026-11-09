@@ -15,6 +15,7 @@ use CodeIgniter\HTTP\IncomingRequest;
 use CodeIgniter\HTTP\Response;
 use CodeIgniter\HTTP\UserAgent;
 use CodeIgniter\Test\CIUnitTestCase;
+use CodeIgniter\View\View;
 use Config\Database;
 use Config\Services;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
@@ -103,11 +104,12 @@ final class EmergencyContactSettingsTest extends CIUnitTestCase
         self::assertNotNull((new AuthenticatedUser())->current());
     }
 
-    private function controller(string $method = 'GET', array $post = [], bool $ajax = true): ProfileSettingsController
+    private function controller(string $method = 'GET', array $post = [], bool $ajax = true, array $get = []): ProfileSettingsController
     {
         $request = new IncomingRequest(config('App'), service('uri'), null, new UserAgent());
         $request->setMethod($method);
         $request->setGlobal('post', $post);
+        $request->setGlobal('get', $get);
         if ($ajax) {
             $request->setHeader('X-Requested-With', 'XMLHttpRequest');
             $request->setHeader('Accept', 'application/json');
@@ -203,12 +205,40 @@ final class EmergencyContactSettingsTest extends CIUnitTestCase
         ]);
 
         $this->login($user);
-        $html = $this->controller()->index();
-        self::assertIsString($html);
-        self::assertStringContainsString('Emergency contact', $html);
-        self::assertStringContainsString('Dr. Alberto Santos', $html);
-        self::assertStringContainsString('0918-000-1111', $html);
-        self::assertStringContainsString('Guardian', $html);
+        $renderer = new class(config('View'), APPPATH . 'Views/') extends View {
+            public string $renderedLayout = '';
+
+            public function render(string $view, ?array $options = null, ?bool $saveData = null): string
+            {
+                if ($view === 'layouts/app') {
+                    $this->renderedLayout = $view;
+                    return $this->renderSection('content');
+                }
+                return parent::render($view, $options, $saveData);
+            }
+        };
+        Services::injectMock('renderer', $renderer);
+        foreach ([[], ['fragment' => '1']] as $get) {
+            $renderer->renderedLayout = '';
+            $html = $this->controller('GET', [], $get !== [], $get)->index();
+            self::assertIsString($html);
+            self::assertSame('layouts/app', $renderer->renderedLayout, 'Emergency contact always belongs to the ordinary settings page.');
+            self::assertStringContainsString('Emergency contact', $html);
+            self::assertStringContainsString('Dr. Alberto Santos', $html);
+            self::assertStringContainsString('0918-000-1111', $html);
+            self::assertStringContainsString('Guardian', $html);
+            self::assertSame(1, preg_match_all('/\\bdata-profile-settings(?:\\s|>)/', $html));
+            self::assertStringContainsString('id="emergencyContactForm"', $html);
+            self::assertStringContainsString('data-emergency-contact-form', $html);
+            foreach (['appFormModal', 'data-app-modal-close', 'data-modal-error', 'modal-backdrop', 'aria-modal="true"'] as $modalMarker) {
+                self::assertStringNotContainsString($modalMarker, $html);
+            }
+            $document = new \DOMDocument();
+            @$document->loadHTML('<?xml encoding="UTF-8">' . $html);
+            $xpath = new \DOMXPath($document);
+            self::assertSame(1, $xpath->query('//*[@data-profile-settings]//*[@id="emergencyContactForm"]')->length);
+            // H1/navigation are certified by the browser fixture, since this renderer removes layouts/app.
+        }
     }
 
     public function testControllerUpdateEmergencyContactAjaxSuccessWithCsrf(): void

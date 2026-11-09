@@ -140,6 +140,8 @@ jobs:
         run: npm exec --prefix tests/browser -- playwright install --with-deps chromium
       - name: All four isolated AI browser suites
         run: npm test --prefix tests/browser
+      - name: Profile settings, navigation and confirmation browser regressions
+        run: npm run test:profile-settings --prefix tests/browser
       - name: AI browser test dependency audit
         run: npm audit --prefix tests/browser --audit-level=high
 

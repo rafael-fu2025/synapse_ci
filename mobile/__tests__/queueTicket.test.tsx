@@ -10,6 +10,9 @@ import {
   ticketPresentation,
 } from '../src/features/queue/components/QueueTicketCard';
 
+import { Skeleton } from '../src/components/Skeleton';
+
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: jest.fn() }));
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
 jest.mock('react-native-svg', () => {
@@ -175,8 +178,8 @@ describe('QueueTicketPlaceholder', () => {
 
   it('shows loading instead of claiming there is no active ticket', () => {
     render(<QueueTicketPlaceholder loading />);
-    expect(texts()).toContain('Loading queue…');
+    expect(renderer!.root.findByType(Skeleton).props.label).toBe('Loading queue…');
     expect(texts()).not.toContain('No active queue ticket');
-    expect(renderer!.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+    expect(renderer!.root.findAllByType(ActivityIndicator)).toHaveLength(0);
   });
 });

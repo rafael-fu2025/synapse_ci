@@ -1,5 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CircleAlert, HeartPulse, LockKeyhole, Phone, WifiOff } from 'lucide-react-native';
@@ -27,13 +30,18 @@ export function HealthProfileScreen() {
   const styles = makeStyles(theme);
   const navigation = useNavigation<Props['navigation']>();
   const query = useHealthSummary();
-  const data = query.data?.data;
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const data = authorityRemoved ? undefined : query.data?.data;
 
   if (!data) {
     return (
       <Screen scroll={false} bodyStyle={styles.pendingBody} header={<PageHeader edgeToEdge title="Health profile" subtitle="University profile and medical flags" onBack={navigation.goBack} />}>
-        {query.isLoading ? (
-          <ActivityIndicator color={theme.brandIcon} />
+        {state === 'loading' ? (
+          <Skeleton label="Loading health profile…" variant="detail" />
+        ) : state === 'waiting' ? (
+          <EmptyState icon={<WifiOff size={30} color={theme.brandIcon} />} title="Waiting to load health profile"
+            body="Your health profile has not loaded yet. It will load when your connection is available." />
         ) : (
           <EmptyState
             icon={<WifiOff size={30} color={theme.brandIcon} />}

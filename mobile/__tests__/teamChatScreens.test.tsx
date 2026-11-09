@@ -18,7 +18,7 @@ import { WorkspaceHeaderActions } from '../src/features/workspace/WorkspaceHeade
 import { TeamChatMessageBubble } from '../src/features/team-chat/components/TeamChatMessageBubble';
 import { TeamChatTaskPicker } from '../src/features/team-chat/components/TeamChatTaskPicker';
 import { teamChatKeys } from '../src/features/team-chat/hooks';
-import { formatChatTime, type TeamChatRow } from '../src/features/team-chat/model';
+import { formatChatGroupTimestamp, formatChatTime, type TeamChatRow } from '../src/features/team-chat/model';
 import { TeamChatScreen } from '../src/features/team-chat/screens/TeamChatScreen';
 
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
@@ -26,7 +26,7 @@ jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefresh
 jest.mock('../src/lib/secureNonce', () => ({ secureClientNonce: jest.fn() }));
 jest.mock('../src/api/endpoints/teamChat', () => ({ history: jest.fn(), markRead: jest.fn(), tasks: jest.fn(), members: jest.fn(), send: jest.fn() }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: mockTheme }) }));
-jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => mockReducedMotion }));
 jest.mock('../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 jest.mock('react-native/Libraries/AppState/AppState', () => ({ __esModule: true, default: { currentState: 'active', addEventListener: jest.fn(() => ({ remove: jest.fn() })) } }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 20, left: 0 }) }));
@@ -54,6 +54,11 @@ const boundClient = expect.objectContaining({ runtime: expect.any(Object), sessi
 let mockFocused = true;
 let mockConnected = true;
 let mockTheme = lightTheme;
+let mockReducedMotion = true;
+let mockMeasured = { height: 0, contentHeight: 0, offset: 0, viewportTop: 100, markerVisible: true, tailVisible: true };
+const mockMeasureCallbacks: Array<() => void> = [];
+const mockMeasuredNodes: string[] = [];
+let mockDelayMeasures = false;
 let mockUser: User | null;
 const mockRefreshProfile = jest.fn();
 const mockOpenAccount = jest.fn();
@@ -145,10 +150,11 @@ function bubbles() {
 }
 function history() { return renderer!.root.findByType(FlatList) as ReactTestInstance & { props: { data: TeamChatRow[] } }; }
 function scrollList(offset: number, contentHeight = 1800, height = 500) {
+  mockMeasured = { ...mockMeasured, offset, contentHeight, height };
   act(() => history().props.onScroll({ nativeEvent: { contentOffset: { x: 0, y: offset }, contentSize: { width: 360, height: contentHeight }, layoutMeasurement: { width: 360, height } } }));
 }
-function layoutList(height: number) { act(() => history().props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } })); }
-function contentList(height: number) { act(() => history().props.onContentSizeChange(360, height)); }
+function layoutList(height: number) { mockMeasured.height = height; act(() => history().props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } })); }
+function contentList(height: number) { mockMeasured.contentHeight = height; act(() => history().props.onContentSizeChange(360, height)); }
 function pinLatest(contentHeight = 1800, height = 500) {
   layoutList(height); contentList(contentHeight); layoutLatestTail();
   scrollList(Math.max(0, contentHeight - height), contentHeight, height);
@@ -161,13 +167,17 @@ function latestTail() { return history().props.ListFooterComponent; }
 function layoutLatestTail(tail = latestTail()) {
   act(() => tail.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 360, height: 1 } } }));
 }
+function entryCover() { return renderer!.root.findAll(node => typeof node.type === 'string' && node.props.testID === 'team-chat-entry-cover' && StyleSheet.flatten(node.props.style).opacity !== 0)[0]; }
 function bottomButton() { return renderer!.root.findAll(node => node.props.testID === 'team-chat-scroll-bottom' && typeof node.props.onPress === 'function')[0]; }
 function visible(info: { kind: 'message' | 'read-marker'; id: number; isViewable?: boolean }[], callback = history().props.onViewableItemsChanged) {
   const rows = history().props.data as TeamChatRow[];
-  act(() => callback({ viewableItems: info.map(item => ({
-    item: rows.find(row => item.kind === 'message' ? row.kind === 'message' && row.message.id === item.id : row.kind === 'read-marker' && row.messageId === item.id),
-    isViewable: item.isViewable ?? true, key: `${item.kind}:${item.id}`, index: 0,
-  })) }));
+  act(() => {
+    jest.advanceTimersByTime(500); // Native viewability reports only after its configured dwell.
+    callback({ viewableItems: info.map(item => ({
+      item: rows.find(row => item.kind === 'message' ? row.kind === 'message' && row.message.id === item.id : row.kind === 'read-marker' && row.messageId === item.id),
+      isViewable: item.isViewable ?? true, key: `${item.kind}:${item.id}`, index: 0,
+    })) });
+  });
 }
 function guard() { return jest.mocked(usePreventRemove).mock.calls.at(-1)!; }
 async function addTask(id = 4) {
@@ -181,7 +191,22 @@ beforeEach(() => {
   jest.useFakeTimers(); jest.setSystemTime(new Date('2026-11-07T18:00:00Z')); jest.clearAllMocks();
   jest.replaceProperty(Platform, 'OS', 'android'); jest.replaceProperty(AppState, 'currentState', 'active');
   jest.mocked(useKeyboardVisible).mockReturnValue(false);
-  mockFocused = true; mockConnected = true; mockTheme = lightTheme;
+  mockFocused = true; mockConnected = true; mockTheme = lightTheme; mockReducedMotion = true;
+  mockMeasured = { height: 0, contentHeight: 0, offset: 0, viewportTop: 100, markerVisible: true, tailVisible: true };
+  mockDelayMeasures = false; mockMeasureCallbacks.length = 0; mockMeasuredNodes.length = 0;
+  jest.spyOn((View as unknown as { prototype: { measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void } }).prototype, 'measureInWindow').mockImplementation(function (this: { props: { testID?: string } }, callback) {
+    const id = this.props.testID;
+    const viewport = id === 'team-chat-viewport';
+    const tail = id === 'team-chat-latest-tail';
+    mockMeasuredNodes.push(id ?? 'target');
+    const { viewportTop, height, contentHeight, offset } = mockMeasured;
+    const atBottom = offset >= Math.max(0, contentHeight - height) - 1;
+    const y = viewport ? viewportTop : tail
+      ? viewportTop + (mockMeasured.tailVisible && atBottom ? Math.min(contentHeight, height) - 1 : height + 200)
+      : viewportTop + (mockMeasured.markerVisible ? id ? Math.min(contentHeight || height, height) - 4 : height / 2 - 1 : height + 200);
+    const execute = () => callback(0, y, 360, viewport ? height : tail ? 1 : 2);
+    if (mockDelayMeasures) { mockMeasureCallbacks.push(execute); } else { execute(); }
+  });
   mockNavigationListeners.blur.clear(); mockNavigationListeners.focus.clear();
   mockWorkspace.canSwitchContext = true;
   focusManager.setFocused(true); onlineManager.setOnline(true);
@@ -209,6 +234,238 @@ afterEach(async () => {
 });
 
 describe('mounted Team Chat screen interactions', () => {
+  it('covers the loaded window until native end geometry is confirmed, without replacing input or list', async () => {
+    await render();
+    const input = field(); const list = history();
+    expect(entryCover()).toBeDefined();
+    expect(history().props.scrollEnabled).toBe(false);
+    expect(history().props.importantForAccessibility).toBe('no-hide-descendants');
+    layoutList(500); contentList(1800); layoutLatestTail();
+    expect(entryCover()).toBeDefined();
+    expect(scrollEnd).toHaveBeenCalledWith({ animated: false });
+    scrollList(1300);
+    expect(entryCover()).toBeUndefined();
+    expect(history().props.scrollEnabled).toBe(true);
+    expect(history()).toBe(list); expect(field()).toBe(input);
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it.each(['short', 'empty'] as const)('reveals a %s latest window without depending on a scroll event', async kind => {
+    jest.mocked(api.history).mockResolvedValueOnce(page(kind === 'empty' ? [] : [message(10)]));
+    await render();
+    expect(entryCover()).toBeDefined();
+    layoutList(500); contentList(240); layoutLatestTail();
+    await tick(40);
+    expect(entryCover()).toBeUndefined();
+    expect(history().props.scrollEnabled).toBe(true);
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('does not reveal an estimated bottom while the actual newest marker is still offscreen', async () => {
+    await render();
+    mockMeasured.markerVisible = false;
+    layoutList(500); contentList(1800); layoutLatestTail(); scrollList(1300);
+    await tick(40);
+    expect(entryCover()).toBeDefined();
+    expect(api.markRead).not.toHaveBeenCalled();
+    mockMeasured.markerVisible = true;
+    const marker = renderer!.root.findAllByType(View).find(node => node.props.testID === 'team-chat-read-marker-11')!;
+    act(() => marker.props.onLayout());
+    expect(entryCover()).toBeUndefined();
+  });
+
+  it('never counts covered time toward the read dwell and rejects callbacks captured before reveal', async () => {
+    await render();
+    const coveredRead = history().props.onViewableItemsChanged;
+    await tick(1_000);
+    pinLatest();
+    const tokens = [{ item: history().props.data.find(row => row.kind === 'read-marker' && row.messageId === 11), isViewable: true }];
+    act(() => coveredRead({ viewableItems: tokens }));
+    act(() => history().props.onViewableItemsChanged({ viewableItems: tokens }));
+    expect(api.markRead).not.toHaveBeenCalled();
+    await tick(499);
+    act(() => history().props.onViewableItemsChanged({ viewableItems: tokens }));
+    expect(api.markRead).not.toHaveBeenCalled();
+    await tick(1);
+    act(() => history().props.onViewableItemsChanged({ viewableItems: tokens })); await tick(0);
+    expect(api.markRead).toHaveBeenCalledWith('clinic', 11, boundClient);
+  });
+
+  it('rejects delayed native measurements after blur and confirms only the replacement entry', async () => {
+    await render();
+    mockDelayMeasures = true;
+    layoutList(500); contentList(1800); layoutLatestTail(); scrollList(1300);
+    expect(mockMeasureCallbacks.length).toBeGreaterThan(0);
+    act(() => { for (const listener of mockNavigationListeners.blur) { listener(); } });
+    const stale = mockMeasureCallbacks.splice(0);
+    act(() => stale.forEach(callback => callback()));
+    expect(entryCover()).toBeDefined();
+    mockDelayMeasures = false;
+    jest.mocked(api.history).mockResolvedValueOnce(page([message(30), message(31)]));
+    await act(async () => { for (const listener of mockNavigationListeners.focus) { listener(); } });
+    pinLatest();
+    expect(entryCover()).toBeUndefined();
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('reveals a measured retained latest window without waiting for the re-entry request', async () => {
+    await render(); pinLatest();
+    const input = field(); const list = history();
+    mockFocused = false; await rerender();
+    const latest = deferred<{ data: api.TeamChatHistory }>();
+    jest.mocked(api.history).mockReturnValueOnce(latest.promise);
+    mockDelayMeasures = true; mockFocused = true; await rerender();
+    expect(entryCover()).toBeDefined();
+    mockDelayMeasures = false;
+    act(() => mockMeasureCallbacks.splice(0).forEach(callback => callback()));
+    await tick(40);
+    expect(entryCover()).toBeUndefined();
+    expect(field()).toBe(input); expect(history()).toBe(list);
+    expect(api.markRead).not.toHaveBeenCalled();
+    await act(async () => latest.resolve(page([message(10), message(11)])));
+    expect(entryCover()).toBeUndefined();
+  });
+
+  it('keeps deliberate reading in the displayed cache when the re-entry refresh finishes', async () => {
+    await render(); pinLatest();
+    mockFocused = false; await rerender();
+    const latest = deferred<{ data: api.TeamChatHistory }>();
+    jest.mocked(api.history).mockReturnValueOnce(latest.promise);
+    mockFocused = true; await rerender(); await tick(40);
+    expect(entryCover()).toBeUndefined();
+    dragList(200); scrollEnd.mockClear(); scrollOffset.mockClear();
+    await act(async () => latest.resolve(page([message(30), message(31)])));
+    layoutLatestTail(); contentList(1800);
+    expect(entryCover()).toBeUndefined();
+    expect(scrollEnd).not.toHaveBeenCalled(); expect(scrollOffset).not.toHaveBeenCalled();
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('corrects the actual content end even if the initial estimated scroll emits no event', async () => {
+    await render();
+    layoutList(500); contentList(1800); layoutLatestTail();
+    expect(scrollEnd).toHaveBeenCalledWith({ animated: false });
+    expect(entryCover()).toBeDefined();
+    await tick(40);
+    expect(scrollOffset).toHaveBeenCalledWith({ offset: 1300, animated: false });
+    scrollList(1300);
+    expect(entryCover()).toBeUndefined();
+  });
+
+  it('keeps the first re-entry render covered until a no-op bottom position is confirmed', async () => {
+    const presentations: boolean[] = [];
+    const node = () => <React.Profiler id="entry" onRender={() => { presentations.push(entryCover() !== undefined); }}><TeamChatScreen /></React.Profiler>;
+    await render(node()); pinLatest();
+    const input = field(); const list = history();
+    mockFocused = false; await rerender(node());
+    const latest = deferred<{ data: api.TeamChatHistory }>();
+    jest.mocked(api.history).mockReturnValueOnce(latest.promise);
+    presentations.length = 0;
+    mockDelayMeasures = true;
+    mockFocused = true; await rerender(node());
+    expect(presentations[0]).toBe(true);
+    expect(entryCover()).toBeDefined();
+    mockDelayMeasures = false;
+    act(() => mockMeasureCallbacks.splice(0).forEach(callback => callback()));
+    await tick(40);
+    expect(entryCover()).toBeUndefined();
+    await act(async () => latest.resolve(page([message(10), message(11)])));
+    expect(entryCover()).toBeUndefined();
+    expect(field()).toBe(input); expect(history()).toBe(list);
+  });
+
+  it('rejects queued native confirmation after keyboard geometry changes', async () => {
+    await render(); mockDelayMeasures = true;
+    layoutList(500); contentList(1800); layoutLatestTail(); scrollList(1300);
+    const stale = mockMeasureCallbacks.splice(0);
+    expect(stale.length).toBeGreaterThan(0);
+    jest.mocked(useKeyboardVisible).mockReturnValue(true); await rerender();
+    layoutList(300);
+    act(() => stale.forEach(callback => callback()));
+    expect(entryCover()).toBeDefined();
+    expect(api.markRead).not.toHaveBeenCalled();
+    mockMeasureCallbacks.length = 0; mockDelayMeasures = false;
+    layoutLatestTail(); scrollList(1500, 1800, 300);
+    expect(entryCover()).toBeUndefined();
+  });
+
+  it('covers retained native pixels immediately on blur before a frozen route can commit', async () => {
+    await render(); pinLatest();
+    const nativeCover = renderer!.root.findAllByType(View).find(node => node.props.testID === 'team-chat-entry-cover')!;
+    const setNativeProps = jest.spyOn(nativeCover.instance, 'setNativeProps');
+    act(() => { for (const listener of mockNavigationListeners.blur) { listener(); } });
+    expect(setNativeProps).toHaveBeenCalledWith(expect.objectContaining({ style: { opacity: 1 }, pointerEvents: 'auto',
+      accessibilityElementsHidden: false, importantForAccessibility: 'auto' }));
+    expect(entryCover()).toBeDefined();
+  });
+
+  it('leaves preparation for retained messages when a latest request fails on re-entry', async () => {
+    await render(); pinLatest(); change('Saved draft');
+    const list = history(); const input = field();
+    mockFocused = false; await rerender();
+    jest.mocked(api.history).mockRejectedValueOnce(new NetworkError());
+    mockFocused = true; await rerender();
+    expect(entryCover()).toBeUndefined();
+    expect(allText()).toContain('Updates interrupted. Showing the last loaded messages');
+    expect(bubbles().map(node => node.props.message.id)).toEqual([10, 11]);
+    expect(history()).toBe(list); expect(field()).toBe(input); expect(field().props.value).toBe('Saved draft');
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('leaves preparation for the retained window when a fresh target cannot be loaded', async () => {
+    await render(); pinLatest();
+    const target = deferred<{ data: api.TeamChatHistory }>();
+    jest.mocked(api.history).mockReturnValueOnce(target.promise);
+    await rerender(<TeamChatScreen targetMessageId={99} />);
+    expect(entryCover()).toBeDefined();
+    await act(async () => target.resolve(page([message(98)])));
+    expect(entryCover()).toBeUndefined();
+    expect(allText()).toContain('Updates interrupted. Showing the last loaded messages');
+    expect(bubbles().map(node => node.props.message.id)).toEqual([10, 11]);
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('waits for measured content before accepting a centered explicit target', async () => {
+    jest.mocked(api.history).mockResolvedValueOnce(page([message(10), message(11)]));
+    await render(<TeamChatScreen targetMessageId={11} />);
+    layoutList(500); await tick(40);
+    expect(entryCover()).toBeDefined();
+    contentList(1800); await tick(40);
+    expect(entryCover()).toBeUndefined();
+    expect(scrollIndex).toHaveBeenCalledWith(expect.objectContaining({ viewPosition: 0.5, animated: false }));
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('keeps a fresh target received while blurred through its navigation return', async () => {
+    await render(); pinLatest();
+    mockFocused = false; await rerender();
+    await rerender(<TeamChatScreen targetMessageId={99} />);
+    jest.mocked(api.history).mockResolvedValueOnce(page([message(98), message(99)]));
+    mockFocused = true; await rerender();
+    expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 99 }, boundClient);
+    mockMeasured = { ...mockMeasured, height: 500, contentHeight: 1800, offset: 900 };
+    layoutList(500); contentList(1800); scrollList(900);
+    expect(entryCover()).toBeUndefined();
+    expect(bubbles().find(node => node.props.message.id === 99)!.props.targeted).toBe(true);
+    expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('keeps prepared Chat visible during incoming/keyboard changes with reduced=%s', async reduced => {
+    mockReducedMotion = reduced;
+    await render(); pinLatest();
+    expect(entryCover()).toBeUndefined();
+    const list = history(); const input = field();
+    change('Multiline\ndraft');
+    jest.mocked(useKeyboardVisible).mockReturnValue(true); await rerender();
+    layoutList(300); contentList(1800); layoutLatestTail(); scrollList(1500, 1800, 300);
+    expect(entryCover()).toBeUndefined();
+    jest.mocked(api.history).mockResolvedValueOnce(page([message(12)]));
+    await act(async () => client.invalidateQueries({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') }));
+    contentList(2000); layoutLatestTail(); scrollList(1700, 2000, 300);
+    expect(entryCover()).toBeUndefined();
+    expect(history()).toBe(list); expect(field()).toBe(input); expect(field().props.value).toBe('Multiline\ndraft');
+  });
+
   it.each(['unread', 'read', 'own'] as const)('opens %s latest messages at the bottom after usable measurements', async kind => {
     jest.mocked(api.history).mockResolvedValueOnce(page([
       message(10, { sender: { id: kind === 'own' ? 12 : 2, name: 'Fixture' }, body: 'Long line\n'.repeat(30) }), message(11),
@@ -339,6 +596,7 @@ describe('mounted Team Chat screen interactions', () => {
     mockFocused = true; await rerender();
     visible([{ kind: 'read-marker', id: 11 }], oldRead);
     expect(api.markRead).not.toHaveBeenCalled();
+    pinLatest();
     visible([{ kind: 'read-marker', id: 11 }]); await tick();
     expect(api.markRead).toHaveBeenCalledTimes(1);
   });
@@ -464,6 +722,7 @@ describe('mounted Team Chat screen interactions', () => {
   it('acknowledges only visible bottom markers, including tall messages, and rejects stale callbacks under overlays/keyboard/history', async () => {
     jest.mocked(api.history).mockResolvedValue(page([message(10, { body: 'Tall line\n'.repeat(200) }), message(11)], { has_more: true }));
     await render();
+    pinLatest();
     expect(history().props.viewabilityConfig).toEqual({ itemVisiblePercentThreshold: 100, minimumViewTime: 500 });
     visible([{ kind: 'message', id: 10 }]); expect(api.markRead).not.toHaveBeenCalled();
     visible([{ kind: 'read-marker', id: 10, isViewable: false }]); expect(api.markRead).not.toHaveBeenCalled();
@@ -487,6 +746,9 @@ describe('mounted Team Chat screen interactions', () => {
     const quote = message(11, { reply_to: { id: 5, sender_name: 'Blair', body: 'Original' } });
     jest.mocked(api.history).mockResolvedValueOnce(page([quote]));
     await render(<TeamChatScreen targetMessageId={11} />);
+    mockMeasured = { ...mockMeasured, height: 500, contentHeight: 1800, offset: 900 };
+    layoutList(500); contentList(1800); scrollList(900);
+    expect(entryCover()).toBeUndefined();
     jest.mocked(api.history).mockResolvedValueOnce(page([message(4), message(5)]));
     await press('Open original message from Blair');
     expect(api.history).toHaveBeenLastCalledWith('clinic', { around: 5 }, boundClient);
@@ -510,7 +772,7 @@ describe('mounted Team Chat screen interactions', () => {
   it('keeps the window and gives retry feedback when a quotation cannot be opened', async () => {
     const quote = message(11, { reply_to: { id: 5, sender_name: 'Blair', body: 'Original' } });
     jest.mocked(api.history).mockResolvedValueOnce(page([quote]));
-    await render();
+    await render(); pinLatest();
     jest.mocked(api.history).mockRejectedValueOnce(new Error('missing'));
     await press('Open original message from Blair');
     expect(allText()).toContain('Could not open the original message.');
@@ -523,14 +785,14 @@ describe('mounted Team Chat screen interactions', () => {
 
   it('navigates authorized read-only task references across tabs without discarding the same-scope composer', async () => {
     jest.mocked(api.history).mockResolvedValue(page([message(11, { tasks: [task(4)] })]));
-    await render(); change('Keep this draft'); await press('Reply to Alex');
+    await render(); pinLatest(); change('Keep this draft'); await press('Reply to Alex');
     expect(mockDrafts.size).toBe(1); expect(guard()[0]).toBe(true);
     await press('Open task 4: Task 4');
     expect(navigateToWorkspaceIntent).toHaveBeenCalledWith({ kind: 'team_task', unit: 'clinic', id: 4 });
     expect(mockWorkspace.requestDiscard).not.toHaveBeenCalled(); expect(field().props.value).toBe('Keep this draft');
     mockFocused = false; await rerender();
     expect(mockDrafts.size).toBe(1); expect(field().props.value).toBe('Keep this draft');
-    mockFocused = true; await rerender();
+    mockFocused = true; await rerender(); pinLatest();
     expect(field().props.value).toBe('Keep this draft'); expect(allText()).toContain('Replying to Alex');
     jest.mocked(navigationRef.isReady).mockReturnValue(false);
     await press('Open task 4: Task 4'); expect(allText()).toContain('Task navigation is not ready.');
@@ -543,7 +805,7 @@ describe('mounted Team Chat screen interactions', () => {
     mockWorkspace.units[0] = { ...mockWorkspace.units[0], features: { ...mockWorkspace.units[0].features, team_board: false } };
     mockWorkspace.activeUnit = mockWorkspace.units[0];
     jest.mocked(api.history).mockResolvedValue(page([message(11, { tasks: [task(4)] })]));
-    await render(); change('Retained draft');
+    await render(); pinLatest(); change('Retained draft');
     await press('Open task 4: Task 4');
     expect(navigateToWorkspaceIntent).not.toHaveBeenCalled();
     expect(navigationRef.navigate).toHaveBeenCalledWith('AppTabs', {
@@ -559,7 +821,7 @@ describe('mounted Team Chat screen interactions', () => {
   });
 
   it('locks the full exact payload on ambiguous delivery, deduplicates same-tick send/retry, and rearms the next composer', async () => {
-    await render(); await addTask(4); await press('Reply to Alex');
+    await render(); pinLatest(); await addTask(4); await press('Reply to Alex');
     change('😀 @Al'); select('😀 @Al'.length); await tick(200); await tick(0);
     const staleMention = button('Mention Alex').props.onPress;
     await press('Mention Alex'); change('😀 @Alex \nnext line'); select('😀 @Alex \nnext line'.length);
@@ -641,6 +903,57 @@ describe('mounted Team Chat screen interactions', () => {
     await press('Mention Alex'); expect(field().props.value).toBe('@Alex ');
   });
 
+  it.each([lightTheme, darkTheme])('shows first-message timestamps above groups, not inside the last bubble, in $mode', async theme => {
+    mockTheme = theme;
+    const first = message(10, { created_at: '2026-11-01T09:05:00+08:00' });
+    const middle = message(11, { created_at: '2026-11-01T09:06:00+08:00' });
+    const recent = message(12, { created_at: '2026-11-04T09:09:00+08:00' });
+    const today = message(13, { created_at: '2026-11-08T13:47:00+08:00', sender: { id: 12, name: 'Member' } });
+    jest.mocked(api.history).mockResolvedValueOnce(page([first, middle, recent, today]));
+    await render();
+    const headings = renderer!.root.findAllByType(Text).filter(node => /^team-chat-timestamp-/.test(node.props.testID ?? ''));
+    expect(headings.map(node => node.props.children)).toEqual([first, recent, today].map(item => formatChatGroupTimestamp(item.created_at, new Date())));
+    expect(headings.map(node => node.props.children)).toEqual(['Nov 1, 2026, 9:05 AM', 'Wed 9:09 AM', '1:47 PM']);
+    expect(headings.map(node => node.props.testID)).toEqual(['team-chat-timestamp-10', 'team-chat-timestamp-12', 'team-chat-timestamp-13']);
+    headings.forEach(node => {
+      expect(node.props.accessibilityRole).toBe('header');
+      expect(node.props.pointerEvents).toBe('none');
+      expect(StyleSheet.flatten(node.props.style)).toMatchObject({ alignSelf: 'center', textAlign: 'center', color: theme.ink500 });
+    });
+    const bubble = bubbles().find(node => node.props.message.id === 11)!;
+    expect(bubble.findAllByType(Text).some(node => node.props.children === formatChatTime(middle.created_at))).toBe(false);
+    expect(renderer!.root.findAllByType(Text).some(node => node.props.children === 'November 1, 2026')).toBe(false);
+    expect(api.markRead).not.toHaveBeenCalled();
+    pinLatest();
+    const nativeScroll = history().findAllByType(ScrollView).find(node => !node.props.horizontal)!;
+    act(() => nativeScroll.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 360, height: 500 } } }));
+    act(() => nativeScroll.props.onContentSizeChange(360, 1800));
+    act(() => nativeScroll.props.onScroll({ timeStamp: Date.now(), nativeEvent: { contentOffset: { x: 0, y: 1300 }, contentSize: { width: 360, height: 1800 }, layoutMeasurement: { width: 360, height: 500 }, zoomScale: 1 } }));
+    await tick(100); layoutLatestTail(); scrollList(1300);
+    expect(renderer!.root.findAllByType(View).some(node => node.props.testID === 'team-chat-read-marker-13')).toBe(true);
+    expect(entryCover()).toBeUndefined();
+  });
+
+  it('updates only timestamp labels at Manila midnight without replacing messages, input or preparation', async () => {
+    jest.setSystemTime(new Date('2026-11-09T23:59:59+08:00'));
+    jest.mocked(api.history).mockResolvedValueOnce(page([message(10, { created_at: '2026-11-09T13:47:00+08:00' })]));
+    await render(); pinLatest();
+    const input = field(); const list = history(); const data = list.props.data;
+    const bubble = bubbles()[0];
+    change('Keep this draft'); dragList(200);
+    const requests = jest.mocked(api.history).mock.calls.length;
+    scrollEnd.mockClear(); scrollOffset.mockClear();
+    const heading = renderer!.root.findAllByType(Text).find(node => node.props.testID === 'team-chat-timestamp-10')!;
+    expect(heading.props.children).toBe('1:47 PM');
+    await tick(1000);
+    expect(heading.props.children).toBe('Mon 1:47 PM');
+    expect(history()).toBe(list); expect(history().props.data).toBe(data);
+    expect(bubbles()[0]).toBe(bubble); expect(field()).toBe(input);
+    expect(input.props.value).toBe('Keep this draft'); expect(entryCover()).toBeUndefined();
+    expect(api.history).toHaveBeenCalledTimes(requests); expect(api.markRead).not.toHaveBeenCalled();
+    expect(scrollEnd).not.toHaveBeenCalled(); expect(scrollOffset).not.toHaveBeenCalled();
+  });
+
   it('keeps read markers invisible and groups nearby bubbles without horizontal separators', async () => {
     jest.mocked(api.history).mockResolvedValueOnce(page([message(10), message(11), message(12)], { last_read_id: 10 }));
     await render();
@@ -655,6 +968,7 @@ describe('mounted Team Chat screen interactions', () => {
     expect(allText()).toContain('Unread messages');
     expect(StyleSheet.flatten(composerFooter().props.style).borderTopWidth).toBe(0);
     expect(api.markRead).not.toHaveBeenCalled();
+    pinLatest();
     visible([{ kind: 'read-marker', id: 11 }]);
     await tick(0);
     expect(api.markRead).toHaveBeenCalledWith('clinic', 11, boundClient);
@@ -665,13 +979,15 @@ describe('mounted Team Chat screen interactions', () => {
     await render();
     const input = field(); change('Draft stays');
     expect(bottomButton()).toBeUndefined();
+    pinLatest();
     scrollList(1300); expect(bottomButton()).toBeUndefined();
     scrollList(1219); expect(bottomButton()).toBeDefined();
     const arrow = bottomButton();
     expect(StyleSheet.flatten(arrow.props.style({ pressed: false }))).toMatchObject({ width: 48, height: 48, borderRadius: 24, backgroundColor: theme.surface });
     expect(StyleSheet.flatten(arrow.parent!.props.style)).toMatchObject({ right: 16, bottom: 12, position: 'absolute' });
     expect(StyleSheet.flatten(arrow.props.style({ pressed: false })).elevation).toBeUndefined();
-    expect(history().parent!.findAll(node => node.props.testID === 'team-chat-scroll-bottom').length).toBeGreaterThan(0);
+    const viewport = renderer!.root.findAllByType(View).find(node => node.props.testID === 'team-chat-viewport')!;
+    expect(viewport.findAll(node => node.props.testID === 'team-chat-scroll-bottom').length).toBeGreaterThan(0);
     const requests = jest.mocked(api.history).mock.calls.length;
     scrollEnd.mockClear();
     await press('Scroll to latest messages');
@@ -693,7 +1009,7 @@ describe('mounted Team Chat screen interactions', () => {
 
   it('queues a pull behind a background poll, deduplicates pulls and holds the manual spinner until completion', async () => {
     await render();
-    layoutList(500); contentList(1800); scrollList(200);
+    pinLatest(); dragList(200);
     scrollEnd.mockClear(); scrollIndex.mockClear();
     const poll = deferred<{ data: api.TeamChatHistory }>();
     jest.mocked(api.history).mockReturnValueOnce(poll.promise);
@@ -817,7 +1133,7 @@ describe('mounted Team Chat screen interactions', () => {
 
   it('does not yank readers downward on a hint or a manual refresh while they are above the bottom', async () => {
     await render();
-    layoutList(500); contentList(1500); scrollList(100);
+    pinLatest(1500); dragList(100, 1500);
     scrollEnd.mockClear(); scrollIndex.mockClear();
     jest.mocked(api.history).mockResolvedValueOnce(page([message(12)]));
     await act(async () => client.invalidateQueries({ queryKey: teamChatKeys.unit({ tenantId: 9, userId: 12 }, 'clinic') }));
@@ -832,7 +1148,7 @@ describe('mounted Team Chat screen interactions', () => {
 
   it('rejects old arrow, geometry and pull callbacks after the chat scope changes', async () => {
     await render();
-    layoutList(500); contentList(1800); scrollList(0);
+    pinLatest(); dragList(0);
     const arrow = bottomButton().props.onPress;
     const scroll = history().props.onScroll;
     const pull = renderer!.root.findByType(RefreshControl).props.onRefresh;
@@ -963,7 +1279,7 @@ describe('mounted Team Chat task picker and memo message', () => {
     await press('Reply to Alex'); expect(reply).toHaveBeenCalledWith(value);
     expect(StyleSheet.flatten(button('Reply to Alex').props.style({ pressed: false })).height).toBe(44);
     await rerender(bubble(false, true));
-    expect(has(sender)).toBe(false); expect(has(formatChatTime(value.created_at))).toBe(true);
+    expect(has(sender)).toBe(false); expect(has(formatChatTime(value.created_at))).toBe(false);
   });
 
   it('exposes reference buttons and quotation, blocks disabled handlers, and memoizes an unchanged message', async () => {

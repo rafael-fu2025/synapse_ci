@@ -95,6 +95,7 @@ export interface TeamChatChannelState extends Omit<ChannelSnapshot, 'request'> {
   busy: boolean;
   loadingInitial: boolean;
   loadingOlder: boolean;
+  loadingLatest: boolean;
   refreshing: boolean;
   polling: boolean;
   loadOlder: () => Promise<boolean>;
@@ -484,7 +485,7 @@ export function useTeamChatChannel({ unit, targetMessageId, paused = false }: Us
   return {
     ...snapshot, active, busy: snapshot.request !== null,
     loadingInitial: !snapshot.loaded && snapshot.request !== null,
-    loadingOlder: snapshot.request === 'older', refreshing: snapshot.request === 'refresh',
+    loadingOlder: snapshot.request === 'older', loadingLatest: snapshot.request === 'latest', refreshing: snapshot.request === 'refresh',
     polling: snapshot.request === 'poll', loadOlder, showLatest, openMessage, refresh, acknowledge, clear,
   };
 }

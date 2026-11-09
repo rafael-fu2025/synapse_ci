@@ -427,7 +427,11 @@
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || restoring) return;
       const link = target?.closest('a[href]');
       if (!link || !link.matches('.sidebar-nav a.nav-link, a[data-navigation], #main a')) return;
-      if (link.closest('[data-navigation="false"], [data-app-modal], [data-app-modal-open], [data-app-modal-close], [data-bs-toggle], [data-table-page], [data-table-reset], [download], [target], [onclick], [hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [data-hx-get], [data-hx-post], [data-hx-put], [data-hx-patch], [data-hx-delete]')) return;
+      if (link.closest('[data-navigation="false"], [data-app-modal], [data-app-modal-open], [data-app-modal-close], [data-table-page], [data-table-reset], [download], [target], [onclick], [hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [data-hx-get], [data-hx-post], [data-hx-put], [data-hx-patch], [data-hx-delete]')) return;
+      // Explicit account links can live inside tooltip wrappers, but never act as Bootstrap toggles.
+      for (let ancestor = link; ancestor; ancestor = ancestor.parentElement) {
+        if (ancestor.hasAttribute('data-bs-toggle') && (!link.hasAttribute('data-navigation') || ancestor === link || ancestor.dataset.bsToggle !== 'tooltip')) return;
+      }
       // The layout disables HTMX boost on body; only a more local opt-out disables us.
       const boost = link.closest('[hx-boost], [data-hx-boost]');
       if (boost && boost !== document.body && (boost.getAttribute('hx-boost') || boost.getAttribute('data-hx-boost')) === 'false') return;

@@ -79,10 +79,9 @@
     window.BalayDatepicker?.init(root);
     window.BalayDateTimePicker?.init(root);
     window.SynapseCarouselForm?.init(root);
-    window.SynapseProfileSettings?.init(root);
   }
   function focusField(root) {
-    const field = root.querySelector('[data-profile-settings] input[type="file"]') || root.querySelector('.modal-body input:not([type="hidden"]):not([type="file"]):not(:disabled), .modal-body textarea, .modal-body .bd-select-toggle');
+    const field = root.querySelector('.modal-body input:not([type="hidden"]):not([type="file"]):not(:disabled), .modal-body textarea, .modal-body .bd-select-toggle');
     (field || root.querySelector('[data-app-modal-close]'))?.focus({ preventScroll: true });
   }
   function error(root, message) {
@@ -149,7 +148,6 @@
     root.addEventListener('hidden.bs.modal', () => {
       record.controller.abort();
       window.SynapseCarouselForm?.destroy(root);
-      window.SynapseProfileSettings?.destroy(root);
       window.BalaySelect?.destroy(root);
       if (window.Alpine) Alpine.mutateDom(() => Alpine.destroyTree(root));
       modal.dispose();
@@ -214,7 +212,6 @@
       window.BalayDatepicker?.init(record.root);
       window.BalayDateTimePicker?.init(record.root);
       window.SynapseCarouselForm?.init(record.root);
-      window.SynapseProfileSettings?.init(record.root);
       if (record.root.classList.contains('show')) focusField(record.root);
     } catch (failure) {
       if (failure.name !== 'AbortError' && active === record) {

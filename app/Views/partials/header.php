@@ -74,7 +74,7 @@
               <span>My Health Portal</span>
             </a>
             <?php if ($profilePersonId > 0 && $role !== 'guest'): ?>
-              <a class="user-menu-item" data-app-modal-open href="<?= esc(\App\Services\PortalContext::urlFor('main', 'portal/settings')) ?>">
+              <a class="user-menu-item" data-navigation href="<?= esc(\App\Services\PortalContext::urlFor('main', 'portal/settings')) ?>">
                 <i class="bi bi-person-gear" aria-hidden="true"></i><span>Profile &amp; Settings</span>
               </a>
             <?php endif; ?>

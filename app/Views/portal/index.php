@@ -192,7 +192,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
         <h6 class="fw-bold mb-0 text-dark" id="portalEmergencyCardTitle">
           <i class="bi bi-telephone-plus text-primary me-1" aria-hidden="true"></i> Emergency Contact
         </h6>
-        <a href="<?= esc(site_url('portal/settings')) ?>" class="btn btn-outline-primary btn-sm py-0" data-app-modal-open>
+        <a href="<?= esc(site_url('portal/settings')) ?>" class="btn btn-outline-primary btn-sm py-0">
           <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
         </a>
       </div>
@@ -212,7 +212,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
           </dl>
         <?php else: ?>
           <p class="small text-muted mb-2">No emergency contact recorded yet. Add one so clinic staff know who to reach in an emergency.</p>
-          <a href="<?= esc(site_url('portal/settings')) ?>" class="btn btn-outline-secondary btn-sm" data-app-modal-open>
+          <a href="<?= esc(site_url('portal/settings')) ?>" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>Add emergency contact
           </a>
         <?php endif; ?>

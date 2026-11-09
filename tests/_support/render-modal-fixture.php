@@ -6,7 +6,7 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 $fixture = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
-require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootstrap.php';
+require __DIR__ . '/ai-runtime-bootstrap.php';
 // Realtime ticket renewal is unrelated to form saves and requires its own backend.
 config(\Config\Realtime::class)->enabled = false;
 $app = config('App');
@@ -146,7 +146,7 @@ switch ($kind) {
                 $data = ['title' => 'Referrals', 'referrals' => [], 'unit' => $unit, 'tab' => 'incoming',
                     'actor' => ['role' => 'superadmin'], 'counts' => ['incoming' => 0, 'sent' => 0, 'history' => 0],
                     'pagination' => ['page' => 1, 'per_page' => 25, 'filtered' => 0, 'total' => 0, 'pages' => 1],
-                    'filters' => ['q' => '', 'per_page' => 25], 'baseUrl' => site_url('/' . $unit . '/referrals'), 'formModalPage' => false];
+                    'filters' => ['q' => '', 'status' => 'all', 'target_unit' => 'all', 'per_page' => 25], 'baseUrl' => site_url('/' . $unit . '/referrals'), 'formModalPage' => false];
                 break;
             case 'referral-chooser':
                 $view = 'referrals/workstation';

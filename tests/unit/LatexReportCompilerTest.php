@@ -30,6 +30,8 @@ final class LatexReportCompilerTest extends CIUnitTestCase
         FakeLatexReportCompiler::$environments = [];
         FakeLatexReportCompiler::$inputs = [];
         FakeLatexReportCompiler::$files = [];
+        FakeLatexReportCompiler::$sealHash = false;
+        FakeLatexReportCompiler::$logoHash = false;
     }
 
     protected function tearDown(): void
@@ -44,7 +46,7 @@ final class LatexReportCompilerTest extends CIUnitTestCase
         }
     }
 
-    public function testReturnsPdfAndUsesIsolatedJobsWithOnlyTheFixedAsset(): void
+    public function testReturnsPdfAndUsesIsolatedJobsWithOnlyTheFixedBrandAssets(): void
     {
         $source = "\\documentclass{article}\n\\begin{document}Counts 12\\end{document}";
         self::assertStringStartsWith('%PDF-', FakeLatexReportCompiler::compile($source));
@@ -62,7 +64,14 @@ final class LatexReportCompilerTest extends CIUnitTestCase
             $expectedFiles[] = 'university-seal.png';
             self::assertSame(hash_file('sha256', $seal), FakeLatexReportCompiler::$sealHash);
         }
+        $logo = ROOTPATH . 'public/synapse-black.png';
+        if (is_file($logo)) {
+            $expectedFiles[] = 'synapse-black.png';
+            self::assertSame(hash_file('sha256', $logo), FakeLatexReportCompiler::$logoHash);
+        }
+        sort($expectedFiles);
         self::assertSame($expectedFiles, FakeLatexReportCompiler::$files[0]);
+        self::assertSame($expectedFiles, FakeLatexReportCompiler::$files[1]);
     }
 
     public function testCommandIsAnArgumentArrayAndSourceNeverBecomesAnArgument(): void
@@ -282,6 +291,7 @@ final class FakeLatexReportCompiler extends LatexReportCompiler
     public static array $inputs = [];
     public static array $files = [];
     public static string|false $sealHash = false;
+    public static string|false $logoHash = false;
 
     protected static function startProcess(array $command, string $directory, array $environment): mixed
     {
@@ -292,6 +302,8 @@ final class FakeLatexReportCompiler extends LatexReportCompiler
         self::$files[] = array_values(array_diff(scandir($directory), ['.', '..']));
         self::$sealHash = is_file($directory . '/university-seal.png')
             ? hash_file('sha256', $directory . '/university-seal.png') : false;
+        self::$logoHash = is_file($directory . '/synapse-black.png')
+            ? hash_file('sha256', $directory . '/synapse-black.png') : false;
         return parent::startProcess([PHP_BINARY, '-r', self::$script], $directory, $environment);
     }
 }

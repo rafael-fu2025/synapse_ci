@@ -13,6 +13,7 @@ import { AlertTriangle, ArrowDown, Plus, Send, X } from 'lucide-react-native';
 import type { TeamChatMember, TeamChatMentionInput, TeamChatMessage, TeamChatSendInput, TeamChatTaskReference } from '../../../api/endpoints/teamChat';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
 import { secureClientNonce } from '../../../lib/secureNonce';
 import { useForegroundOnline } from '../../../lib/useActiveScreen';
 import { useKeyboardVisible } from '../../../lib/useKeyboardVisible';
@@ -28,6 +29,7 @@ import { useWorkspace } from '../../workspace/WorkspaceContext';
 import { WorkspaceHeaderActions } from '../../workspace/WorkspaceHeaderActions';
 import { useWorkspaceDraft } from '../../workspace/useWorkspaceDraft';
 import { TeamChatMessageBubble } from '../components/TeamChatMessageBubble';
+import { TeamChatTimestamp, TeamChatTimestampProvider } from '../components/TeamChatTimestamp';
 import { ChatScrollButton } from '../components/ChatScrollButton';
 import { TeamChatTaskPicker } from '../components/TeamChatTaskPicker';
 import { purgeTeamChatUnit, useSendTeamChatMessage, useTeamChatChannel, useTeamChatIdentity, useTeamChatMemberSearch } from '../hooks';
@@ -48,6 +50,16 @@ interface BottomScrollIntent {
   measuredHeight: number;
   measuredContentHeight: number;
   correctedOffset: number | null;
+}
+interface ChatEntry {
+  key: symbol;
+  scope: string;
+  navigationRevision: number;
+  epoch: number;
+  routeTarget: number | undefined;
+  target: number | null;
+  baselineLatest: number;
+  retainedLatest: boolean;
 }
 const BOTTOM_SCROLL_THRESHOLD = 80;
 function compact(value: string, maximum = 180): string {
@@ -130,6 +142,42 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
   const bottomScroll = useRef<BottomScrollIntent | null>(null);
   const nextBottomRevision = useRef(0);
   const [bottomRevision, setBottomRevision] = useState(0);
+  const [entryEpoch, setEntryEpoch] = useState(0);
+  const [revealedEntry, setRevealedEntry] = useState<symbol | null>(null);
+  const previousLatest = useRef(channel.latestRevision);
+  const entryFocus = useRef(focused);
+  const returnedToFocus = focused && !entryFocus.current;
+  entryFocus.current = focused;
+  const validTarget = Number.isSafeInteger(targetMessageId) && (targetMessageId ?? 0) > 0 ? targetMessageId! : null;
+  const entry = useRef<ChatEntry>({ key: Symbol('chat-entry'), scope, navigationRevision: channel.navigationRevision,
+    epoch: entryEpoch, routeTarget: targetMessageId, target: validTarget, baselineLatest: -1, retainedLatest: false });
+  const freshTarget = entry.current.routeTarget !== targetMessageId && validTarget !== null;
+  const targetWaiting = entry.current.target !== null && (!channel.loaded || channel.targetMessageId !== entry.current.target);
+  if (entry.current.scope !== scope || entry.current.navigationRevision !== channel.navigationRevision || entry.current.epoch !== entryEpoch || returnedToFocus || freshTarget) {
+    const entryTarget = freshTarget || entry.current.scope !== scope ? validTarget
+      : !targetWaiting && (returnedToFocus || entry.current.epoch !== entryEpoch || revealedEntry === entry.current.key) ? null : entry.current.target;
+    entry.current = { key: Symbol('chat-entry'), scope, navigationRevision: channel.navigationRevision, epoch: entryEpoch,
+      routeTarget: targetMessageId, target: entryTarget,
+      baselineLatest: entry.current.scope !== scope ? -1 : previousLatest.current,
+      retainedLatest: entry.current.scope === scope && entryTarget === null && channel.loaded && channel.mode === 'latest' };
+  } else { entry.current.routeTarget = targetMessageId; }
+  previousLatest.current = channel.latestRevision;
+  const entryKey = entry.current.key;
+  // A retained window already committed its native tail; a new entry needs fresh
+  // measurements, not another server response or an unchanged tail layout event.
+  const entryWindow = useMemo(() => Symbol(`${scope}:${channel.latestRevision}:${channel.messages.length}:${channel.mode}:${channel.targetMessageId}`), [scope, channel.latestRevision, channel.messages, channel.mode, channel.targetMessageId]);
+  const currentEntryWindow = useRef(entryWindow);
+  currentEntryWindow.current = entryWindow;
+  const entryReady = revealedEntry === entryKey;
+  const entryReadyRef = useRef(entryReady);
+  entryReadyRef.current = entryReady;
+  const viewportRef = useRef<React.ComponentRef<typeof View>>(null);
+  const entryCoverRef = useRef<React.ComponentRef<typeof View>>(null);
+  const latestTailRef = useRef<React.ComponentRef<typeof View>>(null);
+  const lastMessageRef = useRef<React.ComponentRef<typeof View>>(null);
+  const targetMessageRef = useRef<React.ComponentRef<typeof View>>(null);
+  const entryFrame = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+  const entryCorrection = useRef<() => void>(() => undefined);
   const currentViewSession = useRef<symbol | null>(null);
   const sourceFlight = useRef<symbol | null>(null);
   const [sourceLoading, setSourceLoading] = useState(false);
@@ -167,6 +215,13 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     const blur = navigation.addListener?.('blur', () => {
       navigationFocus.current = false;
       controls.current.active = false;
+      entryReadyRef.current = false;
+      // Frozen routes may defer React commits. Cover retained native pixels before
+      // a later tab attach can expose the old offset while the route thaws.
+      entryCoverRef.current?.setNativeProps({ style: { opacity: 1 }, pointerEvents: 'auto', accessibilityElementsHidden: false,
+        importantForAccessibility: 'auto' });
+      setRevealedEntry(null);
+      setEntryEpoch(value => value + 1);
       currentViewSession.current = null;
       cancelBottomScroll();
     });
@@ -234,6 +289,7 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     clearComposer();
     return () => {
       mounted.current = false;
+      if (entryFrame.current !== null) { cancelAnimationFrame(entryFrame.current); entryFrame.current = null; }
       composerGeneration.current += 1;
       currentViewSession.current = null;
     };
@@ -257,15 +313,21 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
   }, [protectedError, recoverProtectedAccess]);
 
   // Old FlatList callbacks cannot acknowledge a new scope/window or a covered list.
-  const readAllowed = channel.active && focused && !taskPickerVisible && channel.mode === 'latest' &&
+  const readAllowed = entryReady && channel.active && focused && !taskPickerVisible && channel.mode === 'latest' &&
     (!channel.busy || channel.polling) && !sourceLoading && !forbidden && !unauthorized;
   const readState = useRef({ allowed: readAllowed, acknowledge: channel.acknowledge });
   readState.current = { allowed: readAllowed, acknowledge: channel.acknowledge };
-  const viewSession = useMemo(() => Symbol(`${scope}:${readAllowed}:${keyboardVisible}:${channel.targetMessageId ?? 'latest'}:${channel.latestRevision}:${channel.navigationRevision}`), [readAllowed, scope, keyboardVisible, channel.targetMessageId, channel.latestRevision, channel.navigationRevision]);
+  const readableSince = useRef({ session: Symbol('unreadable'), at: Infinity });
+  const viewSession = useMemo(() => Symbol(`${scope}:${readAllowed}:${keyboardVisible}:${channel.targetMessageId ?? 'latest'}:${channel.latestRevision}:${channel.navigationRevision}:${String(entryWindow)}:${String(entryKey)}`), [readAllowed, scope, keyboardVisible, channel.targetMessageId, channel.latestRevision, channel.navigationRevision, entryWindow, entryKey]);
   currentViewSession.current = viewSession;
+  useLayoutEffect(() => {
+    readableSince.current = { session: viewSession, at: readAllowed ? Date.now() : Infinity };
+    if (readAllowed) { listRef.current?.recordInteraction(); }
+  }, [readAllowed, viewSession]);
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 100, minimumViewTime: 500 }).current;
   const onViewableItemsChanged = useCallback((info: { viewableItems: ListViewToken[] }) => {
-    if (!mounted.current || !readState.current.allowed || currentViewSession.current !== viewSession) { return; }
+    if (!mounted.current || !readState.current.allowed || currentViewSession.current !== viewSession ||
+        readableSince.current.session !== viewSession || Date.now() - readableSince.current.at < 500) { return; }
     const ids = info.viewableItems.flatMap(token => token.isViewable && token.item.kind === 'read-marker' ? [token.item.messageId as number] : []);
     if (ids.length > 0) { readState.current.acknowledge(Math.max(...ids)); }
   }, [viewSession]);
@@ -276,8 +338,80 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     const distance = maxOffset - Math.max(0, Math.min(offset, maxOffset));
     setAwayFromBottom(height > 0 && distance > BOTTOM_SCROLL_THRESHOLD);
   }, []);
-  const scrollState = useRef({ mode: channel.mode, loaded: channel.loaded, busy: channel.busy, polling: channel.polling, refreshing: channel.refreshing, reducedMotion, focused, taskPickerVisible });
-  scrollState.current = { mode: channel.mode, loaded: channel.loaded, busy: channel.busy, polling: channel.polling, refreshing: channel.refreshing, reducedMotion, focused, taskPickerVisible };
+  const scrollState = useRef({ mode: channel.mode, loaded: channel.loaded, busy: channel.busy, loadingLatest: channel.loadingLatest, polling: channel.polling, refreshing: channel.refreshing, reducedMotion, keyboardVisible, focused, taskPickerVisible,
+    latestRevision: channel.latestRevision, target: channel.targetMessageId, lastId: channel.messages.at(-1)?.id ?? null, error: protectedError });
+  scrollState.current = { mode: channel.mode, loaded: channel.loaded, busy: channel.busy, loadingLatest: channel.loadingLatest, polling: channel.polling, refreshing: channel.refreshing, reducedMotion, keyboardVisible, focused, taskPickerVisible,
+    latestRevision: channel.latestRevision, target: channel.targetMessageId, lastId: channel.messages.at(-1)?.id ?? null, error: protectedError };
+  const tailWindow = useRef<symbol | null>(null);
+  const confirmEntry = useCallback(() => {
+    const current = scrollState.current;
+    const captured = entry.current;
+    const measured = { ...scrollGeometry.current };
+    const valid = () => mounted.current && currentEntryWindow.current === entryWindow && entry.current === captured && scrollState.current.keyboardVisible === keyboardVisible &&
+      scrollGeometry.current.height === measured.height && scrollGeometry.current.contentHeight === measured.contentHeight && scrollGeometry.current.offset === measured.offset &&
+      !entryReadyRef.current && controls.current.active && !controls.current.blocked && scrollState.current.focused &&
+      !scrollState.current.taskPickerVisible && scrollState.current.loaded && (!scrollState.current.busy || scrollState.current.polling ||
+        (captured.retainedLatest && scrollState.current.loadingLatest && scrollState.current.mode === 'latest'));
+    if (!valid() || (captured.target === null && (current.mode !== 'latest' || current.latestRevision < captured.baselineLatest ||
+          (!captured.retainedLatest && current.latestRevision === captured.baselineLatest))) ||
+        (captured.target !== null && (current.mode !== 'history' || current.target !== captured.target))) { return; }
+    const viewport = viewportRef.current;
+    const tail = latestTailRef.current;
+    const marker = captured.target !== null ? targetMessageRef.current : lastMessageRef.current;
+    const nodesCurrent = () => viewportRef.current === viewport && (captured.target !== null
+      ? targetMessageRef.current === marker : latestTailRef.current === tail && lastMessageRef.current === marker);
+    if (!viewport || (current.lastId !== null && !marker) || (captured.target === null && (!tail || tailWindow.current !== entryWindow))) { return; }
+    const inside = (y: number, height: number, top: number, viewportHeight: number) =>
+      Number.isFinite(y) && Number.isFinite(height) && height > 0 && y < top + viewportHeight && y + height > top;
+    const reveal = () => {
+      if (!valid() || !nodesCurrent()) { return; }
+      currentViewSession.current = null;
+      entryReadyRef.current = true;
+      setRevealedEntry(captured.key);
+    };
+    try {
+      viewport.measureInWindow((_x, top, width, height) => {
+        if (!valid() || !Number.isFinite(top) || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || Math.abs(height - measured.height) > 1) { return; }
+        if (captured.target !== null) {
+          if (measured.contentHeight <= 0 || positioned.current !== `target:${captured.target}`) { return; }
+          marker?.measureInWindow((_markerX, y, _markerWidth, markerHeight) => {
+            if (!valid() || !inside(y, markerHeight, top, height)) { return; }
+            const center = y + markerHeight / 2;
+            const viewportCenter = top + height / 2;
+            const maxOffset = Math.max(0, measured.contentHeight - measured.height);
+            if (Math.abs(center - viewportCenter) <= 2 || (measured.offset <= 1 && center <= viewportCenter) ||
+                (measured.offset >= maxOffset - 1 && center >= viewportCenter)) { reveal(); }
+          });
+          return;
+        }
+        tail!.measureInWindow((_tailX, y, _tailWidth, tailHeight) => {
+          if (!valid() || !inside(y, tailHeight, top, height)) { return; }
+          const geometry = scrollGeometry.current;
+          const maxOffset = Math.max(0, geometry.contentHeight - geometry.height);
+          const atEnd = geometry.height > 0 && Math.abs(geometry.offset - maxOffset) <= 1;
+          if (!atEnd) { return; }
+          if (current.lastId === null) { reveal(); return; }
+          marker!.measureInWindow((_markerX, markerY, _markerWidth, markerHeight) => {
+            if (valid() && inside(markerY, markerHeight, top, height) && markerY + markerHeight <= top + height + 1) { reveal(); }
+          });
+        });
+      });
+    } catch {
+      // Native nodes can detach during a route/window change; the next real event can confirm.
+    }
+  }, [entryWindow, keyboardVisible]);
+  const scheduleEntryCheck = useCallback(() => {
+    if (entryFrame.current !== null) { cancelAnimationFrame(entryFrame.current); }
+    if (entryReadyRef.current) { entryFrame.current = null; return; }
+    entryFrame.current = requestAnimationFrame(() => { entryFrame.current = null; entryCorrection.current(); confirmEntry(); });
+  }, [confirmEntry]);
+  useLayoutEffect(() => {
+    if (entryFrame.current !== null) { cancelAnimationFrame(entryFrame.current); entryFrame.current = null; }
+    if (!entryReady && focused && navigationFocus.current && !taskPickerVisible && channel.loaded && !channel.busy && (protectedError || offline) && !forbidden && !unauthorized) {
+      setRevealedEntry(entryKey); // A failed/offline return keeps its last good window and recovery.
+    }
+    return () => { if (entryFrame.current !== null) { cancelAnimationFrame(entryFrame.current); entryFrame.current = null; } };
+  }, [channel.busy, channel.loaded, entryKey, entryReady, entryWindow, focused, forbidden, offline, protectedError, taskPickerVisible, unauthorized]);
   const armBottomScroll = useCallback(() => {
     const intent: BottomScrollIntent = { session: scrollSession, revision: null, layoutReady: false, started: false,
       measuredHeight: 0, measuredContentHeight: 0, correctedOffset: null };
@@ -309,10 +443,13 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
       // First let VirtualizedList materialize its estimated end. Subsequent
       // measured layouts correct that estimate without a timer or list remount.
       listRef.current.scrollToEnd({ animated: false });
+      scheduleEntryCheck();
       return;
     }
     if (Math.abs(geometry.offset - offset) <= 1) {
       bottomScroll.current = null;
+      confirmEntry();
+      scheduleEntryCheck();
       return;
     }
     if (intent.measuredHeight === geometry.height && intent.measuredContentHeight === geometry.contentHeight && intent.correctedOffset === offset) { return; }
@@ -320,13 +457,20 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     intent.measuredContentHeight = geometry.contentHeight;
     listRef.current.scrollToOffset({ offset, animated: false });
     intent.correctedOffset = offset;
-  }, [scrollSession]);
+    scheduleEntryCheck();
+  }, [confirmEntry, scheduleEntryCheck, scrollSession]);
+  entryCorrection.current = correctBottomScroll;
   const onLatestTailLayout = useCallback(() => {
+    if (currentEntryWindow.current !== entryWindow) { return; }
+    tailWindow.current = entryWindow;
     const intent = bottomScroll.current;
-    if (!intent || intent.revision !== bottomRevision || intent.session !== scrollSession || currentScrollSession.current !== scrollSession) { return; }
-    intent.layoutReady = true;
-    correctBottomScroll();
-  }, [bottomRevision, correctBottomScroll, scrollSession]);
+    if (intent && intent.revision === bottomRevision && intent.session === scrollSession && currentScrollSession.current === scrollSession) {
+      intent.layoutReady = true;
+      correctBottomScroll();
+    }
+    confirmEntry();
+    scheduleEntryCheck();
+  }, [bottomRevision, confirmEntry, correctBottomScroll, entryWindow, scheduleEntryCheck, scrollSession]);
 
   useLayoutEffect(() => {
     const previous = observedNavigation.current;
@@ -336,7 +480,16 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
       followingBottom.current = false;
       positioned.current = null;
     }
-  }, [cancelBottomScroll, channel.navigationRevision, scope]);
+    if (!entryReady && entry.current.target === null && channel.mode === 'latest' && channel.loaded && channel.active && focused && !taskPickerVisible && !forbidden && !unauthorized) {
+      followingBottom.current = true;
+      const geometry = scrollGeometry.current;
+      const atEnd = geometry.height > 0 && geometry.contentHeight > 0 &&
+        Math.abs(geometry.offset - Math.max(0, geometry.contentHeight - geometry.height)) <= 1;
+      if (!atEnd && !bottomScroll.current) { commitBottomScroll(armBottomScroll()); }
+    }
+    confirmEntry();
+    scheduleEntryCheck();
+  }, [armBottomScroll, cancelBottomScroll, channel.active, channel.loaded, channel.mode, channel.navigationRevision, commitBottomScroll, confirmEntry, entryKey, entryReady, focused, forbidden, scheduleEntryCheck, scope, taskPickerVisible, unauthorized]);
 
   useLayoutEffect(() => {
     observedReplacement.current = { scope, revision: channel.latestRevision };
@@ -369,9 +522,16 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     followingBottom.current = false;
     const index = rows.findIndex(row => row.kind === 'message' && row.message.id === channel.targetMessageId);
     if (index < 0) { return; }
-    try { listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false }); }
-    catch { positioned.current = null; }
-  }, [channel.busy, channel.loaded, channel.targetMessageId, focused, rows, scrollSession, taskPickerVisible]);
+    try {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: false });
+      scheduleEntryCheck();
+    } catch { positioned.current = null; }
+  }, [channel.busy, channel.loaded, channel.targetMessageId, focused, rows, scheduleEntryCheck, scrollSession, taskPickerVisible]);
+  const onMessageLayout = useCallback(() => {
+    positionInitialWindow();
+    confirmEntry();
+    scheduleEntryCheck();
+  }, [confirmEntry, positionInitialWindow, scheduleEntryCheck]);
   const followGeometryChange = useCallback(() => {
     const current = scrollState.current;
     if (!followingBottom.current || current.mode !== 'latest' || !current.loaded || !controls.current.active || !current.focused || current.taskPickerVisible) { return; }
@@ -387,7 +547,9 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     updateBottomDistance();
     if (changed) { followGeometryChange(); }
     positionInitialWindow();
-  }, [focused, followGeometryChange, positionInitialWindow, scrollSession, taskPickerVisible, updateBottomDistance]);
+    confirmEntry();
+    scheduleEntryCheck();
+  }, [confirmEntry, focused, followGeometryChange, positionInitialWindow, scheduleEntryCheck, scrollSession, taskPickerVisible, updateBottomDistance]);
   const onListContentSizeChange = useCallback((_width: number, height: number) => {
     if (!mounted.current || currentScrollSession.current !== scrollSession || !controls.current.active || !focused || taskPickerVisible) { return; }
     if (!Number.isFinite(height) || height < 0) { return; }
@@ -397,7 +559,9 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     if (changed) { followGeometryChange(); }
     else { correctBottomScroll(); }
     positionInitialWindow();
-  }, [correctBottomScroll, focused, followGeometryChange, positionInitialWindow, scrollSession, taskPickerVisible, updateBottomDistance]);
+    confirmEntry();
+    scheduleEntryCheck();
+  }, [confirmEntry, correctBottomScroll, focused, followGeometryChange, positionInitialWindow, scheduleEntryCheck, scrollSession, taskPickerVisible, updateBottomDistance]);
   const onListScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!mounted.current || currentScrollSession.current !== scrollSession || !controls.current.active || !focused || taskPickerVisible) { return; }
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
@@ -406,6 +570,9 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     const resized = previous.height !== layoutMeasurement.height || previous.contentHeight !== contentSize.height;
     scrollGeometry.current = { offset: contentOffset.y, height: layoutMeasurement.height, contentHeight: contentSize.height };
     updateBottomDistance();
+    positionInitialWindow();
+    confirmEntry();
+    scheduleEntryCheck();
     if (resized) { followGeometryChange(); return; }
     const intent = bottomScroll.current;
     if (intent && !intent.started) {
@@ -419,10 +586,10 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     }
     const maxOffset = Math.max(0, contentSize.height - layoutMeasurement.height);
     followingBottom.current = layoutMeasurement.height > 0 && maxOffset - Math.max(0, Math.min(contentOffset.y, maxOffset)) <= BOTTOM_SCROLL_THRESHOLD;
-  }, [cancelBottomScroll, correctBottomScroll, focused, followGeometryChange, scrollSession, taskPickerVisible, updateBottomDistance]);
+  }, [cancelBottomScroll, confirmEntry, correctBottomScroll, focused, followGeometryChange, positionInitialWindow, scheduleEntryCheck, scrollSession, taskPickerVisible, updateBottomDistance]);
   const onListDrag = useCallback(() => {
     if (!mounted.current || currentScrollSession.current !== scrollSession || !controls.current.active || !focused || taskPickerVisible) { return; }
-    if (bottomScroll.current?.revision === null) {
+    if (bottomScroll.current?.revision === null || (entry.current.retainedLatest && scrollState.current.loadingLatest)) {
       cancelledReplacement.current = { scope: scopeRef.current, revision: observedReplacement.current.revision + 1 };
     }
     cancelBottomScroll();
@@ -534,7 +701,7 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
   }, [cancelBottomScroll, scrollSession, showLatest]);
 
   const openSource = useCallback((id: number) => {
-    if (!controls.current.active || controls.current.blocked || sourceFlight.current || sendFlight.current) { return; }
+    if (!entryReadyRef.current || !controls.current.active || controls.current.blocked || sourceFlight.current || sendFlight.current) { return; }
     const job = Symbol('source');
     const owner = scopeRef.current;
     sourceFlight.current = job;
@@ -551,7 +718,7 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     });
   }, [cancelBottomScroll, openChannelMessage]);
   const openTask = useCallback((task: TeamChatTaskReference) => {
-    if (!controls.current.active || controls.current.blocked || sendFlight.current) { return; }
+    if (!entryReadyRef.current || !controls.current.active || controls.current.blocked || sendFlight.current) { return; }
     const authorizedUnit = units.find(item => item.unit === unit);
     if (!unit || !authorizedUnit || !Number.isSafeInteger(task.id) || task.id < 1) {
       setSourceError('This task is not available in your current Team Workspace.'); return;
@@ -575,30 +742,34 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     }
   }, [unit, units]);
   const chooseReply = useCallback((message: TeamChatMessage) => {
-    if (controls.current.locked || controls.current.blocked || !controls.current.active || sendFlight.current) { return; }
+    if (!entryReadyRef.current || controls.current.locked || controls.current.blocked || !controls.current.active || sendFlight.current) { return; }
     setReplyTo(message); setComposerError(null); inputRef.current?.focus();
   }, []);
   const renderRow = useCallback(({ item }: ListRenderItemInfo<TeamChatRow>) => {
-    if (item.kind === 'day') { return <Text accessibilityRole="header" style={styles.day}>{item.label}</Text>; }
+    if (item.kind === 'timestamp') { return <TeamChatTimestamp createdAt={item.createdAt} messageId={item.messageId} />; }
     if (item.kind === 'unread') {
       return <View accessibilityLabel="Unread messages" style={styles.unreadRow}><Text style={styles.unreadText}>Unread messages</Text></View>;
     }
     if (item.kind === 'read-marker') {
-      return <View testID={`team-chat-read-marker-${item.messageId}`} accessible={false} importantForAccessibility="no" style={styles.readMarker} />;
+      const last = item.messageId === channel.messages.at(-1)?.id;
+      return <View ref={last ? lastMessageRef : undefined} testID={`team-chat-read-marker-${item.messageId}`} collapsable={!last}
+        onLayout={last ? onMessageLayout : undefined} accessible={false} importantForAccessibility="no" style={styles.readMarker} />;
     }
-    return <TeamChatMessageBubble message={item.message} own={item.message.sender.id === user?.id}
+    const bubble = <TeamChatMessageBubble message={item.message} own={item.message.sender.id === user?.id}
       startsGroup={item.startsGroup} endsGroup={item.endsGroup} targeted={channel.targetMessageId === item.message.id}
       replyDisabled={locked || !channel.active || forbidden || unauthorized}
       navigationDisabled={!channel.active || sourceLoading || sending || forbidden || unauthorized}
       onReply={chooseReply} onOpenSource={openSource} onOpenTask={openTask} />;
-  }, [channel.active, channel.targetMessageId, chooseReply, forbidden, locked, openSource, openTask, sending, sourceLoading, styles, unauthorized, user?.id]);
+    return item.message.id === channel.targetMessageId
+      ? <View ref={targetMessageRef} collapsable={false} onLayout={onMessageLayout}>{bubble}</View> : bubble;
+  }, [channel.active, channel.messages, channel.targetMessageId, chooseReply, forbidden, locked, onMessageLayout, openSource, openTask, sending, sourceLoading, styles, unauthorized, user?.id]);
 
   const header = <PageHeader edgeToEdge title="Team Chat" subtitle={activeUnit?.label ?? 'Choose a Team Workspace'}
     action={<WorkspaceHeaderActions root disabled={sending} />} />;
   const cannotSend = body.trim() === '' || sending || !channel.active || offline || forbidden || unauthorized;
   const editable = !locked && !forbidden && !unauthorized;
   const bottomDisabled = !channel.active || (channel.busy && !channel.polling) || sourceLoading || sending || forbidden || unauthorized;
-  const showBottomButton = channel.loaded && channel.active && !forbidden && !unauthorized && (awayFromBottom || channel.mode === 'history');
+  const showBottomButton = entryReady && channel.loaded && channel.active && !forbidden && !unauthorized && (awayFromBottom || channel.mode === 'history');
   const composer = (
     <>
       {mentionMatch && !taskPickerVisible ? (
@@ -688,7 +859,7 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
       <ChatStatus updatedAt={channel.updatedAt} active={channel.active} mode={channel.mode} error={protectedError} offline={offline} loaded={channel.loaded} />
       {sourceLoading ? <Text accessibilityLiveRegion="polite" style={styles.status}>Opening the original message…</Text> : null}
       {sourceError ? <Text accessibilityRole="alert" style={styles.status}>{sourceError}</Text> : null}
-      {channel.loadingInitial ? <View style={styles.center} accessibilityLabel="Loading Team Chat messages"><ActivityIndicator color={theme.brandIcon} /></View>
+      {channel.loadingInitial ? <Skeleton label="Loading Team Chat messages" variant="chat" />
         : channel.error && !channel.loaded && !forbidden && !unauthorized ? (
           <View style={styles.center}><Text accessibilityRole="alert" style={styles.errorText}>{teamChatErrorMessage(channel.error, 'Could not load Team Chat.')}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Retry loading Team Chat" disabled={!channel.active || channel.busy}
@@ -696,15 +867,18 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
           </View>
         ) : !channel.loaded ? <View style={styles.center}><Text style={styles.emptyBody}>{forbidden || unauthorized ? 'Team Chat is unavailable.' : 'Waiting for an active connection to load Team Chat.'}</Text></View>
           : (
-            <View testID="team-chat-viewport" style={styles.listViewport}>
+            <View ref={viewportRef} testID="team-chat-viewport" style={styles.listViewport} collapsable={false}>
+            <TeamChatTimestampProvider active={entryReady && focused}>
             <FlatList ref={listRef} testID="team-chat-history" data={rows} extraData={viewSession} keyExtractor={item => item.key} renderItem={renderRow}
+              pointerEvents={entryReady ? 'auto' : 'none'} scrollEnabled={entryReady}
+              accessibilityElementsHidden={!entryReady} importantForAccessibility={entryReady ? 'auto' : 'no-hide-descendants'}
               ListHeaderComponent={channel.hasOlder ? <Pressable accessibilityRole="button" accessibilityLabel="Load older messages"
                 accessibilityState={{ busy: channel.loadingOlder, disabled: channel.busy || !channel.active }} disabled={channel.busy || !channel.active}
                 onPress={() => { channel.loadOlder(); }} style={styles.olderButton}>
                 {channel.loadingOlder ? <ActivityIndicator size="small" color={theme.brandIcon} /> : null}<Text style={styles.olderText}>{channel.loadingOlder ? 'Loading older messages…' : 'Load older messages'}</Text>
               </Pressable> : <View style={styles.listTop} />}
               ListEmptyComponent={<View style={styles.empty}><Text style={styles.emptyTitle}>No messages yet</Text><Text style={styles.emptyBody}>Start an operational team discussion.</Text></View>}
-              ListFooterComponent={<View key={bottomRevision} testID="team-chat-latest-tail" collapsable={false} accessible={false} importantForAccessibility="no-hide-descendants" pointerEvents="none" onLayout={onLatestTailLayout} style={styles.latestTail} />}
+              ListFooterComponent={<View ref={latestTailRef} key={bottomRevision} testID="team-chat-latest-tail" collapsable={false} accessible={false} importantForAccessibility="no-hide-descendants" pointerEvents="none" onLayout={onLatestTailLayout} style={styles.latestTail} />}
               refreshControl={<RefreshControl refreshing={channel.refreshing} enabled={channel.active && (!channel.busy || channel.polling || channel.refreshing)} onRefresh={pullRefresh} tintColor={theme.brandIcon} colors={[theme.brandIcon]} />}
               keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={false}
               maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
@@ -718,8 +892,16 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
               }}
               contentContainerStyle={[styles.list, rows.length === 0 && styles.emptyList]} style={styles.listViewport}
             />
+            </TeamChatTimestampProvider>
             <ChatScrollButton visible={showBottomButton} disabled={bottomDisabled} busy={channel.busy && !channel.polling}
               history={channel.mode === 'history'} onPress={scrollToBottom} />
+            <View ref={entryCoverRef} collapsable={false} testID="team-chat-entry-cover"
+              style={[StyleSheet.absoluteFill, styles.entryCover, entryReady && styles.entryHidden]}
+              pointerEvents={entryReady ? 'none' : 'auto'} accessibilityElementsHidden={entryReady}
+              importantForAccessibility={entryReady ? 'no-hide-descendants' : 'auto'}>
+              <Skeleton label="Preparing Team Chat messages" variant="chat" active={!entryReady && channel.active} />
+              {!entryReady && !channel.active ? <Text accessibilityLiveRegion="polite" style={styles.emptyBody}>Waiting for an active connection to prepare Team Chat.</Text> : null}
+            </View>
             </View>
           )}
       <TeamChatTaskPicker key={scope} unit={unit} visible={taskPickerVisible && focused} selected={tasks} disabled={locked || forbidden || unauthorized}
@@ -740,11 +922,11 @@ function createStyles(theme: Theme) {
     latestText: { ...type.bodyStrong, color: '#ffffff' },
     status: { ...type.caption, paddingHorizontal: 12, paddingVertical: 8, color: '#7b4f0b', backgroundColor: '#fff5dc' },
     listViewport: { flex: 1 }, list: { paddingBottom: 10 }, emptyList: { flexGrow: 1 }, listTop: { height: 8 },
+    entryCover: { backgroundColor: theme.canvas, zIndex: 1 }, entryHidden: { opacity: 0 },
     latestTail: { height: 1 },
     readMarker: { height: 2 },
     olderButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginHorizontal: 12, marginVertical: 8 },
     olderText: { ...type.bodyStrong, color: theme.brandText },
-    day: { ...type.caption, alignSelf: 'center', marginVertical: 9, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, color: theme.ink500, backgroundColor: theme.surface },
     unreadRow: { alignItems: 'center', marginHorizontal: 12, marginVertical: 8 },
     unreadText: { ...type.caption, color: theme.brandText },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },

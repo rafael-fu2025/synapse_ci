@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useNetInfo } from '@react-native-community/netinfo';
 import { useIsFocused, useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -12,7 +12,9 @@ import { IconAction } from '../../../components/IconAction';
 import { useOverlayActivity } from '../../../components/OverlayProvider';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
 import { StatusPill } from '../../../components/StatusPill';
+import { loadingState } from '../../../lib/loadingState';
 import { useForegroundOnline } from '../../../lib/useActiveScreen';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Theme, memoizeStyles, type } from '../../../theme/tokens';
@@ -67,11 +69,13 @@ function EventDetail() {
   const mounted = useRef(true);
   const event = query.data?.data;
   const queryKind = query.isError ? teamCalendarErrorKind(query.error) : null;
+  const readDenied = accessDenied || ['unauthorized', 'forbidden', 'missing'].includes(queryKind ?? '');
+  const contentState = loadingState(query);
   const cancelKind = cancelError ? teamCalendarErrorKind(cancelError) : null;
   const offline = network.isConnected === false || query.fetchStatus === 'paused';
-  const canWrite = foregroundOnline && focused && !offline;
-  const current = useRef({ canWrite, event, needsReview, overlayActive });
-  current.current = { canWrite, event, needsReview, overlayActive };
+  const canWrite = foregroundOnline && focused && !offline && !readDenied;
+  const current = useRef({ canWrite, event, needsReview, overlayActive, readDenied });
+  current.current = { canWrite, event, needsReview, overlayActive, readDenied };
   const { requestLeave } = useWorkspaceDraft({
     key: `team-calendar-cancel:${unit ?? 'none'}:${id}`,
     dirty: false,
@@ -97,7 +101,7 @@ function EventDetail() {
 
   function editEvent() {
     const state = current.current;
-    if (requestInFlight.current || succeeded.current || confirmationOpen.current || state.overlayActive || state.needsReview || !state.event?.can_edit || state.event.status !== 'scheduled') { return; }
+    if (requestInFlight.current || succeeded.current || confirmationOpen.current || state.overlayActive || state.readDenied || state.needsReview || !state.event?.can_edit || state.event.status !== 'scheduled') { return; }
     navigation.navigate('TeamCalendarEventForm', { id });
   }
 
@@ -159,7 +163,7 @@ function EventDetail() {
       backDisabled={pending || cancelVisible || overlayActive}
       action={(
         <WorkspaceHeaderActions disabled={pending || cancelVisible || overlayActive}>
-          {event?.can_edit && event.status === 'scheduled' && !cancelled && !accessDenied ? (
+          {event?.can_edit && event.status === 'scheduled' && !cancelled && !readDenied ? (
             <IconAction label="Edit event" icon={<Edit3 size={18} color={theme.brandIcon} />} disabled={pending || cancelVisible || overlayActive || needsReview} onPress={editEvent} />
           ) : null}
         </WorkspaceHeaderActions>
@@ -181,10 +185,16 @@ function EventDetail() {
       </Screen>
     );
   }
-  if (query.isLoading && !event) {
-    return <Screen scroll={false} bodyStyle={styles.center} header={header}><ActivityIndicator accessibilityLabel="Loading event" color={theme.brandIcon} /></Screen>;
+  if (!readDenied && !event && contentState === 'loading' && !offline && query.eligible !== false) {
+    return <Screen header={header}><Skeleton label="Loading event" variant="detail" /></Screen>;
   }
-  if (!event) {
+  if (!readDenied && !event && !query.isError) {
+    return <Screen header={header}><EmptyState icon={<RefreshCw size={30} color={theme.brandIcon} />}
+      title={offline ? 'You are offline' : 'Event is waiting to load'}
+      body={offline ? 'Reconnect to load this event.' : 'Return to this Team Workspace while connected to load the event.'}
+      action={<Action full disabled={!query.eligible || offline} onPress={() => { refresh().catch(() => undefined); }}>Try again</Action>} /></Screen>;
+  }
+  if (!event || readDenied) {
     return (
       <Screen header={header}>
         <EmptyState

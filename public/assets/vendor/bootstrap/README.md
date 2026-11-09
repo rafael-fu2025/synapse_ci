@@ -12,8 +12,11 @@ Upstream: <https://github.com/twbs/bootstrap/tree/v5.3.3>
 | `js/bootstrap.bundle.min.js` | `0833b2e9c3a26c258476c46266e6877fc75218625162e0460be9a3a098a61c6c` |
 | `css/bootstrap.min.css` | `3c8f27e6009ccfd710a905e6dcf12d0ee3c6f2ac7da05b0572d3e0d12e736fc8` |
 
-Both files were byte-compared with the tagged upstream distributions. Keep
-version changes deliberate and re-run the real-view browser regressions.
+Both files were byte-compared with the tagged upstream distributions. The hashes
+above describe upstream LF bytes; Windows Git checkouts can use CRLF without
+changing runtime content. Integrity comparisons should permit only that text
+line-ending normalization, not arbitrary byte differences. Keep version changes deliberate
+and re-run the real-view browser regressions.
 
 Bootstrap is MIT licensed; see `LICENSE`. The JavaScript bundle includes Popper
 2.11.8, also MIT licensed; see `LICENSE-POPPER` and

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Image, Text } from 'react-native';
+import { ActivityIndicator, AppState, Image, Text } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { useQuery } from '@tanstack/react-query';
 import type { Appointment } from '../src/api/endpoints/appointments';
@@ -14,6 +14,9 @@ import { useQueueSnapshot } from '../src/features/queue/hooks';
 import { useSurveys } from '../src/features/surveys/hooks';
 import { useProfilePhoto } from '../src/features/profile/useProfilePhoto';
 import { QueueTicketCard, QueueTicketPlaceholder } from '../src/features/queue/components/QueueTicketCard';
+import { Skeleton } from '../src/components/Skeleton';
+
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
 
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test', lanTest: false } }));
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
@@ -121,6 +124,7 @@ const slots = [
 
 beforeEach(() => {
   jest.resetAllMocks();
+  jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
   mockThemeMode = 'light';
   jest.mocked(useProfilePhoto).mockReturnValue(null);
   (useQuery as jest.Mock).mockReturnValue(result({ entitlements: { staff_queue_units: [] } }));
@@ -134,6 +138,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => { renderer?.unmount(); });
   renderer = undefined;
+  jest.restoreAllMocks();
 });
 
 describe('Home dashboard', () => {
@@ -172,10 +177,12 @@ describe('Home dashboard', () => {
   it.each(slots)('does not describe loading $name as empty', slot => {
     slot.hook.mockReturnValue(result(undefined, 'loading'));
     render();
-    expect(texts()).toContain(slot.loading);
+    expect(renderer!.root.findByType(Skeleton).props.label).toBe(slot.loading);
     expect(texts()).not.toContain(slot.empty);
     expect(texts()).not.toContain(slot.error);
-    expect(renderer!.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+    expect(renderer!.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(texts()).toContain('How are you feeling today?');
+    expect(texts()).toContain('Quick access');
     if (slot.name === 'queue') {
       expect(texts()).toContain('My queue ticket');
       expect(renderer!.root.findAllByType(QueueTicketPlaceholder)).toHaveLength(1);
@@ -193,6 +200,36 @@ describe('Home dashboard', () => {
       expect(texts()).toContain('My queue ticket');
       expect(renderer!.root.findAllByType(QueueTicketPlaceholder)).toHaveLength(1);
     }
+  });
+
+  it.each(slots)('keeps cached empty $name truthful during refresh and refresh failure', slot => {
+    const cached = slot.hook().data;
+    slot.hook.mockReturnValue(result(cached, 'loading'));
+    render();
+    expect(texts()).toContain(slot.empty);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    slot.hook.mockReturnValue(result(cached, 'error'));
+    act(() => renderer!.update(<DashboardScreen />));
+    expect(texts()).toContain(slot.empty);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
+  it.each(slots)('does not invent an empty $name result while waiting or paused', slot => {
+    slot.hook.mockReturnValue({ ...result(undefined), isPending: true, fetchStatus: 'paused' });
+    render();
+    expect(texts()).toContain(`Waiting to load ${slot.name}`);
+    expect(texts()).not.toContain(slot.empty);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    slot.hook.mockReturnValue({ ...result(undefined), isPending: true, fetchStatus: 'idle' });
+    act(() => renderer!.update(<DashboardScreen />));
+    expect(texts()).toContain(`Waiting to load ${slot.name}`);
+  });
+
+  it('does not announce zero unread notifications before the inbox loads', () => {
+    (useNotificationInbox as jest.Mock).mockReturnValue(result(undefined, 'loading'));
+    render();
+    expect(renderer!.root.findAll(node => node.props.accessibilityLabel === 'Notifications').length).toBeGreaterThan(0);
+    expect(renderer!.root.findAll(node => node.props.accessibilityLabel === 'Notifications, 0 unread')).toHaveLength(0);
   });
 
   it.each(slots)('opens $name from its empty placeholder', slot => {

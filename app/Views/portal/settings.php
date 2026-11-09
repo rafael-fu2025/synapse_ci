@@ -1,9 +1,12 @@
-<?= $this->extend('layouts/modal_form') ?>
+<?= $this->extend('layouts/app') ?>
+<?= $this->section('page_actions') ?>
+<a class="btn btn-outline-secondary btn-sm" href="<?= esc(site_url('portal')) ?>"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to My Health Portal</a>
+<?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <?php $health = $health ?? []; ?>
-<div class="row g-3">
-  <section class="col-12" aria-labelledby="profilePhotoTitle" data-profile-settings data-photo-url="<?= esc(site_url('account/photo')) ?>" data-upload-url="<?= esc(site_url('portal/settings/photo')) ?>" data-remove-url="<?= esc(site_url('portal/settings/photo/remove')) ?>" data-default-avatar="<?= esc($defaultAvatar, 'attr') ?>">
-    <div class="card mb-0"><div class="card-body p-3">
+<div class="row g-3" data-profile-settings data-photo-url="<?= esc(site_url('account/photo')) ?>" data-upload-url="<?= esc(site_url('portal/settings/photo')) ?>" data-remove-url="<?= esc(site_url('portal/settings/photo/remove')) ?>" data-emergency-contact-url="<?= esc(site_url('portal/settings/emergency-contact')) ?>" data-default-avatar="<?= esc($defaultAvatar, 'attr') ?>">
+  <section class="col-12 col-lg-6" aria-labelledby="profilePhotoTitle">
+    <div class="card mb-0 h-100"><div class="card-body p-3">
       <h2 class="h5" id="profilePhotoTitle">Profile picture</h2>
       <div class="d-flex align-items-center gap-3 mb-3">
         <img src="<?= esc($photoUrl) ?>" alt="Your current profile picture" width="96" height="96" class="rounded-circle object-fit-cover border flex-shrink-0" data-profile-photo-current>
@@ -21,11 +24,24 @@
       </form>
       <div class="d-flex flex-wrap align-items-center gap-2">
         <button class="btn btn-primary" type="submit" form="profilePhotoForm"><i class="bi bi-upload me-2" aria-hidden="true"></i>Upload picture</button>
+        <button class="btn btn-outline-secondary" type="reset" form="profilePhotoForm" data-profile-photo-clear hidden>Clear selection</button>
         <form class="m-0" action="<?= esc(site_url('portal/settings/photo/remove')) ?>" method="POST" data-profile-photo-remove <?= !$hasPhoto ? 'hidden' : '' ?> data-confirm="Remove your profile picture and use the initials avatar? Any selected new picture will also be discarded." data-confirm-title="Remove profile picture" data-confirm-label="Remove picture" data-confirm-tone="danger">
-        <?= csrf_field() ?>
+          <?= csrf_field() ?>
           <button class="btn btn-danger" type="submit" <?= !$hasPhoto ? 'disabled' : '' ?>>Remove picture</button>
         </form>
       </div>
+    </div></div>
+  </section>
+  <section class="col-12 col-lg-6" aria-labelledby="profileAccountTitle">
+    <div class="card mb-0 h-100"><div class="card-body p-3">
+      <h2 class="h5" id="profileAccountTitle">Your university profile</h2>
+      <p class="small text-muted">These details are managed by MIS. Contact the university office for corrections; uploading a picture does not change your identity or access.</p>
+      <dl class="row mb-0">
+        <dt class="col-sm-4">Name</dt><dd class="col-sm-8 text-break"><?= esc(trim(($person['first_name'] ?? '') . ' ' . ($person['middle_name'] ?? '') . ' ' . ($person['last_name'] ?? ''))) ?></dd>
+        <dt class="col-sm-4">University ID</dt><dd class="col-sm-8 text-break"><?= esc($person['mis_id'] ?? 'Not recorded') ?></dd>
+        <dt class="col-sm-4">Profile type</dt><dd class="col-sm-8"><?= esc(ucfirst($person['kind'])) ?></dd>
+        <dt class="col-sm-4">University email</dt><dd class="col-sm-8 text-break"><?= esc($person['email'] ?: ($actor['email'] ?? 'Not recorded')) ?></dd>
+      </dl>
     </div></div>
   </section>
   <section class="col-12" aria-labelledby="profileEmergencyTitle">
@@ -78,19 +94,5 @@
       </form>
     </div></div>
   </section>
-  <section class="col-12" aria-labelledby="profileAccountTitle">
-    <div class="card mb-0"><div class="card-body p-3">
-      <h2 class="h5" id="profileAccountTitle">Your university profile</h2>
-      <p class="small text-muted">These details are managed by MIS. Contact the university office for corrections; uploading a picture does not change your identity or access.</p>
-      <dl class="row mb-0">
-        <dt class="col-sm-4">Name</dt><dd class="col-sm-8 text-break"><?= esc(trim(($person['first_name'] ?? '') . ' ' . ($person['middle_name'] ?? '') . ' ' . ($person['last_name'] ?? ''))) ?></dd>
-        <dt class="col-sm-4">University ID</dt><dd class="col-sm-8 text-break"><?= esc($person['mis_id'] ?? 'Not recorded') ?></dd>
-        <dt class="col-sm-4">Profile type</dt><dd class="col-sm-8"><?= esc(ucfirst($person['kind'])) ?></dd>
-        <dt class="col-sm-4">University email</dt><dd class="col-sm-8 text-break"><?= esc($person['email'] ?: ($actor['email'] ?? 'Not recorded')) ?></dd>
-      </dl>
-
-    </div></div>
-  </section>
 </div>
-<div class="form-actions"><button type="button" class="btn btn-secondary" data-app-modal-close>Close</button></div>
 <?= $this->endSection() ?>

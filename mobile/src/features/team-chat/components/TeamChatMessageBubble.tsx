@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Reply } from 'lucide-react-native';
 import type { TeamChatMessage, TeamChatTaskReference } from '../../../api/endpoints/teamChat';
 import { useTheme } from '../../../theme/ThemeProvider';
-import { Theme, font, memoizeStyles, type } from '../../../theme/tokens';
+import { Theme, memoizeStyles, type } from '../../../theme/tokens';
 import { formatChatTime, normalizeMentions } from '../model';
 
 function preview(value: string, maximum = 180): string {
@@ -77,18 +77,11 @@ export const TeamChatMessageBubble = memo(function MessageBubble({
         !startsGroup && (own ? styles.ownConnectedTop : styles.connectedTop),
         !endsGroup && (own ? styles.ownConnectedBottom : styles.connectedBottom),
       ]}>
-        {startsGroup || endsGroup ? (
+        {startsGroup ? (
           <View style={styles.heading}>
-            {startsGroup ? (
-              <Text numberOfLines={1} style={[styles.sender, own && styles.ownText]}>
-                {own ? 'You' : message.sender.name}
-              </Text>
-            ) : null}
-            {endsGroup ? (
-              <Text style={[styles.time, own && styles.ownMuted]}>
-                {formatChatTime(message.created_at)}
-              </Text>
-            ) : null}
+            <Text numberOfLines={1} style={[styles.sender, own && styles.ownText]}>
+              {own ? 'You' : message.sender.name}
+            </Text>
           </View>
         ) : null}
         {message.reply_to ? (
@@ -184,7 +177,6 @@ function createStyles(theme: Theme) {
     ownConnectedBottom: { borderBottomRightRadius: 3 },
     heading: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
     sender: { ...type.caption, flexShrink: 1, color: theme.ink700 },
-    time: { fontFamily: font.body, fontSize: 9, flexShrink: 0, marginLeft: 'auto', color: theme.ink500 },
     body: { ...type.body, color: theme.ink900, lineHeight: 18 },
     ownText: { color: '#ffffff' },
     ownMuted: { color: 'rgba(255,255,255,0.78)' },

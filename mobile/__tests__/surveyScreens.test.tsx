@@ -6,6 +6,7 @@ import type { SurveyForm, SurveyListItem, SurveyQuestion } from '../src/api/endp
 import { ApiError, NetworkError } from '../src/api/client';
 import { Action } from '../src/components/Action';
 import { PageHeader } from '../src/components/PageHeader';
+import { Skeleton } from '../src/components/Skeleton';
 import { useSubmitSurvey, useSurveyForm, useSurveys } from '../src/features/surveys/hooks';
 import { SurveyFormScreen } from '../src/features/surveys/screens/SurveyFormScreen';
 import { SurveysScreen } from '../src/features/surveys/screens/SurveysScreen';
@@ -36,7 +37,7 @@ let renderer: ReactTestRenderer | undefined;
 let hardwareBack: () => boolean | null | undefined;
 let removeBackListener: jest.Mock;
 let formQuery: {
-  data?: { data: SurveyForm }; isLoading: boolean; error?: Error; isFetching?: boolean; refetch?: typeof refetch;
+  data?: { data: SurveyForm }; isLoading: boolean; isError?: boolean; fetchStatus?: 'fetching' | 'paused' | 'idle'; error?: Error; isFetching?: boolean; refetch?: typeof refetch;
 };
 let mutation: { mutateAsync: typeof mutateAsync; isPending: boolean; isSuccess: boolean };
 let listQuery: {
@@ -126,6 +127,39 @@ afterEach(() => {
 });
 
 describe('SurveyFormScreen', () => {
+  it.each(['fetching', 'paused', 'idle'] as const)('separates initial survey %s from unavailable or empty content', async fetchStatus => {
+    formQuery = { isLoading: false, fetchStatus, refetch };
+    await act(async () => { renderer = create(<SurveyFormScreen />); });
+    if (fetchStatus === 'fetching') {
+      expect(renderer!.root.findByType(Skeleton).props.label).toBe('Loading survey…');
+    } else {
+      expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+      expect(hasText('Waiting to load this survey. It will load when your connection is available.')).toBe(true);
+    }
+    expect(hasText('This survey is no longer available.')).toBe(false);
+    expect(action('Retry')).toBeUndefined();
+  });
+
+  it('keeps a cached survey and its draft during refresh and transient failure', async () => {
+    await renderForm(); tap('Start survey'); input('Keep this answer');
+    const field = renderer!.root.findByType(TextInput);
+    formQuery = { ...formQuery, isLoading: true, fetchStatus: 'fetching' }; refreshForm();
+    expect(renderer!.root.findByType(TextInput)).toBe(field);
+    expect(renderer!.root.findByType(TextInput).props.value).toBe('Keep this answer');
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    formQuery = { ...formQuery, isLoading: false, isError: true, fetchStatus: 'idle', error: new NetworkError() }; refreshForm();
+    expect(renderer!.root.findByType(TextInput)).toBe(field);
+    expect(renderer!.root.findByType(TextInput).props.value).toBe('Keep this answer');
+    expect(guard()[0]).toBe(true);
+  });
+
+  it.each([401, 403, 404])('does not expose cached survey questions after an authoritative %s', async status => {
+    await renderForm([question('text', 'Protected question')]); tap('Start survey');
+    formQuery = { ...formQuery, isError: true, error: new ApiError(status, { code: 'denied', message: 'Unavailable' }), refetch }; refreshForm();
+    expect(renderer!.root.findAllByType(TextInput)).toHaveLength(0);
+    expect(hasText('Protected question')).toBe(false);
+  });
+
   it.each([
     new NetworkError(),
     new ApiError(503, { code: 'unavailable', message: 'Service unavailable.' }),
@@ -133,7 +167,7 @@ describe('SurveyFormScreen', () => {
     Object.assign(new Error('Not an API 404'), { status: 404 }),
   ])('offers retry instead of claiming the survey is missing for %p', async error => {
     const loadedData = formQuery.data;
-    formQuery = { isLoading: false, error, isFetching: false, refetch };
+    formQuery = { isLoading: false, isError: true, error, isFetching: false, refetch };
     await act(async () => { renderer = create(<SurveyFormScreen />); });
     expect(hasText('The survey could not be loaded. Please try again.')).toBe(true);
     expect(hasText('This survey is no longer available.')).toBe(false);
@@ -152,7 +186,7 @@ describe('SurveyFormScreen', () => {
   });
 
   it('shows the unavailable message only for an API 404 and keeps the back header', async () => {
-    formQuery = { isLoading: false, error: new ApiError(404, { code: 'not_found', message: 'Survey not found.' }), refetch };
+    formQuery = { isLoading: false, isError: true, error: new ApiError(404, { code: 'not_found', message: 'Survey not found.' }), refetch };
     await act(async () => { renderer = create(<SurveyFormScreen />); });
     expect(hasText('This survey is no longer available.')).toBe(true);
     expect(hasText('The survey could not be loaded. Please try again.')).toBe(false);

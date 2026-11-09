@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ChevronRight, CircleCheckBig, ClipboardList, Clock3, MessageSquareText, ShieldCheck, TriangleAlert } from 'lucide-react-native';
@@ -29,8 +32,10 @@ export function SurveysScreen() {
   const navigation = useNavigation<Nav>();
   const [status, setStatus] = useState('all');
   const query = useSurveys({ status });
-  const items = query.data?.data ?? [];
-  const counts = query.data?.counts;
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const items = authorityRemoved ? [] : query.data?.data ?? [];
+  const counts = authorityRemoved ? undefined : query.data?.counts;
   const noSurveys = status === 'all' || counts?.all === 0;
   const retry = () => { query.refetch().catch(() => undefined); };
 
@@ -60,16 +65,19 @@ export function SurveysScreen() {
         ))}
       </View>
 
-      {query.isError && items.length > 0 ? (
+      {query.isError && state === 'content' && !authorityRemoved ? (
         <View style={styles.fetchError}>
           <Text style={styles.fetchErrorText}>Could not refresh surveys. Showing the last loaded results.</Text>
           <Action variant="secondary" onPress={retry} loading={query.isFetching}>Retry</Action>
         </View>
       ) : null}
 
-      {query.isLoading ? (
-        <ActivityIndicator style={styles.loader} color={palette.violet600} />
-      ) : query.isError && items.length === 0 ? (
+      {state === 'loading' ? (
+        <Skeleton label="Loading surveys…" variant="list" />
+      ) : state === 'waiting' ? (
+        <EmptyState icon={<ClipboardList size={30} color={palette.violet600} />} title="Waiting to load surveys"
+          body="Surveys have not loaded yet. They will load when your connection is available." />
+      ) : state === 'error' || authorityRemoved ? (
         <EmptyState
           icon={<TriangleAlert size={30} color={palette.violet600} />}
           title="Could not load surveys"
@@ -188,7 +196,6 @@ function createStyles(theme: Theme) {
     chipActive: { backgroundColor: palette.violet600, borderColor: palette.violet600 },
     chipText: { fontSize: 9.5, fontWeight: '700', fontFamily: font.body, color: theme.ink500 },
     chipTextActive: { color: '#ffffff' },
-    loader: { marginTop: 30 },
     list: { paddingBottom: 20 },
     card: { marginBottom: 10, padding: 15, borderRadius: 15, backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.line, ...elevation.sm },
     cardIcon: { width: 24, height: 28, alignItems: 'center', justifyContent: 'center' },

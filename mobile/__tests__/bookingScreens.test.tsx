@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccessibilityInfo, Animated, BackHandler, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { AccessibilityInfo, Animated, BackHandler, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { act, create, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
 import { useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import { ApiError } from '../src/api/client';
@@ -7,6 +7,7 @@ import { Action } from '../src/components/Action';
 import { formatFullDate } from '../src/lib/format';
 import { PageHeader } from '../src/components/PageHeader';
 import { Screen } from '../src/components/Screen';
+import { Skeleton } from '../src/components/Skeleton';
 import { Appointment } from '../src/api/endpoints/appointments';
 import { useAppointment, useAppointments, useCancelAppointment, useCreateAppointment } from '../src/features/appointments/hooks';
 import { BookingScreen } from '../src/features/appointments/screens/BookingScreen';
@@ -16,8 +17,13 @@ import { AppointmentDetailScreen } from '../src/features/appointments/screens/Ap
 import { AppointmentCard } from '../src/features/appointments/components/AppointmentCard';
 import { CONTEXT_BAR_ACTION_CLEARANCE } from '../src/navigation/contextTabBarMetrics';
 import { useKeyboardVisible } from '../src/lib/useKeyboardVisible';
+import { useTheme } from '../src/theme/ThemeProvider';
+import { darkTheme, lightTheme } from '../src/theme/tokens';
 
 let mockWorkspace: { canSwitchContext: boolean } | null = null;
+let mockReducedMotion = true;
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => mockReducedMotion }));
+jest.mock('react-native/Libraries/AppState/AppState', () => ({ __esModule: true, default: { currentState: 'active', addEventListener: jest.fn(() => ({ remove: jest.fn() })) } }));
 jest.mock('../src/features/workspace/WorkspaceContext', () => ({ useOptionalWorkspace: () => mockWorkspace }));
 jest.mock('../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
@@ -29,9 +35,7 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: jest.fn(), useRoute: jest.fn(), usePreventRemove: jest.fn(),
   useFocusEffect: (effect: () => (() => void)) => jest.requireActual('react').useEffect(effect, [effect]),
 }));
-jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }),
-}));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
 jest.mock('react-native-svg', () => ({ SvgXml: () => null }));
 jest.mock('lucide-react-native', () => ({
@@ -92,10 +96,20 @@ function advanceToReview() {
 function textContent(node: ReactTestInstance): string {
   return node.findAllByType(Text).map(text => JSON.stringify(text.props.children)).join(' ');
 }
+function filledAncestor(node: ReactTestInstance): ReactTestInstance {
+  let ancestor = node.parent;
+  while (ancestor && StyleSheet.flatten(ancestor.props.style)?.backgroundColor === undefined) {
+    ancestor = ancestor.parent;
+  }
+  if (!ancestor) { throw new Error('Missing enclosing card fill'); }
+  return ancestor;
+}
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockWorkspace = null;
+  mockReducedMotion = true;
+  jest.mocked(useTheme).mockReturnValue({ theme: lightTheme, mode: 'light', preference: 'system', setPreference: jest.fn() });
   jest.mocked(useKeyboardVisible).mockReturnValue(false);
   jest.useFakeTimers();
   jest.setSystemTime(new Date('2026-10-30T01:00:00Z'));
@@ -139,8 +153,10 @@ function expectPinnedAction(label: string) {
   expect(ancestor?.type).toBe(Screen);
   expect(footer).not.toBeNull();
   const scroll = renderer!.root.findAllByType(ScrollView).find(node => !node.props.horizontal)!;
-  expect(scroll.parent).toBe(footer!.parent);
-  expect(scroll.parent!.children.indexOf(scroll)).toBeLessThan(scroll.parent!.children.indexOf(footer!));
+  let viewport: ReactTestInstance = scroll;
+  while (viewport.parent && viewport.parent !== footer!.parent) { viewport = viewport.parent; }
+  expect(viewport.parent === footer!.parent).toBe(true);
+  expect(footer!.parent!.children.indexOf(viewport)).toBeLessThan(footer!.parent!.children.indexOf(footer!));
 }
 
 function expectFixedHeader() {
@@ -151,6 +167,61 @@ function expectFixedHeader() {
 }
 
 describe('BookingScreen', () => {
+  const themeServices = [lightTheme, darkTheme].flatMap(theme => [
+    { theme, unit: 'clinic' as const, label: 'University Clinic', visit: 'Routine consultation', type: 'routine', logo: require('../src/assets/brand/health-services.png') },
+    { theme, unit: 'guidance' as const, label: 'Guidance Center', visit: 'First session', type: 'initial', logo: require('../src/assets/brand/guidance-center.png') },
+  ]);
+
+  function bottomPadding() {
+    const style = renderer!.root.findByType(Screen).props.bodyStyle;
+    return style ? StyleSheet.flatten(style).paddingBottom : 20;
+  }
+
+  it('clears the raised switcher on every pinned booking step without changing ordinary or keyboard spacing', async () => {
+    mockWorkspace = { canSwitchContext: true };
+    await render(<BookingScreen />);
+    expect(bottomPadding()).toBe(20);
+    pressText('University Clinic');
+    expect(bottomPadding()).toBe(CONTEXT_BAR_ACTION_CLEARANCE);
+    expectPinnedAction('Continue to date & time');
+    const button = action('Continue to date & time');
+    const input = renderer!.root.findByType(TextInput);
+    act(() => input.props.onChangeText('Keep this reason'));
+    jest.mocked(useKeyboardVisible).mockReturnValue(true);
+    await act(async () => renderer!.update(<BookingScreen />));
+    expect(bottomPadding()).toBe(20);
+    expect(action('Continue to date & time')).toBe(button);
+    expect(renderer!.root.findByType(TextInput)).toBe(input);
+    expect(input.props.value).toBe('Keep this reason');
+    jest.mocked(useKeyboardVisible).mockReturnValue(false);
+    mockWorkspace = { canSwitchContext: false };
+    await act(async () => renderer!.update(<BookingScreen />));
+    expect(bottomPadding()).toBe(20);
+    mockWorkspace = null;
+    await act(async () => renderer!.update(<BookingScreen />));
+    expect(bottomPadding()).toBe(20);
+    mockWorkspace = { canSwitchContext: true };
+    await act(async () => renderer!.update(<BookingScreen />));
+    expect(bottomPadding()).toBe(CONTEXT_BAR_ACTION_CLEARANCE);
+    expect(action('Continue to date & time')).toBe(button);
+    pressText('Routine consultation');
+    act(() => button.props.onPress());
+    expect(bottomPadding()).toBe(CONTEXT_BAR_ACTION_CLEARANCE);
+    expectPinnedAction('Review appointment');
+    const monday = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-11-02T00:00:00+08:00'))[0];
+    act(() => monday.props.onPress());
+    pressText('1:30 PM');
+    act(() => action('Review appointment').props.onPress());
+    expect(bottomPadding()).toBe(CONTEXT_BAR_ACTION_CLEARANCE);
+    expectPinnedAction('Submit appointment request');
+    expect(renderer!.root.findByType(Screen).props.bottomSafeArea).toBeUndefined();
+    act(() => checkbox().props.onPress());
+    await act(async () => action('Submit appointment request').props.onPress());
+    expect(hasText('Request received')).toBe(true);
+    expect(renderer!.root.findByType(Screen).props.bodyStyle).toBeUndefined();
+    expect(createRequest).toHaveBeenCalledWith(expect.objectContaining({ reason: 'Keep this reason' }));
+  });
+
   it('keeps the header and step actions outside the vertical scroll with keyboard-aware layout', async () => {
     await render(<BookingScreen />);
     expectFixedHeader();
@@ -185,6 +256,89 @@ describe('BookingScreen', () => {
     expect(hasText('Request received')).toBe(true);
   });
 
+  it('slides accepted booking changes without moving progress/actions or losing same-step input identity', async () => {
+    mockReducedMotion = false;
+    const timings: Array<{ value: Animated.Value; config: Parameters<typeof Animated.timing>[1]; complete?: (result: { finished: boolean }) => void }> = [];
+    jest.spyOn(Animated, 'timing').mockImplementation((value, config) => {
+      const timing = { value: value as Animated.Value, config, complete: undefined as ((result: { finished: boolean }) => void) | undefined };
+      timings.push(timing);
+      return { start: callback => { timing.complete = callback; }, stop: jest.fn(), reset: jest.fn() };
+    });
+    await render(<BookingScreen />);
+    const viewport = renderer!.root.findAllByType(View).find(node => node.props.testID === 'booking-step-viewport')!;
+    act(() => viewport.props.onLayout({ nativeEvent: { layout: { width: 360, height: 500, x: 0, y: 0 } } }));
+    const header = renderer!.root.findByType(PageHeader);
+    const progress = renderer!.root.findAllByType(View).find(node => node.props.accessibilityLabel === 'Step 1 of 4')!;
+    expect(timings).toHaveLength(0);
+    pressText('University Clinic');
+    expect(timings).toHaveLength(1);
+    expect(timings[0].config).toMatchObject({ duration: 240, useNativeDriver: true, toValue: 1 });
+    const input = renderer!.root.findByType(TextInput);
+    const staleChange = input.props.onChangeText;
+    const button = action('Continue to date & time');
+    act(() => input.props.onChangeText('Kept reason'));
+    act(() => button.props.onPress()); // Invalid: no visit type; no motion restart.
+    expect(hasText('Choose a visit type to continue.')).toBe(true);
+    expect(timings).toHaveLength(1);
+    expect(renderer!.root.findByType(TextInput)).toBe(input);
+    pressText('Routine consultation');
+    act(() => {
+      timings[0].value.setValue(1); timings[0].complete?.({ finished: true });
+    });
+    expect(renderer!.root.findByType(TextInput)).toBe(input);
+    expect(action('Continue to date & time')).toBe(button);
+    expect(renderer!.root.findByType(PageHeader)).toBe(header);
+    expect(renderer!.root.findAllByType(View).find(node => node.props.accessibilityLabel === 'Step 2 of 4')).toBe(progress);
+    act(() => button.props.onPress());
+    expect(timings).toHaveLength(2);
+    const outgoing = renderer!.root.findAllByType(Animated.View).find(node => node.props.testID === 'booking-step-panel-details')!;
+    expect(outgoing.props.pointerEvents).toBe('none');
+    expect(outgoing.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(outgoing.findByType(TextInput).props.editable).toBe(false);
+    act(() => staleChange('Must not replace reason'));
+    expect(outgoing.findByType(TextInput).props.value).toBe('Kept reason');
+    const next = action('Review appointment');
+    expectPinnedAction('Review appointment');
+    expect(next.findAllByType(Animated.View)).toHaveLength(1); // Only its existing press feedback moves.
+    act(() => { timings[1].value.setValue(0.5); });
+    act(() => renderer!.root.findByType(PageHeader).props.onBack());
+    expect(timings.at(-1)!.config).toMatchObject({ toValue: 0, duration: 120 });
+    expect(renderer!.root.findByType(TextInput)).toBe(input);
+    expect(input.props.value).toBe('Kept reason');
+    expect(createRequest).not.toHaveBeenCalled();
+  });
+
+  it('does not unlock or resend review while the receipt slides in', async () => {
+    mockReducedMotion = false;
+    const completions: Array<(result: { finished: boolean }) => void> = [];
+    jest.spyOn(Animated, 'timing').mockImplementation(() => ({
+      start: callback => { if (callback) { completions.push(callback); } }, stop: jest.fn(), reset: jest.fn(),
+    }));
+    await render(<BookingScreen />);
+    const viewport = renderer!.root.findAllByType(View).find(node => node.props.testID === 'booking-step-viewport')!;
+    act(() => viewport.props.onLayout({ nativeEvent: { layout: { width: 360, height: 500, x: 0, y: 0 } } }));
+    advanceToReview();
+    const pending = { resolve: undefined as ((value: { data: Appointment }) => void) | undefined };
+    createRequest.mockImplementationOnce(() => new Promise(value => { pending.resolve = value; }));
+    act(() => checkbox().props.onPress());
+    const submit = action('Submit appointment request').props.onPress;
+    act(() => { submit(); submit(); });
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    act(() => renderer!.root.findByType(PageHeader).props.onBack());
+    expect(hasText('Step 4 of 4')).toBe(true);
+    await act(async () => pending.resolve!({ data: appointment }));
+    expect(hasText('Request received')).toBe(true);
+    expect(action('Submit appointment request')).toBeUndefined();
+    expect(renderer!.root.findByType(PageHeader).props.subtitle).toBeUndefined();
+    const receipt = renderer!.root.findAllByType(Animated.View).find(node => node.props.testID === 'booking-step-panel-success')!;
+    expect(receipt.props.pointerEvents).toBe('auto');
+    const review = renderer!.root.findAllByType(Animated.View).find(node => node.props.testID === 'booking-step-panel-review')!;
+    expect(review.props.pointerEvents).toBe('none');
+    await act(async () => { submit(); completions.slice(0, -1).forEach(callback => callback({ finished: true })); });
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    expect(hasText('Request received')).toBe(true);
+  });
+
   it('shows the bundled web logos for both service choices without cropping', async () => {
     await render(<BookingScreen />);
     const logos = renderer!.root.findAllByType(Image);
@@ -198,6 +352,67 @@ describe('BookingScreen', () => {
     expect(hasText('GC')).toBe(false);
     pressText('Guidance Center');
     expect(hasText('Step 2 of 4')).toBe(true);
+  });
+
+  it.each(themeServices)('scopes the step-two summary fill and readable text to $label in $theme.mode mode', async ({ theme, label, logo }) => {
+    jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference: jest.fn() });
+    await render(<BookingScreen />);
+    pressText(label);
+    const kicker = renderer!.root.findAllByType(Text).find(node => node.props.children === 'SELECTED SERVICE')!;
+    const summary = filledAncestor(kicker);
+    const texts = summary.findAllByType(Text);
+    expect(texts.map(node => node.props.children)).toEqual(['SELECTED SERVICE', label]);
+    expect(StyleSheet.flatten(summary.props.style)).toMatchObject({
+      backgroundColor: theme.mode === 'dark' ? theme.surface : theme.brand,
+      padding: 11, borderRadius: 13,
+    });
+    expect(texts.map(node => StyleSheet.flatten(node.props.style).color)).toEqual(
+      theme.mode === 'dark' ? [theme.ink500, theme.ink900] : ['#ffffff', '#ffffff'],
+    );
+    expect(summary.findByType(Image).props).toMatchObject({ source: logo, resizeMode: 'contain', accessible: false });
+    expect(StyleSheet.flatten(renderer!.root.findAllByType(Text).find(node => node.props.children === 'Type of visit')!.props.style).color).toBe(theme.ink700);
+    expect(renderer!.root.findByType(PageHeader).props.subtitle).toBe('Step 2 of 4');
+    expectPinnedAction('Continue to date & time');
+    expect(createRequest).not.toHaveBeenCalled();
+  });
+
+  it.each(themeServices)('preserves review and receipt styles for $label in $theme.mode mode', async ({ theme, unit, label, visit, type, logo }) => {
+    jest.mocked(useTheme).mockReturnValue({ theme, mode: theme.mode, preference: 'system', setPreference: jest.fn() });
+    createRequest.mockResolvedValue({ data: { ...appointment, unit, type, date: '2026-11-02' } });
+    await render(<BookingScreen />);
+    pressText(label);
+    pressText(visit);
+    act(() => action('Continue to date & time').props.onPress());
+    const monday = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-11-02T00:00:00+08:00'))[0];
+    act(() => monday.props.onPress());
+    pressText('1:30 PM');
+    act(() => action('Review appointment').props.onPress());
+    expect(hasText('SELECTED SERVICE')).toBe(false);
+    const reviewKicker = renderer!.root.findAllByType(Text).find(node => node.props.children === 'REVIEW')!;
+    const review = filledAncestor(reviewKicker);
+    expect(StyleSheet.flatten(review.props.style)).toMatchObject({
+      backgroundColor: theme.brand50, padding: 13, borderRadius: 14,
+    });
+    expect(review.findAllByType(Text).map(node => StyleSheet.flatten(node.props.style).color)).toEqual([theme.ink500, theme.ink900]);
+    expect(review.findByType(Image).props).toMatchObject({ source: logo, resizeMode: 'contain', accessible: false });
+    expect(action('Submit appointment request').props.disabled).toBe(true);
+    act(() => checkbox().props.onPress());
+    await act(async () => action('Submit appointment request').props.onPress());
+    expect(createRequest).toHaveBeenCalledTimes(1);
+    expect(createRequest).toHaveBeenCalledWith({ unit, date: '2026-11-02', preferred_time: '13:30', type, reason: undefined });
+    expect(hasText('SELECTED SERVICE')).toBe(false);
+    expect(hasText('REVIEW')).toBe(false);
+    const receiptTitle = renderer!.root.findAllByType(Text).find(node => node.props.children === label)!;
+    const ticket = filledAncestor(receiptTitle);
+    expect(StyleSheet.flatten(ticket.props.style)).toMatchObject({
+      backgroundColor: theme.surface, borderColor: theme.line, borderWidth: 1, padding: 15, borderRadius: 15,
+    });
+    expect(ticket.findAllByType(Text).map(node => StyleSheet.flatten(node.props.style).color)).toEqual([
+      theme.ink500, theme.ink900, theme.ink500, theme.ink900, theme.ink500, theme.ink500,
+    ]);
+    expect(textContent(ticket)).toContain('1052');
+    expect(action('View request status')).toBeDefined();
+    expect(action('View my visits')).toBeDefined();
   });
 
   it('offers no afternoon preference on a Saturday and clears a stale afternoon pick', async () => {
@@ -410,6 +625,40 @@ describe('AppointmentDetailScreen layout', () => {
 });
 
 describe('Cancellation and appointment loading', () => {
+  it.each([AppointmentsScreen, AppointmentDetailScreen, CancelAppointmentScreen])('uses skeletons only without current appointment data (%#)', async Component => {
+    const initial = { isLoading: false, fetchStatus: 'fetching', refetch };
+    jest.mocked(useAppointments).mockReturnValue(initial as unknown as ReturnType<typeof useAppointments>);
+    jest.mocked(useAppointment).mockReturnValue(initial as unknown as ReturnType<typeof useAppointment>);
+    await render(<Component />);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(1);
+    const cached = { data: { data: appointment }, isLoading: true, isRefetching: true, fetchStatus: 'fetching', refetch };
+    jest.mocked(useAppointment).mockReturnValue(cached as unknown as ReturnType<typeof useAppointment>);
+    jest.mocked(useAppointments).mockReturnValue({ ...cached, data: { data: [appointment] } } as unknown as ReturnType<typeof useAppointments>);
+    await act(async () => renderer!.update(<Component />));
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+  });
+
+  it.each([AppointmentsScreen, AppointmentDetailScreen, CancelAppointmentScreen])('does not invent missing appointments while paused or ineligible (%#)', async Component => {
+    const waiting = { isLoading: false, isPending: true, fetchStatus: 'paused', refetch };
+    jest.mocked(useAppointment).mockReturnValue(waiting as unknown as ReturnType<typeof useAppointment>);
+    jest.mocked(useAppointments).mockReturnValue(waiting as unknown as ReturnType<typeof useAppointments>);
+    await render(<Component />);
+    expect(renderer!.root.findAllByType(Skeleton)).toHaveLength(0);
+    expect(textContent(renderer!.root)).toMatch(/Waiting to load/);
+    expect(hasText('This appointment is no longer available.')).toBe(false);
+    expect(hasText('No upcoming visits')).toBe(false);
+  });
+
+  it.each([401, 403, 404])('hides retained appointment detail and cancellation actions after %s', async status => {
+    jest.mocked(useAppointment).mockReturnValue({ data: { data: appointment }, isError: true,
+      error: new ApiError(status, { code: 'denied', message: 'Unavailable' }), refetch } as unknown as ReturnType<typeof useAppointment>);
+    await render(<AppointmentDetailScreen />);
+    expect(action('Cancel appointment')).toBeUndefined();
+    expect(hasText(appointment.reason!)).toBe(false);
+    await act(async () => renderer!.update(<CancelAppointmentScreen />));
+    expect(action('Yes, cancel appointment')).toBeUndefined();
+    expect(renderer!.root.findAllByType(TextInput)).toHaveLength(0);
+  });
   it('shows the appointment summary, requires a reason, and guards duplicate cancellation', async () => {
     let resolve!: () => void;
     cancelRequest.mockImplementationOnce(() => new Promise<void>(result => { resolve = result; }));

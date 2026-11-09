@@ -1,8 +1,8 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
-import { motion } from '../lib/motion';
+import { motion, type OverlayTiming } from '../lib/motion';
 import { useSheetDrag } from './useSheetDrag';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { useReducedMotion } from '../lib/useReducedMotion';
@@ -22,8 +22,16 @@ export type BottomSheetProps = {
   dismissible?: boolean;
   closeLabel?: string;
   onDismiss?: () => void;
+  timing?: OverlayTiming;
   testID?: string;
 };
+
+const BottomSheetPresentationContext = createContext<boolean | null>(null);
+
+/** Local decorations follow the retained native presenter, not query activity. */
+export function useBottomSheetPresentationActive(): boolean | null {
+  return useContext(BottomSheetPresentationContext);
+}
 
 export function BottomSheet(props: BottomSheetProps) {
   return useOverlayHost(props.visible, props.onDismiss, presentation => (
@@ -38,7 +46,7 @@ export function BottomSheet(props: BottomSheetProps) {
       settled={presentation.settled}
       abandoned={presentation.abandoned}
     />
-  ), { timing: motion.sheet, waitForLayout: true });
+  ), { timing: props.timing ?? motion.sheet, waitForLayout: true });
 }
 
 type SurfaceProps = BottomSheetProps & {
@@ -154,12 +162,14 @@ function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss,
                 </View>
                 {dismissible ? <IconAction label={closeLabel} icon={<X size={20} color={theme.ink700} />} disabled={!visible || abandoned} onPress={requestClose} /> : null}
               </View>
-              <KeyboardRevealContext.Provider value={reveal.context}>
-                <ScrollView style={styles.body} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false} {...reveal.scrollProps}>
-                  {children}
-                </ScrollView>
-              </KeyboardRevealContext.Provider>
-              {footer != null ? <View style={styles.footer}>{footer}</View> : null}
+              <BottomSheetPresentationContext.Provider value={visible && !abandoned}>
+                <KeyboardRevealContext.Provider value={reveal.context}>
+                  <ScrollView style={styles.body} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets={false} {...reveal.scrollProps}>
+                    {children}
+                  </ScrollView>
+                </KeyboardRevealContext.Provider>
+                {footer != null ? <View style={styles.footer}>{footer}</View> : null}
+              </BottomSheetPresentationContext.Provider>
             </Animated.View>
             </View>
           </View>

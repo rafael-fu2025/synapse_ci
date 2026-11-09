@@ -1,18 +1,21 @@
 <?php
-// CLI-only presentation fixture: no SQL, account writes, or photo persistence.
+// CLI-only real-view fixture: no deployment dotenv, SQL fixtures, or account/photo writes.
 if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 $fixture = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
-require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootstrap.php';
+require __DIR__ . '/ai-runtime-bootstrap.php';
 $app = config('App'); $app->baseURL = $fixture['origin'] . '/'; $app->indexPage = '';
+config(\Config\Realtime::class)->enabled = false;
 $_SERVER['HTTP_HOST'] = parse_url($fixture['origin'], PHP_URL_HOST);
 $_SERVER['REQUEST_METHOD'] = 'GET';
 parse_str(parse_url($fixture['path'], PHP_URL_QUERY) ?? '', $_GET);
+$_COOKIE = isset($fixture['csrfHash']) ? [config('Security')->cookieName => $fixture['csrfHash']] : [];
 $request = new \CodeIgniter\HTTP\IncomingRequest($app, new \CodeIgniter\HTTP\SiteURI($app, $fixture['path']), null, new \CodeIgniter\HTTP\UserAgent());
 $request->setGlobal('get', $_GET);
+$request->setGlobal('cookie', $_COOKIE);
 \Config\Services::injectMock('request', $request);
 \Config\Services::injectMock('uri', $request->getUri());
 helper(['url', 'form']);
-$kind = ($_GET['kind'] ?? '') === 'employee' ? 'employee' : 'student';
+$kind = ($fixture['kind'] ?? $_GET['kind'] ?? '') === 'employee' ? 'employee' : 'student';
 $actor = ['id' => 1, 'person_id' => 999999999, 'tenant_id' => 999999999, 'name' => 'Synthetic ' . ucfirst($kind), 'role' => $kind,
     'email' => 'fixture@example.test', 'permissions' => [], 'logged_in' => true];
 session()->set(['user' => $actor, 'tenant_id' => $actor['tenant_id']]);
@@ -20,8 +23,8 @@ $person = ['id' => $actor['person_id'], 'kind' => $kind, 'mis_id' => 'FIXTURE-12
     'last_name' => ucfirst($kind), 'email' => 'fixture@example.test'];
 $actor['avatar_initials'] = \App\Services\ProfileAvatar::initials($person);
 session()->set('user', $actor);
-$hasPhoto = isset($_GET['uploaded']) || isset($_GET['saved']);
-if (isset($_GET['uploaded'])) session()->setFlashdata('success', 'Profile picture updated. Only the compressed image was stored.');
+$hasPhoto = (bool) ($fixture['hasPhoto'] ?? (isset($_GET['uploaded']) || isset($_GET['saved'])));
+if (!empty($fixture['successMessage'])) session()->setFlashdata('success', $fixture['successMessage']);
 $health = [
     'blood_type' => 'O+',
     'allergies' => '',
@@ -29,6 +32,10 @@ $health = [
     'emergency_contact_phone' => '0917-123-4567',
     'emergency_contact_relationship' => 'Mother',
 ];
+// The synthetic HTTP receiver owns persistence; render the authoritative values on every GET.
+foreach (['emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relationship'] as $field) {
+    if (array_key_exists($field, $fixture['contact'] ?? [])) $health[$field] = $fixture['contact'][$field];
+}
 if (parse_url($fixture['path'], PHP_URL_PATH) === '/portal') {
     echo view('portal/index', [
         'title' => 'My Health Portal',
@@ -45,7 +52,7 @@ if (parse_url($fixture['path'], PHP_URL_PATH) === '/portal') {
         ],
         'activeTickets' => [],
         'appointments' => [],
-        'filters' => ['service' => 'all', 'status' => 'all', 'sort' => 'upcoming'],
+        'filters' => ['service' => 'all', 'status' => 'all', 'sort' => 'upcoming', 'per_page' => 25],
         'breadcrumbs' => [['label' => 'Campus Portal', 'url' => site_url('portal')], ['label' => 'Personal Workspace', 'url' => '']],
     ]);
 } elseif (parse_url($fixture['path'], PHP_URL_PATH) !== '/portal/settings') {
@@ -54,9 +61,10 @@ if (parse_url($fixture['path'], PHP_URL_PATH) === '/portal') {
         'counts' => ['all' => 0, 'unread' => 0, 'read' => 0],
         'pagination' => ['page' => 1, 'pages' => 1, 'filtered' => 0, 'total' => 0, 'per_page' => 25]]);
 } else {
+    // No fragment/modal flags or repaired shell markup: certify the production app layout itself.
     echo view('portal/settings', ['title' => 'Profile & Settings', 'actor' => $actor, 'person' => $person,
-        'cancelUrl' => site_url('portal'), 'formModalPage' => true, 'modalSize' => '',
         'health' => $health,
+        'breadcrumbs' => [['label' => 'My Health Portal', 'url' => site_url('portal')], ['label' => 'Profile & Settings', 'url' => '']],
         'defaultAvatar' => \App\Services\ProfileAvatar::dataUri($person),
         'photoUrl' => $hasPhoto ? site_url('portal/settings/photo') : \App\Services\ProfileAvatar::dataUri($person), 'hasPhoto' => $hasPhoto]);
 }

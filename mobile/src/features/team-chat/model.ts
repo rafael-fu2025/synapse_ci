@@ -27,10 +27,11 @@ export interface MentionQuery {
   query: string;
 }
 
-export interface ChatDayRow {
-  kind: 'day';
+export interface ChatTimestampRow {
+  kind: 'timestamp';
   key: string;
-  label: string;
+  messageId: number;
+  createdAt: string;
 }
 
 export interface ChatUnreadRow {
@@ -52,7 +53,7 @@ export interface ChatReadMarkerRow {
   messageId: number;
 }
 
-export type TeamChatRow = ChatDayRow | ChatUnreadRow | ChatMessageRow | ChatReadMarkerRow;
+export type TeamChatRow = ChatTimestampRow | ChatUnreadRow | ChatMessageRow | ChatReadMarkerRow;
 
 const manilaDayKey = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Manila',
@@ -60,14 +61,21 @@ const manilaDayKey = new Intl.DateTimeFormat('en-CA', {
   month: '2-digit',
   day: '2-digit',
 });
-const manilaDayLabel = new Intl.DateTimeFormat('en-PH', {
+const manilaDateLabel = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Manila',
-  dateStyle: 'long',
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+const manilaWeekday = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Manila',
+  weekday: 'short',
 });
 const manilaTime = new Intl.DateTimeFormat('en-PH', {
   timeZone: 'Asia/Manila',
   hour: 'numeric',
   minute: '2-digit',
+  hour12: true,
 });
 
 export function parseChatTimestamp(value: string): Date | null {
@@ -77,7 +85,24 @@ export function parseChatTimestamp(value: string): Date | null {
 
 export function formatChatTime(value: string): string {
   const date = parseChatTimestamp(value);
-  return date === null ? '' : manilaTime.format(date);
+  return date === null ? '' : manilaTime.format(date).replace(/\s/g, ' ');
+}
+
+function manilaDayNumber(date: Date): number {
+  const parts = manilaDayKey.formatToParts(date);
+  const part = (name: string) => Number(parts.find(value => value.type === name)?.value);
+  return Date.UTC(part('year'), part('month') - 1, part('day')) / 86_400_000;
+}
+
+/** Group headers describe calendar age in portal time, never elapsed device-local days. */
+export function formatChatGroupTimestamp(value: string, now: Date = new Date()): string {
+  const date = parseChatTimestamp(value);
+  if (date === null) { return 'Date unavailable'; }
+  const time = formatChatTime(value);
+  const days = Number.isFinite(now.getTime()) ? manilaDayNumber(now) - manilaDayNumber(date) : -1;
+  if (days === 0) { return time; }
+  if (days >= 1 && days <= 6) { return `${manilaWeekday.format(date)} ${time}`; }
+  return `${manilaDateLabel.format(date)}, ${time}`;
 }
 
 export function buildChatRows(
@@ -96,11 +121,6 @@ export function buildChatRows(
     const date = parseChatTimestamp(message.created_at);
     const key = date === null ? 'unknown' : manilaDayKey.format(date);
     if (key !== day) {
-      rows.push({
-        kind: 'day',
-        key: `day:${key}:${message.id}`,
-        label: date === null ? 'Date unavailable' : manilaDayLabel.format(date),
-      });
       day = key;
       previous = null;
     }
@@ -122,6 +142,9 @@ export function buildChatRows(
       previous.message.reply_to === null && message.reply_to === null &&
       previous.message.tasks.length === 0 && message.tasks.length === 0 &&
       gap >= 0 && gap <= 5 * 60_000;
+    if (!continuesGroup) {
+      rows.push({ kind: 'timestamp', key: `timestamp:${message.id}`, messageId: message.id, createdAt: message.created_at });
+    }
     const row: ChatMessageRow = {
       kind: 'message',
       key: `message:${message.id}`,

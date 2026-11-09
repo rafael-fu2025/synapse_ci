@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useFocusEffect, useNavigation, usePreventRemove, useRoute } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CircleCheckBig, ClipboardList, Clock3, ListOrdered, ShieldCheck } from 'lucide-react-native';
@@ -36,7 +38,9 @@ export function SurveyFormScreen() {
   const submissionInFlight = useRef(false);
   const submitted = useRef(false);
 
-  const survey = query.data?.data;
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const survey = authorityRemoved ? undefined : query.data?.data;
   const questions = useMemo(() => survey?.questions ?? [], [survey]);
   const question = questions[index];
   const isLast = index === questions.length - 1;
@@ -154,11 +158,11 @@ export function SurveyFormScreen() {
     );
   }
 
-  if (query.isLoading) {
+  if (state === 'loading') {
     return (
       <Screen scroll={false}>
         <PageHeader title="Survey" onBack={navigation.goBack} />
-        <ActivityIndicator color={palette.violet600} />
+        <Skeleton label="Loading survey…" variant="form" />
       </Screen>
     );
   }
@@ -168,9 +172,11 @@ export function SurveyFormScreen() {
       <Screen scroll={false}>
         <PageHeader title="Survey" onBack={navigation.goBack} />
         <Text style={styles.missing}>
-          {notFound ? 'This survey is no longer available.' : 'The survey could not be loaded. Please try again.'}
+          {notFound ? 'This survey is no longer available.' : state === 'waiting'
+            ? 'Waiting to load this survey. It will load when your connection is available.'
+            : 'The survey could not be loaded. Please try again.'}
         </Text>
-        {!notFound ? (
+        {!notFound && state !== 'waiting' ? (
           <Action full variant="secondary" style={styles.retry} loading={query.isFetching} onPress={() => {
             query.refetch().catch(() => undefined);
           }}>

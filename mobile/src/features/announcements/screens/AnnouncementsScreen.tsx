@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -35,7 +38,9 @@ export function AnnouncementsScreen() {
   const unit = filter === 'clinic' || filter === 'guidance' ? filter : 'all';
   const status = filter === 'unread' ? 'unread' : 'all';
   const query = useAnnouncements({ unit, status, page });
-  const items = query.data?.data ?? [];
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
+  const items = authorityRemoved ? [] : query.data?.data ?? [];
   const currentPage = query.data?.meta.page ?? page;
   const pages = query.data?.meta.pages;
   // There is no featured flag in the API: spotlight the first returned story,
@@ -63,14 +68,17 @@ export function AnnouncementsScreen() {
       {query.isError ? (
         <View style={styles.feedback}>
           <Text accessibilityRole="alert" style={styles.feedbackText}>
-            {query.data ? 'Could not refresh announcements. Showing saved updates.' : 'Could not load announcements.'}
+            {query.data && !authorityRemoved ? 'Could not refresh announcements. Showing saved updates.' : 'Could not load announcements.'}
           </Text>
           <Action variant="secondary" onPress={() => { query.refetch().catch(() => undefined); }} loading={query.isFetching}>Retry</Action>
         </View>
       ) : null}
-      {query.isLoading ? (
-        <ActivityIndicator style={styles.loader} color={theme.brandIcon} />
-      ) : query.data && items.length === 0 && !query.isError ? (
+      {state === 'loading' ? (
+        <Skeleton label="Loading announcements…" variant="list" />
+      ) : state === 'waiting' ? (
+        <EmptyState icon={<Megaphone size={30} color={theme.brandIcon} />} title="Waiting to load announcements"
+          body="Updates have not loaded yet. They will load when your connection is available." />
+      ) : authorityRemoved ? null : query.data && items.length === 0 ? (
         <EmptyState
           icon={<Megaphone size={30} color={theme.brandIcon} />}
           title="No announcements"
@@ -155,7 +163,6 @@ function createStyles(theme: Theme) {
     chipActive: { backgroundColor: theme.brand, borderColor: theme.brand },
     chipText: { fontSize: 9.5, fontWeight: '700', fontFamily: font.body, color: theme.ink500 },
     chipTextActive: { color: '#ffffff' },
-    loader: { marginTop: 30 },
     list: { paddingBottom: 20 },
     feedback: { gap: 10, paddingVertical: 12 },
     feedbackText: { color: theme.ink700, fontFamily: font.body, fontSize: 11.5 },

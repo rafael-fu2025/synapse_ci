@@ -1,5 +1,8 @@
 import React, { useMemo } from 'react';
-import { ActivityIndicator, SectionList, StyleSheet, Text, View } from 'react-native';
+import { SectionList, StyleSheet, Text, View } from 'react-native';
+import { ApiError } from '../../../api/client';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FileText, ShieldCheck } from 'lucide-react-native';
@@ -23,6 +26,8 @@ export function RecordsScreen() {
   const styles = makeStyles(theme);
   const navigation = useNavigation<Props['navigation']>();
   const query = useAppointments({ service: 'all', status: 'completed', sort: 'date_desc' });
+  const state = loadingState(query);
+  const authorityRemoved = query.isError && query.error instanceof ApiError && [401, 403, 404].includes(query.error.status);
   const sections = useMemo(() => {
     const byMonth = new Map<string, Appointment[]>();
     for (const appointment of query.data?.data ?? []) {
@@ -47,9 +52,18 @@ export function RecordsScreen() {
         <ShieldCheck size={18} color={theme.brandIcon} />
         <Text style={styles.noticeText}>This timeline shows completed appointments, not clinical records or shared care summaries. Internal clinical and counseling notes are not shown here.</Text>
       </View>
-      {query.isLoading ? (
-        <ActivityIndicator color={theme.brandIcon} />
-      ) : query.isError ? (
+      {query.isError && state === 'content' && !authorityRemoved ? (
+        <View style={styles.notice}>
+          <Text style={styles.noticeText} accessibilityRole="alert">Could not refresh appointment history. Showing saved history.</Text>
+          <Action variant="secondary" onPress={() => { query.refetch().catch(() => undefined); }} loading={query.isFetching}>Try again</Action>
+        </View>
+      ) : null}
+      {state === 'loading' ? (
+        <Skeleton label="Loading appointment history…" variant="list" />
+      ) : state === 'waiting' ? (
+        <EmptyState icon={<FileText size={30} color={theme.brandIcon} />} title="Waiting to load appointment history"
+          body="Your history has not loaded yet. It will load when this screen and your connection are active." />
+      ) : state === 'error' || authorityRemoved ? (
         <EmptyState
           icon={<FileText size={30} color={theme.brandIcon} />}
           title="Could not load appointment history"

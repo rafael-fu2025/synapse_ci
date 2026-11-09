@@ -18,7 +18,11 @@ import { AppTabsParamList, VisitsStackParamList } from '../../../navigation/type
 import { formatDateTile, formatFullDate } from '../../../lib/format';
 import { BOOKING_STEPS, BookingStep, PREFERRED_TIMES, TYPE_LABELS, formatPreferredTime, isHalfDay, nextDays, previousBookingStep } from '../booking';
 import { appointmentErrorMessage } from '../errors';
+import { useKeyboardVisible } from '../../../lib/useKeyboardVisible';
+import { CONTEXT_BAR_ACTION_CLEARANCE } from '../../../navigation/contextTabBarMetrics';
+import { useOptionalWorkspace } from '../../workspace/WorkspaceContext';
 import { useContextDraftRegistration } from '../../workspace/useContextDraftRegistration';
+import { BookingStepTransition } from '../components/BookingStepTransition';
 
 // Keep nested tab destinations typed locally; Booking may be hosted from Home or Visits.
 type BookingTabs = Omit<AppTabsParamList, 'Visits'> & {
@@ -34,8 +38,13 @@ export function BookingScreen() {
   const styles = makeStyles(theme);
   const navigation = useNavigation<Navigation>();
   const create = useCreateAppointment();
+  const keyboardVisible = useKeyboardVisible();
+  const workspace = useOptionalWorkspace();
 
   const [step, setStep] = useState<BookingStep>('unit');
+  const [stepReset, setStepReset] = useState(0);
+  const currentStep = useRef(step);
+  currentStep.current = step;
   const [unit, setUnit] = useState<'clinic' | 'guidance' | null>(null);
   const [date, setDate] = useState<string | null>(null);
   const [time, setTime] = useState<string | null>(null);
@@ -49,6 +58,7 @@ export function BookingScreen() {
     dirty: step !== 'success' && (unit !== null || reason !== '' || date !== null || visitType !== null),
     submitting: create.isPending,
     onDiscard: () => {
+      setStepReset(value => value + 1);
       setStep('unit'); setUnit(null); setDate(null); setTime(null); setVisitType(null);
       setReason(''); setError(null); setReviewed(false); setReceived(null);
       submitting.current = false;
@@ -124,12 +134,13 @@ export function BookingScreen() {
     }
   }
 
-  if (step === 'success' && received) {
-    const ticketDate = `${received.date}T00:00:00+08:00`;
-    const tile = formatDateTile(ticketDate);
-    return (
-      <Screen>
-        <PageHeader title="Request received" onBack={viewVisits} />
+  function renderStepContent(bodyStep: BookingStep, interactive: boolean) {
+    const canEdit = () => interactive && currentStep.current === bodyStep && !submitting.current;
+    if (bodyStep === 'success' && received) {
+      const ticketDate = `${received.date}T00:00:00+08:00`;
+      const tile = formatDateTile(ticketDate);
+      return (
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.receiptContent} scrollEnabled={interactive}>
         <View style={styles.centered}>
           <View style={styles.successRing}>
             <CircleCheckBig size={34} color={theme.brandIcon} />
@@ -163,26 +174,12 @@ export function BookingScreen() {
             <Action full variant="ghost" onPress={viewVisits}>View my visits</Action>
           </View>
         </View>
-      </Screen>
-    );
-  }
-
-  return (
-    <Screen scroll={false}>
-      <PageHeader
-        title={step === 'unit' ? 'Choose a service' : step === 'details' ? 'Appointment details' : step === 'date-time' ? 'Choose date & time' : 'Review appointment'}
-        subtitle={`Step ${BOOKING_STEPS.findIndex(value => value === step) + 1} of 4`}
-        onBack={onBack}
-      />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.scroll}>
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={styles.progress} accessibilityLabel={`Step ${BOOKING_STEPS.findIndex(value => value === step) + 1} of 4`}>
-            {BOOKING_STEPS.map((value, index) => (
-              <View key={value} style={[styles.stepBar, index <= BOOKING_STEPS.findIndex(item => item === step) && styles.stepBarDone]} />
-            ))}
-          </View>
-
-          {step === 'unit' ? (
+        </ScrollView>
+      );
+    }
+    return (
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" scrollEnabled={interactive}>
+          {bodyStep === 'unit' ? (
             <View>
               {(['clinic', 'guidance'] as const).map((key) => {
                 const presentation = UNIT_PRESENTATION[key];
@@ -191,8 +188,10 @@ export function BookingScreen() {
                   <Pressable
                     key={key}
                     accessibilityRole="button"
-                    accessibilityState={{ selected }}
+                    accessibilityState={{ selected, disabled: !interactive }}
+                    disabled={!interactive}
                     onPress={() => {
+                      if (!canEdit()) { return; }
                       if (unit !== key) {
                         setVisitType(null);
                       }
@@ -225,7 +224,7 @@ export function BookingScreen() {
             </View>
           ) : null}
 
-          {step === 'details' && unit ? (
+          {bodyStep === 'details' && unit ? (
             <View>
               <View style={styles.selectedBar}>
                 <Image
@@ -237,8 +236,8 @@ export function BookingScreen() {
                   accessible={false}
                 />
                 <View style={styles.selectedCopy}>
-                  <Text style={styles.selectedKicker}>SELECTED SERVICE</Text>
-                  <Text style={styles.selectedTitle}>{UNIT_PRESENTATION[unit].label}</Text>
+                  <Text style={[styles.selectedKicker, theme.mode === 'light' && styles.selectedBarText]}>SELECTED SERVICE</Text>
+                  <Text style={[styles.selectedTitle, theme.mode === 'light' && styles.selectedBarText]}>{UNIT_PRESENTATION[unit].label}</Text>
                 </View>
               </View>
 
@@ -249,8 +248,9 @@ export function BookingScreen() {
                   <Pressable
                     key={option}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: visitType === option }}
-                    onPress={() => setVisitType(option)}
+                    accessibilityState={{ selected: visitType === option, disabled: !interactive }}
+                    disabled={!interactive}
+                    onPress={() => { if (canEdit()) { setVisitType(option); } }}
                     style={[styles.typeChip, visitType === option && styles.typeChipActive]}>
                     <Text style={[styles.typeText, visitType === option && styles.typeTextActive]}>
                       {TYPE_LABELS[option] ?? option}
@@ -266,20 +266,21 @@ export function BookingScreen() {
                 maxLength={255}
                 hint={`${reason.length} / 255 characters. Do not include emergency or highly sensitive information.`}
                 value={reason}
-                onChangeText={setReason}
+                editable={interactive}
+                onChangeText={value => { if (canEdit()) { setReason(value); } }}
               />
 
               {error ? <Text style={styles.formError}>{error}</Text> : null}
             </View>
           ) : null}
 
-          {step === 'date-time' ? (
+          {bodyStep === 'date-time' ? (
             <View>
               <Text style={styles.noticeText}>
                 Choose a preferred date and time. These are suggestions, not live availability. Staff may propose another time.
               </Text>
               <Text style={styles.formLabel}>Preferred date</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateStrip}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dateStrip} scrollEnabled={interactive}>
                 {days.map((day) => {
                   const active = date === day.date;
                   return (
@@ -287,8 +288,9 @@ export function BookingScreen() {
                       key={day.date}
                       accessibilityRole="button"
                       accessibilityLabel={formatFullDate(`${day.date}T00:00:00+08:00`)}
-                      accessibilityState={{ selected: active }}
-                      onPress={() => setDate(day.date)}
+                      accessibilityState={{ selected: active, disabled: !interactive }}
+                      disabled={!interactive}
+                      onPress={() => { if (canEdit()) { setDate(day.date); } }}
                       style={[styles.dateCell, active && styles.dateCellActive]}>
                       <Text style={[styles.dateWeekday, active && styles.dateTextActive]}>{day.weekday}</Text>
                       <Text style={[styles.dateDay, active && styles.dateTextActive]}>{day.day}</Text>
@@ -306,7 +308,8 @@ export function BookingScreen() {
                       <View style={styles.periodLine} />
                     </View>
                     <View style={styles.timeGrid}>
-                      {times.map(value => <TimeCell key={value} value={value} active={time === value} onPress={setTime} />)}
+                      {times.map(value => <TimeCell key={value} value={value} active={time === value} disabled={!interactive}
+                        onPress={next => { if (canEdit()) { setTime(next); } }} />)}
                     </View>
                   </View>
                 ))}
@@ -317,7 +320,7 @@ export function BookingScreen() {
             </View>
           ) : null}
 
-          {step === 'review' && unit && date && time && visitType ? (
+          {bodyStep === 'review' && unit && date && time && visitType ? (
             <View>
               <View style={styles.reviewBanner}>
                 <Image
@@ -349,9 +352,9 @@ export function BookingScreen() {
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityLabel="I confirm that these appointment details are correct."
-                accessibilityState={{ checked: reviewed, disabled: create.isPending }}
-                disabled={create.isPending}
-                onPress={() => setReviewed(value => !value)}
+                accessibilityState={{ checked: reviewed, disabled: !interactive || create.isPending }}
+                disabled={!interactive || create.isPending}
+                onPress={() => { if (canEdit()) { setReviewed(value => !value); } }}
                 style={styles.reviewCheck}>
                 <View style={[styles.checkbox, reviewed && styles.checkboxChecked]}>
                   {reviewed ? <Check size={12} color="#ffffff" /> : null}
@@ -361,13 +364,32 @@ export function BookingScreen() {
               {error ? <Text style={styles.formError} accessibilityRole="alert">{error}</Text> : null}
             </View>
           ) : null}
-        </ScrollView>
-        {step !== 'unit' ? (
+      </ScrollView>
+    );
+  }
+
+  const success = step === 'success' && received !== null;
+  return (
+    <Screen scroll={false} bodyStyle={!success && step !== 'unit' && workspace?.canSwitchContext && !keyboardVisible ? styles.raisedActions : undefined}>
+      <PageHeader
+        title={success ? 'Request received' : step === 'unit' ? 'Choose a service' : step === 'details' ? 'Appointment details' : step === 'date-time' ? 'Choose date & time' : 'Review appointment'}
+        subtitle={success ? undefined : `Step ${BOOKING_STEPS.findIndex(value => value === step) + 1} of 4`}
+        onBack={success ? viewVisits : onBack}
+      />
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.scroll}>
+        {!success ? <View style={styles.progress} accessibilityLabel={`Step ${BOOKING_STEPS.findIndex(value => value === step) + 1} of 4`}>
+          {BOOKING_STEPS.map((value, index) => (
+            <View key={value} style={[styles.stepBar, index <= BOOKING_STEPS.findIndex(item => item === step) && styles.stepBarDone]} />
+          ))}
+        </View> : null}
+        <BookingStepTransition step={step} reset={stepReset} renderStep={renderStepContent} />
+        {!success && step !== 'unit' ? (
           <View style={styles.actions}>
             {step === 'details' && unit ? (
               <Action
                 full
                 onPress={() => {
+                  if (submitting.current || currentStep.current !== 'details') { return; }
                   if (visitType === null) {
                     setError('Choose a visit type to continue.');
                     return;
@@ -380,6 +402,7 @@ export function BookingScreen() {
             ) : null}
             {step === 'date-time' ? (
               <Action full onPress={() => {
+                if (submitting.current || currentStep.current !== 'date-time') { return; }
                 if (!date || !time) {
                   setError('Choose a preferred date and time to continue.');
                   return;
@@ -402,12 +425,13 @@ export function BookingScreen() {
 }
 
 
-function TimeCell({ value, active, onPress }: { value: string; active: boolean; onPress: (value: string) => void }) {
+function TimeCell({ value, active, disabled = false, onPress }: { value: string; active: boolean; disabled?: boolean; onPress: (value: string) => void }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const label = formatPreferredTime(value);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: active }} onPress={() => onPress(value)} style={[styles.timeCell, active && styles.timeCellActive]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: active, disabled }} disabled={disabled}
+      onPress={() => { if (!disabled) { onPress(value); } }} style={[styles.timeCell, active && styles.timeCellActive]}>
       <Text style={[styles.timeText, active && styles.timeTextActive]}>{label}</Text>
     </Pressable>
   );
@@ -474,8 +498,9 @@ function createStyles(theme: Theme) {
       gap: 10,
       padding: 11,
       borderRadius: 13,
-      backgroundColor: theme.brand50,
+      backgroundColor: theme.mode === 'dark' ? theme.surface : theme.brand,
     },
+    selectedBarText: { color: '#ffffff' },
     selectedLogo: { width: 37, height: 37 },
     selectedCopy: { flex: 1 },
     selectedKicker: { color: theme.ink500, fontSize: 8.5, fontWeight: '800', letterSpacing: 1, fontFamily: font.body },
@@ -561,7 +586,9 @@ function createStyles(theme: Theme) {
     noticeText: { flex: 1, color: theme.ink700, fontSize: 10, lineHeight: 14, fontFamily: font.body },
     scroll: { flex: 1 },
     scrollContent: { flexGrow: 1, paddingBottom: 12 },
+    receiptContent: { flexGrow: 1 },
     actions: { flexShrink: 0, paddingTop: 24 },
+    raisedActions: { paddingBottom: CONTEXT_BAR_ACTION_CLEARANCE },
   });
 }
 

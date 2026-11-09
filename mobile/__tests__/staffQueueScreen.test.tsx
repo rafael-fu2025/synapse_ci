@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { Skeleton } from '../src/components/Skeleton';
 import { PageHeader } from '../src/components/PageHeader';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { lightTheme, darkTheme } from '../src/theme/tokens';
@@ -9,6 +10,7 @@ import { StaffQueueScreen } from '../src/features/staff-queue/screens/StaffQueue
 import { ApiError } from '../src/api/client';
 import { useNetInfo } from '@react-native-community/netinfo';
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: jest.fn() }));
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('../src/features/staff-queue/hooks', () => ({ useStaffQueueSummary: jest.fn() }));
 jest.mock('../src/api/client', () => ({ ApiError: class extends Error { status: number; constructor(code: number) { super('error'); this.status = code; } } }));
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ goBack: jest.fn() }) }));
@@ -118,11 +120,43 @@ it('does not present an old business date as today', () => {
   expect(text()).toContain('Queue Snapshot'); expect(text()).not.toContain('Today');
 });
 it('distinguishes loading, failed initial fetch and empty queues', () => {
-  state = { ...state, data: undefined, isLoading: true }; render(); expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+  state = { ...state, data: undefined, isLoading: true }; render();
+  expect(renderer.root.findByType(Skeleton).props).toMatchObject({ label: 'Loading authorized queues', variant: 'queue' });
+  expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+  expect(text()).not.toContain('Outdated Snapshot');
+  expect(renderer.root.findByType(PageHeader).props.title).toBe('Queue Monitor');
   act(() => { state = { ...state, isLoading: false, isError: true }; renderer.update(<StaffQueueScreen />); });
   expect(text()).toContain('Retry Refresh'); expect(text()).not.toContain('No active');
   act(() => { state = { ...state, isError: false, data: { ...data, data: [] } }; renderer.update(<StaffQueueScreen />); });
   expect(text()).toContain('No Authorized Queues');
+});
+
+it.each(['idle', 'paused'])('shows %s no-data waiting feedback without false empty queues or a loader', fetchStatus => {
+  state = { ...state, data: undefined, fetchStatus, isLoading: fetchStatus === 'paused' };
+  render();
+  expect(text()).toContain(fetchStatus === 'paused' ? 'Waiting for a connection' : 'Queues are waiting to load');
+  expect(text()).not.toContain('No Authorized Queues');
+  expect(text()).not.toContain('Outdated Snapshot');
+  expect(renderer.root.findAllByType(Skeleton)).toHaveLength(0);
+});
+
+it.each([false, true])('keeps cached %s empty queue snapshots during refetch and a refresh failure', empty => {
+  state = { ...state, data: empty ? { ...data, data: [] } : data, isLoading: true, isFetching: true, fetchStatus: 'fetching' };
+  render();
+  expect(text()).toContain(empty ? 'No Authorized Queues' : 'C-001');
+  expect(renderer.root.findAllByType(Skeleton)).toHaveLength(0);
+  act(() => { state = { ...state, isLoading: false, isFetching: false, fetchStatus: 'idle', isError: true, error: new Error('refresh failed') }; renderer.update(<StaffQueueScreen />); });
+  expect(text()).toContain(empty ? 'No Authorized Queues' : 'C-001');
+  expect(text()).toContain('Refresh Failed / Saved Snapshot');
+  expect(renderer.root.findAllByType(Skeleton)).toHaveLength(0);
+});
+
+it('keeps the header refresh control stable during an active first load', () => {
+  state = { ...state, data: undefined, isLoading: false, isFetching: true, fetchStatus: 'fetching' };
+  render();
+  expect(renderer.root.findByType(Skeleton).props.variant).toBe('queue');
+  press('Refresh queue');
+  expect(refetch).toHaveBeenCalledTimes(1);
 });
 
 it('keeps totals and timing without the distribution bar or ticket lane lines', () => {

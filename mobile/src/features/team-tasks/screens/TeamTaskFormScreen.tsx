@@ -11,7 +11,9 @@ import { EmptyState } from '../../../components/EmptyState';
 import { IconAction } from '../../../components/IconAction';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
 import { TextField } from '../../../components/TextField';
+import { loadingState } from '../../../lib/loadingState';
 import { secureClientNonce } from '../../../lib/secureNonce';
 import type { TeamTasksStackParamList } from '../../../navigation/types';
 import { useTheme } from '../../../theme/ThemeProvider';
@@ -45,6 +47,8 @@ export function TeamTaskFormScreen() {
   const { reset: resetCreate } = createTask;
   const { reset: resetUpdate } = updateTask;
   const reconcileAccess = useTeamTaskAccessRecovery(unit, detail.isError ? detail.error : null);
+  const contentState = loadingState(detail);
+  const paused = detail.fetchStatus === 'paused';
   const [draft, setDraft] = useState<TeamTaskDraft>(() => editing && detail.data?.data ? taskDraft(detail.data.data) : emptyTaskDraft());
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(() => editing && detail.data?.data.assignee ? { ...detail.data.data.assignee, role: '' } : null);
   const [loadedVersion, setLoadedVersion] = useState<number | null>(() => editing ? detail.data?.data.version ?? null : null);
@@ -261,8 +265,17 @@ export function TeamTaskFormScreen() {
   if (!unit) {
     return <Screen header={header}><EmptyState icon={<Users size={30} color={theme.brandIcon} />} title="Choose a Team Workspace unit" body="Select a unit before creating a task." action={<Action full onPress={openUnitPicker}>Choose unit</Action>} /></Screen>;
   }
-  if (editing && detail.isLoading) {
-    return <Screen scroll={false} header={header} bodyStyle={styles.center}><ActivityIndicator accessibilityLabel="Loading task for editing" color={theme.brandIcon} /></Screen>;
+  if (editing && !readDenied && !detail.data?.data && contentState === 'loading' && !paused && detail.eligible !== false) {
+    return <Screen header={header}><Skeleton label="Loading task for editing" variant="form" /></Screen>;
+  }
+  if (editing && !readDenied && !detail.data?.data && !detail.isError) {
+    return <Screen header={header}><EmptyState icon={<Users size={30} color={theme.brandIcon} />}
+      title={paused ? 'You are offline' : 'Task is waiting to load'}
+      body={paused ? 'Reconnect to load this task for editing.' : 'Return to this Team Workspace while connected to load the original task.'}
+      action={<Action full variant="secondary" disabled={detail.eligible === false || paused} onPress={() => { detail.refetch().catch(() => undefined); }}>Try again</Action>} /></Screen>;
+  }
+  if (editing && !readDenied && detail.data?.data && loadedVersion === null) {
+    return <Screen header={header}><Skeleton label="Preparing task form" variant="form" active={false} /></Screen>;
   }
   if (editing && (readDenied || !detail.data?.data || loadedVersion === null)) {
     return <Screen header={header}>

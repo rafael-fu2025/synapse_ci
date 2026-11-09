@@ -3,6 +3,7 @@ import * as teamChatApi from '../src/api/endpoints/teamChat';
 import type { TeamChatMessage } from '../src/api/endpoints/teamChat';
 import {
   buildChatRows,
+  formatChatGroupTimestamp,
   type ChatMessageRow,
   insertMention,
   isAmbiguousSendFailure,
@@ -108,13 +109,13 @@ describe('Team Chat cursor and display helpers', () => {
     expect(mergeChatMessages(current, [message(6), message(7)], 'newer', 4).map(item => item.id)).toEqual([4, 5, 6, 7]);
   });
 
-  it('adds Manila day separators and one unread divider before the first other-user message', () => {
+  it('adds group timestamps and one unread divider before the first other-user message', () => {
     const rows = buildChatRows([
       message(1, { sender: { id: 1, name: 'Me' } }),
       message(2),
       message(3),
     ], 1, 1);
-    expect(rows.map(row => row.kind)).toEqual(['day', 'message', 'unread', 'message', 'day', 'message']);
+    expect(rows.map(row => row.kind)).toEqual(['timestamp', 'message', 'unread', 'timestamp', 'message', 'timestamp', 'message']);
   });
 
   it('keeps references for unchanged pages while replacing changed reply/task/mention fields', () => {
@@ -143,6 +144,36 @@ describe('Team Chat cursor and display helpers', () => {
   });
 });
 
+describe('Team Chat contextual group timestamps', () => {
+  const now = new Date('2026-11-09T13:00:00+08:00');
+  it.each([
+    ['2026-11-09T13:47:00+08:00', '1:47 PM'],
+    ['2026-11-04T09:09:00+08:00', 'Wed 9:09 AM'],
+    ['2026-11-03T00:00:00+08:00', 'Tue 12:00 AM'],
+    ['2026-11-02T09:05:00+08:00', 'Nov 2, 2026, 9:05 AM'],
+    ['2026-11-01T09:05:00+08:00', 'Nov 1, 2026, 9:05 AM'],
+    ['2026-11-10T09:05:00+08:00', 'Nov 10, 2026, 9:05 AM'],
+    ['not-a-date', 'Date unavailable'],
+  ])('formats %s as %s', (value, expected) => {
+    expect(formatChatGroupTimestamp(value, now)).toBe(expected);
+  });
+
+  it('uses Manila calendar midnight rather than elapsed hours or device-local dates', () => {
+    const midnight = new Date('2026-11-09T16:00:00Z');
+    expect(formatChatGroupTimestamp('2026-11-09T15:59:00Z', midnight)).toBe('Mon 11:59 PM');
+    expect(formatChatGroupTimestamp('2026-11-09T16:00:00Z', midnight)).toBe('12:00 AM');
+    expect(formatChatGroupTimestamp('2026-11-09T00:30:00+08:00', new Date('2026-11-09T23:59:00+08:00'))).toBe('12:30 AM');
+  });
+
+  it('handles equivalent offsets and year boundaries without changing timestamp parsing', () => {
+    expect(formatChatGroupTimestamp('2026-11-09T05:47:00Z', now)).toBe('1:47 PM');
+    const january = new Date('2027-01-01T01:00:00+08:00');
+    expect(formatChatGroupTimestamp('2026-12-31T09:09:00+08:00', january)).toBe('Thu 9:09 AM');
+    expect(formatChatGroupTimestamp('2026-12-01T09:05:00+08:00', january)).toBe('Dec 1, 2026, 9:05 AM');
+    expect(formatChatGroupTimestamp('2026-11-01T09:05:00+08:00', new Date('invalid'))).toBe('Nov 1, 2026, 9:05 AM');
+  });
+});
+
 describe('Team Chat message grouping', () => {
   function messageRows(
     messages: readonly TeamChatMessage[],
@@ -162,6 +193,24 @@ describe('Team Chat message grouping', () => {
       endsGroup: row.endsGroup,
     }));
   }
+
+  it('places a first-message timestamp above every sender/gap group, after any unread divider', () => {
+    const values = [
+      message(1, { created_at: '2026-11-06T01:05:00Z' }),
+      message(2, { created_at: '2026-11-06T01:06:00Z' }),
+      message(3, { created_at: '2026-11-06T01:07:00Z', sender: { id: 3, name: 'Other' } }),
+      message(4, { created_at: '2026-11-06T01:13:00Z', sender: { id: 3, name: 'Other' } }),
+    ];
+    const rows = buildChatRows(values, 0, 1, true, true);
+    expect(rows.filter(row => row.kind === 'timestamp')).toEqual([
+      { kind: 'timestamp', key: 'timestamp:1', messageId: 1, createdAt: values[0].created_at },
+      { kind: 'timestamp', key: 'timestamp:3', messageId: 3, createdAt: values[2].created_at },
+      { kind: 'timestamp', key: 'timestamp:4', messageId: 4, createdAt: values[3].created_at },
+    ]);
+    expect(rows[0].kind).toBe('unread');
+    expect(rows[1].kind).toBe('timestamp');
+    expect(rows.filter(row => row.kind === 'timestamp').map(row => row.createdAt)).not.toContain(values[1].created_at);
+  });
 
   it('handles empty and single-message windows as standalone without changing row identities', () => {
     expect(buildChatRows([], 0, 1)).toEqual([]);
@@ -211,7 +260,7 @@ describe('Team Chat message grouping', () => {
       message(2, { created_at: '2026-11-06T16:00:00Z' }),
     ], 0, 1);
     expect(rows.map(row => row.key)).toEqual([
-      'day:2026-11-06:1', 'unread:1', 'message:1', 'day:2026-11-07:2', 'message:2',
+      'unread:1', 'timestamp:1', 'message:1', 'timestamp:2', 'message:2',
     ]);
     expect(grouping(rows.filter((row): row is ChatMessageRow => row.kind === 'message'))).toEqual([
       { id: 1, startsGroup: true, endsGroup: true },
@@ -234,7 +283,7 @@ describe('Team Chat message grouping', () => {
     const values = [message(1), message(2), message(3, { created_at: message(1).created_at })];
     const rows = buildChatRows(values, 1, 1);
     expect(rows.map(row => row.key)).toEqual([
-      'day:2026-11-06:1', 'message:1', 'unread:2', 'message:2', 'message:3',
+      'timestamp:1', 'message:1', 'unread:2', 'timestamp:2', 'message:2', 'message:3',
     ]);
     expect(grouping(messageRows(values, 1))).toEqual([
       { id: 1, startsGroup: true, endsGroup: true },
@@ -316,11 +365,11 @@ describe('Team Chat message grouping', () => {
     const withoutMarkers = buildChatRows(values, 1, 1);
     const withMarkers = buildChatRows(values, 1, 1, true, true);
     expect(withoutMarkers.map(row => row.key)).toEqual([
-      'day:2026-11-06:1', 'message:1', 'unread:2', 'message:2', 'day:2026-11-07:3', 'message:3',
+      'timestamp:1', 'message:1', 'unread:2', 'timestamp:2', 'message:2', 'timestamp:3', 'message:3',
     ]);
     expect(withMarkers.map(row => row.key)).toEqual([
-      'day:2026-11-06:1', 'message:1', 'read-marker:1', 'unread:2',
-      'message:2', 'read-marker:2', 'day:2026-11-07:3', 'message:3', 'read-marker:3',
+      'timestamp:1', 'message:1', 'read-marker:1', 'unread:2',
+      'timestamp:2', 'message:2', 'read-marker:2', 'timestamp:3', 'message:3', 'read-marker:3',
     ]);
     expect(withMarkers.filter(row => row.kind !== 'read-marker')).toEqual(withoutMarkers);
     const rows = withMarkers.filter((row): row is ChatMessageRow => row.kind === 'message');
@@ -357,6 +406,26 @@ describe('Team Chat message grouping', () => {
       { kind: 'read-marker', key: 'read-marker:2', messageId: 2 },
       { kind: 'read-marker', key: 'read-marker:3', messageId: 3 },
     ]);
+  });
+
+  it('moves a group header to an earlier prepended message without changing individual message keys', () => {
+    const older = message(1, { created_at: '2026-11-06T01:05:00Z' });
+    const newer = message(2, { created_at: '2026-11-06T01:06:00Z' });
+    const current = Object.freeze([newer]);
+    const before = buildChatRows(current, 2, 1, false, true);
+    const merged = mergeChatMessages(current, [older], 'older');
+    const after = buildChatRows(merged, 2, 1, false, true);
+    expect(before.filter(row => row.kind === 'timestamp')).toEqual([
+      { kind: 'timestamp', key: 'timestamp:2', messageId: 2, createdAt: newer.created_at },
+    ]);
+    expect(after.filter(row => row.kind === 'timestamp')).toEqual([
+      { kind: 'timestamp', key: 'timestamp:1', messageId: 1, createdAt: older.created_at },
+    ]);
+    expect(after.filter(row => row.kind === 'message').map(row => [row.key, row.message])).toEqual([
+      ['message:1', older], ['message:2', newer],
+    ]);
+    expect(after.filter(row => row.kind === 'read-marker').map(row => row.key)).toEqual(['read-marker:1', 'read-marker:2']);
+    expect(current).toEqual([newer]);
   });
 
   it.each([true, false])('regroups an appended message without mutating previous rows or objects (markers=%p)', includeReadMarkers => {

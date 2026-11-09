@@ -10,9 +10,11 @@ import { EmptyState } from '../../../components/EmptyState';
 import { IconAction } from '../../../components/IconAction';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
 import { StatusPill } from '../../../components/StatusPill';
 import { TextField } from '../../../components/TextField';
 import { formatDateTime } from '../../../lib/format';
+import { loadingState } from '../../../lib/loadingState';
 import { secureClientNonce } from '../../../lib/secureNonce';
 import type { TeamTasksStackParamList } from '../../../navigation/types';
 import { useTheme } from '../../../theme/ThemeProvider';
@@ -60,6 +62,8 @@ export function TeamTaskDetailScreen() {
   const refreshInFlight = useRef(false);
   const checklistIds = useRef<string[]>([]);
   const task = query.data?.data;
+  const contentState = loadingState(query);
+  const paused = query.fetchStatus === 'paused';
   const readErrorKind = query.isError ? teamTaskErrorKind(query.error) : null;
   const readDenied = readErrorKind === 'forbidden' || readErrorKind === 'missing';
   const failureKind = failure ? teamTaskErrorKind(failure.error) : null;
@@ -205,8 +209,14 @@ export function TeamTaskDetailScreen() {
   if (!activeUnit) {
     return <Screen header={header}><EmptyState icon={<Users size={30} color={theme.brandIcon} />} title="Choose a Team Workspace unit" body="Select a unit to view this task." action={<Action full onPress={openUnitPicker}>Choose unit</Action>} /></Screen>;
   }
-  if (query.isLoading && !task) {
-    return <Screen scroll={false} header={header} bodyStyle={styles.center}><ActivityIndicator accessibilityLabel="Loading task" color={theme.brandIcon} /></Screen>;
+  if (!readDenied && !task && contentState === 'loading' && !paused && query.eligible !== false) {
+    return <Screen header={header}><Skeleton label="Loading task" variant="detail" /></Screen>;
+  }
+  if (!readDenied && !task && !query.isError) {
+    return <Screen header={header}><EmptyState icon={<RefreshCw size={30} color={theme.brandIcon} />}
+      title={paused ? 'You are offline' : 'Task is waiting to load'}
+      body={paused ? 'Reconnect to load this task.' : 'Return to this Team Workspace while connected to load the task.'}
+      action={<Action full disabled={query.eligible === false || paused} onPress={() => { refresh().catch(() => undefined); }}>Try again</Action>} /></Screen>;
   }
   if (!task || readDenied) {
     return <Screen header={header} refreshControl={refreshControl}>
@@ -277,7 +287,7 @@ export function TeamTaskDetailScreen() {
           {needsReview ? <Action variant="secondary" disabled={submitting || query.eligible === false} loading={query.isFetching} onPress={() => { refresh(false, true).catch(() => undefined); }}>Review latest</Action> : null}
           {uncertain ? <Action variant="ghost" disabled={submitting} onPress={() => leave(() => undefined)}>Discard comment draft</Action> : null}
         </View> : null}
-        <Action full icon={<MessageSquare size={17} color="#ffffff" />} loading={inFlight === 'comment'} disabled={locked || commentBody.trim() === ''} onPress={submitComment}>Add comment</Action>
+        <Action full style={styles.commentAction} icon={<MessageSquare size={17} color="#ffffff" />} loading={inFlight === 'comment'} disabled={locked || commentBody.trim() === ''} onPress={submitComment}>Add comment</Action>
       </View>
 
       <SectionTitle title={`Activity (${task.activity_total})`} />
@@ -318,6 +328,7 @@ function createStyles(theme: Theme) {
     inlineLoader: { marginTop: 10 }, inlineError: { gap: 8, marginVertical: 10 }, errorText: { ...type.bodyStrong, color: theme.mode === 'dark' ? '#f2a7a7' : '#a33b3b' }, errorHint: { ...type.caption, color: theme.ink500, lineHeight: 16 },
     checklistRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8 }, checklistText: { ...type.body, flex: 1, color: theme.ink700 }, checklistDone: { color: theme.ink500, textDecorationLine: 'line-through' }, muted: { ...type.body, color: theme.ink500 },
     timelineItem: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.line }, timelineHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }, actor: { ...type.bodyStrong, flex: 1, color: theme.ink900 }, timestamp: { fontFamily: font.body, fontSize: 9.5, color: theme.ink500 }, bodyText: { ...type.body, marginTop: 4, lineHeight: 17, color: theme.ink700 }, limitNote: { ...type.caption, marginTop: 10, lineHeight: 16, color: theme.ink500 }, commentInput: { minHeight: 92, paddingTop: 12, textAlignVertical: 'top' },
+    commentAction: { marginTop: 12 },
     pressed: { opacity: 0.7 }, disabled: { opacity: 0.5 },
   });
 }

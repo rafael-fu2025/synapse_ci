@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -32,12 +31,16 @@ import { EmptyState } from '../../../components/EmptyState';
 import { IconAction } from '../../../components/IconAction';
 import { PageHeader } from '../../../components/PageHeader';
 import { Screen } from '../../../components/Screen';
+import { Skeleton } from '../../../components/Skeleton';
+import { loadingState } from '../../../lib/loadingState';
+import type { OverlayTiming } from '../../../lib/motion';
 import { useAuth } from '../../../store/auth';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { Theme, font, memoizeStyles, type } from '../../../theme/tokens';
 import { useWorkspace } from '../../workspace/WorkspaceContext';
 import { WorkspaceHeaderActions } from '../../workspace/WorkspaceHeaderActions';
 import { CalendarItemRow } from '../components/CalendarItemRow';
+import { CalendarSegmentedControl } from '../components/CalendarSegmentedControl';
 import { teamCalendarErrorKind, teamCalendarErrorMessage } from '../errors';
 import { useCalendarManualRefresh, useManilaToday, useTeamCalendar, useTeamCalendarAccess } from '../hooks';
 import {
@@ -58,6 +61,7 @@ const VIEWS: readonly TeamCalendarView[] = ['agenda', 'week', 'month'];
 const SCOPES: readonly TeamCalendarScope[] = ['team', 'mine'];
 const STATUSES: readonly TeamCalendarStatusFilter[] = ['scheduled', 'all', 'cancelled'];
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const FILTER_SHEET_TIMING: OverlayTiming = { enterMs: 360, exitMs: 240 };
 
 export function TeamCalendarHomeScreen() {
   const navigation = useNavigation<Navigation>();
@@ -88,6 +92,9 @@ export function TeamCalendarHomeScreen() {
   const items = useMemo(() => forbidden ? [] : query.data?.data ?? [], [forbidden, query.data]);
   const meta = forbidden ? undefined : query.data?.meta;
   const offline = network.isConnected === false || query.fetchStatus === 'paused';
+  const contentState = loadingState(query);
+  const initialLoading = contentState === 'loading' && !offline && query.eligible !== false;
+  const waiting = query.data === undefined && !query.isError && !initialLoading;
   const filterCount = Number(scope !== 'team') + Number(status !== 'scheduled');
   const filterSummary = `${scope === 'mine' ? 'Mine' : 'Team'} · ${status === 'all' ? 'All events' : status === 'cancelled' ? 'Cancelled events' : 'Scheduled events'}`;
   const scopeKey = `${user?.tenant_id ?? 0}:${user?.id ?? 0}:${unit ?? 'none'}`;
@@ -221,10 +228,11 @@ export function TeamCalendarHomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} enabled={query.eligible} tintColor={theme.brandIcon} colors={[theme.brandIcon]} onRefresh={() => { refresh().catch(() => undefined); }} />}>
         <View testID="calendar-toolbar" style={styles.toolbar}>
           <View testID="calendar-view-control" style={[styles.viewControl, { minWidth: Math.min(Math.max(0, width - 36), Math.ceil(210 * fontScale)) }]}>
-            <SegmentedControl
+            <CalendarSegmentedControl
               label="Calendar view"
               values={VIEWS}
               selected={view}
+              enabled={focused}
               labelFor={value => value[0].toUpperCase() + value.slice(1)}
               onChange={selectView}
             />
@@ -251,7 +259,7 @@ export function TeamCalendarHomeScreen() {
           </Pressable>
         </View>
 
-        {offline ? <Notice text={items.length > 0 ? 'You are offline. Showing the last available calendar.' : 'You are offline. Reconnect to load the calendar.'} tone="warning" /> : null}
+        {offline ? <Notice text={contentState === 'content' ? 'You are offline. Showing the last available calendar.' : 'You are offline. Reconnect to load the calendar.'} tone="warning" /> : null}
         {query.isError ? (
           <View style={styles.errorBlock}>
             <Notice
@@ -271,9 +279,13 @@ export function TeamCalendarHomeScreen() {
             {view === 'week' && scope === 'mine' ? <Text style={styles.capHint}>This is the narrowest available range. Use the period arrows to review another week.</Text> : null}
           </View>
         ) : null}
-        {query.isLoading ? <ActivityIndicator accessibilityLabel="Loading calendar" style={styles.loader} color={theme.brandIcon} /> : null}
+        {initialLoading ? <Skeleton label="Loading calendar" variant="calendar" /> : null}
+        {waiting ? <EmptyState icon={<CalendarDays size={30} color={theme.brandIcon} />}
+          title={offline ? 'Calendar is waiting for a connection' : 'Calendar is waiting to load'}
+          body={offline ? 'Reconnect to load this period.' : 'Return to this Team Workspace while connected to load the calendar.'}
+          action={<Action full variant="secondary" disabled={!query.eligible || offline} onPress={() => { refresh().catch(() => undefined); }}>Retry</Action>} /> : null}
 
-        {!query.isLoading && !query.isError && items.length === 0 && view === 'agenda' ? (
+        {contentState === 'content' && items.length === 0 && view === 'agenda' ? (
           <EmptyState
             icon={<CalendarDays size={30} color={theme.brandIcon} />}
             title="Nothing scheduled"
@@ -282,65 +294,36 @@ export function TeamCalendarHomeScreen() {
           />
         ) : null}
 
-        {!query.isLoading && items.length > 0 && view === 'agenda' ? (
+        {contentState === 'content' && items.length > 0 && view === 'agenda' ? (
           <AgendaView items={items} rangeStart={meta?.start_date ?? date} onOpen={openItem} />
         ) : null}
-        {!query.isLoading && view === 'week' ? (
+        {contentState === 'content' && view === 'week' ? (
           <WeekView items={items} anchor={date} selected={selectedDate} onSelect={setSelectedDate} onOpen={openItem} />
         ) : null}
-        {!query.isLoading && view === 'month' ? (
+        {contentState === 'content' && view === 'month' ? (
           <MonthView items={items} anchor={date} selected={selectedDate} onSelect={setSelectedDate} onOpen={openItem} />
         ) : null}
       </ScrollView>
-      <BottomSheet visible={filterSession !== null && focused} title="Calendar filters" description="Choose whose schedule to see and which events to include. Selections are kept when you close."
+      <BottomSheet visible={filterSession !== null && focused} timing={FILTER_SHEET_TIMING} title="Calendar filters" description="Choose whose schedule to see and which events to include. Selections are kept when you close."
         closeLabel="Close calendar filters" onClose={closeFilters} footer={<View style={styles.filterFooter}>
           <Action variant="ghost" accessibilityLabel="Reset calendar filters" onPress={resetFilters}>Reset filters</Action>
           <Action style={styles.filterDone} accessibilityLabel="Done filtering calendar" onPress={closeFilters}>Done</Action>
         </View>}>
         <View style={styles.filterGroup}>
           <Text accessibilityRole="header" style={styles.filterHeading}>Whose schedule</Text>
-          <SegmentedControl label="Calendar scope" values={SCOPES} selected={scope}
+          <CalendarSegmentedControl label="Calendar scope" values={SCOPES} selected={scope} enabled={isCurrentFilterSession()}
             labelFor={value => value === 'team' ? 'Team' : 'Mine'}
             onChange={value => { if (isCurrentFilterSession()) { setScope(value); } }} />
         </View>
         <View style={styles.filterGroup}>
           <Text accessibilityRole="header" style={styles.filterHeading}>Event status</Text>
-          <SegmentedControl label="Event status" values={STATUSES} selected={status}
+          <CalendarSegmentedControl label="Event status" values={STATUSES} selected={status} enabled={isCurrentFilterSession()}
             labelFor={value => value === 'all' ? 'All events' : value[0].toUpperCase() + value.slice(1)}
             onChange={value => { if (isCurrentFilterSession()) { setStatus(value); } }} />
         </View>
         <Text style={styles.capHint}>Per period: up to 250 events and 250 task deadlines.</Text>
       </BottomSheet>
     </Screen>
-  );
-}
-
-function SegmentedControl<T extends string>({ label, values, selected, labelFor, onChange }: {
-  label: string;
-  values: readonly T[];
-  selected: T;
-  labelFor: (value: T) => string;
-  onChange: (value: T) => void;
-}) {
-  const { theme } = useTheme();
-  const styles = makeStyles(theme);
-  return (
-    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={styles.segments}>
-      {values.map(value => {
-        const active = value === selected;
-        return (
-          <Pressable
-            key={value}
-            accessibilityRole="radio"
-            accessibilityLabel={`${label}: ${labelFor(value)}`}
-            accessibilityState={{ checked: active }}
-            onPress={() => onChange(value)}
-            style={[styles.segment, active && styles.segmentActive]}>
-            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{labelFor(value)}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }
 
@@ -478,11 +461,6 @@ function createStyles(theme: Theme) {
     screen: { paddingHorizontal: 0 },
     content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 30 },
     capHint: { ...type.caption, color: theme.ink500, marginTop: 8 },
-    segments: { minHeight: 44, flexDirection: 'row', padding: 3, borderRadius: 13, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.surface },
-    segment: { minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6, paddingVertical: 8, borderRadius: 10 },
-    segmentActive: { backgroundColor: theme.brand },
-    segmentText: { ...type.caption, textAlign: 'center', color: theme.ink500, textTransform: 'capitalize' },
-    segmentTextActive: { color: '#ffffff' },
     toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
     viewControl: { flex: 1 },
     filterButton: { minWidth: 50, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 13, backgroundColor: theme.surface },

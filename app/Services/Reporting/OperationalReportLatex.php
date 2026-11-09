@@ -17,6 +17,10 @@ final class OperationalReportLatex
 \documentclass[10pt,a4paper]{article}
 \pdfminorversion=4
 \usepackage[top=16mm,bottom=20mm,left=18mm,right=18mm,footskip=10mm]{geometry}
+\usepackage[T1]{fontenc}
+\IfFileExists{t1ptm.fd}{\renewcommand{\rmdefault}{ptm}}{\renewcommand{\rmdefault}{utm}}
+\DeclareSymbolFont{operators}{T1}{\rmdefault}{m}{n}
+\SetSymbolFont{operators}{bold}{T1}{\rmdefault}{b}{n}
 \usepackage{graphicx,xcolor,booktabs,tabularx,pgfplots,microtype}
 \pgfplotsset{compat=1.18}
 \definecolor{Maroon}{HTML}{800000}
@@ -35,34 +39,41 @@ final class OperationalReportLatex
 \renewcommand{\arraystretch}{1.2}
 \renewcommand{\labelitemi}{\textcolor{Maroon}{\rule{0.7mm}{0.7mm}}}
 \pdfinfo{/Title (SYNAPSE Operational Report) /Author (Foundation University)}
+\newsavebox{\ReportBrand}
+\newlength{\ReportBrandHeight}
+\newlength{\SynapseLogoHeight}
 \newcommand{\ReportHeader}[3]{%
-  \begin{minipage}[c]{22mm}\includegraphics[width=20mm,height=20mm,keepaspectratio]{university-seal.png}\end{minipage}%
-  \hfill\begin{minipage}[c]{\dimexpr\linewidth-26mm\relax}
-    {\sffamily\bfseries\large\color{Maroon}FOUNDATION UNIVERSITY}\par
-    {\sffamily\small\color{Muted}SYNAPSE\enspace/\enspace Operational Reporting}
-  \end{minipage}\par\vspace{3mm}
+  \sbox{\ReportBrand}{\begin{minipage}[c]{\dimexpr\linewidth-15mm\relax}
+    \setlength{\parskip}{2pt}
+    {\rmfamily\bfseries\large\color{Maroon}\textls[120]{FOUNDATION UNIVERSITY}}\par
+    {\rmfamily\small\color{Muted}SYNAPSE\enspace/\enspace Operational Reporting}
+  \end{minipage}}%
+  \setlength{\ReportBrandHeight}{\dimexpr\ht\ReportBrand+\dp\ReportBrand\relax}%
+  \includegraphics[trim=0 8.25bp 0 8.25bp,clip,height=\ReportBrandHeight]{university-seal.png}\hspace{3mm}%
+  \usebox{\ReportBrand}\par\vspace{3mm}
   {\color{Maroon}\hrule height 0.8pt}\vspace{4mm}
-  {\sffamily\bfseries\scriptsize\color{Maroon}#1}\par\vspace{1mm}
-  {\sffamily\bfseries\LARGE #2}\par\vspace{2mm}
+  {\rmfamily\bfseries\scriptsize\color{Maroon}#1}\par\vspace{1mm}
+  {\rmfamily\bfseries\LARGE #2}\par\vspace{2mm}
   {\small\textbf{Reporting period:} #3\hfill\textcolor{Muted}{Asia/Manila (inclusive)}}\par\vspace{4mm}
 }
-\newcommand{\Section}[1]{\par\vspace{3mm}{\sffamily\bfseries\small #1}\par\vspace{1mm}}
+\newcommand{\Section}[1]{\par\vspace{3mm}{\rmfamily\bfseries\small #1}\par\vspace{1mm}}
 \newlength{\cardwidth}
 \setlength{\fboxsep}{3mm}
 \setlength{\cardwidth}{\dimexpr(\textwidth-12mm)/3-6mm\relax}
 \newcommand{\MetricCard}[3]{%
   \colorbox{Panel}{\begin{minipage}[t][24mm][t]{\cardwidth}
-    {\sffamily\bfseries\small #1}\par\vspace{1mm}
-    {\sffamily\bfseries\Large\color{Maroon}#2}\par
-    {\sffamily\scriptsize\color{Muted}#3}
+    {\rmfamily\bfseries\small #1}\par\vspace{1mm}
+    {\rmfamily\bfseries\Large\color{Maroon}#2}\par
+    {\rmfamily\scriptsize\color{Muted}#3}
   \end{minipage}}%
 }
 \makeatletter
 \def\ps@synapse{%
   \def\@oddhead{}\def\@evenhead{}%
-  \def\@oddfoot{\parbox{\textwidth}{\color{Muted}\hrule\vspace{2mm}%
-    \sffamily\scriptsize SYNAPSE\enspace/\enspace Authorized aggregate report\hfill Page \thepage{} of TOTALPAGES\par
-    No names, diagnoses, or person-level records.}}
+  \def\@oddfoot{\parbox{\textwidth}{\rmfamily\scriptsize\color{black}%
+    \settoheight{\SynapseLogoHeight}{\textbf{SYNAPSE}}%
+    \raisebox{-0.5\height}{\includegraphics[trim=76bp 89bp 92bp 116bp,clip,height=\SynapseLogoHeight]{synapse-black.png}}\enspace
+    \textbf{SYNAPSE}\hfill Page \thepage{} of TOTALPAGES\par}}
   \let\@evenfoot\@oddfoot
 }
 \makeatother
@@ -190,13 +201,13 @@ TEX;
         foreach ($values as $index => $value) $coordinates[] = '(' . ($index + 1) . ',' . $value . ')';
         $color = $colors[$metric];
         $barWidth = min(14, 380 / $count * 0.6);
-        return '\par{\sffamily\bfseries\small\color{' . $color . '}' . self::escape($label) . "}\\par\n"
+        return '\par{\rmfamily\bfseries\small\color{' . $color . '}' . self::escape($label) . "}\\par\n"
             . '\begin{tikzpicture}\begin{axis}[width=\linewidth,height=' . $height . "mm,scale only axis=false,\n"
             . 'ybar,bar width=' . number_format($barWidth, 2, '.', '') . 'pt,xmin=0.3,xmax=' . ($count + 0.7)
             . ',ymin=0,ymax=' . $ceiling . ',ytick={0,' . $step . ',' . $ceiling . "},\n"
             . 'xtick={' . implode(',', $indexes) . '},xticklabels={' . implode(',', $labels) . "},\n"
             . "tick label style={font=\\scriptsize},label style={font=\\scriptsize},ylabel={Count},\n"
-            . "scaled y ticks=false,yticklabel style={/pgf/number format/fixed,/pgf/number format/precision=0},\n"
+            . "scaled y ticks=false,yticklabel style={/pgf/number format/fixed,/pgf/number format/precision=0,/pgf/number format/assume math mode=true},\n"
             . "axis line style={draw=Muted!40},axis x line*=bottom,axis y line*=left,\n"
             . "ymajorgrids=true,grid style={draw=Muted!15},tick align=outside,enlarge x limits=false]\n"
             . '\addplot[fill=' . $color . ',draw=' . $color . '] coordinates {' . implode(' ', $coordinates) . "};\n"
@@ -299,7 +310,7 @@ TEX;
             $source .= "\\draw[Muted!35,line width=2mm] (0,0) circle[radius=19];\n";
         }
         $source .= "\\fill[white] (0,0) circle[radius=12];\n";
-        $source .= '\\node[align=center,font=\\sffamily\\small,text=Ink] at (0,0) {'
+        $source .= '\\node[align=center,font=\\rmfamily\\small,text=Ink] at (0,0) {'
             . ($sum > 0 ? number_format($total) . '\\\\{\\scriptsize encounters}' : 'Empty\\\\{\\scriptsize No encounters}') . "};\n";
         return $source . "\\end{tikzpicture}\\par\n";
     }
