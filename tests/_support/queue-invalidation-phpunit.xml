@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="fresh-framework-bootstrap.php" colors="false" cacheResult="false"
+         failOnRisky="true" failOnWarning="true" failOnSkipped="true">
+    <!-- Explicit queue hint tests only: no dotenv, migrations, server DB, or external transport. -->
+    <testsuites>
+        <testsuite name="Isolated queue invalidation contract">
+            <file>../unit/QueueInvalidationTest.php</file>
+            <file>../unit/QueueCallerTransactionTest.php</file>
+            <file>../unit/QueueAppointmentInvalidationTest.php</file>
+        </testsuite>
+    </testsuites>
+    <php>
+        <server name="app.baseURL" value="http://example.test/" force="true"/>
+        <server name="CODEIGNITER_SCREAM_DEPRECATIONS" value="0"/>
+        <env name="QUEUE_INVALIDATION_ISOLATED" value="1" force="true"/>
+        <env name="database.defaultGroup" value="tests" force="true"/>
+        <env name="database.default.DBDriver" value="SQLite3" force="true"/>
+        <env name="database.default.database" value=":memory:" force="true"/>
+        <env name="database.default.DBPrefix" value="queue_hint_" force="true"/>
+        <env name="database.tests.DBDriver" value="SQLite3" force="true"/>
+        <env name="database.tests.database" value=":memory:" force="true"/>
+        <env name="database.tests.DBPrefix" value="queue_hint_" force="true"/>
+        <env name="realtime.enabled" value="false" force="true"/>
+        <env name="push.enabled" value="false" force="true"/>
+        <env name="FUMIS_ENABLED" value="false" force="true"/>
+    </php>
+</phpunit>

@@ -176,12 +176,11 @@ __pycache__/
 #-------------------------
 # Local-Only Directories
 #-------------------------
-# Development documentation, the test suites and research papers stay on the
-# local working copy. Files already tracked in these directories keep their
-# history and remain tracked; these rules only stop new files from being
-# added to them. The Team Workspace tracker is the one versioned execution log.
+# Local documentation stays private unless it is required to build/test shipped changes.
+# Already tracked files retain their history; allowlist only named delivery guides.
 /docs/*
 !/docs/MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md
+!/docs/MOBILE_LAN_TEST.md
 /tests/
 # AI CI fixtures must be available to clean checkouts; keep unrelated local tests ignored.
 !/tests/
@@ -201,9 +200,20 @@ __pycache__/
 !/tests/unit/PushInstallationCapabilityTest.php
 !/tests/unit/RequestContextFilterTest.php
 !/tests/unit/ApiTokenConcurrencyTest.php
+# Shipped mobile LAN notification and post-commit correctness suites.
+!/tests/unit/PushConfigTest.php
+!/tests/unit/PushTokenServiceTest.php
+!/tests/unit/FcmClientTest.php
+!/tests/unit/PushLanRegistrationTest.php
+!/tests/unit/PushLanControllerTest.php
+!/tests/unit/PushLanScopeMigrationTest.php
+!/tests/unit/PushLanTransportTest.php
+!/tests/unit/QueueAppointmentInvalidationTest.php
 !/tests/_support/
 /tests/_support/*
 !/tests/_support/api-token-race-worker.php
+!/tests/_support/queue-invalidation-phpunit.xml
+!/tests/_support/push-lan-phpunit.xml
 !/tests/database/
 /tests/database/*
 !/tests/database/TeamAccessTest.php

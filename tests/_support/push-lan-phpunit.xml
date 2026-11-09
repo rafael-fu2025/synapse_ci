@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="fresh-framework-bootstrap.php"
+         colors="true" failOnRisky="true" failOnWarning="true" failOnSkipped="true" cacheResult="false">
+    <!-- Explicit focused push tests only. No dotenv, application migration runner, or external transport. -->
+    <testsuites>
+        <testsuite name="LAN push notification contract">
+            <file>../unit/PushConfigTest.php</file>
+            <file>../unit/PushTokenServiceTest.php</file>
+            <file>../unit/PushInstallationCapabilityTest.php</file>
+            <file>../unit/PushLanRegistrationTest.php</file>
+            <file>../unit/PushLanControllerTest.php</file>
+            <file>../unit/PushLanScopeMigrationTest.php</file>
+            <file>../unit/PushLanTransportTest.php</file>
+            <file>../unit/PushPublisherTest.php</file>
+            <file>../unit/TeamPushRecipientTest.php</file>
+            <file>../unit/FcmClientTest.php</file>
+        </testsuite>
+    </testsuites>
+    <php>
+        <server name="app.baseURL" value="http://example.test/" force="true"/>
+        <server name="CODEIGNITER_SCREAM_DEPRECATIONS" value="0"/>
+        <env name="database.tests.DBDriver" value="SQLite3" force="true"/>
+        <env name="database.tests.database" value=":memory:" force="true"/>
+        <env name="database.tests.DBPrefix" value="push_test_" force="true"/>
+        <env name="push.enabled" value="false" force="true"/>
+        <env name="push.project_id" value="" force="true"/>
+        <env name="push.service_account_path" value="" force="true"/>
+        <env name="push.deployment_id" value="" force="true"/>
+    </php>
+</phpunit>

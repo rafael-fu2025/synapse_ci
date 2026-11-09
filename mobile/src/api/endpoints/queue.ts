@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 
 export interface QueueTicket {
   unit: 'clinic' | 'guidance';
@@ -16,6 +16,6 @@ export interface QueueSnapshot {
   tickets: QueueTicket[];
 }
 
-export function snapshot(): Promise<{ data: QueueSnapshot }> {
-  return request<{ data: QueueSnapshot }>('api/v1/queue');
+export function snapshot(binding?: ApiBinding): Promise<{ data: QueueSnapshot }> {
+  return (binding ? bindApiClient(binding).request : request)<{ data: QueueSnapshot }>('api/v1/queue');
 }

@@ -1,26 +1,29 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { bindApiQueryResult, useApiClient, useApiMutation } from '../../api/runtime';
 import * as announcementsApi from '../../api/endpoints/announcements';
 import { queryKeys } from '../../api/queryKeys';
 import { announcementDetail, announcementListing } from './model';
 
 export function useAnnouncements(filters: { unit: string; status: string; page: number }) {
-  return useQuery({
+  const apiClient = useApiClient();
+  return bindApiQueryResult(apiClient, useQuery({
     queryKey: queryKeys.announcements({ ...filters, q: '' }),
-    queryFn: () => announcementsApi.listing(filters).then(announcementListing),
-  });
+    queryFn: () => announcementsApi.listing(filters, apiClient).then(announcementListing),
+  }));
 }
 
 export function useAnnouncement(id: number) {
-  return useQuery({
+  const apiClient = useApiClient();
+  return bindApiQueryResult(apiClient, useQuery({
     queryKey: queryKeys.announcement(id),
-    queryFn: () => announcementsApi.detail(id).then(announcementDetail),
-  });
+    queryFn: () => announcementsApi.detail(id, apiClient).then(announcementDetail),
+  }));
 }
 
 export function useMarkAnnouncementRead() {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => announcementsApi.markRead(id),
+  return useApiMutation({
+    mutationFn: (id: number, apiClient) => announcementsApi.markRead(id, apiClient),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['announcements'] }).catch(() => undefined);
     },

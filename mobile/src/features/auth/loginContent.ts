@@ -60,16 +60,16 @@ export const LOGIN_SOCIAL_LINKS = [
   },
 ] as const;
 
-function imageSource(path: unknown): ImageSourcePropType | null {
+function imageSource(path: unknown, apiBaseUrl: string): ImageSourcePropType | null {
   if (typeof path !== 'string' || path.length > 255 ||
       !/^(?:assets\/img\/brand\/|uploads\/carousel\/)(?:[A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.(?:png|jpe?g|webp|gif)$/i.test(path)) {
     return null;
   }
-  return { uri: `${config.apiBaseUrl}/${path}` };
+  return { uri: `${apiBaseUrl}/${path}` };
 }
 
 /** Keep public artwork same-server and tolerate an older/unavailable backend. */
-export function loginSlides(payload: unknown): LoginSlide[] {
+export function loginSlides(payload: unknown, apiBaseUrl = config.apiBaseUrl): LoginSlide[] {
   const rows = (payload as { data?: { slides?: unknown } } | null)?.data?.slides;
   if (!Array.isArray(rows)) {
     return FALLBACK_LOGIN_SLIDES;
@@ -82,7 +82,7 @@ export function loginSlides(payload: unknown): LoginSlide[] {
     }
     const slide = value as Record<string, unknown>;
     const id = Number(slide.id);
-    const lightImage = imageSource(slide.light_image);
+    const lightImage = imageSource(slide.light_image, apiBaseUrl);
     if (!Number.isSafeInteger(id) || id <= 0 || ids.has(id) || !lightImage) {
       continue;
     }
@@ -92,7 +92,7 @@ export function loginSlides(payload: unknown): LoginSlide[] {
       title: typeof slide.title === 'string' ? slide.title : '',
       subtitle: typeof slide.subtitle === 'string' ? slide.subtitle : '',
       lightImage,
-      darkImage: imageSource(slide.dark_image) ?? lightImage,
+      darkImage: imageSource(slide.dark_image, apiBaseUrl) ?? lightImage,
       fitMode: slide.fit_mode === 'contain_blur' ? 'contain_blur' : 'cover',
     });
   }

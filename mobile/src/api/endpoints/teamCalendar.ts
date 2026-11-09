@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 import type { TeamUnit } from '../types';
 import type { TeamMember, TeamTaskPriority, TeamTaskStatus } from './teamTasks';
 
@@ -96,8 +96,9 @@ function params(values: Record<string, string | undefined>): string {
 export function list(
   unit: TeamUnit,
   filters: TeamCalendarFilters,
+  binding?: ApiBinding,
 ): Promise<{ data: TeamCalendarItem[]; meta: TeamCalendarListMeta }> {
-  return request(`${base(unit)}${params({
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}${params({
     date: filters.date,
     view: filters.view,
     mine: filters.scope === 'mine' ? '1' : undefined,
@@ -108,31 +109,35 @@ export function list(
 export function detail(
   unit: TeamUnit,
   id: number,
+  binding?: ApiBinding,
 ): Promise<{ data: TeamCalendarEventDetail }> {
-  return request(`${base(unit)}/events/${id}`);
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/events/${id}`);
 }
 
 export function create(
   unit: TeamUnit,
   input: TeamCalendarEventCreateInput,
+  binding?: ApiBinding,
 ): Promise<{ data: TeamCalendarEventDetail }> {
-  return request(`${base(unit)}/events`, { method: 'POST', body: input });
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/events`, { method: 'POST', body: input });
 }
 
 export function update(
   unit: TeamUnit,
   id: number,
   input: TeamCalendarEventUpdateInput,
+  binding?: ApiBinding,
 ): Promise<{ data: TeamCalendarEventDetail }> {
-  return request(`${base(unit)}/events/${id}/update`, { method: 'POST', body: input });
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/events/${id}/update`, { method: 'POST', body: input });
 }
 
 export function cancel(
   unit: TeamUnit,
   id: number,
   version: number,
+  binding?: ApiBinding,
 ): Promise<{ data: TeamCalendarEventDetail }> {
-  return request(`${base(unit)}/events/${id}/cancel`, {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/events/${id}/cancel`, {
     method: 'POST',
     body: { version },
   });

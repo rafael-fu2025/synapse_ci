@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 import type { TeamUnit } from '../types';
 
 export interface TeamChatMember {
@@ -88,25 +88,28 @@ function query(values: Record<string, string | number | undefined>): string {
 export function history(
   unit: TeamUnit,
   cursor: TeamChatHistoryCursor = {},
+  binding?: ApiBinding,
 ): Promise<{ data: TeamChatHistory }> {
-  return request(`${base(unit)}/chat/messages${query(cursor)}`);
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/chat/messages${query(cursor)}`);
 }
 
 /** Active, authorized task references only; the server fixes results at 40. */
 export function tasks(
   unit: TeamUnit,
   q = '',
+  binding?: ApiBinding,
 ): Promise<{
   data: TeamChatTaskReference[];
   meta: { unit: TeamUnit; total: number; limit: number };
 }> {
-  return request(`${base(unit)}/chat/tasks${query({ q: q.trim() || undefined })}`);
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/chat/tasks${query({ q: q.trim() || undefined })}`);
 }
 
 /** Current authorized unit members, explicitly bounded for mention suggestions. */
 export function members(
   unit: TeamUnit,
   q = '',
+  binding?: ApiBinding,
 ): Promise<{
   data: TeamChatMember[];
   meta: {
@@ -118,7 +121,7 @@ export function members(
     limit: number;
   };
 }> {
-  return request(`${base(unit)}/members${query({
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/members${query({
     q: q.trim() || undefined,
     page: 1,
     limit: 20,
@@ -128,15 +131,17 @@ export function members(
 export function send(
   unit: TeamUnit,
   input: TeamChatSendInput,
+  binding?: ApiBinding,
 ): Promise<{ data: TeamChatMessage }> {
-  return request(`${base(unit)}/chat/messages`, { method: 'POST', body: input });
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/chat/messages`, { method: 'POST', body: input });
 }
 
 export function markRead(
   unit: TeamUnit,
   lastReadId: number,
+  binding?: ApiBinding,
 ): Promise<{ data: TeamChatReadSummary }> {
-  return request(`${base(unit)}/chat/read`, {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/chat/read`, {
     method: 'POST',
     body: { last_read_id: lastReadId },
   });

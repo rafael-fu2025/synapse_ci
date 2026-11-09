@@ -6,6 +6,7 @@ import { Action } from '../../../components/Action';
 import { useAuth } from '../../../store/auth';
 import { Theme, palette, type, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
+import { ServerConnectionControl } from '../../connection/ServerConnectionControl';
 
 export function SessionExpiredScreen() {
   const { theme } = useTheme();
@@ -22,6 +23,7 @@ export function SessionExpiredScreen() {
         <Text style={styles.message}>
           Your session could not be renewed. Sign in again to continue securely.
         </Text>
+        <ServerConnectionControl />
         <View style={styles.actionWrap}>
           <Action full onPress={acknowledgeExpired}>
             Sign in again

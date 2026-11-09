@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 import type { TeamUnit } from '../types';
 
 export type TeamTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
@@ -128,19 +128,20 @@ function params(values: Record<string, string | number | undefined>): string {
   return query === '' ? '' : `?${query}`;
 }
 
-export function context(unit: TeamUnit): Promise<{ data: TeamContext }> {
-  return request(`${base(unit)}`);
+export function context(unit: TeamUnit, binding?: ApiBinding): Promise<{ data: TeamContext }> {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}`);
 }
 
 export function members(
   unit: TeamUnit,
   filters: { q?: string; page?: number } = {},
+  binding?: ApiBinding,
 ): Promise<{ data: TeamMember[]; meta: { unit: TeamUnit; total: number; page?: number; pages?: number; limit?: number } }> {
-  return request(`${base(unit)}/members${params({ q: filters.q?.trim() || undefined, page: filters.page })}`);
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/members${params({ q: filters.q?.trim() || undefined, page: filters.page })}`);
 }
 
-export function list(unit: TeamUnit, filters: TeamTaskFilters): Promise<{ data: TeamTaskSummary[]; meta: TeamTaskListMeta }> {
-  return request(`${base(unit)}/tasks${params({
+export function list(unit: TeamUnit, filters: TeamTaskFilters, binding?: ApiBinding): Promise<{ data: TeamTaskSummary[]; meta: TeamTaskListMeta }> {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/tasks${params({
     mine: filters.scope === 'mine' ? '1' : undefined,
     q: filters.q.trim() || undefined,
     status: filters.status === 'all' ? undefined : filters.status,
@@ -149,26 +150,27 @@ export function list(unit: TeamUnit, filters: TeamTaskFilters): Promise<{ data: 
   })}`);
 }
 
-export function detail(unit: TeamUnit, id: number): Promise<{ data: TeamTaskDetail }> {
-  return request(`${base(unit)}/tasks/${id}`);
+export function detail(unit: TeamUnit, id: number, binding?: ApiBinding): Promise<{ data: TeamTaskDetail }> {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/tasks/${id}`);
 }
 
-export function create(unit: TeamUnit, input: TeamTaskCreateInput): Promise<{ data: TeamTaskSummary }> {
-  return request(`${base(unit)}/tasks`, { method: 'POST', body: input });
+export function create(unit: TeamUnit, input: TeamTaskCreateInput, binding?: ApiBinding): Promise<{ data: TeamTaskSummary }> {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/tasks`, { method: 'POST', body: input });
 }
 
-export function update(unit: TeamUnit, id: number, input: TeamTaskUpdateInput): Promise<{ data: TeamTaskSummary }> {
-  return request(`${base(unit)}/tasks/${id}/update`, { method: 'POST', body: input });
+export function update(unit: TeamUnit, id: number, input: TeamTaskUpdateInput, binding?: ApiBinding): Promise<{ data: TeamTaskSummary }> {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/tasks/${id}/update`, { method: 'POST', body: input });
 }
 
 export function changeStatus(
   unit: TeamUnit,
   id: number,
   input: { status: TeamTaskStatus; version: number },
+  binding?: ApiBinding,
 ): Promise<{ data: TeamTaskSummary }> {
-  return request(`${base(unit)}/tasks/${id}/status`, { method: 'POST', body: input });
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/tasks/${id}/status`, { method: 'POST', body: input });
 }
 
-export function comment(unit: TeamUnit, id: number, input: TeamTaskCommentInput): Promise<{ data: TeamTaskDetail }> {
-  return request(`${base(unit)}/tasks/${id}/comments`, { method: 'POST', body: input });
+export function comment(unit: TeamUnit, id: number, input: TeamTaskCommentInput, binding?: ApiBinding): Promise<{ data: TeamTaskDetail }> {
+  return (binding ? bindApiClient(binding).request : request)(`${base(unit)}/tasks/${id}/comments`, { method: 'POST', body: input });
 }

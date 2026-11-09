@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccessibilityInfo, Animated, Keyboard, KeyboardEvent, Modal, Platform, Text } from 'react-native';
+import { AccessibilityInfo, Animated, Keyboard, KeyboardEvent, Modal, Platform, StyleSheet, Text } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { BottomSheet } from '../src/components/BottomSheet';
 import { ConfirmDialog } from '../src/components/ConfirmDialog';
@@ -38,6 +38,10 @@ function host(sheet: boolean, dialog: boolean, closed: () => void) {
   return <OverlayProvider><ActivityProbe /><BottomSheet visible={sheet} title="Sheet" onClose={jest.fn()} onDismiss={closed}><Text>Body</Text></BottomSheet><ConfirmDialog visible={dialog} title="Dialog" message="Message" confirmLabel="Confirm" onConfirm={jest.fn()} onCancel={jest.fn()} /></OverlayProvider>;
 }
 function visibleModals() { return renderer!.root.findAllByType(Modal).filter(node => node.props.visible); }
+function measureSheet() {
+  const surface = renderer!.root.findAllByType(Animated.View).find(node => StyleSheet.flatten(node.props.style)?.borderTopLeftRadius === 22)!;
+  act(() => surface.props.onLayout({ nativeEvent: { layout: { height: 320 } } }));
+}
 function finishAnimation(index: number, finished = true) { act(() => animations[index].callback?.({ finished })); }
 
 beforeEach(() => {
@@ -149,6 +153,7 @@ it('animates native-driver presentation and exit while retaining occupancy until
   await act(async () => resolvePreference(false));
   const closed = jest.fn();
   await act(async () => { renderer = create(host(true, false, closed)); });
+  measureSheet();
   expect(animations).toHaveLength(1);
   expect(animations[0].config).toMatchObject({ toValue: 1, duration: 240, useNativeDriver: true });
   finishAnimation(0);
@@ -170,6 +175,7 @@ it('reverses a pending animated close without a ghost dismissal or granting the 
   await act(async () => resolvePreference(false));
   const closed = jest.fn();
   await act(async () => { renderer = create(host(true, false, closed)); });
+  measureSheet();
   finishAnimation(0);
   act(() => renderer!.update(host(false, true, closed)));
   const staleExit = animations[1];
@@ -190,6 +196,7 @@ it('stops an in-flight exit when reduced motion changes and dismisses once immed
   await act(async () => resolvePreference(false));
   const closed = jest.fn();
   await act(async () => { renderer = create(host(true, false, closed)); });
+  measureSheet();
   finishAnimation(0);
   act(() => renderer!.update(host(false, false, closed)));
   const exit = animations[1];
@@ -205,6 +212,7 @@ it('stops an in-flight exit when reduced motion changes and dismisses once immed
 it('does not restart presentation animations for native keyboard events', async () => {
   await act(async () => resolvePreference(false));
   await act(async () => { renderer = create(host(true, false, jest.fn())); });
+  measureSheet();
   const count = animations.length;
   act(() => keyboardSubscriptions.get('keyboardDidShow')!.forEach(subscription => subscription.emit()));
   act(() => keyboardSubscriptions.get('keyboardDidHide')!.forEach(subscription => subscription.emit()));
@@ -216,6 +224,7 @@ it('stops motion and all native listeners and rejects late completion after prov
   await act(async () => resolvePreference(false));
   const closed = jest.fn();
   await act(async () => { renderer = create(host(true, false, closed)); });
+  measureSheet();
   const enter = animations[0];
   act(() => renderer!.unmount());
   renderer = undefined;

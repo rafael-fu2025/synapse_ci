@@ -16,6 +16,7 @@ jest.mock('../src/lib/keychain', () => ({
 jest.mock('../src/lib/push/session', () => ({ usePushSession: jest.fn() }));
 jest.mock('../src/lib/push/registration', () => ({
   revokeDevice: jest.fn(() => Promise.resolve()),
+  capturePushCleanup: jest.fn(() => Object.assign(() => Promise.resolve(), { clearScope: Promise.resolve() })),
 }));
 jest.mock('../src/lib/queryClient', () => {
   const { QueryClient: ActualQueryClient } = jest.requireActual<typeof import('@tanstack/react-query')>('@tanstack/react-query');

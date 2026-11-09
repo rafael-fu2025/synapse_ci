@@ -15,6 +15,8 @@ import { useSurveys } from '../src/features/surveys/hooks';
 import { useProfilePhoto } from '../src/features/profile/useProfilePhoto';
 import { QueueTicketCard, QueueTicketPlaceholder } from '../src/features/queue/components/QueueTicketCard';
 
+jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test', lanTest: false } }));
+jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 jest.mock('@tanstack/react-query', () => ({ useQuery: jest.fn() }));
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),

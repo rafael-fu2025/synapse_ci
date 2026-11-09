@@ -33,6 +33,7 @@ jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) }));
 
+const boundClient = expect.objectContaining({ runtime: expect.any(Object), sessionVersion: expect.any(Number), assertCurrent: expect.any(Function) });
 const originalAppState = AppState.currentState;
 const event: calendar.TeamCalendarEventDetail = {
   type: 'event', id: 4, title: 'Planning', description: '', location: 'Room 1', status: 'scheduled',
@@ -235,7 +236,7 @@ describe('real Calendar query eligibility and refresh', () => {
       act(() => { oldTransport.setReady(false); oldTransport.release(); });
       unit = 'guidance'; rerender(); await flush();
       expect(calendar.list).toHaveBeenCalledTimes(3); expect(calendar.detail).toHaveBeenCalledTimes(3);
-      expect(calendar.list).toHaveBeenLastCalledWith('guidance', filters);
+      expect(calendar.list).toHaveBeenLastCalledWith('guidance', filters, boundClient);
       await flush(60_000);
       expect(calendar.list).toHaveBeenCalledTimes(3); expect(calendar.detail).toHaveBeenCalledTimes(3);
       act(() => replacement!.release()); await flush();
@@ -314,20 +315,20 @@ describe('real Calendar query eligibility and refresh', () => {
 describe('real Calendar member paging and freshness', () => {
   it('retains pagination metadata past page five and accepts explicit error retries', async () => {
     memberPage = 6; render(MemberProbe); await flush();
-    expect(tasks.members).toHaveBeenCalledWith('clinic', { q: '', page: 6 });
+    expect(tasks.members).toHaveBeenCalledWith('clinic', { q: '', page: 6 }, boundClient);
     expect(memberResult.data?.meta).toEqual({ unit: 'clinic', total: 301, page: 6, pages: 7, limit: 50 });
     jest.mocked(tasks.members).mockRejectedValueOnce(new NetworkError());
     memberPage = 7; rerender(); await flush();
     expect(memberResult.isError).toBe(true); expect(memberResult.data).toBeUndefined();
     expect(tasks.members).toHaveBeenCalledTimes(2);
     await act(async () => { await memberResult.refetch(); }); await flush();
-    expect(tasks.members).toHaveBeenLastCalledWith('clinic', { q: '', page: 7 });
+    expect(tasks.members).toHaveBeenLastCalledWith('clinic', { q: '', page: 7 }, boundClient);
     expect(memberResult.data?.meta.page).toBe(7);
   });
 
   it('normalizes search and honors cache freshness/invalidation instead of an unbounded private ref cache', async () => {
     memberQ = '  Alex  '; render(MemberProbe); await flush();
-    expect(tasks.members).toHaveBeenCalledWith('clinic', { q: 'Alex', page: 1 });
+    expect(tasks.members).toHaveBeenCalledWith('clinic', { q: 'Alex', page: 1 }, boundClient);
     memberPage = 2; rerender(); await flush();
     memberPage = 1; rerender(); await flush();
     expect(tasks.members).toHaveBeenCalledTimes(2);
@@ -336,7 +337,7 @@ describe('real Calendar member paging and freshness', () => {
     setFocused(false); await flush(30_001); setFocused(true); await flush();
     expect(tasks.members).toHaveBeenCalledTimes(4);
     memberQ = ` ${'x'.repeat(90)} `; rerender(); await flush();
-    expect(tasks.members).toHaveBeenLastCalledWith('clinic', { q: 'x'.repeat(80), page: 1 });
+    expect(tasks.members).toHaveBeenLastCalledWith('clinic', { q: 'x'.repeat(80), page: 1 }, boundClient);
   });
 
   it('isolates late search responses from a newer search and another unit', async () => {
@@ -420,10 +421,10 @@ describe('real Calendar mutation acknowledgement and origin safety', () => {
       await updateResult.mutateAsync({ ...editable, version: 2 });
       await cancelResult.mutateAsync(3);
     });
-    expect(calendar.create).toHaveBeenCalledWith('clinic', input);
+    expect(calendar.create).toHaveBeenCalledWith('clinic', input, boundClient);
     expect(jest.mocked(calendar.create).mock.calls[0][1]).toBe(input);
-    expect(calendar.update).toHaveBeenCalledWith('clinic', 4, { ...editable, version: 2 });
-    expect(calendar.cancel).toHaveBeenCalledWith('clinic', 4, 3);
+    expect(calendar.update).toHaveBeenCalledWith('clinic', 4, { ...editable, version: 2 }, boundClient);
+    expect(calendar.cancel).toHaveBeenCalledWith('clinic', 4, 3, boundClient);
     expect(invalidate).toHaveBeenCalledTimes(3);
     invalidate.mock.calls.forEach(call => expect(call).toEqual([{ queryKey: teamCalendarQueryKeys.unit(3, 7, 'clinic'), exact: false }]));
     expect(client.getQueryData(teamCalendarQueryKeys.event(3, 7, 'clinic', 4))).toEqual({ data: { ...event, status: 'cancelled', version: 3 } });
@@ -467,7 +468,7 @@ describe('real Calendar mutation acknowledgement and origin safety', () => {
     let saved!: Promise<{ data: calendar.TeamCalendarEventDetail }>;
     act(() => { saved = updateResult.mutateAsync({ ...editable, version: 2 }); });
     unit = 'guidance'; detailId = 9; rerender(); await flush();
-    expect(calendar.update).toHaveBeenCalledWith('clinic', 4, { ...editable, version: 2 });
+    expect(calendar.update).toHaveBeenCalledWith('clinic', 4, { ...editable, version: 2 }, boundClient);
     await act(async () => { pending.resolve({ data: event }); await saved; });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: teamCalendarQueryKeys.unit(3, 7, 'clinic'), exact: false });
     expect(client.getQueryData(teamCalendarQueryKeys.event(3, 7, 'guidance', 4))).toBeUndefined();

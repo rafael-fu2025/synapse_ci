@@ -14,8 +14,12 @@ import { CancelAppointmentScreen } from '../src/features/appointments/screens/Ca
 import { AppointmentsScreen } from '../src/features/appointments/screens/AppointmentsScreen';
 import { AppointmentDetailScreen } from '../src/features/appointments/screens/AppointmentDetailScreen';
 import { AppointmentCard } from '../src/features/appointments/components/AppointmentCard';
+import { CONTEXT_BAR_ACTION_CLEARANCE } from '../src/navigation/contextTabBarMetrics';
+import { useKeyboardVisible } from '../src/lib/useKeyboardVisible';
 
-jest.mock('../src/features/workspace/WorkspaceContext', () => ({ useOptionalWorkspace: () => null }));
+let mockWorkspace: { canSwitchContext: boolean } | null = null;
+jest.mock('../src/features/workspace/WorkspaceContext', () => ({ useOptionalWorkspace: () => mockWorkspace }));
+jest.mock('../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 jest.mock('../src/features/appointments/hooks', () => ({
@@ -51,8 +55,8 @@ const refetch = jest.fn();
 let renderer: ReactTestRenderer | undefined;
 let hardwareBack: (() => boolean | null | undefined) | undefined;
 
-function render(element: React.ReactElement) {
-  act(() => { renderer = create(element); });
+async function render(element: React.ReactElement) {
+  await act(async () => { renderer = create(element); });
 }
 function hasText(text: string) {
   return renderer!.root.findAllByType(Text).some(node => node.props.children === text);
@@ -91,8 +95,11 @@ function textContent(node: ReactTestInstance): string {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockWorkspace = null;
+  jest.mocked(useKeyboardVisible).mockReturnValue(false);
   jest.useFakeTimers();
   jest.setSystemTime(new Date('2026-10-30T01:00:00Z'));
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
   createRequest.mockReset().mockResolvedValue({ data: appointment });
   cancelRequest.mockReset().mockResolvedValue(undefined);
   refetch.mockReset().mockResolvedValue(undefined);
@@ -145,7 +152,7 @@ function expectFixedHeader() {
 
 describe('BookingScreen', () => {
   it('keeps the header and step actions outside the vertical scroll with keyboard-aware layout', async () => {
-    render(<BookingScreen />);
+    await render(<BookingScreen />);
     expectFixedHeader();
     expect(renderer!.root.findAllByType(Action)).toHaveLength(0);
     const keyboard = renderer!.root.findByType(KeyboardAvoidingView);
@@ -178,8 +185,8 @@ describe('BookingScreen', () => {
     expect(hasText('Request received')).toBe(true);
   });
 
-  it('shows the bundled web logos for both service choices without cropping', () => {
-    render(<BookingScreen />);
+  it('shows the bundled web logos for both service choices without cropping', async () => {
+    await render(<BookingScreen />);
     const logos = renderer!.root.findAllByType(Image);
     expect(logos).toHaveLength(2);
     expect(logos[0].props.source).toEqual(require('../src/assets/brand/health-services.png'));
@@ -193,8 +200,8 @@ describe('BookingScreen', () => {
     expect(hasText('Step 2 of 4')).toBe(true);
   });
 
-  it('offers no afternoon preference on a Saturday and clears a stale afternoon pick', () => {
-    render(<BookingScreen />);
+  it('offers no afternoon preference on a Saturday and clears a stale afternoon pick', async () => {
+    await render(<BookingScreen />);
     advanceToDateTime();
     // 2026-10-31 is a Saturday: only the morning group is offered.
     const saturday = renderer!.root.findAll(node => typeof node.props.onPress === 'function' && node.props.accessibilityLabel === formatFullDate('2026-10-31T00:00:00+08:00'))[0];
@@ -218,7 +225,7 @@ describe('BookingScreen', () => {
   it('requires review consent and blocks duplicate same-tick and stale successful submits', async () => {
     let resolve!: (value: { data: Appointment }) => void;
     createRequest.mockImplementationOnce(() => new Promise(result => { resolve = result; }));
-    render(<BookingScreen />);
+    await render(<BookingScreen />);
     advanceToReview();
     expect(hasText('Step 4 of 4')).toBe(true);
     expect(hasText('1:30 PM (30-minute request)')).toBe(true);
@@ -242,8 +249,8 @@ describe('BookingScreen', () => {
     expect(navigation.replace).toHaveBeenCalledWith('AppointmentDetail', { id: 1052 });
   });
 
-  it('steps back with hardware/native/header back without losing details, date, or time', () => {
-    render(<BookingScreen />);
+  it('steps back with hardware/native/header back without losing details, date, or time', async () => {
+    await render(<BookingScreen />);
     advanceToReview();
     act(() => { expect(hardwareBack!()).toBe(true); });
     expect(hasText('Step 3 of 4')).toBe(true);
@@ -269,7 +276,7 @@ describe('BookingScreen', () => {
 
   it('shows server field errors and releases the submit guard for an explicit retry', async () => {
     createRequest.mockRejectedValueOnce(new ApiError(422, { code: 'validation_failed', message: 'Review the request.', fields: { preferred_time: ['Choose a future time.'] } }));
-    render(<BookingScreen />);
+    await render(<BookingScreen />);
     advanceToReview();
     act(() => checkbox().props.onPress());
     await act(async () => action('Submit appointment request').props.onPress());
@@ -282,7 +289,7 @@ describe('BookingScreen', () => {
 
   it('routes success safely to Visits when hosted by a different stack', async () => {
     navigation.getState.mockReturnValue({ routeNames: ['Dashboard', 'Booking'] });
-    render(<BookingScreen />);
+    await render(<BookingScreen />);
     advanceToReview();
     act(() => checkbox().props.onPress());
     await act(async () => action('Submit appointment request').props.onPress());
@@ -295,6 +302,51 @@ describe('BookingScreen', () => {
 });
 
 describe('AppointmentDetailScreen layout', () => {
+  function bottomPadding() {
+    const style = renderer!.root.findByType(Screen).props.bodyStyle;
+    return style ? StyleSheet.flatten(style).paddingBottom : 20;
+  }
+
+  it('uses shared raised-CTA clearance without stacking padding or moving the pinned action', async () => {
+    mockWorkspace = { canSwitchContext: true };
+    await render(<AppointmentDetailScreen />);
+    expect(CONTEXT_BAR_ACTION_CLEARANCE).toBe(34);
+    expect(bottomPadding()).toBe(34);
+    expectPinnedAction('Cancel this appointment');
+    expect(renderer!.root.findByType(Screen).props.bottomSafeArea).toBeUndefined();
+    const button = action('Cancel this appointment');
+    jest.mocked(useKeyboardVisible).mockReturnValue(true);
+    await act(async () => renderer!.update(<AppointmentDetailScreen />));
+    expect(bottomPadding()).toBe(20);
+    expect(action('Cancel this appointment')).toBe(button);
+    jest.mocked(useKeyboardVisible).mockReturnValue(false);
+    mockWorkspace = { canSwitchContext: false };
+    await act(async () => renderer!.update(<AppointmentDetailScreen />));
+    expect(bottomPadding()).toBe(20);
+    mockWorkspace = { canSwitchContext: true };
+    await act(async () => renderer!.update(<AppointmentDetailScreen />));
+    expect(bottomPadding()).toBe(34);
+    expect(action('Cancel this appointment')).toBe(button);
+    act(() => button.props.onPress());
+    expect(navigation.navigate).toHaveBeenCalledWith('CancelAppointment', { id: appointment.id });
+  });
+
+  it.each(['loading', 'missing', 'reason', 'completed', 'checked_in', 'cancelled', 'no_show'] as const)(
+    'does not reserve raised action padding for %s details', async state => {
+      mockWorkspace = { canSwitchContext: true };
+      jest.mocked(useAppointment).mockReturnValue({
+        isLoading: state === 'loading', isError: false,
+        data: state === 'loading' || state === 'missing' ? undefined : { data: { ...appointment,
+          status: state === 'reason' ? 'confirmed' : state,
+          cancellation_reason: state === 'reason' ? 'Cannot attend' : null,
+        } },
+      } as unknown as ReturnType<typeof useAppointment>);
+      await render(<AppointmentDetailScreen />);
+      expect(bottomPadding()).toBe(20);
+      expect(action('Cancel this appointment')).toBeUndefined();
+    },
+  );
+
   it.each([
     ['requested', 1, 'Awaiting confirmation, step 1 of 4'],
     ['scheduled', 2, 'Confirmed, step 2 of 4'],
@@ -361,7 +413,7 @@ describe('Cancellation and appointment loading', () => {
   it('shows the appointment summary, requires a reason, and guards duplicate cancellation', async () => {
     let resolve!: () => void;
     cancelRequest.mockImplementationOnce(() => new Promise<void>(result => { resolve = result; }));
-    render(<CancelAppointmentScreen />);
+    await render(<CancelAppointmentScreen />);
     expect(textContent(renderer!.root)).toContain('Preferred time · Awaiting confirmation');
     expect(textContent(renderer!.root)).toContain('1:30 PM');
     expect(textContent(renderer!.root)).toContain('1052');
@@ -381,7 +433,7 @@ describe('Cancellation and appointment loading', () => {
 
   it('keeps a cancellation server error separate from reason validation and allows retry', async () => {
     cancelRequest.mockRejectedValueOnce(new ApiError(409, { code: 'conflict', message: 'This appointment has changed.' }));
-    render(<CancelAppointmentScreen />);
+    await render(<CancelAppointmentScreen />);
     act(() => renderer!.root.findByType(TextInput).props.onChangeText('Cannot attend'));
     await act(async () => action('Yes, cancel appointment').props.onPress());
     expect(hasText('This appointment has changed.')).toBe(true);
@@ -390,11 +442,11 @@ describe('Cancellation and appointment loading', () => {
     expect(cancelRequest).toHaveBeenCalledTimes(2);
   });
 
-  it.each([AppointmentsScreen, AppointmentDetailScreen, CancelAppointmentScreen])('does not call a server failure an empty appointment state (%#)', ScreenComponent => {
+  it.each([AppointmentsScreen, AppointmentDetailScreen, CancelAppointmentScreen])('does not call a server failure an empty appointment state (%#)', async ScreenComponent => {
     const failure = { isLoading: false, isError: true, error: new ApiError(503, { code: 'unavailable', message: 'Department service unavailable.' }), refetch };
     jest.mocked(useAppointments).mockReturnValue(failure as unknown as ReturnType<typeof useAppointments>);
     jest.mocked(useAppointment).mockReturnValue(failure as unknown as ReturnType<typeof useAppointment>);
-    render(<ScreenComponent />);
+    await render(<ScreenComponent />);
     expect(hasText('Department service unavailable.')).toBe(true);
     expect(hasText('No upcoming visits')).toBe(false);
     expect(hasText('This appointment is no longer available.')).toBe(false);
@@ -403,8 +455,8 @@ describe('Cancellation and appointment loading', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it('uses real provider data in the card footer, not the private reason', () => {
-    render(<AppointmentCard appointment={{ ...appointment, provider_name: 'Dr. Rivera' }} onOpen={jest.fn()} />);
+  it('uses real provider data in the card footer, not the private reason', async () => {
+    await render(<AppointmentCard appointment={{ ...appointment, provider_name: 'Dr. Rivera' }} onOpen={jest.fn()} />);
     expect(hasText('Dr. Rivera')).toBe(true);
     expect(hasText(appointment.reason!)).toBe(false);
   });

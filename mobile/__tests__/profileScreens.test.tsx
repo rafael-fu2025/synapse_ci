@@ -5,8 +5,9 @@ import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
-import { ApiError, authorizedFetch, getAccessToken, request } from '../src/api/client';
-import { removePhoto, uploadPhoto } from '../src/api/endpoints/health';
+import { ApiError, authorizedFetch, getAccessToken, request, activateApiRuntime, createApiRuntime, __resetClientForTests } from '../src/api/client';
+import { ApiRuntimeProvider } from '../src/api/runtime';
+import { profilePhoto, removePhoto, uploadPhoto } from '../src/api/endpoints/health';
 import type { Appointment } from '../src/api/endpoints/appointments';
 import type { User } from '../src/api/types';
 import { Action } from '../src/components/Action';
@@ -32,6 +33,7 @@ jest.mock('../src/api/client', () => ({
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 jest.mock('../src/api/endpoints/health', () => ({
   ...jest.requireActual('../src/api/endpoints/health'),
+  profilePhoto: jest.fn(),
   uploadPhoto: jest.fn(jest.requireActual('../src/api/endpoints/health').uploadPhoto),
   removePhoto: jest.fn(),
 }));
@@ -53,6 +55,7 @@ jest.mock('lucide-react-native', () => ({
   Lock: () => null, KeyRound: () => null, Check: () => null, Monitor: () => null, Sun: () => null,
 }));
 
+const boundClient = expect.objectContaining({ runtime: expect.any(Object), sessionVersion: expect.any(Number), assertCurrent: expect.any(Function) });
 let renderer: ReactTestRenderer | undefined;
 const invalidateQueries = jest.fn().mockResolvedValue(undefined);
 const signOut = jest.fn().mockResolvedValue(undefined);
@@ -97,7 +100,9 @@ function appointment(id: number, date: string, status: Appointment['status'] = '
 }
 
 beforeEach(() => {
+  __resetClientForTests();
   jest.clearAllMocks();
+  jest.mocked(profilePhoto).mockReset().mockResolvedValue('data:image/png;base64,cGhvdG8=');
   jest.mocked(getAccessToken).mockReturnValue('private-access-token');
   jest.mocked(authorizedFetch).mockResolvedValue({ ok: true } as Response);
   jest.mocked(request).mockResolvedValue({});
@@ -128,7 +133,7 @@ describe('ProfilePhotoScreen', () => {
     const previousUri = image().props.source.uri;
     await act(async () => button('Choose from library').props.onPress());
     expect(uploadPhoto).toHaveBeenCalledTimes(1);
-    expect(uploadPhoto).toHaveBeenCalledWith({ uri: 'file:///private/photo', name: `photo.${extension}`, type });
+    expect(uploadPhoto).toHaveBeenCalledWith({ uri: 'file:///private/photo', name: `photo.${extension}`, type }, boundClient);
     expect(authorizedFetch).toHaveBeenCalledTimes(1);
     const [path, init] = jest.mocked(authorizedFetch).mock.calls[0];
     expect(path).toBe('api/v1/me/photo');
@@ -283,7 +288,7 @@ describe('ProfilePhotoScreen', () => {
       return {};
     });
     await act(async () => image().props.onError());
-    expect(request).toHaveBeenCalledWith('api/v1/me');
+    expect(request).toHaveBeenCalledWith('api/v1/me', {}, boundClient);
     expect(image().props.source.headers.Authorization).toBe('Bearer rotated-token');
     expect(image().props.source.uri).not.toBe(previousUri);
     expect(image().props.source.uri).not.toContain('rotated-token');
@@ -297,6 +302,44 @@ describe('ProfilePhotoScreen', () => {
     render(<ProfilePhotoScreen />);
     expect(renderer!.root.findAllByType(Image)).toHaveLength(0);
     expect(hasText('ST')).toBe(true);
+  });
+
+  it('uses only credential-free data URI previews in LAN mode and cannot reuse a retired server photo', async () => {
+    const runtime = createApiRuntime({ apiBaseUrl: 'http://172.16.153.237:8080', profileId: 'university', credentialBinding: 'fixture-university', lanTest: true });
+    activateApiRuntime(runtime);
+    await act(async () => {
+      renderer = create(<ApiRuntimeProvider value={runtime}><ProfilePhotoScreen /></ApiRuntimeProvider>);
+    });
+    expect(image().props.source).toEqual({ uri: 'data:image/png;base64,cGhvdG8=' });
+    expect(image().props.source.headers).toBeUndefined();
+    expect(profilePhoto).toHaveBeenLastCalledWith(expect.objectContaining({ runtime }));
+    const replacement = createApiRuntime({ apiBaseUrl: 'http://192.168.1.11:8080', profileId: 'home', credentialBinding: 'fixture-home', lanTest: true });
+    activateApiRuntime(replacement);
+    let release!: (uri: string | null) => void;
+    jest.mocked(profilePhoto).mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    await act(async () => renderer!.update(<ApiRuntimeProvider value={replacement}><ProfilePhotoScreen /></ApiRuntimeProvider>));
+    expect(renderer!.root.findAllByType(Image)).toHaveLength(0);
+    await act(async () => { release('data:image/jpeg;base64,bmV4dA=='); });
+    expect(image().props.source).toEqual({ uri: 'data:image/jpeg;base64,bmV4dA==' });
+    expect(image().props.source.headers).toBeUndefined();
+  });
+
+  it('drops a picker selection when LAN runtime changes before React rerenders', async () => {
+    const runtime = createApiRuntime({ apiBaseUrl: 'http://172.16.153.237:8080', profileId: 'university', credentialBinding: 'fixture-university', lanTest: true });
+    activateApiRuntime(runtime);
+    let release!: (value: { assets: ReturnType<typeof pickerAsset>[] }) => void;
+    jest.mocked(launchImageLibrary).mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    await act(async () => {
+      renderer = create(<ApiRuntimeProvider value={runtime}><ProfilePhotoScreen /></ApiRuntimeProvider>);
+    });
+    let pending!: Promise<void>;
+    act(() => { pending = button('Choose from library').props.onPress(); });
+    const replacement = createApiRuntime({ apiBaseUrl: 'http://192.168.1.11:8080', profileId: 'home', credentialBinding: 'fixture-home', lanTest: true });
+    activateApiRuntime(replacement);
+    await act(async () => { release({ assets: [pickerAsset()] }); await pending; });
+    expect(uploadPhoto).not.toHaveBeenCalled();
+    expect(authorizedFetch).not.toHaveBeenCalled();
+    expect(invalidateQueries).not.toHaveBeenCalled();
   });
 });
 

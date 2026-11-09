@@ -116,6 +116,11 @@ function expectFixedCta(center = 180) {
   expect(action).toMatchObject({ position: 'absolute', top: 0, width: 76, left: center - 38 });
   expect(number(action.minHeight)).toBeGreaterThanOrEqual(44);
   expect(ring).toMatchObject({ width: 64, height: 64, borderRadius: 32, padding: 4 });
+  for (const layer of [host, action, ring, style(byId('context-cta-disc'))]) {
+    for (const property of ['elevation', 'shadowColor', 'shadowOpacity', 'shadowRadius', 'shadowOffset', 'boxShadow']) {
+      expect(layer[property]).toBeUndefined();
+    }
+  }
   expect(style(byId('context-cta-disc'))).toMatchObject({ width: 56, height: 56, borderRadius: 28 });
   expect(style(byId('context-cta-slot'))).toMatchObject({ width: 76 });
   // The disc starts 4px inside its ring, 26px above the surface: raised by 22px.

@@ -357,7 +357,7 @@ it('omits the misleading swipe handle on required sheets and limits ordinary ges
   const config = spy.mock.calls[spy.mock.calls.length - 1][0];
   const gesture = { dy: 90, dx: 2, vy: 1 } as Parameters<NonNullable<typeof config.onPanResponderRelease>>[1];
   const event = {} as Parameters<NonNullable<typeof config.onPanResponderRelease>>[0];
-  act(() => { config.onPanResponderRelease!(event, gesture); config.onPanResponderRelease!(event, gesture); });
+  act(() => { config.onPanResponderGrant!(event, { ...gesture, dy: 0 }); config.onPanResponderMove!(event, gesture); config.onPanResponderRelease!(event, gesture); config.onPanResponderRelease!(event, gesture); });
   expect(close).toHaveBeenCalledTimes(1);
 });
 

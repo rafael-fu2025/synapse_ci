@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, AppState, Keyboard, KeyboardAvoidingView, Platform, ScrollView, SectionList, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, AppState, Keyboard, KeyboardAvoidingView, Modal, Platform, ScrollView, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { KeyboardEvent } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { act, create, ReactTestInstance, ReactTestRenderer } from 'react-test-renderer';
@@ -7,6 +7,8 @@ import { usePreventRemove } from '@react-navigation/native';
 import { ApiError, NetworkError } from '../src/api/client';
 import type { TeamTaskDetail, TeamTaskFilters } from '../src/api/endpoints/teamTasks';
 import { Action } from '../src/components/Action';
+import { BottomSheet } from '../src/components/BottomSheet';
+import { darkTheme, lightTheme } from '../src/theme/tokens';
 import { PageHeader } from '../src/components/PageHeader';
 import { Screen } from '../src/components/Screen';
 import { TextField } from '../src/components/TextField';
@@ -25,13 +27,15 @@ jest.mock('../src/features/team-tasks/hooks', () => ({
   useTeamTaskScreenScope: jest.requireActual('../src/features/team-tasks/hooks').useTeamTaskScreenScope,
   useCreateTeamTask: jest.fn(), useUpdateTeamTask: jest.fn(), useChangeTeamTaskStatus: jest.fn(), useCommentTeamTask: jest.fn(),
 }));
-jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: jest.requireActual('../src/theme/tokens').lightTheme }) }));
-jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
+jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: mockTheme }) }));
+jest.mock('../src/lib/useReducedMotion', () => ({ useReducedMotion: () => true }));
+jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 20, left: 0 }) }));
 jest.mock('@react-native-community/datetimepicker', () => 'DateTimePicker');
 jest.mock('lucide-react-native', () => ({
   ArrowLeft: () => null, CalendarDays: () => null, Check: () => null, Plus: () => null, Trash2: () => null,
   Users: () => null, X: () => null, AlertTriangle: () => null, CheckSquare2: () => null, Search: () => null,
   Edit3: () => null, MessageSquare: () => null, RefreshCw: () => null, Square: () => null,
+  ChevronRight: () => null, Flag: () => null, SlidersHorizontal: () => null, UserRound: () => null,
 }));
 jest.mock('@react-navigation/native', () => ({
   NavigationContext: require('react').createContext(null),
@@ -50,6 +54,7 @@ jest.mock('../src/features/workspace/WorkspaceHeaderActions', () => ({
 }));
 
 let mockIdentity = { id: 5, tenant_id: 7 };
+let mockTheme = lightTheme;
 const mockNavigation = { goBack: jest.fn(), navigate: jest.fn(), replace: jest.fn(), dispatch: jest.fn() };
 let mockRoute: { key: string; name: string; params?: { id?: number } };
 const mockDrafts = new Map<string, { onDiscard: () => void; warning?: string }>();
@@ -57,7 +62,7 @@ const mockSubmissions = new Set<string>();
 let mockPendingLeave: (() => void) | undefined;
 const mockReconcile = jest.fn();
 const mockWorkspace = {
-  activeUnit: { unit: 'clinic', label: 'Clinic' },
+  activeUnit: { unit: 'clinic', label: 'Clinic' } as { unit: string; label: string } | null,
   units: [{ unit: 'clinic', label: 'Clinic' }],
   openUnitPicker: jest.fn(),
   registerDirtyDraft: jest.fn((key: string, options: { onDiscard: () => void; warning?: string }) => {
@@ -121,6 +126,11 @@ function confirmDiscard() { act(() => { const leave = mockPendingLeave; mockPend
 function mutation(fn: jest.Mock) { return { mutateAsync: fn, isPending: false, reset: jest.fn() }; }
 function addItem(text: string) { change('New checklist item', text); press('Add checklist item'); }
 function filters(): TeamTaskFilters { return jest.mocked(hooks.useTeamTasks).mock.calls.at(-1)![1]; }
+function filterChoice(label: string) { return renderer!.root.findAll(node => node.props.accessibilityRole === 'radio' && node.props.accessibilityLabel === label && typeof node.props.onPress === 'function')[0]; }
+function finishSheetDismissal() {
+  act(() => { renderer!.root.findAllByType(Modal).filter(node => !node.props.visible).forEach(node => node.props.onDismiss?.()); });
+  act(() => { jest.advanceTimersByTime(40); });
+}
 function expectOutsideScroll(node: ReactTestInstance) {
   let parent = node.parent;
   while (parent && parent.type !== Screen) { expect(parent.type).not.toBe(ScrollView); parent = parent.parent; }
@@ -193,6 +203,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.setSystemTime(new Date('2026-11-07T18:00:00Z'));
   mockIdentity = { id: 5, tenant_id: 7 };
+  mockTheme = lightTheme;
   mockRoute = { key: 'task-route', name: 'TeamTaskForm', params: {} };
   mockDrafts.clear(); mockSubmissions.clear(); mockPendingLeave = undefined;
   mockWorkspace.units = [{ unit: 'clinic', label: 'Clinic' }];
@@ -824,13 +835,122 @@ describe('Team Task list rendered handlers', () => {
     expect(renderer!.root.findByType(WorkspaceHeaderActions).props.root).toBe(true);
     change('Search tasks', '  stock  '); press('Search');
     expect(filters()).toMatchObject({ scope: 'mine', q: 'stock', page: 1 });
+    press('Open task filters');
     press('Status filter: Done'); press('Priority filter: High');
     expect(filters()).toMatchObject({ status: 'done', priority: 'high' });
+    press('Done filtering tasks');
     await tap('Next'); expect(filters().page).toBe(2);
     press('Clear task search'); expect(filters().q).toBe('');
     await tap('Reset filters'); expect(filters()).toEqual({ scope: 'mine', q: '', status: 'all', priority: 'all', page: 1 });
     press('Open task Check supplies'); expect(mockNavigation.navigate).toHaveBeenCalledWith('TeamTaskDetail', { id: 12 });
     press('Create task'); expect(mockNavigation.navigate).toHaveBeenLastCalledWith('TeamTaskForm', undefined);
+  });
+
+  it('keeps unchanged task-card rendering isolated from search draft typing', () => {
+    render(<TeamTaskListScreen scope="team" />);
+    const list = renderer!.root.findByType(SectionList);
+    const renderItem = list.props.renderItem;
+    const card = button('Open task Check supplies');
+    const props = card.props;
+    const title = card.findAllByType(Text).find(node => node.props.children === 'Check supplies')!;
+    change('Search tasks', 'draft');
+    change('Search tasks', 'draft continues');
+    expect(renderer!.root.findByType(SectionList).props.renderItem).toBe(renderItem);
+    expect(button('Open task Check supplies').props).toBe(props);
+    expect(button('Open task Check supplies').findAllByType(Text).find(node => node.props.children === 'Check supplies')).toBe(title);
+    expect(filters().q).toBe('');
+    listQuery = { ...listQuery, data: { ...listQuery.data!, data: [task({ title: 'Updated task' })] } };
+    rerender();
+    expect(button('Open task Updated task')).toBeDefined();
+  });
+
+  it('uses server workflow counts across pages instead of counting the visible cards', () => {
+    listQuery = { ...listQuery, data: { data: [task()], meta: { ...listQuery.data!.meta,
+      counts: { todo: 40, in_progress: 27, blocked: 3, done: 50, total: 120 }, total: 120, pages: 3 } } };
+    render(<TeamTaskListScreen scope="team" />);
+    const overview = renderer!.root.findByProps({ testID: 'task-workflow-overview' });
+    expect(overview.findAllByProps({ accessibilityLabel: 'Open tasks: 70' }).length).toBeGreaterThan(0);
+    expect(overview.findAllByProps({ accessibilityLabel: 'Blocked tasks: 3' }).length).toBeGreaterThan(0);
+    expect(overview.findAllByProps({ accessibilityLabel: 'Done tasks: 50' }).length).toBeGreaterThan(0);
+    expect(renderer!.root.findAll(node => node.props.accessibilityRole === 'radio')).toHaveLength(0);
+    expect(hasText('120 tasks')).toBe(true);
+    expect(renderer!.root.findByType(SectionList).props.sections[0].data).toHaveLength(1);
+
+    press('Open task filters'); press('Status filter: Done'); press('Done filtering tasks');
+    listQuery = { ...listQuery, data: { ...listQuery.data!, data: [task({ status: 'done' })], meta: { ...listQuery.data!.meta, total: 50 } } };
+    rerender();
+    expect(hasText('50 tasks found')).toBe(true);
+    expect(hasText('All statuses')).toBe(true);
+    expect(overview.findAllByProps({ accessibilityLabel: 'Open tasks: 70' }).length).toBeGreaterThan(0);
+    expect(button('Open task Check supplies').props.accessibilityHint).toContain('Done');
+  });
+
+  it('keeps draft search separate while the filter sheet applies selections and retains them on dismissal', () => {
+    const dismissKeyboard = jest.spyOn(Keyboard, 'dismiss');
+    render(<TeamTaskListScreen scope="team" />);
+    change('Search tasks', '  not applied yet  ');
+    expect(filters().q).toBe('');
+    press('Open task filters');
+    expect(dismissKeyboard).toHaveBeenCalledTimes(1);
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(true);
+    const radios = renderer!.root.findAll(node => node.props.accessibilityRole === 'radio' && typeof node.props.onPress === 'function');
+    expect(radios).toHaveLength(9);
+    expect(filterChoice('Status filter: All').props.accessibilityState.checked).toBe(true);
+    press('Status filter: In progress'); press('Priority filter: High');
+    expect(filters()).toMatchObject({ q: '', status: 'in_progress', priority: 'high', page: 1 });
+    expect(field('Search tasks').props.value).toBe('  not applied yet  ');
+    expect(filterChoice('Priority filter: High').props.accessibilityState.checked).toBe(true);
+    const staleChoice = button('Priority filter: Low').props.onPress;
+    act(() => renderer!.root.findByType(Modal).props.onRequestClose());
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(false);
+    expect(filters()).toMatchObject({ status: 'in_progress', priority: 'high', q: '' });
+    act(() => staleChoice());
+    expect(filters().priority).toBe('high');
+    act(() => field('Search tasks').props.onSubmitEditing());
+    expect(filters().q).toBe('not applied yet');
+    press('Clear task search');
+    expect(filters()).toMatchObject({ q: '', status: 'in_progress', priority: 'high' });
+    finishSheetDismissal();
+    press('Open task filters'); press('Reset filters in sheet');
+    expect(filters()).toEqual({ scope: 'team', q: '', status: 'all', priority: 'all', page: 1 });
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(true);
+    expect(field('Search tasks').props.value).toBe('');
+    press('Done filtering tasks');
+  });
+
+  it.each([lightTheme, darkTheme])('structures readable, theme-aware task cards in $mode mode without clipped titles or owners', theme => {
+    mockTheme = theme;
+    const title = 'Prepare the department handover and reconcile all outstanding supply requests';
+    const owner = 'A long team member name that needs room to wrap';
+    listQuery = { ...listQuery, data: { ...listQuery.data!, data: [
+      task({ title, assignee: { id: 9, name: owner }, status: 'blocked', priority: 'high', due_date: '2026-10-30', checklist_progress: { done: 2, total: 5 } }),
+      task({ id: 13, title: 'Unassigned follow-up', assignee: null, due_date: null, status: 'done', priority: 'low', checklist_progress: { done: 0, total: 0 }, can_edit: false }),
+    ] } };
+    render(<TeamTaskListScreen scope="team" />);
+    const card = button(`Open task ${title}`);
+    expect(StyleSheet.flatten(card.props.style({ pressed: false }))).toMatchObject({ padding: 16, borderRadius: 18, backgroundColor: theme.surface });
+    expect(card.props.accessibilityHint).toBe(`Blocked, High priority, ${owner}, Due Friday, October 30, 2026, 2 of 5 checklist items complete`);
+    const text = card.findAllByType(Text);
+    const titleNode = text.find(node => node.props.children === title)!;
+    const ownerNode = text.find(node => node.props.children === owner)!;
+    expect(titleNode.props.numberOfLines).toBeUndefined();
+    expect(ownerNode.props.numberOfLines).toBeUndefined();
+    expect(StyleSheet.flatten(titleNode.props.style)).toMatchObject({ fontSize: 15, color: theme.ink900, flex: 1 });
+    expect(hasText('Due Oct 30')).toBe(true);
+    expect(text.some(node => React.Children.toArray(node.props.children).join('') === '2/5 complete')).toBe(true);
+    const progress = card.findAllByType(View).find(node => StyleSheet.flatten(node.props.style)?.width === '40%')!;
+    expect(StyleSheet.flatten(progress.props.style).height).toBe(3);
+    const unassigned = button('Open task Unassigned follow-up');
+    expect(unassigned.props.accessibilityHint).toBe('Done, Low priority, Unassigned, No due date');
+    expect(unassigned.findAllByType(Text).some(node => node.props.children === 'No due date')).toBe(true);
+    expect(unassigned.findAllByType(View).some(node => StyleSheet.flatten(node.props.style)?.height === 3)).toBe(false);
+    expect(renderer!.root.findAll(node => node.props.accessibilityRole === 'header' && node.props.accessibilityLabel === 'Blocked, 1 task on this page').length).toBeGreaterThan(0);
+    press('Open task Unassigned follow-up');
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('TeamTaskDetail', { id: 13 });
+    press('Open task filters');
+    const choice = filterChoice('Status filter: Blocked');
+    expect(choice.props.accessibilityRole).toBe('radio');
+    expect(StyleSheet.flatten(choice.props.style({ pressed: false })).minHeight).toBeGreaterThanOrEqual(44);
   });
 
   it('makes empty results refreshable and separates pull feedback from background fetching', async () => {
@@ -853,7 +973,7 @@ describe('Team Task list rendered handlers', () => {
     listQuery = { ...listQuery, data: { ...listQuery.data!, data: [] } };
     render(<TeamTaskListScreen scope="mine" />);
     expect(hasText('No tasks assigned to you')).toBe(true);
-    press('Status filter: Done');
+    press('Open task filters'); press('Status filter: Done'); press('Done filtering tasks');
     expect(hasText('No matching tasks')).toBe(true);
     await tap('Reset filters');
     expect(filters().status).toBe('all');
@@ -886,9 +1006,97 @@ describe('Team Task list rendered handlers', () => {
     expect(renderer!.root.findByType(SectionList).props.refreshing).toBe(false);
   });
 
+  it('labels filtered and previous workflow totals and never fabricates counts while loading', () => {
+    listQuery = { ...listQuery, data: undefined, isLoading: true, isFetching: true };
+    render(<TeamTaskListScreen scope="team" />);
+    expect(renderer!.root.findAllByProps({ accessibilityLabel: 'Open tasks: unavailable' }).length).toBeGreaterThan(0);
+    expect(renderer!.root.findAllByProps({ accessibilityLabel: 'Loading tasks' }).length).toBeGreaterThan(0);
+    listQuery = queryResult({ data: [task()], meta: { counts: { todo: 1, in_progress: 0, blocked: 0, done: 0, total: 1 }, total: 1, page: 1, pages: 1, limit: 100, scope: 'team' } }) as unknown as typeof listQuery;
+    rerender();
+    change('Search tasks', 'supplies'); press('Search');
+    expect(hasText('Search / priority · All statuses')).toBe(true);
+    listQuery = { ...listQuery, isPlaceholderData: true, isFetching: true };
+    rerender();
+    expect(hasText('Previous results')).toBe(true);
+    expect(hasText('Showing the previous results until this page finishes loading.')).toBe(true);
+  });
+
+  it('hides protected cards, counts and creation controls after access is denied and retires filter callbacks', () => {
+    render(<TeamTaskListScreen scope="team" />);
+    press('Open task filters');
+    const select = button('Priority filter: High').props.onPress;
+    listQuery = { ...listQuery, isError: true, error: new ApiError(403, { code: 'forbidden', message: 'No access' }) };
+    rerender();
+    expect(hasText('Check supplies')).toBe(false);
+    expect(button('Create task')).toBeUndefined();
+    expect(renderer!.root.findAllByProps({ testID: 'task-workflow-overview' })).toHaveLength(0);
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(false);
+    expect(button('Open task filters').props.disabled).toBe(true);
+    act(() => select());
+    expect(filters().priority).toBe('all');
+  });
+
+  it('retires sheet callbacks across unit/account/scope changes and across separate presentations', () => {
+    render(<TeamTaskListScreen scope="team" />);
+    press('Open task filters');
+    const oldChoice = button('Priority filter: High').props.onPress;
+    const oldClose = renderer!.root.findByType(BottomSheet).props.onClose;
+    press('Close task filters');
+    finishSheetDismissal();
+    press('Open task filters');
+    act(() => { oldChoice(); oldClose(); });
+    expect(filters().priority).toBe('all');
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(true);
+    const unitChoice = button('Status filter: Done').props.onPress;
+    mockWorkspace.activeUnit = { unit: 'guidance', label: 'Guidance' };
+    rerender();
+    act(() => unitChoice());
+    expect(filters()).toMatchObject({ status: 'all', priority: 'all' });
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(false);
+    finishSheetDismissal();
+    press('Open task filters');
+    const accountChoice = button('Priority filter: High').props.onPress;
+    mockIdentity = { id: 6, tenant_id: 7 };
+    rerender();
+    act(() => accountChoice());
+    expect(filters().priority).toBe('all');
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(false);
+    finishSheetDismissal();
+    press('Open task filters');
+    const scopeChoice = button('Status filter: Blocked').props.onPress;
+    element = <TeamTaskListScreen scope="mine" />;
+    rerender();
+    act(() => scopeChoice());
+    expect(filters()).toEqual({ scope: 'mine', q: '', status: 'all', priority: 'all', page: 1 });
+    expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(false);
+  });
+
+  it('offers unit selection instead of task controls when there is no active unit', () => {
+    mockWorkspace.activeUnit = null;
+    render(<TeamTaskListScreen scope="team" />);
+    expect(hasText('Choose a Team Workspace unit')).toBe(true);
+    expect(renderer!.root.findAllByType(SectionList)).toHaveLength(0);
+    expect(button('Create task')).toBeUndefined();
+    expect(button('Open task filters')).toBeUndefined();
+    expect(renderer!.root.findAllByType(TextInput)).toHaveLength(0);
+    act(() => action('Choose unit').props.onPress());
+    expect(mockWorkspace.openUnitPicker).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows members to create from either list without turning read-only cards into editing controls', () => {
+    listQuery = { ...listQuery, data: { ...listQuery.data!, data: [task({ can_edit: false })] } };
+    render(<TeamTaskListScreen scope="mine" />);
+    expect(renderer!.root.findByType(PageHeader).props.title).toBe('My Tasks');
+    press('Create task');
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('TeamTaskForm', undefined);
+    expect(button('Edit task')).toBeUndefined();
+    press('Open task Check supplies');
+    expect(mockNavigation.navigate).toHaveBeenLastCalledWith('TeamTaskDetail', { id: 12 });
+  });
+
   it('resets local filters when moving between list scopes', () => {
     render(<TeamTaskListScreen scope="team" />);
-    change('Search tasks', 'clinic'); press('Search'); press('Priority filter: High');
+    change('Search tasks', 'clinic'); press('Search'); press('Open task filters'); press('Priority filter: High');
     element = <TeamTaskListScreen scope="mine" />;
     rerender();
     expect(filters()).toEqual({ scope: 'mine', q: '', status: 'all', priority: 'all', page: 1 });

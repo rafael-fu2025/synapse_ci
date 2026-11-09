@@ -80,17 +80,19 @@ export type PushPermission = 'granted' | 'denied' | 'blocked' | 'unavailable';
  *
  * A device that has not been granted the permission is never worth a token.
  */
-export async function requestPushPermission(): Promise<PushPermission> {
+export async function requestPushPermission(isCurrent: () => boolean = () => true): Promise<PushPermission> {
   const permissions = loadPermissionsModule();
-  if (!permissions) {
+  if (!permissions || !isCurrent()) {
     return 'unavailable';
   }
   try {
     const current = await permissions.checkNotifications();
+    if (!isCurrent()) { return 'unavailable'; }
     if (current.status === 'granted' || current.status === 'limited') {
       return 'granted';
     }
     const requested = await permissions.requestNotifications();
+    if (!isCurrent()) { return 'unavailable'; }
     if (requested.status === 'granted' || requested.status === 'limited') {
       return 'granted';
     }

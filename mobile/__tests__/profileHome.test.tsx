@@ -4,6 +4,8 @@ import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { ProfileHomeScreen } from '../src/features/profile/screens/ProfileHomeScreen';
 import { useProfilePhoto } from '../src/features/profile/useProfilePhoto';
 
+jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test', lanTest: false } }));
+jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 jest.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: { entitlements: { staff_queue_units: [] } } }) }));
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: mockNavigate }) }));
 jest.mock('../src/api/endpoints/me', () => ({ me: jest.fn() }));

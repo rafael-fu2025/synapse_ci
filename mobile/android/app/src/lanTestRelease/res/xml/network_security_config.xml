@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <!-- Exact IPs only; Android network-security-config cannot restrict ports.
+         JS selects port 8080 and the native API redirect policy uses exact origins. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">172.16.153.237</domain>
+        <domain includeSubdomains="false">192.168.1.11</domain>
+    </domain-config>
+</network-security-config>

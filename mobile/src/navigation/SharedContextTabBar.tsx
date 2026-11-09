@@ -8,15 +8,16 @@ import type { AppContextMode } from '../features/workspace/WorkspaceContext';
 import { Theme, font, memoizeStyles } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../lib/useReducedMotion';
+import { motion } from '../lib/motion';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { useOverlayActivity } from '../components/OverlayProvider';
+import { CONTEXT_BAR_RAISED_SPACE } from './contextTabBarMetrics';
 import { TAB_TRANSITION_MS } from './useTabMotionOptions';
 
-export const CONTEXT_BAR_TRANSITION_MS = 400;
+export const CONTEXT_BAR_TRANSITION_MS = motion.context.barMs;
 const CTA_SIZE = 56;
 const CTA_RING_SIZE = 64;
 const CTA_SLOT = 76;
-const RAISED_SPACE = 26;
 
 type ContextBindings = Partial<Record<AppContextMode, BottomTabBarProps>>;
 type Props = BottomTabBarProps & { available?: boolean; contextBindings?: ContextBindings };
@@ -35,7 +36,7 @@ export function SharedContextTabBar({ available = true, contextBindings, ...prop
   const window = useWindowDimensions();
   const captionHeight = Math.max(18, Math.ceil(14 * window.fontScale));
   const rowHeight = Math.max(62, 37 + Math.ceil(14 * window.fontScale) * 2,
-    workspace.canSwitchContext ? CTA_RING_SIZE + 2 + captionHeight - RAISED_SPACE + 6 : 0);
+    workspace.canSwitchContext ? CTA_RING_SIZE + 2 + captionHeight - CONTEXT_BAR_RAISED_SPACE + 6 : 0);
   const [layout, setLayout] = useState({ width: window.width, height: rowHeight + 2 + Math.max(6, insets.bottom) });
   const progress = useRef(new Animated.Value(mode === 'workspace' ? 1 : 0)).current;
   const pressedScale = useRef(new Animated.Value(1)).current;
@@ -50,9 +51,9 @@ export function SharedContextTabBar({ available = true, contextBindings, ...prop
   const locked = !available || keyboardVisible || overlayActive || workspace.pendingDiscard || workspace.hasPendingSubmission || workspace.unitPickerVisible;
   const latest = useRef({ mode, locked, reduced, workspace, state, navigation });
   latest.current = { mode, locked, reduced, workspace, state, navigation };
-  const raised = workspace.canSwitchContext ? RAISED_SPACE : 0;
+  const raised = workspace.canSwitchContext ? CONTEXT_BAR_RAISED_SPACE : 0;
   const centerX = (layout.width + insets.left - insets.right) / 2;
-  const originY = CTA_RING_SIZE / 2 - RAISED_SPACE;
+  const originY = CTA_RING_SIZE / 2 - CONTEXT_BAR_RAISED_SPACE;
   const radius = Math.hypot(Math.max(centerX, layout.width - centerX), Math.max(originY, layout.height - originY)) + 1;
   const personalOpacity = progress.interpolate({ inputRange: [0, 0.16, 0.48, 1], outputRange: [1, 1, 0, 0], extrapolate: 'clamp' });
   const workOpacity = progress.interpolate({ inputRange: [0, 0.58, 0.9, 1], outputRange: [0, 0, 1, 1], extrapolate: 'clamp' });
@@ -240,8 +241,7 @@ function createStyles(theme: Theme) {
     centerSlot: { width: CTA_SLOT },
     context: { position: 'absolute', top: 0, width: CTA_SLOT, minHeight: 80, alignItems: 'center' },
     contextRing: { width: CTA_RING_SIZE, height: CTA_RING_SIZE, borderRadius: CTA_RING_SIZE / 2, padding: 4,
-      backgroundColor: theme.canvas, elevation: 8, shadowColor: theme.shadowColor, shadowOpacity: 0.2,
-      shadowRadius: 7, shadowOffset: { width: 0, height: 3 } },
+      backgroundColor: theme.canvas },
     contextDisc: { width: CTA_SIZE, height: CTA_SIZE, borderRadius: CTA_SIZE / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
     personalDisc: { backgroundColor: theme.brand },
     workDisc: { backgroundColor: '#ffffff' },

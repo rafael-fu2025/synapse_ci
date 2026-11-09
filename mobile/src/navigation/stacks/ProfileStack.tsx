@@ -9,12 +9,14 @@ import { RecordsScreen } from '../../features/profile/screens/RecordsScreen';
 import { SettingsScreen } from '../../features/profile/screens/SettingsScreen';
 import { StaffQueueScreen } from '../../features/staff-queue/screens/StaffQueueScreen';
 import { ProfileStackParamList } from '../types';
+import { useNativeStackMotionOptions } from '../useNativeStackMotionOptions';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
 export function ProfileStack() {
+  const motion = useNativeStackMotionOptions();
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={motion}>
       <Stack.Screen name="ProfileHome" component={ProfileHomeScreen} />
       <Stack.Screen name="HealthProfile" component={HealthProfileScreen} />
       <Stack.Screen name="ProfilePhoto" component={ProfilePhotoScreen} />

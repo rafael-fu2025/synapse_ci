@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, findNodeHandle, Platform, Text, TextInput } from 'react-native';
+import { AccessibilityInfo, Animated, findNodeHandle, Platform, Text, TextInput } from 'react-native';
+import { motion, motionEasing, type OverlayTiming } from '../lib/motion';
 import { useReducedMotion } from '../lib/useReducedMotion';
 
 type PresentationPhase = 'idle' | 'presented' | 'dismissing';
@@ -11,10 +12,14 @@ type OverlayPresentation = {
   cycle: number;
   abandoned: boolean;
   onNativeDismiss: () => void;
+  onReady: () => void;
+  settled: boolean;
 };
+type OverlayOptions = { timing?: OverlayTiming; waitForLayout?: boolean };
 type OverlayRequest = {
   id: string;
   visible: boolean;
+  options?: OverlayOptions;
   onDismiss?: () => void;
   render: (presentation: OverlayPresentation) => React.ReactNode;
 };
@@ -122,7 +127,7 @@ function OverlayHost({ entry, complete }: { entry: OverlayEntry; complete: Overl
     // this retained host has rerendered after the requester unmounted.
     if (request && !request.abandoned) { dismissed(); request.onDismiss?.(); }
   }, [complete, dismissed]);
-  const presentation = useOverlayPresentation(entry.visible, finish);
+  const presentation = useOverlayPresentation(entry.visible, finish, entry.options);
   useLayoutEffect(() => { if (presentation.nativeVisible) { capture(); } }, [capture, presentation.nativeVisible]);
   const focusLifecycle = useMemo(() => ({ capture: capture, requestRestore: requestRestore, onDismiss: dismissed }), [capture, dismissed, requestRestore]);
   return presentation.mounted ? (
@@ -137,23 +142,23 @@ export function useOverlayActivity(): boolean {
 }
 
 /** Internal host bridge; standalone components still mount without a provider. */
-export function useOverlayHost(visible: boolean, onDismiss: (() => void) | undefined, render: OverlayRequest['render']): React.ReactNode {
+export function useOverlayHost(visible: boolean, onDismiss: (() => void) | undefined, render: OverlayRequest['render'], options?: OverlayOptions): React.ReactNode {
   const queue = useContext(OverlayRequestsContext);
   const id = useId();
   const upsert = queue?.upsert;
   const abandon = queue?.abandon;
-  const latest = useRef({ visible, onDismiss, render });
-  latest.current = { visible, onDismiss, render };
+  const latest = useRef({ visible, onDismiss, render, options });
+  latest.current = { visible, onDismiss, render, options };
   useLayoutEffect(() => {
     upsert?.({ id, ...latest.current });
   });
   useLayoutEffect(() => () => { abandon?.(id); }, [abandon, id]);
-  return queue ? null : <StandaloneOverlay visible={visible} onDismiss={onDismiss} render={render} />;
+  return queue ? null : <StandaloneOverlay visible={visible} onDismiss={onDismiss} render={render} options={options} />;
 }
 
-function StandaloneOverlay({ visible, onDismiss, render }: Omit<OverlayRequest, 'id'>) {
+function StandaloneOverlay({ visible, onDismiss, render, options }: Omit<OverlayRequest, 'id'>) {
   const { capture, requestRestore, onDismiss: dismissed } = useOverlayFocus(visible, onDismiss);
-  const presentation = useOverlayPresentation(visible, dismissed);
+  const presentation = useOverlayPresentation(visible, dismissed, options);
   useLayoutEffect(() => { if (presentation.nativeVisible) { capture(); } }, [capture, presentation.nativeVisible]);
   const focusLifecycle = useMemo(() => ({ capture: capture, requestRestore: requestRestore, onDismiss: dismissed }), [capture, dismissed, requestRestore]);
   return presentation.mounted ? <OverlayFocusContext.Provider value={focusLifecycle}>{render(presentation)}</OverlayFocusContext.Provider> : null;
@@ -164,8 +169,13 @@ function StandaloneOverlay({ visible, onDismiss, render }: Omit<OverlayRequest, 
  * hide, wait for the native iOS callback (Android: a frame after hidden commit).
  * Cycle tokens reject early, duplicate and stale native/animation completions.
  */
-export function useOverlayPresentation(visible: boolean, onDismiss?: () => void): OverlayPresentation {
+export function useOverlayPresentation(visible: boolean, onDismiss?: () => void, options?: OverlayOptions): OverlayPresentation {
   const [state, setState] = useState<PresentationState>({ phase: 'idle', token: 0 });
+  const [readyToken, setReadyToken] = useState(0);
+  const [settledToken, setSettledToken] = useState(0);
+  const enterMs = options?.timing?.enterMs ?? motion.sheet.enterMs;
+  const exitMs = options?.timing?.exitMs ?? motion.sheet.exitMs;
+  const waitForLayout = options?.waitForLayout === true;
   const stateRef = useRef(state);
   const progress = useRef(new Animated.Value(0)).current;
   const reduced = useReducedMotion();
@@ -199,29 +209,35 @@ export function useOverlayPresentation(visible: boolean, onDismiss?: () => void)
     latest.current.onDismiss?.();
   }, [transition]);
   const onNativeDismiss = useCallback(() => finish(state.token), [finish, state.token]);
+  const onReady = useCallback(() => {
+    if (alive.current && stateRef.current.phase === 'presented' && stateRef.current.token === state.token) { setReadyToken(state.token); }
+  }, [state.token]);
   useEffect(() => {
-    if (state.phase !== 'presented') { return undefined; }
+    if (state.phase !== 'presented' || (visible && waitForLayout && readyToken !== state.token && !reduced)) { return undefined; }
     const animationRevision = ++revision.current;
+    setSettledToken(0);
     progress.stopAnimation();
     const done = ({ finished }: { finished: boolean }) => {
-      if (!finished || !alive.current || revision.current !== animationRevision || stateRef.current.phase !== 'presented' || stateRef.current.token !== state.token || latest.current.visible) { return; }
-      transition({ phase: 'dismissing', token: state.token });
+      if (!finished || !alive.current || revision.current !== animationRevision || stateRef.current.phase !== 'presented' || stateRef.current.token !== state.token) { return; }
+      if (latest.current.visible) { setSettledToken(state.token); }
+      else { transition({ phase: 'dismissing', token: state.token }); }
     };
     if (reduced) {
       progress.setValue(visible ? 1 : 0);
       done({ finished: true });
       return () => { revision.current += 1; };
     }
-    const animation = Animated.timing(progress, { toValue: visible ? 1 : 0, duration: visible ? 240 : 180, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    const animation = Animated.timing(progress, { toValue: visible ? 1 : 0, duration: visible ? enterMs : exitMs, easing: motionEasing, useNativeDriver: true, isInteraction: false });
     animation.start(done);
     return () => { revision.current += 1; animation.stop(); };
-  }, [progress, reduced, state.phase, state.token, transition, visible]);
+  }, [enterMs, exitMs, progress, readyToken, reduced, state.phase, state.token, transition, visible, waitForLayout]);
   useEffect(() => {
     if (state.phase !== 'dismissing' || Platform.OS === 'ios') { return undefined; }
     const frame = requestAnimationFrame(() => finish(state.token));
     return () => cancelAnimationFrame(frame);
   }, [finish, state.phase, state.token]);
-  return { mounted: state.phase !== 'idle', nativeVisible: state.phase === 'presented', progress, cycle: state.token, abandoned: false, onNativeDismiss };
+  return { mounted: state.phase !== 'idle', nativeVisible: state.phase === 'presented', progress, cycle: state.token, abandoned: false, onNativeDismiss, onReady,
+    settled: visible && state.phase === 'presented' && (reduced || settledToken === state.token) };
 }
 
 /**

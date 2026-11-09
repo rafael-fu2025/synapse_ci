@@ -1,4 +1,4 @@
-import { request } from '../client';
+import { bindApiClient, request, type ApiBinding } from '../client';
 
 export interface Appointment {
   id: number;
@@ -28,21 +28,21 @@ export interface BookingInput {
   reason?: string;
 }
 
-export function list(filters: AppointmentFilters): Promise<{ data: Appointment[] }> {
+export function list(filters: AppointmentFilters, binding?: ApiBinding): Promise<{ data: Appointment[] }> {
   const params = new URLSearchParams({ service: filters.service, status: filters.status, sort: filters.sort });
-  return request<{ data: Appointment[] }>(`api/v1/appointments?${params.toString()}`);
+  return (binding ? bindApiClient(binding).request : request)<{ data: Appointment[] }>(`api/v1/appointments?${params.toString()}`);
 }
 
-export function detail(id: number): Promise<{ data: Appointment }> {
-  return request<{ data: Appointment }>(`api/v1/appointments/${id}`);
+export function detail(id: number, binding?: ApiBinding): Promise<{ data: Appointment }> {
+  return (binding ? bindApiClient(binding).request : request)<{ data: Appointment }>(`api/v1/appointments/${id}`);
 }
 
-export function create(input: BookingInput): Promise<{ data: Appointment }> {
-  return request<{ data: Appointment }>('api/v1/appointments', { method: 'POST', body: input });
+export function create(input: BookingInput, binding?: ApiBinding): Promise<{ data: Appointment }> {
+  return (binding ? bindApiClient(binding).request : request)<{ data: Appointment }>('api/v1/appointments', { method: 'POST', body: input });
 }
 
-export function cancel(id: number, reason: string): Promise<void> {
-  return request<void>(`api/v1/appointments/${id}/cancel`, { method: 'POST', body: { reason } });
+export function cancel(id: number, reason: string, binding?: ApiBinding): Promise<void> {
+  return (binding ? bindApiClient(binding).request : request)<void>(`api/v1/appointments/${id}/cancel`, { method: 'POST', body: { reason } });
 }
 
 export const CLINIC_TYPES = ['routine', 'follow_up', 'referral_based'] as const;

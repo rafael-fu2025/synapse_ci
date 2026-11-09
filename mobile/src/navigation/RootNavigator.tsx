@@ -26,12 +26,14 @@ import { AccountStack } from './stacks/AccountStack';
 import { WorkspaceNotice } from '../features/workspace/WorkspaceNotice';
 import { queueNavigationIntent, takePendingNavigationIntent } from '../features/workspace/navigationIntent';
 import { RootStackParamList } from './types';
+import { useNativeStackMotionOptions } from './useNativeStackMotionOptions';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 /** Root gate: splash while restoring, sign-in when unauthenticated, the app when signed in. */
 export function RootNavigator() {
   const { theme } = useTheme();
+  const motion = useNativeStackMotionOptions();
   const { status, profile } = useAuth();
   const personalEnabled = profile?.entitlements.personal.enabled === true;
   const network = useNetInfo();
@@ -78,7 +80,7 @@ export function RootNavigator() {
           {offline ? <OfflineBanner /> : null}
           <PushBanner />
           <WorkspaceNotice />
-          <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Navigator screenOptions={motion}>
             <Stack.Screen name="AppTabs" component={ContextTabs} />
             {personalEnabled ? (
               <Stack.Group navigationKey="personal">

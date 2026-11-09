@@ -7,13 +7,13 @@ import { ProfileStack } from './stacks/ProfileStack';
 import { QueueStack } from './stacks/QueueStack';
 import { VisitsStack } from './stacks/VisitsStack';
 import { ContextTabBarBinding } from './ContextTabBarBinding';
-import { useTabMotionOptions } from './useTabMotionOptions';
+import { usePeerTabMotionOptions } from './useTabMotionOptions';
 
 const Tab = createBottomTabNavigator<PersonalTabsParamList>();
 const ICONS = { Home, Visits: CalendarDays, Queue: ListChecks, Profile: UserRound } as const;
 
 export function PersonalTabs() {
-  const motion = useTabMotionOptions();
+  const motion = usePeerTabMotionOptions();
   return (
     <Tab.Navigator
       tabBar={(props) => <ContextTabBarBinding mode="personal" {...props} />}

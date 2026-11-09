@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, BackHandler, FlatList, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
+import { AccessibilityInfo, Alert, BackHandler, FlatList, ScrollView, StyleSheet, Text, TextInput } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { usePreventRemove } from '@react-navigation/native';
 import type { SurveyForm, SurveyListItem, SurveyQuestion } from '../src/api/endpoints/surveys';
@@ -48,14 +48,14 @@ function question(type: SurveyQuestion['type'], label = 'Question', required = t
   return { type, label, required, options: type === 'single' || type === 'multiple' ? ['First', 'Second'] : [] };
 }
 
-function renderForm(questions = [question('text')], submitted = false) {
+async function renderForm(questions = [question('text')], submitted = false) {
   formQuery.data!.data.questions = questions;
   formQuery.data!.data.submitted = submitted;
-  act(() => { renderer = create(<SurveyFormScreen />); });
+  await act(async () => { renderer = create(<SurveyFormScreen />); });
 }
 
-function renderList() {
-  act(() => { renderer = create(<SurveysScreen />); });
+async function renderList() {
+  await act(async () => { renderer = create(<SurveysScreen />); });
 }
 
 function refreshForm() {
@@ -100,6 +100,7 @@ function attemptRemoval() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
   mutateAsync.mockReset().mockResolvedValue({ data: { response_id: 42 } });
   refetch.mockReset().mockResolvedValue(undefined);
   formQuery = { data: { data: {
@@ -133,7 +134,7 @@ describe('SurveyFormScreen', () => {
   ])('offers retry instead of claiming the survey is missing for %p', async error => {
     const loadedData = formQuery.data;
     formQuery = { isLoading: false, error, isFetching: false, refetch };
-    act(() => { renderer = create(<SurveyFormScreen />); });
+    await act(async () => { renderer = create(<SurveyFormScreen />); });
     expect(hasText('The survey could not be loaded. Please try again.')).toBe(true);
     expect(hasText('This survey is no longer available.')).toBe(false);
     expect(guard()[0]).toBe(false);
@@ -150,9 +151,9 @@ describe('SurveyFormScreen', () => {
     expect(hasText('The survey could not be loaded. Please try again.')).toBe(false);
   });
 
-  it('shows the unavailable message only for an API 404 and keeps the back header', () => {
+  it('shows the unavailable message only for an API 404 and keeps the back header', async () => {
     formQuery = { isLoading: false, error: new ApiError(404, { code: 'not_found', message: 'Survey not found.' }), refetch };
-    act(() => { renderer = create(<SurveyFormScreen />); });
+    await act(async () => { renderer = create(<SurveyFormScreen />); });
     expect(hasText('This survey is no longer available.')).toBe(true);
     expect(hasText('The survey could not be loaded. Please try again.')).toBe(false);
     expect(action('Retry')).toBeUndefined();
@@ -165,7 +166,7 @@ describe('SurveyFormScreen', () => {
   it('scrolls long question content while keeping the header and navigation controls outside the scroll area', async () => {
     const label = 'A detailed question about your experience. '.repeat(8);
     const options = Array.from({ length: 10 }, (_, index) => `${index}: ${'Detailed option text. '.repeat(5)}`);
-    renderForm([{ ...question('single', label), options }, question('text', 'Tell us more')]);
+    await renderForm([{ ...question('single', label), options }, question('text', 'Tell us more')]);
     tap('Start survey');
     const content = renderer!.root.findByType(ScrollView);
     expect(StyleSheet.flatten(content.props.style).flex).toBe(1);
@@ -189,7 +190,7 @@ describe('SurveyFormScreen', () => {
   });
 
   it.each(['', ' \n\t '])('does not count or submit blank required text %p on the final question', async value => {
-    renderForm();
+    await renderForm();
     tap('Start survey');
     input(value);
     const submit = renderer!.root.findAllByType(Action).at(-1)!;
@@ -200,7 +201,7 @@ describe('SurveyFormScreen', () => {
   });
 
   it('validates all questions on submit and returns to an earlier missing required answer', async () => {
-    renderForm([question('text', 'Earlier feedback', false), question('single', 'Choose')]);
+    await renderForm([question('text', 'Earlier feedback', false), question('single', 'Choose')]);
     tap('Start survey');
     tap('Continue');
     act(() => choice(0).props.onPress());
@@ -214,7 +215,7 @@ describe('SurveyFormScreen', () => {
   });
 
   it('rejects whitespace on Continue and empty multiple selections on Submit; accepts option zero', async () => {
-    renderForm([question('text', 'Feedback'), question('multiple', 'Choose')]);
+    await renderForm([question('text', 'Feedback'), question('multiple', 'Choose')]);
     tap('Start survey');
     input(' \t ');
     tap('Continue');
@@ -234,7 +235,7 @@ describe('SurveyFormScreen', () => {
   });
 
   it('accepts single option index zero and sends optional blanks as null', async () => {
-    renderForm([question('single'), question('text', 'Optional', false)]);
+    await renderForm([question('single'), question('text', 'Optional', false)]);
     tap('Start survey');
     act(() => choice(0).props.onPress());
     tap('Continue');
@@ -246,7 +247,7 @@ describe('SurveyFormScreen', () => {
   it('blocks same-tick duplicate submission, edits, and back while pending, then releases removal after success', async () => {
     let resolve!: (value: unknown) => void;
     mutateAsync.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-    renderForm();
+    await renderForm();
     expect(guard()[0]).toBe(false);
     tap('Start survey');
     input('Original answer');
@@ -279,7 +280,7 @@ describe('SurveyFormScreen', () => {
   it.each(['single', 'multiple', 'rating'] as const)('locks %s choices during submission, including old handlers', async type => {
     let resolve!: (value: unknown) => void;
     mutateAsync.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
-    renderForm([question(type)]);
+    await renderForm([question(type)]);
     tap('Start survey');
     act(() => choice(0).props.onPress());
     const oldEdit = choice(1).props.onPress;
@@ -294,7 +295,7 @@ describe('SurveyFormScreen', () => {
   });
 
   it('keeps the local success view before submitted, loading, and missing-data refetch branches', async () => {
-    renderForm();
+    await renderForm();
     tap('Start survey');
     input('An answer');
     await act(async () => renderer!.root.findAllByType(Action).at(-1)!.props.onPress());
@@ -314,16 +315,16 @@ describe('SurveyFormScreen', () => {
     expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
   });
 
-  it('prioritizes mutation success over an already-submitted refetch even before the local receipt is set', () => {
+  it('prioritizes mutation success over an already-submitted refetch even before the local receipt is set', async () => {
     mutation.isSuccess = true;
-    renderForm(undefined, true);
+    await renderForm(undefined, true);
     expect(hasText('Response recorded')).toBe(true);
     expect(hasText('Already submitted')).toBe(false);
     expect(guard()[0]).toBe(false);
   });
 
-  it('allows already-submitted surveys to leave without a draft guard', () => {
-    renderForm(undefined, true);
+  it('allows already-submitted surveys to leave without a draft guard', async () => {
+    await renderForm(undefined, true);
     expect(hasText('Already submitted')).toBe(true);
     expect(guard()[0]).toBe(false);
     expect(hardwareBack()).toBe(false);
@@ -331,8 +332,8 @@ describe('SurveyFormScreen', () => {
     expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
   });
 
-  it('uses header and hardware back for previous questions/intro and preserves the draft on resume', () => {
-    renderForm([question('text', 'First question'), question('text', 'Second question')]);
+  it('uses header and hardware back for previous questions/intro and preserves the draft on resume', async () => {
+    await renderForm([question('text', 'First question'), question('text', 'Second question')]);
     tap('Start survey');
     input('Kept answer');
     tap('Continue');
@@ -358,8 +359,8 @@ describe('SurveyFormScreen', () => {
     expect(mockNavigation.dispatch).toHaveBeenCalledWith({ type: 'GO_BACK' });
   });
 
-  it('confirms leaving even an unanswered started draft, but not an untouched intro', () => {
-    renderForm();
+  it('confirms leaving even an unanswered started draft, but not an untouched intro', async () => {
+    await renderForm();
     expect(guard()[0]).toBe(false);
     expect(hardwareBack()).toBe(false);
     tap('Start survey');
@@ -372,7 +373,7 @@ describe('SurveyFormScreen', () => {
 
   it('preserves answers after failure, unlocks editing, and allows a new submission', async () => {
     mutateAsync.mockRejectedValueOnce(new Error('Offline'));
-    renderForm();
+    await renderForm();
     tap('Start survey');
     input('Retry me');
     await act(async () => renderer!.root.findAllByType(Action).at(-1)!.props.onPress());
@@ -394,9 +395,9 @@ describe('SurveysScreen', () => {
     ends_at: null, published_at: null, status: 'published', submitted: false, closed: false,
   };
 
-  it('shows a real empty placeholder only after a successful empty response', () => {
+  it('shows a real empty placeholder only after a successful empty response', async () => {
     listQuery.data = { data: [], counts: { all: 0, available: 0, submitted: 0, closed: 0 } };
-    renderList();
+    await renderList();
     expect(hasText('No surveys yet')).toBe(true);
     expect(hasText('Could not load surveys')).toBe(false);
     expect(action('Retry')).toBeUndefined();
@@ -404,17 +405,17 @@ describe('SurveysScreen', () => {
 
   it('shows fetch errors rather than an empty placeholder and supports retry', async () => {
     listQuery.isError = true;
-    renderList();
+    await renderList();
     expect(hasText('Could not load surveys')).toBe(true);
     expect(hasText('No surveys yet')).toBe(false);
     await act(async () => action('Retry').props.onPress());
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps cached cards visible on refresh failure with retry and uses only supported metadata', () => {
+  it('keeps cached cards visible on refresh failure with retry and uses only supported metadata', async () => {
     listQuery.isError = true;
     listQuery.data = { data: [item], counts: { all: 1, available: 1, submitted: 0, closed: 0 } };
-    renderList();
+    await renderList();
     expect(hasText('Could not refresh surveys. Showing the last loaded results.')).toBe(true);
     expect(hasText('Campus care')).toBe(true);
     expect(hasText('Identified response')).toBe(true);
@@ -426,9 +427,9 @@ describe('SurveysScreen', () => {
     expect(hasText('Optional')).toBe(false);
   });
 
-  it('distinguishes an empty filter from no surveys and lets the user reset it', () => {
+  it('distinguishes an empty filter from no surveys and lets the user reset it', async () => {
     listQuery.data = { data: [], counts: { all: 2, available: 0, submitted: 2, closed: 0 } };
-    renderList();
+    await renderList();
     act(() => renderer!.root.findAll(node => typeof node.props.onPress === 'function').find(node =>
       node.findAllByType(Text).some(text => text.props.children === 'Available'))!.props.onPress());
     expect(hasText('No available surveys')).toBe(true);
@@ -437,9 +438,9 @@ describe('SurveysScreen', () => {
     expect(jest.mocked(useSurveys)).toHaveBeenLastCalledWith({ status: 'all' });
   });
 
-  it('does not make submitted or closed surveys actionable', () => {
+  it('does not make submitted or closed surveys actionable', async () => {
     listQuery.data = { data: [{ ...item, submitted: true }, { ...item, id: 8, closed: true }], counts: { all: 2, available: 0, submitted: 1, closed: 1 } };
-    renderList();
+    await renderList();
     expect(hasText('You already submitted this survey.')).toBe(true);
     expect(hasText('This survey has closed.')).toBe(true);
     expect(renderer!.root.findAllByProps({ accessibilityLabel: 'Start survey: Campus care' })).toHaveLength(0);

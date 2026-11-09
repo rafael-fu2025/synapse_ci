@@ -16,8 +16,17 @@
 -keep class com.humus.synapse.MainActivity { *; }
 -keep class com.humus.synapse.MainApplication { *; }
 
-# react-native-config resolves its values through generated BuildConfig fields.
+# react-native-config resolves the app namespace BuildConfig through reflection.
+-keep class com.humus.synapse.BuildConfig { public static <fields>; }
 -keep class com.lugg.** { *; }
+
+# Preserve exact class definitions for the optimized release APK packaging gate,
+# while allowing method optimization rather than keeping the entire app package.
+-keep,allowoptimization class com.humus.synapse.WindowRefreshRatePolicy { *; }
+-keep,allowoptimization class com.humus.synapse.SupportedRefreshRatePolicy { *; }
+-keep,allowoptimization class com.humus.synapse.SupportedRefreshRatePolicy$Mode { *; }
+-keep,allowoptimization class com.humus.synapse.LanTestOkHttpClientFactory { *; }
+-keep,allowoptimization class com.humus.synapse.LanApiRedirectInterceptor { *; }
 
 # WorkManager and the notification machinery reach these by name.
 -keep class androidx.work.** { *; }

@@ -1,12 +1,18 @@
 import { summary } from '../src/api/endpoints/staffQueue';
-import { request } from '../src/api/client';
+import { bindApiClient, request } from '../src/api/client';
 import { useStaffQueueSummary } from '../src/features/staff-queue/hooks';
 import { useQuery } from '@tanstack/react-query';
 import { useRealtimePoll } from '../src/lib/useRealtimePoll';
-jest.mock('../src/api/client', () => ({ request: jest.fn() }));
+jest.mock('../src/api/client', () => ({ request: jest.fn(), bindApiClient: jest.fn() }));
+jest.mock('../src/api/runtime', () => ({ useApiClient: () => mockClient, bindApiQueryResult: (_client: unknown, result: unknown) => result }));
+const mockClient = { request: jest.fn() };
 jest.mock('@tanstack/react-query', () => ({ useQuery: jest.fn() }));
 jest.mock('../src/lib/useRealtimePoll', () => ({ useRealtimePoll: jest.fn(() => 15000) }));
-beforeEach(() => { jest.clearAllMocks(); });
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockClient.request.mockImplementation(request);
+  jest.mocked(bindApiClient).mockReturnValue(mockClient as unknown as ReturnType<typeof bindApiClient>);
+});
 
 it('requests the read-only all-authorized projection without a unit filter', async () => {
   const response = { data: [], meta: { date: '2026-11-05', generated_at: '2026-11-05T10:00:00Z' } };

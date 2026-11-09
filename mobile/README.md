@@ -78,15 +78,25 @@ While signed in, foreground, and online, the app holds one extra socket on the s
 private channel via the bearer-authenticated `GET api/v1/realtime/grant` (same Workerman worker,
 same first-frame ticket rule; see [MOBILE_API.md](../docs/MOBILE_API.md#private-mobile-realtime-grant)).
 Payload-free hints refresh the React Query caches: `notifications.changed` (bell inbox),
-`portal.queue.changed` (personal queue card), `portal.appointments.changed` (visits lists/detail),
-and `queue.invalidated` (staff queue board for the named unit). Hints never carry content — the
-socket says "stale", the HTTP refetch says "what". **Polling is the default; a healthy authenticated
-WebSocket takes priority.** Queue/staff queue (15s), notifications (30s), Tasks/Calendar (30s), and
-latest Chat (5s) stop their short polling timers only after the server's authenticated `ready` frame.
+`portal.queue.changed` (personal queue card **and linked appointment lists/detail**),
+`portal.appointments.changed` (visits lists/detail), and `queue.invalidated` (staff queue board for
+the named unit). Hints never carry content — the socket says "stale", the HTTP refetch says "what".
+Independent query reads do not wait behind a slow inbox or another unrelated query; overlapping
+hints coalesce per concrete query, with one trailing read if a hint overlaps an older HTTP read.
+
+**Polling is the default; a healthy authenticated WebSocket takes priority.** Queue, appointments
+and staff queue (15s), notifications (30s), Tasks/Calendar (30s), and latest Chat (5s) stop their short
+fallback timers only after the server's authenticated `ready` frame. One narrow exception is a
+visible **waiting** personal ticket: its position/ETA still reconciles every 15s, because another
+patient moving through the queue does not send this user a personal hint. This is not a department
+subscription and never exposes peer records. Queue and appointment observers pause when their
+screen is covered, blurred, backgrounded, or offline.
+
 An enabled grant or an open-but-not-authenticated socket is not sufficient. Disconnect, heartbeat
 timeout, ticket renewal, offline/background and sign-out release readiness; eligible fallback timers
 resume without an automatic mutation replay. Query eligibility remains separate, so socket hints,
-manual refresh, and initial HTTP reads keep working while polling is paused.
+manual refresh, and initial HTTP reads keep working while polling is paused. A 2–5-second visible
+delay is not a configured queue timer: the authoritative HTTP read and server work still take time.
 
 The 120-second HTTP reconciliation stays active even on a healthy connection, including staff queue
 snapshots: server fanout is bounded, so a connected socket can still miss a hint. Chat keeps its
@@ -145,11 +155,13 @@ There is no automated distribution pipeline yet: builds are produced locally and
 
 ## Team Workspace interaction parity
 
-Production uses `ContextTabs`, with independent Personal and Team navigation histories. Both use
-240 ms opaque cubic-out **scene** transitions and live Reduce Motion. A single stationary navigation
-bar sits outside those scenes, with a raised circular center CTA and a coordinated 400 ms maroon
-reveal for Work/reverse reveal for Personal. The guarded action is not a fake tab; disabled Work
-features are omitted and changing units clears the old unit's navigator.
+Production uses `ContextTabs`, with independent Personal and Team navigation histories. Context
+changes retain 240 ms opaque cubic-out **scene** transitions; peer tabs use a 160 ms native opacity
+fade and mount on first visit, retaining visited state. Native-stack screens keep platform transitions
+unless live Reduce Motion disables them. A single stationary navigation bar sits outside those
+scenes, with a raised, shadow-free circular center CTA and a coordinated 400 ms maroon reveal for
+Work/reverse reveal for Personal. The guarded action is not a fake tab; disabled Work features are
+omitted and changing units clears the old unit's navigator.
 
 Tasks, Calendar, Chat and their pickers reuse shared controls and retained serialized native sheets
 and dialogs. Drafts stay in memory, Keep editing preserves them, and accepted discard resets them
@@ -163,6 +175,38 @@ The detailed screen/action checklist and **current-pass** evidence/remaining nat
 Passing Jest or `assembleDebug` is not proof of Android keyboard geometry, iOS modal dismissal,
 screen-reader focus, or production animation frame rate. Use an explicitly selected native target;
 do not replace an installed app/account or perform server writes merely for visual testing.
+
+## Motion and performance acceptance
+
+`src/lib/motion.ts` holds the product presets: sheets enter/exit at 240/180 ms, dialogs
+at 180/140 ms with a 0.97-to-1 scale, action content scales to 0.98 at 80/120 ms, and the
+chat down-arrow fades over 120 ms. All decorative motion uses native-driver transforms/opacity;
+button hit targets stay stationary and activation never waits for an animation.
+
+Sheets measure their outer surface before entry, keep travel stable during entry/exit, and
+continue dismissal from a dragged offset. Rejected closes settle back and unlock another attempt.
+The shared queue still retains each outgoing native Modal until actual dismissal. Handle movement
+uses PanResponder on the JS thread; this pass does not claim UI-thread gesture independence.
+
+Task cards retain stable render props during draft search changes, and queue/appointment reads
+respect focus, foreground/connectivity and overlay eligibility. Lists do not replay entrance
+animations on polling/refresh. Ordinary Chat entry and navigation re-entry request the latest
+window at the bottom; explicit message targets still take priority. While staying in chat, a
+reader who scrolls upward keeps their position. Bottom-follow intent keeps the newest message
+above keyboard/composer resizes and incoming messages only while already following latest.
+Read markers, grouped-message identity, drafts and layout-gated explicit return-to-latest remain
+intact. Appointment Details shares chat's raised-CTA clearance without changing ordinary accounts.
+
+The reported transient outlines during normal tab changes remain a physical-release visual
+acceptance item. The current peer fade and independent context/CTA animation are unchanged;
+there is no speculative global shadow, border or hardware-layer workaround.
+
+Native acceptance must use a release/profileable build on physical hardware. Compare cold and warm
+tab/context transitions, rapid reversals, sheet dragging and rejected dismissal, keyboard-to-sheet
+handoffs, and populated lists during updates. Trace frame deadlines at the active display rate
+(about 16.7/11.1/8.3 ms at 60/90/120 Hz), p95/p99 work, missed-frame clusters, input latency and
+retained memory. Use Android Studio System Trace/Perfetto and iOS Instruments. Debug FPS counters
+and passing Jest/bundle compilation do not establish sustained FPS or zero jank.
 
 ## Checks and references
 
@@ -189,4 +233,4 @@ instrumentation slows the fake-timer suites enough to time them out.
 
 Device push needs the per-machine Firebase project files, which are never committed. `android/app/google-services.json` is picked up by the Google Services Gradle plugin whenever it is present, and `ios/SynapseMobile/GoogleService-Info.plist` must be given Target Membership of the `SynapseMobile` target in Xcode so it is copied into the app bundle. Without either file the app still builds and runs, reporting push as unavailable. iOS push additionally needs a physical device and an APNs key uploaded to the Firebase console.
 
-See [architecture and troubleshooting](../docs/MOBILE.md), [API contract](../docs/MOBILE_API.md), and the [React Native environment setup](https://reactnative.dev/docs/set-up-your-environment). `mobileScreenReference/` is design reference only, excluded from Metro, TypeScript, and ESLint.
+See [architecture and troubleshooting](../docs/MOBILE.md), [API contract](../docs/MOBILE_API.md), the [LAN Test build and two-server setup](../docs/MOBILE_LAN_TEST.md), and the [React Native environment setup](https://reactnative.dev/docs/set-up-your-environment). `mobileScreenReference/` is design reference only, excluded from Metro, TypeScript, and ESLint.

@@ -20,6 +20,9 @@ final class Push extends BaseConfig
     /** Firebase project that owns the messaging service account. */
     public string $projectId = '';
 
+    /** Explicit, stable deployment identity for LAN-scoped push; never inferred from a request host. */
+    public string $deploymentId = '';
+
     /** Absolute path to the service account JSON key. Never served to a client. */
     public string $serviceAccountPath = '';
 
@@ -38,6 +41,7 @@ final class Push extends BaseConfig
         // The environment uses dotted snake_case keys; the properties are camelCase.
         foreach ([
             'project_id' => 'projectId',
+            'deployment_id' => 'deploymentId',
             'service_account_path' => 'serviceAccountPath',
             'token_scope' => 'tokenScope',
         ] as $key => $property) {
@@ -58,6 +62,12 @@ final class Push extends BaseConfig
         if (is_numeric($max)) {
             $this->maxActiveTokens = max(1, (int) $max);
         }
+    }
+
+    /** A scope is an opaque deployment name, not a URL, hostname discovery mechanism, or credential. */
+    public function hasDeploymentId(): bool
+    {
+        return preg_match('/\A[A-Za-z0-9][A-Za-z0-9._-]{7,127}\z/D', $this->deploymentId) === 1;
     }
 
     /** Push cannot be attempted without a project and a service account key. */

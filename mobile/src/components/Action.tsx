@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { usePressFeedback } from '../lib/usePressFeedback';
 import { useTheme } from '../theme/ThemeProvider';
 import { elevation, spacing, type } from '../theme/tokens';
 
@@ -33,10 +34,13 @@ export function Action({
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const isDisabled = disabled || loading || onPress === undefined;
+  const feedback = usePressFeedback(isDisabled);
 
   return (
     <Pressable
       onPress={isDisabled ? undefined : onPress}
+      onPressIn={feedback.onPressIn}
+      onPressOut={feedback.onPressOut}
       disabled={isDisabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
@@ -51,10 +55,10 @@ export function Action({
         isDisabled && styles.disabled,
         style,
       ]}>
-      <View style={[styles.content, loading && styles.hidden]} pointerEvents="none">
+      <Animated.View style={[styles.content, { transform: [{ scale: feedback.scale }] }, loading && styles.hidden]} pointerEvents="none">
         {icon}
         <Text style={[styles.label, styles[`${variant}Label` as const] as object]}>{children}</Text>
-      </View>
+      </Animated.View>
       {loading ? (
         <View style={styles.spinner} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <ActivityIndicator size="small" color={variant === 'primary' || variant === 'danger' ? '#ffffff' : theme.brandIcon} />
@@ -81,7 +85,7 @@ function makeStyles(theme: ReturnType<typeof useTheme>['theme']) {
     hidden: { opacity: 0 },
     spinner: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
     full: { width: '100%' as const },
-    pressed: { opacity: 0.75, transform: [{ translateY: -0.5 }] },
+    pressed: { opacity: 0.75 },
     disabled: { opacity: 0.5 },
     primary: { backgroundColor: theme.brand, ...elevation.sm },
     secondary: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.mode === 'dark' ? theme.line : '#f0d5d5' },

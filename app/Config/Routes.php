@@ -82,6 +82,8 @@ $routes->group('api/v1', static function (RouteCollection $routes): void {
         $routes->post('notifications/read-all', 'Api\V1\NotificationsApiController::readAll');
         $routes->post('notifications/(:num)/read', 'Api\V1\NotificationsApiController::read/$1');
 
+        // Discover the scoped push contract before submitting a LAN device token.
+        $routes->get('push/capabilities', 'Api\V1\PushController::capabilities');
         // Device token registration for push delivery. The token is never returned.
         $routes->post('push/token', 'Api\V1\PushController::register');
         $routes->delete('push/token', 'Api\V1\PushController::revoke');

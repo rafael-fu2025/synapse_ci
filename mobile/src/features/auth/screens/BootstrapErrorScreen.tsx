@@ -5,6 +5,7 @@ import { Screen } from '../../../components/Screen';
 import { useAuth } from '../../../store/auth';
 import { Theme, memoizeStyles, type } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
+import { ServerConnectionControl } from '../../connection/ServerConnectionControl';
 
 /** Safe holding screen when credentials exist but authoritative /me is unavailable. */
 export function BootstrapErrorScreen() {
@@ -19,6 +20,7 @@ export function BootstrapErrorScreen() {
         <Text style={styles.body}>
           Your secure session is still available, but your account and access could not be verified. Retry when the connection is available.
         </Text>
+        <ServerConnectionControl requiresSignIn />
         <Action full onPress={() => { retryBootstrap().catch(() => undefined); }}>Retry</Action>
         <Action full variant="secondary" onPress={() => { signOut().catch(() => undefined); }}>Sign out</Action>
       </View>

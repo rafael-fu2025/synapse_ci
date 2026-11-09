@@ -8,11 +8,7 @@ export class ApiError extends Error {
   readonly fields: Record<string, string[]>;
   readonly retryAfterSeconds: number | null;
 
-  constructor(
-    status: number,
-    body: ErrorBody,
-    retryAfterSeconds: number | null = null,
-  ) {
+  constructor(status: number, body: ErrorBody, retryAfterSeconds: number | null = null) {
     super(body.message);
     this.status = status;
     this.code = body.code;
@@ -22,311 +18,431 @@ export class ApiError extends Error {
 }
 
 export class NetworkError extends Error {
-  constructor(
-    message = 'Cannot reach the server. Check your connection and try again.',
-  ) {
+  constructor(message = 'Cannot reach the server. Check your connection and try again.') {
     super(message);
   }
 }
 
-/** An in-flight response belongs to a session that has already ended. */
+/** Work captured by an environment/account that has already ended. */
 export class SessionChangedError extends Error {
   constructor() {
     super('This session has ended. Please sign in again.');
   }
 }
 
+export interface ApiRuntime {
+  readonly id: number;
+  readonly apiBaseUrl: string;
+  readonly profileId: 'university' | 'home' | null;
+  readonly credentialBinding: string | null;
+  readonly lanTest: boolean;
+  readonly active: boolean;
+  /** Changes at account boundaries, not during access-token rotation. */
+  readonly sessionVersion: number;
+}
+
+export interface ApiRuntimeOptions {
+  apiBaseUrl: string;
+  profileId?: ApiRuntime['profileId'];
+  credentialBinding?: string | null;
+  lanTest?: boolean;
+}
+
+export interface ApiSession {
+  readonly runtime: ApiRuntime;
+  readonly sessionVersion: number;
+}
+
+export interface RequestOptions {
+  method?: 'GET' | 'POST' | 'DELETE';
+  body?: unknown;
+  /** false for the auth endpoints themselves. They still obey runtime/account boundaries. */
+  authenticated?: boolean;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+export interface ApiClient extends ApiSession {
+  assertCurrent(): void;
+  isCurrent(): boolean;
+  request<T>(path: string, options?: RequestOptions): Promise<T>;
+  authorizedFetch(path: string, init: RequestInit): Promise<Response>;
+  /** Guard asynchronous body/image decoding through its final result as well. */
+  run<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs?: number): Promise<T>;
+}
+
+export type ApiBinding = ApiRuntime | ApiClient;
+
+type RuntimeState = {
+  phase: 'created' | 'active' | 'retired';
+  accessToken: string | null;
+  sessionVersion: number;
+  refreshInFlight: Promise<boolean> | null;
+  sessionExpiredHandler: (() => void) | null;
+  requests: Set<AbortController>;
+};
+
+const TIMEOUT_READ_MS = 10_000;
+const TIMEOUT_MUTATION_MS = 45_000;
+const TIMEOUT_CLEANUP_MS = 5_000;
+const states = new WeakMap<ApiRuntime, RuntimeState>();
+let nextRuntimeId = 0;
+let activeRuntime: ApiRuntime | null = null;
+
+function stateOf(runtime: ApiRuntime): RuntimeState {
+  const state = states.get(runtime);
+  if (!state) { throw new SessionChangedError(); }
+  return state;
+}
+
+/** Immutable destination/credential identity. Creating one does not activate it. */
+export function createApiRuntime(options: ApiRuntimeOptions): ApiRuntime {
+  const state: RuntimeState = {
+    phase: 'created', accessToken: null, sessionVersion: 0,
+    refreshInFlight: null, sessionExpiredHandler: null, requests: new Set(),
+  };
+  const runtime: ApiRuntime = Object.freeze({
+    id: ++nextRuntimeId,
+    apiBaseUrl: options.apiBaseUrl.replace(/\/+$/, ''),
+    profileId: options.profileId ?? null,
+    credentialBinding: options.credentialBinding ?? null,
+    lanTest: options.lanTest ?? false,
+    get active() { return state.phase === 'active' && activeRuntime === runtime; },
+    get sessionVersion() { return state.sessionVersion; },
+  });
+  states.set(runtime, state);
+  return runtime;
+}
+
+export function activateApiRuntime(runtime: ApiRuntime): void {
+  const state = stateOf(runtime);
+  if (state.phase === 'retired') { throw new SessionChangedError(); }
+  if (activeRuntime !== null && activeRuntime !== runtime) { retireApiRuntime(activeRuntime); }
+  activeRuntime = runtime;
+  state.phase = 'active';
+}
+
+/** Normal-mode compatibility only. A LAN build must wait for the connection owner. */
+export function getApiRuntime(): ApiRuntime {
+  if (activeRuntime !== null && activeRuntime.active) { return activeRuntime; }
+  if (config.lanTest) { throw new SessionChangedError(); }
+  const runtime = createApiRuntime({ apiBaseUrl: config.apiBaseUrl });
+  activateApiRuntime(runtime);
+  return runtime;
+}
+
+export function retireApiRuntime(runtime: ApiRuntime): void {
+  const state = stateOf(runtime);
+  if (state.phase === 'retired') { return; }
+  state.phase = 'retired';
+  state.sessionVersion += 1;
+  state.accessToken = null;
+  state.refreshInFlight = null;
+  state.sessionExpiredHandler = null;
+  if (activeRuntime === runtime) { activeRuntime = null; }
+  for (const controller of state.requests) { controller.abort(); }
+  state.requests.clear();
+}
+
+export function captureApiSession(runtime: ApiRuntime = getApiRuntime()): ApiSession {
+  return Object.freeze({ runtime, sessionVersion: stateOf(runtime).sessionVersion });
+}
+
+export function isApiSessionCurrent(session: ApiSession): boolean {
+  return session.runtime.active && stateOf(session.runtime).sessionVersion === session.sessionVersion;
+}
+
+export function assertApiSession(session: ApiSession): void {
+  if (!isApiSessionCurrent(session)) { throw new SessionChangedError(); }
+}
+
+function sessionFor(binding?: ApiBinding): ApiSession {
+  if (binding && 'runtime' in binding) { return binding; }
+  return captureApiSession(binding);
+}
+
+/** Only use at an account boundary, never during access-token rotation. */
+export function setAccessToken(token: string | null, runtime: ApiRuntime = getApiRuntime()): void {
+  const state = stateOf(runtime);
+  if (state.phase === 'retired') { throw new SessionChangedError(); }
+  state.sessionVersion += 1;
+  state.accessToken = token;
+  state.refreshInFlight = null;
+  for (const controller of state.requests) { controller.abort(); }
+}
+
+export function getAccessToken(runtime: ApiRuntime = getApiRuntime()): string | null {
+  return stateOf(runtime).accessToken;
+}
+
+export function setSessionExpiredHandler(handler: (() => void) | null, runtime: ApiRuntime = getApiRuntime()): void {
+  const state = stateOf(runtime);
+  if (state.phase !== 'retired') { state.sessionExpiredHandler = handler; }
+}
+
 function parseRetryAfter(header: string | null): number | null {
-  if (!header?.trim()) {
-    return null;
-  }
+  if (!header?.trim()) { return null; }
   const value = header.trim();
   if (/^\d+$/.test(value)) {
     const seconds = Number(value);
     return Number.isSafeInteger(seconds) ? seconds : null;
   }
-  // An HTTP date must not turn an invalid numeric value into a parsed date.
   const timestamp = /^[a-z]/i.test(value) ? Date.parse(value) : NaN;
-  return Number.isFinite(timestamp)
-    ? Math.max(0, Math.ceil((timestamp - Date.now()) / 1000))
-    : null;
+  return Number.isFinite(timestamp) ? Math.max(0, Math.ceil((timestamp - Date.now()) / 1000)) : null;
 }
 
-const TIMEOUT_READ_MS = 10_000;
-const TIMEOUT_MUTATION_MS = 45_000;
-
-// The access token lives in memory only; the refresh token stays in the keychain.
-let accessToken: string | null = null;
-let sessionVersion = 0;
-let refreshInFlight: Promise<boolean> | null = null;
-let sessionExpiredHandler: (() => void) | null = null;
-
-/** Only use at a session boundary (sign-in, sign-out, expiry), not during rotation. */
-export function setAccessToken(token: string | null): void {
-  sessionVersion += 1;
-  accessToken = token;
-  refreshInFlight = null;
-}
-
-function assertSession(version: number): void {
-  if (version !== sessionVersion) {
-    throw new SessionChangedError();
-  }
-}
-
-export function getAccessToken(): string | null {
-  return accessToken;
-}
-
-export function setSessionExpiredHandler(handler: (() => void) | null): void {
-  sessionExpiredHandler = handler;
-}
-
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'DELETE';
-  body?: unknown;
-  /** false for the auth endpoints themselves. */
-  authenticated?: boolean;
-  headers?: Record<string, string>;
-  /** Overrides the default per-method timeout. */
-  timeoutMs?: number;
-}
-
-/** Single request without refresh handling; throws ApiError/NetworkError. */
-async function rawRequest<T>(
-  path: string,
-  options: RequestOptions,
-  token: string | null,
+/** Registry covers fetch AND decoding; retirement also settles transports that ignore abort. */
+async function runBound<T>(
+  session: ApiSession,
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs?: number,
+  signal?: AbortSignal | null,
 ): Promise<T> {
-  const method = options.method ?? 'GET';
+  assertApiSession(session);
+  const state = stateOf(session.runtime);
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    options.timeoutMs ??
-      (method === 'GET' ? TIMEOUT_READ_MS : TIMEOUT_MUTATION_MS),
-  );
-
+  state.requests.add(controller);
+  const abort = () => controller.abort();
+  signal?.addEventListener('abort', abort, { once: true });
+  const timeout = timeoutMs === undefined ? null : setTimeout(abort, timeoutMs);
+  let rejectAborted!: (error: Error) => void;
+  const aborted = new Promise<never>((_resolve, reject) => { rejectAborted = reject; });
+  const onAbort = () => rejectAborted(isApiSessionCurrent(session) ? new NetworkError() : new SessionChangedError());
+  controller.signal.addEventListener('abort', onAbort, { once: true });
   try {
-    let response: Response;
-    try {
-      response = await fetch(`${config.apiBaseUrl}/${path}`, {
-        method,
-        signal: controller.signal,
-        headers: {
-          Accept: 'application/json',
-          ...options.headers,
-          ...(options.body !== undefined
-            ? { 'Content-Type': 'application/json' }
-            : {}),
-          ...(token !== null ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body:
-          options.body !== undefined ? JSON.stringify(options.body) : undefined,
-      });
-    } catch {
-      // Do not log URLs/queries or transport objects: they may contain personal data.
-      throw new NetworkError();
-    }
-
-    if (response.status === 204) {
-      return undefined as T;
-    }
-    const payload: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const body = (payload as { error?: ErrorBody } | null)?.error;
-      throw new ApiError(
-        response.status,
-        body ?? {
-          code: 'unknown_error',
-          message: 'The request could not be completed.',
-        },
-        response.status === 429
-          ? parseRetryAfter(response.headers.get('Retry-After'))
-          : null,
-      );
-    }
-    if (payload === null) {
-      throw new ApiError(502, {
-        code: 'invalid_response',
-        message:
-          'The server returned an unreadable response. Please try again.',
-      });
-    }
-    return payload as T;
+    if (signal?.aborted) { controller.abort(); }
+    if (controller.signal.aborted) { return await aborted; }
+    const result = await Promise.race([operation(controller.signal), aborted]);
+    assertApiSession(session);
+    return result;
+  } catch (error) {
+    assertApiSession(session);
+    throw error;
   } finally {
-    clearTimeout(timeout);
+    if (timeout !== null) { clearTimeout(timeout); }
+    state.requests.delete(controller);
+    signal?.removeEventListener('abort', abort);
+    controller.signal.removeEventListener('abort', onAbort);
   }
 }
 
-async function performRefresh(version: number): Promise<boolean> {
-  const refreshToken = await getRefreshToken();
-  assertSession(version);
-  if (refreshToken === null) {
-    return false;
+async function decodeJson<T>(response: Response): Promise<T> {
+  if (response.status === 204) { return undefined as T; }
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const body = (payload as { error?: ErrorBody } | null)?.error;
+    throw new ApiError(response.status, body ?? {
+      code: 'unknown_error', message: 'The request could not be completed.',
+    }, response.status === 429 ? parseRetryAfter(response.headers.get('Retry-After')) : null);
   }
+  if (payload === null) {
+    throw new ApiError(502, { code: 'invalid_response', message: 'The server returned an unreadable response. Please try again.' });
+  }
+  return payload as T;
+}
+
+function jsonInit(options: RequestOptions, token: string | null, signal: AbortSignal): RequestInit {
+  return {
+    method: options.method ?? 'GET', signal,
+    headers: {
+      Accept: 'application/json', ...options.headers,
+      ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(token !== null ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+  };
+}
+
+function rawRequest<T>(session: ApiSession, path: string, options: RequestOptions, token: string | null): Promise<T> {
+  const url = `${session.runtime.apiBaseUrl}/${path}`;
+  return runBound(session, async signal => {
+    let response: Response;
+    try { response = await fetch(url, jsonInit(options, token, signal)); }
+    catch { assertApiSession(session); throw new NetworkError(); }
+    assertApiSession(session);
+    const result = await decodeJson<T>(response);
+    assertApiSession(session);
+    return result;
+  }, options.timeoutMs ?? (options.method === undefined || options.method === 'GET' ? TIMEOUT_READ_MS : TIMEOUT_MUTATION_MS), options.signal);
+}
+
+async function performRefresh(session: ApiSession): Promise<boolean> {
+  const { runtime } = session;
+  const state = stateOf(runtime);
+  const binding = runtime.credentialBinding;
+  const refreshToken = await (binding === null ? getRefreshToken() : getRefreshToken(binding));
+  assertApiSession(session);
+  if (refreshToken === null) { return false; }
   try {
-    const payload = await rawRequest<{
-      token: { access_token: string; refresh_token: string };
-    }>(
-      'api/v1/auth/refresh',
-      {
-        method: 'POST',
-        body: { refresh_token: refreshToken },
-        authenticated: false,
-      },
-      null,
+    const payload = await rawRequest<{ token: { access_token: string; refresh_token: string } }>(
+      session, 'api/v1/auth/refresh', { method: 'POST', body: { refresh_token: refreshToken }, authenticated: false }, null,
     );
-    assertSession(version);
-    await setRefreshToken(payload.token.refresh_token);
-    assertSession(version);
-    accessToken = payload.token.access_token;
+    assertApiSession(session);
+    await (binding === null ? setRefreshToken(payload.token.refresh_token) : setRefreshToken(payload.token.refresh_token, binding));
+    assertApiSession(session);
+    state.accessToken = payload.token.access_token;
     return true;
   } catch (error) {
-    // A temporary outage must not destroy a valid refresh credential.
-    if (error instanceof ApiError && error.status === 401) {
-      return false;
-    }
+    assertApiSession(session);
+    if (error instanceof ApiError && error.status === 401) { return false; }
     throw error;
   }
 }
 
-/** Concurrent 401s share one refresh attempt; a failing or repeated 401 ends the session. */
-function refresh(): Promise<boolean> {
-  if (refreshInFlight === null) {
-    const pending = performRefresh(sessionVersion).finally(() => {
-      if (refreshInFlight === pending) {
-        refreshInFlight = null;
-      }
+function refresh(session: ApiSession): Promise<boolean> {
+  assertApiSession(session);
+  const state = stateOf(session.runtime);
+  if (state.refreshInFlight === null) {
+    const pending = runBound(session, () => performRefresh(session)).finally(() => {
+      if (state.refreshInFlight === pending) { state.refreshInFlight = null; }
     });
-    refreshInFlight = pending;
+    state.refreshInFlight = pending;
   }
-  return refreshInFlight;
+  return state.refreshInFlight;
 }
 
-export async function request<T>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<T> {
+async function requestBound<T>(session: ApiSession, path: string, options: RequestOptions): Promise<T> {
+  assertApiSession(session);
+  const state = stateOf(session.runtime);
   const authenticated = options.authenticated !== false;
-  const version = sessionVersion;
-  const token = authenticated ? accessToken : null;
+  const token = authenticated ? state.accessToken : null;
   try {
-    const result = await rawRequest<T>(path, options, token);
-    if (authenticated) {
-      assertSession(version);
-    }
+    const result = await rawRequest<T>(session, path, options, token);
+    assertApiSession(session);
     return result;
   } catch (error) {
-    if (authenticated) {
-      assertSession(version);
-    }
-    if (
-      !(error instanceof ApiError) ||
-      error.status !== 401 ||
-      !authenticated ||
-      path.startsWith('api/v1/auth/')
-    ) {
+    assertApiSession(session);
+    if (!(error instanceof ApiError) || error.status !== 401 || !authenticated || path.startsWith('api/v1/auth/')) { throw error; }
+    if (token === state.accessToken && !(await refresh(session))) {
+      assertApiSession(session);
+      state.sessionExpiredHandler?.();
       throw error;
     }
-    // Another request may already have refreshed while this response was in flight.
-    if (token === accessToken && !(await refresh())) {
-      assertSession(version);
-      sessionExpiredHandler?.();
-      throw error;
-    }
-    assertSession(version);
+    assertApiSession(session);
     try {
-      const result = await rawRequest<T>(path, options, accessToken);
-      assertSession(version);
+      const result = await rawRequest<T>(session, path, options, state.accessToken);
+      assertApiSession(session);
       return result;
     } catch (retry) {
-      assertSession(version);
-      if (retry instanceof ApiError && retry.status === 401) {
-        sessionExpiredHandler?.();
-      }
+      assertApiSession(session);
+      if (retry instanceof ApiError && retry.status === 401) { state.sessionExpiredHandler?.(); }
       throw retry;
     }
   }
 }
 
-/**
- * Best-effort server-side revocation for sign-out: one short attempt with the current token,
- * never refreshing, so a failed revoke can not re-store a credential after the user left.
- */
-export async function revokeSession(): Promise<void> {
-  if (accessToken === null) {
-    return;
-  }
-  try {
-    await rawRequest<void>(
-      'api/v1/auth/logout',
-      { method: 'POST', timeoutMs: 5_000 },
-      accessToken,
-    );
-  } catch {
-    // The local credential is discarded regardless; the server token also expires on its own.
-  }
+export function request<T>(path: string, options: RequestOptions = {}, binding?: ApiBinding): Promise<T> {
+  try { return requestBound<T>(sessionFor(binding), path, options); }
+  catch (error) { return Promise.reject(error); }
 }
 
-/** Session restore: exchange the stored refresh token for a fresh access token. */
-export function refreshSession(): Promise<boolean> {
-  return refresh();
-}
-
-/** Raw authorized fetch for non-JSON bodies (multipart uploads); one refresh retry on 401. */
-export async function authorizedFetch(
-  path: string,
-  init: RequestInit,
-): Promise<Response> {
-  const version = sessionVersion;
-  const token = accessToken;
-  const attempt = async (): Promise<Response> => {
+/** Single environment/account-bound upload/raw-body fetch; at most one refresh retry. */
+async function authorizedFetchBound(session: ApiSession, path: string, init: RequestInit): Promise<Response> {
+  assertApiSession(session);
+  const state = stateOf(session.runtime);
+  const token = state.accessToken;
+  const url = `${session.runtime.apiBaseUrl}/${path}`;
+  const attempt = (attemptToken: string | null) => runBound(session, async signal => {
     const headers = new Headers(init.headers);
     headers.set('Accept', 'application/json');
-    if (accessToken !== null) {
-      headers.set('Authorization', `Bearer ${accessToken}`);
-    }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MUTATION_MS);
+    headers.delete('Authorization');
+    if (attemptToken !== null) { headers.set('Authorization', `Bearer ${attemptToken}`); }
     try {
-      const response = await fetch(`${config.apiBaseUrl}/${path}`, {
-        ...init,
-        headers,
-        signal: controller.signal,
-      });
-      assertSession(version);
+      const response = await fetch(url, { ...init, headers, signal });
+      assertApiSession(session);
       return response;
     } catch (error) {
-      assertSession(version);
-      if (error instanceof SessionChangedError) {
-        throw error;
-      }
+      assertApiSession(session);
+      if (error instanceof SessionChangedError) { throw error; }
       throw new NetworkError();
-    } finally {
-      clearTimeout(timeout);
     }
-  };
-  const response = await attempt();
-  if (response.status !== 401) {
+  }, TIMEOUT_MUTATION_MS, init.signal);
+  const response = await attempt(token);
+  assertApiSession(session);
+  if (response.status !== 401 || path.startsWith('api/v1/auth/')) { return response; }
+  if (token === state.accessToken && !(await refresh(session))) {
+    assertApiSession(session);
+    state.sessionExpiredHandler?.();
     return response;
   }
-  if (token === accessToken && !(await refresh())) {
-    assertSession(version);
-    sessionExpiredHandler?.();
-    return response;
-  }
-  assertSession(version);
-  const retry = await attempt();
-  if (retry.status === 401) {
-    sessionExpiredHandler?.();
-  }
+  assertApiSession(session);
+  const retry = await attempt(state.accessToken);
+  assertApiSession(session);
+  if (retry.status === 401) { state.sessionExpiredHandler?.(); }
   return retry;
 }
 
-/** Test hook: reset module state between test cases. */
+export function authorizedFetch(path: string, init: RequestInit, binding?: ApiBinding): Promise<Response> {
+  try { return authorizedFetchBound(sessionFor(binding), path, init); }
+  catch (error) { return Promise.reject(error); }
+}
+
+/** Bind at render/invocation, BEFORE any picker, queued mutation, retry, or other await. */
+export function bindApiClient(binding?: ApiBinding, sessionVersion?: number): ApiClient {
+  if (binding && 'runtime' in binding && sessionVersion === undefined) { return binding; }
+  const captured = sessionFor(binding);
+  const session = sessionVersion === undefined ? captured : Object.freeze({ runtime: captured.runtime, sessionVersion });
+  const client: ApiClient = Object.freeze({
+    ...session,
+    assertCurrent: () => assertApiSession(session),
+    isCurrent: () => isApiSessionCurrent(session),
+    request: <T>(path: string, options: RequestOptions = {}) => request<T>(path, options, client),
+    authorizedFetch: (path: string, init: RequestInit) => authorizedFetch(path, init, client),
+    run: <T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs = TIMEOUT_MUTATION_MS) => runBound(session, operation, timeoutMs),
+  });
+  return client;
+}
+
+/** Restore only the runtime/session captured by the caller, sharing that runtime's refresh. */
+export function refreshSession(binding?: ApiBinding): Promise<boolean> {
+  try { return refresh(sessionFor(binding)); }
+  catch (error) { return Promise.reject(error); }
+}
+
+export interface RuntimeCleanup {
+  request<T>(path: string, options?: RequestOptions): Promise<T | undefined>;
+  revokeSession(): Promise<void>;
+}
+
+/** Explicit best-effort cleanup is the ONLY work permitted after retirement; never refresh. */
+export function captureRuntimeCleanup(runtime: ApiRuntime = getApiRuntime()): RuntimeCleanup {
+  const apiBaseUrl = runtime.apiBaseUrl;
+  const token = stateOf(runtime).accessToken;
+  const cleanupRequest = async <T>(path: string, options: RequestOptions = {}): Promise<T | undefined> => {
+    if (token === null) { return undefined; }
+    const controller = new AbortController();
+    const timeoutMs = Math.min(TIMEOUT_CLEANUP_MS, Math.max(0, options.timeoutMs ?? TIMEOUT_CLEANUP_MS));
+    let finish!: () => void;
+    const aborted = new Promise<undefined>(resolve => { finish = () => resolve(undefined); });
+    controller.signal.addEventListener('abort', finish, { once: true });
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await Promise.race([
+        (async () => {
+          const response = await fetch(`${apiBaseUrl}/${path}`, jsonInit(options, token, controller.signal));
+          return await decodeJson<T>(response);
+        })(),
+        aborted,
+      ]);
+    } catch { return undefined; }
+    finally {
+      clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', finish);
+    }
+  };
+  return Object.freeze({
+    request: cleanupRequest,
+    revokeSession: async () => { await cleanupRequest<void>('api/v1/auth/logout', { method: 'POST' }); },
+  });
+}
+
+export async function revokeSession(runtime: ApiRuntime = getApiRuntime()): Promise<void> {
+  await captureRuntimeCleanup(runtime).revokeSession();
+}
+
+/** Test-only boundary; runtime IDs are never recycled, even between tests. */
 export function __resetClientForTests(): void {
-  accessToken = null;
-  sessionVersion = 0;
-  refreshInFlight = null;
-  sessionExpiredHandler = null;
+  if (activeRuntime !== null) { retireApiRuntime(activeRuntime); }
+  activeRuntime = null;
 }

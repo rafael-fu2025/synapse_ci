@@ -1,5 +1,5 @@
-import { QueryClient, matchQuery } from '@tanstack/react-query';
-import { ApiError } from '../../api/client';
+import { QueryClient, matchQuery, type Query } from '@tanstack/react-query';
+import { ApiError, type ApiRuntime } from '../../api/client';
 import { config } from '../config';
 
 const TIMEOUT_MS = 10_000;
@@ -20,6 +20,8 @@ export type RealtimeGrant = {
 export type RealtimeTarget = { key: readonly unknown[]; exact: boolean };
 
 export type SocketEngineOptions = {
+  /** Reject retired runtime/account work before React finishes effect cleanup. */
+  isCurrent?: () => boolean;
   reconcileMs: number;
   fetchGrant: () => Promise<unknown>;
   validateGrant: (value: unknown) => RealtimeGrant | null;
@@ -58,11 +60,12 @@ function clearRetryAfter(client: QueryClient, options: SocketEngineOptions): voi
 }
 
 /** The API may use a separate socket host, but credentials must only travel in a frame. */
-export function validateGrantEnvelope(value: unknown, channel: RegExp): RealtimeGrant | null {
+export function validateGrantEnvelope(value: unknown, channel: RegExp, runtime?: ApiRuntime): RealtimeGrant | null {
   if (!value || typeof value !== 'object') { return null; }
   const grant = value as RealtimeGrant;
   try {
-    const api = new URL(config.apiBaseUrl);
+    if (runtime && !runtime.active) { return null; }
+    const api = new URL(runtime?.apiBaseUrl ?? config.apiBaseUrl);
     if (grant.enabled !== true || grant.origin !== api.origin ||
         typeof grant.url !== 'string' || !/^wss?:\/\//.test(grant.url) || /[\s\\?#]/.test(grant.url) ||
         typeof grant.channel !== 'string' || !channel.test(grant.channel) ||
@@ -74,6 +77,9 @@ export function validateGrantEnvelope(value: unknown, channel: RegExp): Realtime
     const url = new URL(grant.url);
     if (!url.hostname || url.username || url.password || url.search || url.hash ||
         !['ws:', 'wss:'].includes(url.protocol) || (api.protocol === 'https:' && url.protocol !== 'wss:')) {
+      return null;
+    }
+    if (runtime?.lanTest && (url.protocol !== 'ws:' || url.hostname !== api.hostname || url.port !== '8081' || url.pathname !== '/')) {
       return null;
     }
     return grant;
@@ -89,6 +95,7 @@ function targetId(target: RealtimeTarget): string {
 /** One active/foreground/online lifetime. Stale grants and callbacks cannot restart it. */
 export function startSocketRealtime(client: QueryClient, options: SocketEngineOptions, observer?: SocketRealtimeObserver): () => void {
   let stopped = false;
+  const isCurrent = () => !stopped && (options.isCurrent?.() ?? true);
   let reportedReady = false;
   const reportReady = (ready: boolean) => {
     if (reportedReady === ready) { return; }
@@ -106,54 +113,70 @@ export function startSocketRealtime(client: QueryClient, options: SocketEngineOp
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let pong: ReturnType<typeof setTimeout> | undefined;
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-  let refreshing = false;
-  let dirty = false;
-  // Hints collected since the last drain, deduplicated by key and match mode.
+  // Hint bursts deduplicate targets; overlapping prefixes deduplicate actual queries.
   const pending = new Map<string, RealtimeTarget>();
+  const trailing = new Set<Query>();
+  const refreshing = new Map<Query, { again: boolean }>();
 
-  // A burst has one refresh; changes received during a fetch get one trailing refresh.
-  // cancelRefetch:false also avoids cancelling the component's initial HTTP request.
-  async function drain() {
-    refreshTimer = undefined;
-    if (stopped || refreshing || !dirty) { return; }
-    dirty = false;
-    const targets = [...pending.values()];
-    pending.clear();
-    refreshing = true;
-    const alreadyFetching = new Map<string, RealtimeTarget>();
+  async function refreshQuery(query: Query) {
+    if (!isCurrent() || client.getQueryCache().get(query.queryHash) !== query) { return; }
+    const running = refreshing.get(query);
+    if (running) { running.again = true; return; }
+    const active = query.isActive();
+    const inFlight = query.state.fetchStatus !== 'idle';
+    if (!active && !inFlight) { return; }
+    // An initial/manual read may predate this hint. Reuse it without cancellation,
+    // then make one trailing read. Other queries never wait for this one.
+    const work = { again: inFlight };
+    refreshing.set(query, work);
     try {
-      for (const target of targets) {
-        if (stopped) { return; }
-        await client.invalidateQueries({ queryKey: target.key, exact: target.exact, refetchType: 'none' });
+      if (active) {
+        await client.refetchQueries({ predicate: candidate => candidate === query, type: 'active' }, { cancelRefetch: false });
       }
-      for (const target of targets) {
-        if (stopped) { return; }
-        if (client.getQueryCache().getAll().some(query =>
-          matchQuery({ queryKey: target.key, exact: target.exact }, query) && query.isActive() &&
-          query.state.fetchStatus === 'fetching')) {
-          alreadyFetching.set(targetId(target), target);
-        }
-        await client.refetchQueries({ queryKey: target.key, exact: target.exact, type: 'active' }, { cancelRefetch: false });
-      }
+      // Disabled in-flight queries must still become stale after an old response.
+      // RefetchQueries also returns early for a paused request: wait for physical
+      // settlement without issuing hidden reads or spinning refresh timers.
+      if (!active || query.state.fetchStatus === 'paused') { await query.promise; }
     } catch {
-      // The queries retain their last good data. Reconciliation will retry later.
+      // Keep the last good data; later hints and reconciliation can retry.
     } finally {
-      refreshing = false;
-      if (!stopped) {
-        // The reused response may predate this hint. Preserve its targets for one
-        // trailing read after the physical HTTP request has settled.
-        for (const target of alreadyFetching.values()) { pending.set(targetId(target), target); }
-        if (pending.size > 0) { refresh(); }
+      refreshing.delete(query);
+      if (isCurrent() && work.again && client.getQueryCache().get(query.queryHash) === query) {
+        trailing.add(query);
+        refresh();
       }
     }
   }
 
+  function drain() {
+    refreshTimer = undefined;
+    if (!isCurrent()) { return; }
+    const targets = [...pending.values()];
+    pending.clear();
+    const queries = new Set(trailing);
+    trailing.clear();
+    for (const query of client.getQueryCache().getAll()) {
+      if (targets.some(target => matchQuery({ queryKey: target.key, exact: target.exact }, query))) {
+        queries.add(query);
+      }
+    }
+    // Invalidate once per concrete query, including disabled signal observers
+    // such as Team Chat. Inactive queries become stale but are not fetched.
+    client.invalidateQueries({ predicate: query => queries.has(query), refetchType: 'none' }).catch(() => undefined);
+    for (const query of queries) {
+      if (!isCurrent()) { return; }
+      refreshQuery(query);
+    }
+  }
+
   function refresh(immediate = false) {
-    if (stopped) { return; }
-    dirty = true;
-    if (refreshing || refreshTimer !== undefined) { return; }
-    if (immediate) { drain(); }
-    else { refreshTimer = setTimeout(() => { drain(); }, 100); }
+    if (!isCurrent()) { return; }
+    if (immediate) {
+      clearTimeout(refreshTimer);
+      drain();
+    } else if (refreshTimer === undefined) {
+      refreshTimer = setTimeout(drain, 100);
+    }
   }
 
   function note(event: string, data: unknown) {
@@ -196,7 +219,7 @@ export function startSocketRealtime(client: QueryClient, options: SocketEngineOp
   }
 
   function failed() {
-    if (stopped) { return; }
+    if (!isCurrent()) { return; }
     // A rapid ready/close loop must still back off.
     if (readyAt !== null && Date.now() - readyAt >= MAX_RETRY_MS) { failures = 0; }
     readyAt = null;
@@ -206,13 +229,13 @@ export function startSocketRealtime(client: QueryClient, options: SocketEngineOp
   }
 
   async function connect() {
-    if (stopped || connecting || socket || retry !== undefined || typeof WebSocket === 'undefined') { return; }
+    if (!isCurrent() || connecting || socket || retry !== undefined || typeof WebSocket === 'undefined') { return; }
     const wait = retryAfterFor(client, options) - Date.now();
     if (wait > 0) { scheduleRetry(wait); return; }
     clearRetryAfter(client, options);
     connecting = true;
     const version = ++generation;
-    const current = () => !stopped && version === generation;
+    const current = () => isCurrent() && version === generation;
     try {
       const payload = await options.fetchGrant() as { data?: { enabled?: unknown } } | null | undefined;
       if (!current()) { return; }
@@ -304,7 +327,8 @@ export function startSocketRealtime(client: QueryClient, options: SocketEngineOp
     clearConnection();
     clearInterval(reconciliation);
     clearTimeout(refreshTimer);
-    dirty = false;
     pending.clear();
+    trailing.clear();
+    refreshing.clear();
   };
 }

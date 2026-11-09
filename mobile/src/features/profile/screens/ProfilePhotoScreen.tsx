@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,9 +8,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
 import { ApiError, getAccessToken, request } from '../../../api/client';
-import { config } from '../../../lib/config';
+import { useApiClient } from '../../../api/runtime';
 import { useAuth } from '../../../store/auth';
-import { removePhoto, uploadPhoto } from '../../../api/endpoints/health';
+import { profilePhoto, removePhoto, uploadPhoto } from '../../../api/endpoints/health';
 import type { PhotoUpload } from '../../../api/endpoints/health';
 import { Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
@@ -28,46 +28,70 @@ export function ProfilePhotoScreen() {
   const navigation = useNavigation<Props['navigation']>();
   const { user } = useAuth();
   const client = useQueryClient();
+  const apiClient = useApiClient();
 
   const [busy, setBusy] = useState<'upload' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [failedUri, setFailedUri] = useState<string | null>(null);
   const [removedSession, setRemovedSession] = useState<string | null>(null);
+  const [lanPhoto, setLanPhoto] = useState<{ session: object; version: number; uri: string | null } | null>(null);
   const mutationInFlight = useRef(false);
   const previewActive = useRef(false);
   // Native image caches may ignore Authorization. Never reuse a URL across owners or screen sessions.
   const previewSession = useMemo(() => ({
     owner: user,
+    apiClient,
     nonce: `${Date.now().toString(36)}-${++previewSequence}-${Math.random().toString(36).slice(2)}`,
-  }), [user]);
-  const token = getAccessToken();
-  const photoUri = `${config.apiBaseUrl}/api/v1/me/photo?owner=${user?.tenant_id}-${user?.id}&session=${previewSession.nonce}&v=${version}`;
+  }), [user, apiClient]);
+  const token = getAccessToken(apiClient.runtime);
+  const lanTest = apiClient.runtime.lanTest;
+  const lanUri = lanPhoto?.session === previewSession && lanPhoto.version === version ? lanPhoto.uri : null;
+  const photoUri = lanTest ? lanUri : `${apiClient.runtime.apiBaseUrl}/api/v1/me/photo?owner=${user?.tenant_id}-${user?.id}&session=${previewSession.nonce}&v=${version}`;
   const currentPreview = useRef({ session: previewSession, uri: photoUri });
   currentPreview.current = { session: previewSession, uri: photoUri };
 
   useFocusEffect(React.useCallback(() => {
-    previewActive.current = previewSession.owner !== null;
+    previewActive.current = previewSession.owner !== null && apiClient.isCurrent();
+    mutationInFlight.current = false;
+    setBusy(null);
+    setError(null);
     setFailedUri(null);
     // Refresh native image headers when returning after another request rotated the token.
     setVersion(current => current + 1);
     return () => { previewActive.current = false; };
-  }, [previewSession]));
+  }, [apiClient, previewSession]));
+
+  useEffect(() => {
+    if (!lanTest || !token || !previewActive.current || removedSession === previewSession.nonce) { return; }
+    let active = true;
+    profilePhoto(apiClient).then(uri => {
+      if (active && apiClient.isCurrent() && previewActive.current && currentPreview.current.session === previewSession) {
+        setLanPhoto({ session: previewSession, version, uri });
+      }
+    }).catch(() => {
+      if (active && apiClient.isCurrent() && currentPreview.current.session === previewSession) {
+        setLanPhoto({ session: previewSession, version, uri: null });
+      }
+    });
+    return () => { active = false; };
+  }, [apiClient, lanTest, previewSession, removedSession, token, version]);
 
   async function onImageError() {
-    if (!previewActive.current || currentPreview.current.uri !== photoUri) {
+    if (!apiClient.isCurrent() || !previewActive.current || currentPreview.current.uri !== photoUri) {
       return;
     }
+    if (lanTest) { setFailedUri(photoUri); return; }
     try {
-      // Native Image does not use the API client's 401 refresh/retry path.
-      await request('api/v1/me');
+      // Normal mode preserves its native preview; LAN never sends bearer headers through Image.
+      await request('api/v1/me', {}, apiClient);
     } catch {
       // Fall back to initials without exposing request details or credentials.
     }
-    if (!previewActive.current || currentPreview.current.uri !== photoUri) {
+    if (!apiClient.isCurrent() || !previewActive.current || currentPreview.current.uri !== photoUri) {
       return;
     }
-    if (getAccessToken() !== null && getAccessToken() !== token) {
+    if (getAccessToken(apiClient.runtime) !== null && getAccessToken(apiClient.runtime) !== token) {
       setVersion(current => current + 1);
     } else {
       setFailedUri(photoUri);
@@ -75,7 +99,7 @@ export function ProfilePhotoScreen() {
   }
 
   async function pickAndUpload() {
-    if (!previewActive.current || mutationInFlight.current || currentPreview.current.session !== previewSession) {
+    if (!apiClient.isCurrent() || !previewActive.current || mutationInFlight.current || currentPreview.current.session !== previewSession) {
       return;
     }
     mutationInFlight.current = true;
@@ -83,7 +107,7 @@ export function ProfilePhotoScreen() {
     setBusy('upload');
     try {
       const result = await launchImageLibrary({ mediaType: 'photo', quality: 1, selectionLimit: 1, assetRepresentationMode: 'current' });
-      if (result.didCancel || !previewActive.current || currentPreview.current.session !== previewSession) {
+      if (result.didCancel || !apiClient.isCurrent() || !previewActive.current || currentPreview.current.session !== previewSession) {
         return;
       }
       if (result.errorCode) {
@@ -110,8 +134,8 @@ export function ProfilePhotoScreen() {
         setError('Choose a photo no larger than 10 MB.');
         return;
       }
-      await uploadPhoto({ uri: asset.uri, name: `photo.${PHOTO_EXTENSIONS[mime]}`, type: mime });
-      if (currentPreview.current.session !== previewSession) {
+      await uploadPhoto({ uri: asset.uri, name: `photo.${PHOTO_EXTENSIONS[mime]}`, type: mime }, apiClient);
+      if (!apiClient.isCurrent() || !previewActive.current || currentPreview.current.session !== previewSession) {
         return;
       }
       setRemovedSession(null);
@@ -119,45 +143,53 @@ export function ProfilePhotoScreen() {
       setVersion(current => current + 1);
       client.invalidateQueries({ queryKey: ['me'] }).catch(() => undefined);
     } catch (uploadError) {
-      setError(uploadError instanceof ApiError ? uploadError.message : 'The photo could not be selected or uploaded. Try again.');
+      if (apiClient.isCurrent() && previewActive.current && currentPreview.current.session === previewSession) {
+        setError(uploadError instanceof ApiError ? uploadError.message : 'The photo could not be selected or uploaded. Try again.');
+      }
     } finally {
-      mutationInFlight.current = false;
-      setBusy(null);
+      if (currentPreview.current.session === previewSession) {
+        mutationInFlight.current = false;
+        if (previewActive.current && apiClient.isCurrent()) { setBusy(null); }
+      }
     }
   }
 
   async function onRemove() {
-    if (!previewActive.current || mutationInFlight.current || currentPreview.current.session !== previewSession) {
+    if (!apiClient.isCurrent() || !previewActive.current || mutationInFlight.current || currentPreview.current.session !== previewSession) {
       return;
     }
     mutationInFlight.current = true;
     setError(null);
     setBusy('remove');
     try {
-      await removePhoto();
-      if (currentPreview.current.session !== previewSession) {
+      await removePhoto(apiClient);
+      if (!apiClient.isCurrent() || !previewActive.current || currentPreview.current.session !== previewSession) {
         return;
       }
       setRemovedSession(previewSession.nonce);
       setVersion(current => current + 1);
       client.invalidateQueries({ queryKey: ['me'] }).catch(() => undefined);
     } catch (removeError) {
-      setError(removeError instanceof ApiError ? removeError.message : 'The photo could not be removed. Try again.');
+      if (apiClient.isCurrent() && previewActive.current && currentPreview.current.session === previewSession) {
+        setError(removeError instanceof ApiError ? removeError.message : 'The photo could not be removed. Try again.');
+      }
     } finally {
-      mutationInFlight.current = false;
-      setBusy(null);
+      if (currentPreview.current.session === previewSession) {
+        mutationInFlight.current = false;
+        if (previewActive.current && apiClient.isCurrent()) { setBusy(null); }
+      }
     }
   }
 
   return (
     <Screen header={<PageHeader edgeToEdge title="Profile photo" onBack={navigation.goBack} />}>
       <View style={styles.previewRing}>
-        {!user || !token || failedUri === photoUri || removedSession === previewSession.nonce ? (
+        {!user || !token || !photoUri || failedUri === photoUri || removedSession === previewSession.nonce ? (
           <Text style={styles.initials}>{user?.avatar_initials ?? '··'}</Text>
         ) : (
           <Image
             key={photoUri}
-            source={{ uri: photoUri, headers: { Authorization: `Bearer ${token}` }, cache: 'reload' }}
+            source={lanTest ? { uri: photoUri } : { uri: photoUri, headers: { Authorization: `Bearer ${token}` }, cache: 'reload' }}
             accessibilityLabel="Your profile photo"
             style={styles.previewImage}
             resizeMode="cover"

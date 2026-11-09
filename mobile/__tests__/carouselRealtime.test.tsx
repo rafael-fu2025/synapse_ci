@@ -2,7 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider, QueryObserver, onlineManager } from '@tanstack/react-query';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { loginCarouselRealtime } from '../src/api/endpoints/auth';
-import { ApiError, NetworkError } from '../src/api/client';
+import { ApiError, NetworkError, activateApiRuntime, bindApiClient, createApiRuntime, retireApiRuntime } from '../src/api/client';
 import { startCarouselRealtime, validateCarouselGrant } from '../src/features/auth/realtime/carouselRealtime';
 import { useCarouselRealtime } from '../src/features/auth/realtime/useCarouselRealtime';
 import { config } from '../src/lib/config';
@@ -11,6 +11,7 @@ jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'https://api.test/
 jest.mock('../src/api/endpoints/auth', () => ({ loginCarouselRealtime: jest.fn() }));
 jest.mock('../src/lib/keychain', () => ({ getRefreshToken: jest.fn(), setRefreshToken: jest.fn() }));
 
+const mockConfig = config as { apiBaseUrl: string };
 const KEY = ['auth', 'carousel'];
 const originalWebSocket = globalThis.WebSocket;
 class MockSocket {
@@ -56,7 +57,7 @@ beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
   jest.setSystemTime(new Date('2026-01-01T00:00:00Z'));
   onlineManager.setOnline(true);
-  config.apiBaseUrl = 'https://api.test/subpath';
+  mockConfig.apiBaseUrl = 'https://api.test/subpath';
   MockSocket.instances = [];
   globalThis.WebSocket = MockSocket as unknown as typeof WebSocket;
   jest.mocked(loginCarouselRealtime).mockReset().mockImplementation(async () => ({ data: grant() }));
@@ -89,7 +90,7 @@ async function start() {
 describe('public carousel grant validation', () => {
   it('allows a separate socket host and the API origin without its path', () => {
     expect(validateCarouselGrant(grant())).toEqual(grant());
-    config.apiBaseUrl = 'http://api.test/path';
+    mockConfig.apiBaseUrl = 'http://api.test/path';
     expect(validateCarouselGrant(grant({ origin: 'http://api.test', url: 'ws://socket.test/path' }))).not.toBeNull();
   });
   it('accepts the server maximum TTL of 300 seconds, but rejects longer and unsafe expiry values', () => {
@@ -176,6 +177,28 @@ describe('socket protocol and cache repair', () => {
     expect(queryFn).toHaveBeenCalledTimes(4);
     await flush(1000);
     expect(queryFn).toHaveBeenCalledTimes(4);
+  });
+
+  it('ignores public hints and trailing reads as soon as its bound runtime retires', async () => {
+    const runtime = createApiRuntime({ apiBaseUrl: 'https://api.test/subpath' });
+    activateApiRuntime(runtime);
+    stop = startCarouselRealtime(client, bindApiClient(runtime));
+    await flush();
+    const ws = latest();
+    ws.ready();
+    await flush();
+    let resolve!: (data: string[]) => void;
+    queryFn.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    const external = client.refetchQueries({ queryKey: KEY });
+    changed(ws);
+    await flush(100);
+    retireApiRuntime(runtime);
+    changed(ws);
+    resolve(['old result']);
+    await external;
+    await flush(1000);
+    expect(queryFn).toHaveBeenCalledTimes(3);
+    expect(client.getQueryState(KEY)?.isInvalidated).toBe(false);
   });
 
   it('repairs ready/events that arrive during the initial HTTP request without cancelling it', async () => {
