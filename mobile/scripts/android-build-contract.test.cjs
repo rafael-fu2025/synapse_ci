@@ -25,6 +25,12 @@ function block(source, marker) {
   assert.fail(`Unclosed ${marker}`);
 }
 
+test('Android packaging CI explicitly avoids the retired SDK tools package', () => {
+  const workflow = readFileSync(path.join(mobile, '..', '.github/workflows/mobile.yml'), 'utf8');
+  const packaging = workflow.slice(workflow.indexOf('  android-packaging:'));
+  assert.match(packaging, /android-actions\/setup-android@v3\r?\n {8}with:\r?\n {10}packages: 'platform-tools'/);
+});
+
 test('LAN is a separate bundled nondebuggable release with normal optimization defaults', () => {
   const buildTypes = block(gradle, 'buildTypes');
   const release = block(buildTypes, 'release');
