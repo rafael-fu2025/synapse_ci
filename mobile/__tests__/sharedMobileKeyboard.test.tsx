@@ -193,8 +193,8 @@ describe.each([lightTheme, darkTheme])('Screen footer safe area in $mode mode', 
     expect(footerSafeArea().props.edges).toEqual({ bottom: 'additive' });
   });
 
-  it.each([true, false])('leaves non-opt-in footers unchanged with scroll=%s, including a fixed composer', scroll => {
-    act(() => { renderer = create(<Screen keyboardAware scroll={scroll} header={<Text>Header</Text>}
+  it.each([true, false])('preserves explicitly opted-out footers with scroll=%s, including a fixed composer', scroll => {
+    act(() => { renderer = create(<Screen keyboardAware bottomSafeArea={false} scroll={scroll} header={<Text>Header</Text>}
       bodyStyle={{ backgroundColor: theme.surfaceWarm, paddingBottom: 5 }}
       footer={<TextField label="Composer" value="Unsent message" />} footerStyle={{ backgroundColor: theme.surfaceWarm, paddingBottom: 9 }}><Text>List viewport</Text></Screen>); });
     const footer = renderer!.root.findAllByType(View).find(node => node.props.testID === 'screen-footer')!;

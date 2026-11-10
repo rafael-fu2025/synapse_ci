@@ -3,10 +3,12 @@ import { ActivityIndicator, Image, ScrollView, StyleSheet, View } from 'react-na
 import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { palette } from '../../../theme/tokens';
+import { useSystemNavigationBar } from '../../../components/SystemNavigationBar';
 import { useOptionalConnection } from '../../connection/ConnectionContext';
 import { ServerConnectionControl } from '../../connection/ServerConnectionControl';
 
 export function SplashScreen() {
+  useSystemNavigationBar('splash');
   const connection = useOptionalConnection();
   const showConnection = connection?.enabled === true && connection.profile !== null;
   const content = (

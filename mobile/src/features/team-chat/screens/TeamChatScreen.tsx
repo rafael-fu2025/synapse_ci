@@ -62,6 +62,7 @@ interface ChatEntry {
   retainedLatest: boolean;
 }
 const BOTTOM_SCROLL_THRESHOLD = 80;
+const CHAT_LIST_BOTTOM_PADDING = 10;
 function compact(value: string, maximum = 180): string {
   const characters = Array.from(value.replace(/\s+/g, ' ').trim());
   return characters.length <= maximum ? characters.join('') : `${characters.slice(0, maximum).join('')}…`;
@@ -365,6 +366,15 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
       Number.isFinite(y) && Number.isFinite(height) && height > 0 && y < top + viewportHeight && y + height > top;
     const reveal = () => {
       if (!valid() || !nodesCurrent()) { return; }
+      if (captured.target === null) {
+        // Native end measurements are authoritative even when a no-op scroll
+        // never delivers onScroll. Reconcile only after every check succeeds.
+        scrollGeometry.current.offset = Math.max(0, measured.contentHeight - measured.height);
+        positioned.current = 'latest';
+        followingBottom.current = true;
+        if (bottomScroll.current?.revision !== null) { cancelBottomScroll(); }
+        setAwayFromBottom(false);
+      }
       currentViewSession.current = null;
       entryReadyRef.current = true;
       setRevealedEntry(captured.key);
@@ -385,11 +395,11 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
           return;
         }
         tail!.measureInWindow((_tailX, y, _tailWidth, tailHeight) => {
-          if (!valid() || !inside(y, tailHeight, top, height)) { return; }
-          const geometry = scrollGeometry.current;
-          const maxOffset = Math.max(0, geometry.contentHeight - geometry.height);
-          const atEnd = geometry.height > 0 && Math.abs(geometry.offset - maxOffset) <= 1;
-          if (!atEnd) { return; }
+          if (!valid() || !inside(y, tailHeight, top, height) || measured.contentHeight <= 0) { return; }
+          // Empty content can flex to fill the viewport with space below its tail.
+          if (current.lastId === null && measured.contentHeight <= height + 1) { reveal(); return; }
+          const expectedTailBottom = top + Math.min(measured.contentHeight, height) - CHAT_LIST_BOTTOM_PADDING;
+          if (Math.abs(y + tailHeight - expectedTailBottom) > 1) { return; }
           if (current.lastId === null) { reveal(); return; }
           marker!.measureInWindow((_markerX, markerY, _markerWidth, markerHeight) => {
             if (valid() && inside(markerY, markerHeight, top, height) && markerY + markerHeight <= top + height + 1) { reveal(); }
@@ -399,7 +409,7 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     } catch {
       // Native nodes can detach during a route/window change; the next real event can confirm.
     }
-  }, [entryWindow, keyboardVisible]);
+  }, [cancelBottomScroll, entryWindow, keyboardVisible]);
   const scheduleEntryCheck = useCallback(() => {
     if (entryFrame.current !== null) { cancelAnimationFrame(entryFrame.current); }
     if (entryReadyRef.current) { entryFrame.current = null; return; }
@@ -489,7 +499,7 @@ export function TeamChatScreen({ targetMessageId }: { targetMessageId?: number }
     }
     confirmEntry();
     scheduleEntryCheck();
-  }, [armBottomScroll, cancelBottomScroll, channel.active, channel.loaded, channel.mode, channel.navigationRevision, commitBottomScroll, confirmEntry, entryKey, entryReady, focused, forbidden, scheduleEntryCheck, scope, taskPickerVisible, unauthorized]);
+  }, [armBottomScroll, cancelBottomScroll, channel.active, channel.busy, channel.loaded, channel.loadingLatest, channel.mode, channel.navigationRevision, channel.polling, commitBottomScroll, confirmEntry, entryKey, entryReady, focused, forbidden, scheduleEntryCheck, scope, taskPickerVisible, unauthorized]);
 
   useLayoutEffect(() => {
     observedReplacement.current = { scope, revision: channel.latestRevision };
@@ -921,7 +931,7 @@ function createStyles(theme: Theme) {
     latestButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, borderRadius: 12, backgroundColor: theme.brand },
     latestText: { ...type.bodyStrong, color: '#ffffff' },
     status: { ...type.caption, paddingHorizontal: 12, paddingVertical: 8, color: '#7b4f0b', backgroundColor: '#fff5dc' },
-    listViewport: { flex: 1 }, list: { paddingBottom: 10 }, emptyList: { flexGrow: 1 }, listTop: { height: 8 },
+    listViewport: { flex: 1 }, list: { paddingBottom: CHAT_LIST_BOTTOM_PADDING }, emptyList: { flexGrow: 1 }, listTop: { height: 8 },
     entryCover: { backgroundColor: theme.canvas, zIndex: 1 }, entryHidden: { opacity: 0 },
     latestTail: { height: 1 },
     readMarker: { height: 2 },

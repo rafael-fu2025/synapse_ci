@@ -5,6 +5,7 @@ import type { BottomTabBarProps, BottomTabNavigationProp } from '@react-navigati
 import { TabActions, useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NavigationState, PartialState } from '@react-navigation/native';
 import { Screen } from '../components/Screen';
+import { TabOwnsBottomInsetContext } from '../components/ScreenInsets';
 import { useWorkspace } from '../features/workspace/WorkspaceContext';
 import { ContextTabsParamList } from './types';
 import { PersonalTabs } from './PersonalTabs';
@@ -59,17 +60,19 @@ export function ContextTabs() {
   }
   return (
     <ContextTabBarProvider>
-      <Tab.Navigator
-        initialRouteName={route}
-        backBehavior="none"
-        tabBar={(props) => <ContextModeSync {...props} />}
-        screenOptions={motion}>
-        {personalEnabled ? <Tab.Screen name="PersonalContext" component={PersonalContextScreen} /> : null}
-        {workEnabled ? (
-          // Reset parent-owned Work state across units without replacing Personal or the shared host.
-          <Tab.Screen name="WorkspaceContext" navigationKey={activeUnit?.unit ?? 'no-unit'} component={WorkspaceContextScreen} />
-        ) : null}
-      </Tab.Navigator>
+      <TabOwnsBottomInsetContext.Provider value>
+        <Tab.Navigator
+          initialRouteName={route}
+          backBehavior="none"
+          tabBar={(props) => <ContextModeSync {...props} />}
+          screenOptions={motion}>
+          {personalEnabled ? <Tab.Screen name="PersonalContext" component={PersonalContextScreen} /> : null}
+          {workEnabled ? (
+            // Reset parent-owned Work state across units without replacing Personal or the shared host.
+            <Tab.Screen name="WorkspaceContext" navigationKey={activeUnit?.unit ?? 'no-unit'} component={WorkspaceContextScreen} />
+          ) : null}
+        </Tab.Navigator>
+      </TabOwnsBottomInsetContext.Provider>
     </ContextTabBarProvider>
   );
 }

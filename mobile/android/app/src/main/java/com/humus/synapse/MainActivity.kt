@@ -2,6 +2,7 @@ package com.humus.synapse
 
 import android.content.res.Configuration
 import android.hardware.display.DisplayManager
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -20,6 +21,9 @@ class MainActivity : ReactActivity() {
   private val refreshPolicies = mutableMapOf<Window, WindowRefreshRatePolicy>()
   private var refreshPolicyActive = false
   private var refreshPolicyDestroyed = false
+  private data class NavigationBarAppearance(val background: Int, val darkIcons: Boolean)
+  private var navigationBarAppearance: NavigationBarAppearance? = null
+  private var modalNavigationBarAppearance: NavigationBarAppearance? = null
   private val configurationRefresh = Runnable {
     if (!refreshPolicyDestroyed) updateRefreshRatePreferences()
   }
@@ -38,6 +42,7 @@ class MainActivity : ReactActivity() {
     override fun onExtraWindowCreate(window: Window) {
       if (observedReactContext?.currentActivity !== this@MainActivity) return
       val policy = refreshPolicies.getOrPut(window) { WindowRefreshRatePolicy(window) }
+      updateNavigationBarAppearance()
       if (refreshPolicyActive) policy.update()
     }
 
@@ -54,6 +59,7 @@ class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     refreshPolicies[window] = WindowRefreshRatePolicy(window)
+    updateNavigationBarAppearance()
     val host = (application as MainApplication).reactHost
     host.addReactInstanceEventListener(reactInstanceListener)
     host.addBeforeDestroyListener(beforeReactDestroyListener)
@@ -127,7 +133,25 @@ class MainActivity : ReactActivity() {
   }
 
   private fun updateRefreshRatePreferences() {
+    updateNavigationBarAppearance()
     if (refreshPolicyActive) refreshPolicies.values.forEach { it.update() }
+  }
+
+  fun setNavigationBarAppearance(background: Int, darkIcons: Boolean, modalBackground: Int, modalDarkIcons: Boolean) {
+    navigationBarAppearance = NavigationBarAppearance(background, darkIcons)
+    modalNavigationBarAppearance = NavigationBarAppearance(modalBackground, modalDarkIcons)
+    updateNavigationBarAppearance()
+  }
+
+  private fun updateNavigationBarAppearance() {
+    if (refreshPolicyDestroyed) return
+    val dark = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    val fallback = NavigationBarAppearance(if (dark) Color.rgb(18, 18, 18) else Color.rgb(246, 247, 251), !dark)
+    val activityAppearance = navigationBarAppearance ?: fallback
+    refreshPolicies.keys.forEach { target ->
+      val appearance = if (target === window) activityAppearance else modalNavigationBarAppearance ?: activityAppearance
+      SystemNavigationBarPolicy.apply(target, appearance.background, appearance.darkIcons)
+    }
   }
 
   /**

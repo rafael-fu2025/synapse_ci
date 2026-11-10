@@ -397,7 +397,7 @@ it('forwards refresh control and opts into iOS keyboard avoidance without changi
   expect(renderer.root.findByType(ScrollView).props.automaticallyAdjustKeyboardInsets).toBe(false);
   expect(renderer.root.findByType(KeyboardAvoidingView).props.behavior).toBe('padding');
   expect(renderer.root.findByType(KeyboardAvoidingView).props.enabled).toBe(true);
-  act(() => renderer.update(<Screen><Text>Legacy body</Text></Screen>));
+  act(() => renderer.update(<Screen bottomSafeArea={false}><Text>Legacy body</Text></Screen>));
   expect(renderer.root.findAllByType(KeyboardAvoidingView)).toHaveLength(0);
   expect(renderer.root.findByType(ScrollView).props.keyboardDismissMode).toBeUndefined();
   expect(renderer.root.findAllByType(View).find(node => node.props.edges)!.props.edges).toEqual(['top']);
