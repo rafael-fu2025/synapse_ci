@@ -134,8 +134,6 @@ export function SignInScreen() {
               </View>
             </View>
 
-            <ServerConnectionControl />
-
             {displayedNotice !== null ? (
               <View style={styles.errorBox}>
                 <TriangleAlert size={15} color="#a33b3b" />
@@ -224,13 +222,20 @@ export function SignInScreen() {
             <Text style={styles.help}>Trouble signing in? Contact your system administrator.</Text>
           </View>
         </ScrollView>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={theme.mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        onPress={() => setPreference(theme.mode === 'dark' ? 'light' : 'dark')}
-        style={({ pressed }) => [styles.themeToggle, pressed && styles.pressed]}>
-        {theme.mode === 'dark' ? <Sun size={20} color={theme.ink900} /> : <Moon size={20} color={theme.ink900} />}
-      </Pressable>
+      <ServerConnectionControl renderTrigger={({ open, available, busy }) => (
+        <Pressable
+          testID="login-theme-toggle"
+          accessibilityRole="button"
+          accessibilityLabel={theme.mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          accessibilityHint={available ? 'Tap to switch theme. Touch and hold to change server connection.' : undefined}
+          accessibilityActions={available ? [{ name: 'changeServer', label: 'Change server connection' }] : undefined}
+          onAccessibilityAction={event => { if (event.nativeEvent.actionName === 'changeServer' && available && !busy) { open(); } }}
+          onPress={() => setPreference(theme.mode === 'dark' ? 'light' : 'dark')}
+          onLongPress={available ? open : undefined}
+          style={({ pressed }) => [styles.themeToggle, pressed && styles.pressed]}>
+          {theme.mode === 'dark' ? <Sun size={20} color={theme.ink900} /> : <Moon size={20} color={theme.ink900} />}
+        </Pressable>
+      )} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
