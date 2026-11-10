@@ -25,7 +25,7 @@ jest.mock('../src/store/auth', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test' } }));
 jest.mock('../src/api/client', () => ({ ApiError: class ApiError extends Error {}, NetworkError: class NetworkError extends Error {} }));
 jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: jest.fn(() => ({ theme: jest.requireActual('../src/theme/tokens')[mockDark ? 'darkTheme' : 'lightTheme'], setPreference: jest.fn() })),
+  useTheme: jest.fn(() => ({ theme: jest.requireActual('../src/theme/tokens')[mockDark ? 'darkTheme' : 'lightTheme'], setPreference: mockSetPreference })),
 }));
 jest.mock('../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View, useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 20, left: 0 }) }));
@@ -44,6 +44,7 @@ const selectProfile = jest.fn<Promise<void>, ['university' | 'home']>();
 const signIn = jest.fn<Promise<void>, [string, string]>();
 const retryBootstrap = jest.fn<Promise<void>, []>();
 const signOut = jest.fn<Promise<void>, []>();
+const mockSetPreference = jest.fn();
 const motionListeners = new Set<(reduced: boolean) => void>();
 
 function WorkspaceProbe() { workspace = useWorkspace(); return null; }
@@ -64,7 +65,11 @@ function refresh(update: Partial<ConnectionContextValue> = {}) {
 }
 function actions(label: string) { return renderer!.root.findAllByType(Action).filter(node => node.props.children === label); }
 function press(label: string) { act(() => { actions(label)[0].props.onPress(); }); }
-function change() { press('Change'); }
+function themeToggle() { return renderer!.root.findAll(node => node.props.testID === 'login-theme-toggle' && typeof node.props.onPress === 'function')[0]; }
+function change() {
+  if (renderer!.root.findAllByType(SignInScreen).length) { act(() => themeToggle().props.onLongPress()); }
+  else { press('Change'); }
+}
 function radio(id: string) { return renderer!.root.findAll(node => node.props.testID === `server-profile-${id}`).find(node => typeof node.props.style === 'function')!; }
 function chooseHome() { change(); act(() => radio('home').props.onPress()); }
 function visibleModals() { return renderer!.root.findAllByType(Modal).filter(node => node.props.visible); }
@@ -77,6 +82,7 @@ beforeEach(() => {
   jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
   jest.replaceProperty(Platform, 'OS', 'ios');
   mockDark = false;
+  mockSetPreference.mockClear();
   motionListeners.clear();
   __resetPushSetupStatusForTests();
   selectProfile.mockReset().mockImplementation(() => new Promise<void>(() => undefined));
@@ -340,11 +346,105 @@ it('reacts to live reduced-motion changes without moving hit targets or enabling
 
 it.each([SettingsScreen, SignInScreen, BootstrapErrorScreen, SessionExpiredScreen, SplashScreen])('makes %p connection selection reachable offline without automatically retrying/authenticating', async Component => {
   await mount(<Component />);
-  expect(hasText('Server · University')).toBe(true);
+  expect(hasText('Server · University')).toBe(Component !== SignInScreen);
   toConfirmation();
   expect(selectProfile).not.toHaveBeenCalled();
   expect(signIn).not.toHaveBeenCalled(); expect(retryBootstrap).not.toHaveBeenCalled(); expect(signOut).not.toHaveBeenCalled();
   press('Keep current server'); dismissNative();
+  expect(selectProfile).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('hides login server details while preserving theme taps in dark=%s mode', async dark => {
+  mockDark = dark;
+  await mount(<SignInScreen />);
+  expect(hasText('Server · University')).toBe(false);
+  expect(hasText(CONNECTION_PROFILES[0].apiBaseUrl)).toBe(false);
+  expect(actions('Change')).toHaveLength(0);
+  expect(renderer!.root.findAll(node => node.props.testID === 'server-connection-control')).toHaveLength(0);
+  const toggle = themeToggle();
+  expect(toggle.props.accessibilityLabel).toBe(dark ? 'Switch to light mode' : 'Switch to dark mode');
+  expect(StyleSheet.flatten(toggle.props.style({ pressed: false }))).toMatchObject({ width: 44, height: 44, position: 'absolute' });
+  act(() => toggle.props.onPress());
+  expect(mockSetPreference).toHaveBeenCalledWith(dark ? 'light' : 'dark');
+  expect(visibleModals()).toHaveLength(0);
+  expect(selectProfile).not.toHaveBeenCalled();
+});
+
+it('opens the existing chooser on a theme hold without toggling theme or duplicating overlays', async () => {
+  await mount(<SignInScreen />);
+  const hold = themeToggle().props.onLongPress;
+  act(() => { hold(); hold(); });
+  expect(visibleModals()).toHaveLength(1);
+  expect(renderer!.root.findByType(BottomSheet).props.visible).toBe(true);
+  expect(mockSetPreference).not.toHaveBeenCalled();
+  press('Cancel');
+  act(() => hold());
+  expect(visibleModals()).toHaveLength(0);
+  dismissNative();
+  expect(selectProfile).not.toHaveBeenCalled();
+  change();
+  expect(visibleModals()).toHaveLength(1);
+});
+
+it('keeps native theme taps separate from a completed long press and release', async () => {
+  await mount(<SignInScreen />);
+  const nativeToggle = () => renderer!.root.findAll(node => node.props.testID === 'login-theme-toggle' && typeof node.props.onResponderGrant === 'function')[0];
+  const event = { currentTarget: 1, persist: jest.fn(), nativeEvent: { touches: [{ pageX: 24, pageY: 24 }], pageX: 24, pageY: 24 } };
+  act(() => { nativeToggle().props.onResponderGrant(event); jest.advanceTimersByTime(50); nativeToggle().props.onResponderRelease(event); });
+  expect(mockSetPreference).toHaveBeenCalledTimes(1);
+  expect(visibleModals()).toHaveLength(0);
+  mockSetPreference.mockClear();
+  act(() => nativeToggle().props.onResponderGrant(event));
+  act(() => jest.advanceTimersByTime(600));
+  expect(visibleModals()).toHaveLength(1);
+  act(() => nativeToggle().props.onResponderRelease(event));
+  expect(mockSetPreference).not.toHaveBeenCalled();
+  expect(selectProfile).not.toHaveBeenCalled();
+});
+
+it('offers an accessible server action without changing the theme action', async () => {
+  await mount(<SignInScreen />);
+  const toggle = themeToggle();
+  expect(toggle.props.accessibilityHint).toContain('Touch and hold');
+  expect(toggle.props.accessibilityActions).toEqual([{ name: 'changeServer', label: 'Change server connection' }]);
+  act(() => toggle.props.onAccessibilityAction({ nativeEvent: { actionName: 'changeServer' } }));
+  expect(visibleModals()).toHaveLength(1);
+  expect(mockSetPreference).not.toHaveBeenCalled();
+});
+
+it.each(['disabled', 'missingProfile', 'noProvider'] as const)('keeps the login theme button functional when server access is %s', async unavailable => {
+  if (unavailable === 'disabled') { connection.enabled = false; }
+  if (unavailable === 'missingProfile') { connection.profile = null; }
+  if (unavailable === 'noProvider') {
+    await act(async () => { renderer = create(<SignInScreen />); });
+  } else { await mount(<SignInScreen />); }
+  const toggle = themeToggle();
+  expect(toggle.props.onLongPress).toBeUndefined();
+  expect(toggle.props.accessibilityActions).toBeUndefined();
+  expect(toggle.props.disabled).not.toBe(true);
+  act(() => toggle.props.onPress());
+  expect(mockSetPreference).toHaveBeenCalledWith('dark');
+  expect(visibleModals()).toHaveLength(0);
+});
+
+it('retains accessible server errors and setup warnings without restoring the login card', async () => {
+  connection.error = 'Could not save the selected server.';
+  await mount(<SignInScreen />);
+  const warning = 'Notifications are unavailable on this server.';
+  act(() => publishPushSetupStatus({ state: 'warning', warning, code: 'push_unavailable', runtimeId: 11 }));
+  expect(hasText(connection.error!)).toBe(true);
+  expect(hasText(warning)).toBe(true);
+  expect(hasText('Server · University')).toBe(false);
+  expect(actions('Change')).toHaveLength(0);
+});
+
+it('ignores stale theme holds while the connection is switching but leaves normal taps enabled', async () => {
+  await mount(<SignInScreen />);
+  const hold = themeToggle().props.onLongPress;
+  refresh({ switching: true });
+  act(() => { hold(); themeToggle().props.onLongPress(); themeToggle().props.onPress(); });
+  expect(visibleModals()).toHaveLength(0);
+  expect(mockSetPreference).toHaveBeenCalledWith('dark');
   expect(selectProfile).not.toHaveBeenCalled();
 });
 
@@ -433,7 +533,8 @@ it('preserves sign-in fields and allows changing server during a pending sign-in
   });
   press('Sign in');
   expect(actions('Sign in')[0].props.loading).toBe(true);
-  expect(actions('Change')[0].props.disabled).toBe(false);
+  expect(themeToggle().props.onLongPress).toEqual(expect.any(Function));
+  expect(themeToggle().props.disabled).not.toBe(true);
   chooseHome(); press('Cancel'); dismissNative();
   const inputs = renderer!.root.findAllByType(TextInput);
   expect(inputs[0].props.value).toBe('Keep identifier'); expect(inputs[1].props.value).toBe('Keep password');

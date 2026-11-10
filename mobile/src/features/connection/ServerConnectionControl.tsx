@@ -17,6 +17,7 @@ type Props = {
   presentation?: 'compact' | 'settings';
   /** Restoring and signed-in sessions are also retired when changing servers. */
   requiresSignIn?: boolean;
+  renderTrigger?: (trigger: { open: () => void; available: boolean; busy: boolean }) => React.ReactNode;
 };
 type Phase = 'choosing' | 'closingChooser' | 'confirming' | 'closingConfirmation' | 'requestDiscard' | 'awaitingDiscard' | 'ready' | 'selecting';
 type Selection = {
@@ -32,13 +33,15 @@ type Selection = {
 };
 
 /** Legacy fixtures and non-LAN builds need neither a provider nor extra UI. */
-export function ServerConnectionControl({ presentation = 'compact', requiresSignIn = false }: Props) {
+export function ServerConnectionControl({ presentation = 'compact', requiresSignIn = false, renderTrigger }: Props) {
   const connection = useOptionalConnection();
-  if (!connection?.enabled || !connection.profile) { return null; }
-  return <EnabledConnectionControl key={`${connection.owner}:${connection.profile.id}`} connection={connection} presentation={presentation} requiresSignIn={requiresSignIn} />;
+  if (!connection?.enabled || !connection.profile) {
+    return renderTrigger?.({ open: () => undefined, available: false, busy: false }) ?? null;
+  }
+  return <EnabledConnectionControl key={`${connection.owner}:${connection.profile.id}`} connection={connection} presentation={presentation} requiresSignIn={requiresSignIn} renderTrigger={renderTrigger} />;
 }
 
-function EnabledConnectionControl({ connection, presentation, requiresSignIn }: Required<Props> & { connection: ConnectionContextValue }) {
+function EnabledConnectionControl({ connection, presentation, requiresSignIn, renderTrigger }: Required<Omit<Props, 'renderTrigger'>> & Pick<Props, 'renderTrigger'> & { connection: ConnectionContextValue }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
   const { width, fontScale } = useWindowDimensions();
@@ -157,28 +160,35 @@ function EnabledConnectionControl({ connection, presentation, requiresSignIn }: 
 
   const error = connection.error ?? localError;
   const token = selection?.token;
+  const feedback = <>
+    {error ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text> : null}
+    <ConnectionSetupWarning owner={connection.owner} />
+  </>;
   return (
-    <View style={presentation === 'settings' ? styles.settingsGroup : styles.compact} testID="server-connection-control">
-      {presentation === 'settings' ? <Text style={styles.groupLabel}>CONNECTION</Text> : null}
-      <View style={[styles.row, stacked && styles.stacked]}>
-        {presentation === 'settings' && !stacked ? <View style={styles.icon}><Server size={16} color={theme.brandIcon} /></View> : null}
-        <View style={[styles.copy, stacked && styles.stackedCopy]}>
-          <Text style={styles.label}>{`Server · ${profile.label}`}</Text>
-          <Text style={styles.address}>{profile.apiBaseUrl}</Text>
+    <>
+      {renderTrigger ? <>{renderTrigger({ open, available: true, busy })}{feedback}</> : (
+        <View style={presentation === 'settings' ? styles.settingsGroup : styles.compact} testID="server-connection-control">
+          {presentation === 'settings' ? <Text style={styles.groupLabel}>CONNECTION</Text> : null}
+          <View style={[styles.row, stacked && styles.stacked]}>
+            {presentation === 'settings' && !stacked ? <View style={styles.icon}><Server size={16} color={theme.brandIcon} /></View> : null}
+            <View style={[styles.copy, stacked && styles.stackedCopy]}>
+              <Text style={styles.label}>{`Server · ${profile.label}`}</Text>
+              <Text style={styles.address}>{profile.apiBaseUrl}</Text>
+            </View>
+            <Action
+              variant="ghost"
+              onPress={open}
+              disabled={busy}
+              loading={connection.switching}
+              accessibilityLabel="Change server connection"
+              accessibilityHint="Choose University or Home without testing a connection first"
+              testID="change-server-connection">
+              Change
+            </Action>
+          </View>
+          {feedback}
         </View>
-        <Action
-          variant="ghost"
-          onPress={open}
-          disabled={busy}
-          loading={connection.switching}
-          accessibilityLabel="Change server connection"
-          accessibilityHint="Choose University or Home without testing a connection first"
-          testID="change-server-connection">
-          Change
-        </Action>
-      </View>
-      {error ? <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</Text> : null}
-      <ConnectionSetupWarning owner={connection.owner} />
+      )}
       <BottomSheet
         visible={selection?.phase === 'choosing'}
         title="Choose a server"
@@ -205,7 +215,7 @@ function EnabledConnectionControl({ connection, presentation, requiresSignIn }: 
         onCancel={() => closeConfirmation(token, false)}
         onDismiss={() => confirmationDismissed(token)}
       />
-    </View>
+    </>
   );
 }
 
