@@ -11,6 +11,7 @@ import { useReducedMotion } from '../lib/useReducedMotion';
 import { motion } from '../lib/motion';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { useOverlayActivity } from '../components/OverlayProvider';
+import { useSystemNavigationBar } from '../components/SystemNavigationBar';
 import { CONTEXT_BAR_RAISED_SPACE } from './contextTabBarMetrics';
 import { TAB_TRANSITION_MS } from './useTabMotionOptions';
 
@@ -31,6 +32,7 @@ export function SharedContextTabBar({ available = true, contextBindings, ...prop
   const mode = workspace.mode === 'workspace' || workspace.personalEnabled === false ? 'workspace' : 'personal';
   const reduced = useReducedMotion();
   const keyboardVisible = useKeyboardVisible();
+  useSystemNavigationBar(mode, !keyboardVisible);
   const overlayActive = useOverlayActivity();
   const reportHeight = useContext(BottomTabBarHeightCallbackContext);
   const window = useWindowDimensions();

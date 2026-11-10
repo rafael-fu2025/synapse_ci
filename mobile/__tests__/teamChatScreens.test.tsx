@@ -55,7 +55,7 @@ let mockFocused = true;
 let mockConnected = true;
 let mockTheme = lightTheme;
 let mockReducedMotion = true;
-let mockMeasured = { height: 0, contentHeight: 0, offset: 0, viewportTop: 100, markerVisible: true, tailVisible: true };
+let mockMeasured = { height: 0, contentHeight: 0, offset: 0, viewportTop: 100, markerVisible: true, tailVisible: true, trailingSpace: 0 };
 const mockMeasureCallbacks: Array<() => void> = [];
 const mockMeasuredNodes: string[] = [];
 let mockDelayMeasures = false;
@@ -192,7 +192,7 @@ beforeEach(() => {
   jest.replaceProperty(Platform, 'OS', 'android'); jest.replaceProperty(AppState, 'currentState', 'active');
   jest.mocked(useKeyboardVisible).mockReturnValue(false);
   mockFocused = true; mockConnected = true; mockTheme = lightTheme; mockReducedMotion = true;
-  mockMeasured = { height: 0, contentHeight: 0, offset: 0, viewportTop: 100, markerVisible: true, tailVisible: true };
+  mockMeasured = { height: 0, contentHeight: 0, offset: 0, viewportTop: 100, markerVisible: true, tailVisible: true, trailingSpace: 0 };
   mockDelayMeasures = false; mockMeasureCallbacks.length = 0; mockMeasuredNodes.length = 0;
   jest.spyOn((View as unknown as { prototype: { measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void } }).prototype, 'measureInWindow').mockImplementation(function (this: { props: { testID?: string } }, callback) {
     const id = this.props.testID;
@@ -200,10 +200,11 @@ beforeEach(() => {
     const tail = id === 'team-chat-latest-tail';
     mockMeasuredNodes.push(id ?? 'target');
     const { viewportTop, height, contentHeight, offset } = mockMeasured;
-    const atBottom = offset >= Math.max(0, contentHeight - height) - 1;
+    // Native position can change without delivering an onScroll event to the screen.
+    const tailBottom = contentHeight - offset - 10 - mockMeasured.trailingSpace;
     const y = viewport ? viewportTop : tail
-      ? viewportTop + (mockMeasured.tailVisible && atBottom ? Math.min(contentHeight, height) - 1 : height + 200)
-      : viewportTop + (mockMeasured.markerVisible ? id ? Math.min(contentHeight || height, height) - 4 : height / 2 - 1 : height + 200);
+      ? viewportTop + (mockMeasured.tailVisible ? tailBottom - 1 : height + 200)
+      : viewportTop + (mockMeasured.markerVisible ? id ? tailBottom - 3 : height / 2 - 1 : height + 200);
     const execute = () => callback(0, y, 360, viewport ? height : tail ? 1 : 2);
     if (mockDelayMeasures) { mockMeasureCallbacks.push(execute); } else { execute(); }
   });
@@ -250,6 +251,36 @@ describe('mounted Team Chat screen interactions', () => {
     expect(api.markRead).not.toHaveBeenCalled();
   });
 
+  it('reveals populated history when native scrolling reaches the end without an onScroll event', async () => {
+    await render();
+    const input = field(); const list = history();
+    scrollEnd.mockImplementationOnce(() => { mockMeasured.offset = 1300; });
+    layoutList(500); contentList(1800); layoutLatestTail();
+    await tick(40);
+    expect(scrollEnd).toHaveBeenCalledWith({ animated: false });
+    expect(entryCover()).toBeUndefined();
+    expect(history().props.scrollEnabled).toBe(true);
+    expect(history().props.importantForAccessibility).toBe('auto');
+    expect(history()).toBe(list); expect(field()).toBe(input);
+    expect(bubbles().map(node => node.props.message.id)).toEqual([10, 11]);
+    scrollEnd.mockClear(); scrollOffset.mockClear();
+    contentList(1800); layoutList(500); layoutLatestTail(); await tick(40);
+    expect(scrollEnd).not.toHaveBeenCalled(); expect(scrollOffset).not.toHaveBeenCalled();
+    expect(api.send).not.toHaveBeenCalled(); expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it.each([-6, 40])('does not reveal a visible tail displaced from the native content end by %s pixels', async displacement => {
+    await render();
+    mockMeasured.offset = 1300 + displacement;
+    layoutList(500); contentList(1800); layoutLatestTail(); await tick(40);
+    expect(entryCover()).toBeDefined();
+    expect(api.markRead).not.toHaveBeenCalled();
+    mockMeasured.offset = 1300;
+    layoutLatestTail();
+    expect(entryCover()).toBeUndefined();
+    expect(api.send).not.toHaveBeenCalled();
+  });
+
   it.each(['short', 'empty'] as const)('reveals a %s latest window without depending on a scroll event', async kind => {
     jest.mocked(api.history).mockResolvedValueOnce(page(kind === 'empty' ? [] : [message(10)]));
     await render();
@@ -259,6 +290,17 @@ describe('mounted Team Chat screen interactions', () => {
     expect(entryCover()).toBeUndefined();
     expect(history().props.scrollEnabled).toBe(true);
     expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('reveals an empty window with flex-grown content and unused space below its footer', async () => {
+    jest.mocked(api.history).mockResolvedValueOnce(page([]));
+    await render();
+    mockMeasured.trailingSpace = 260;
+    layoutList(500); contentList(500); layoutLatestTail(); await tick(40);
+    expect(entryCover()).toBeUndefined();
+    expect(history().props.scrollEnabled).toBe(true);
+    expect(allText()).toContain('No messages yet');
+    expect(api.send).not.toHaveBeenCalled(); expect(api.markRead).not.toHaveBeenCalled();
   });
 
   it('does not reveal an estimated bottom while the actual newest marker is still offscreen', async () => {
@@ -346,10 +388,34 @@ describe('mounted Team Chat screen interactions', () => {
     layoutList(500); contentList(1800); layoutLatestTail();
     expect(scrollEnd).toHaveBeenCalledWith({ animated: false });
     expect(entryCover()).toBeDefined();
+    scrollOffset.mockImplementationOnce(({ offset }: { offset: number }) => { mockMeasured.offset = offset; });
     await tick(40);
     expect(scrollOffset).toHaveBeenCalledWith({ offset: 1300, animated: false });
-    scrollList(1300);
     expect(entryCover()).toBeUndefined();
+    expect(history().props.scrollEnabled).toBe(true);
+    expect(api.send).not.toHaveBeenCalled(); expect(api.markRead).not.toHaveBeenCalled();
+  });
+
+  it('restarts entry confirmation when a successful request settles without another layout event', async () => {
+    await render();
+    mockMeasured.tailVisible = false;
+    pinLatest(); await tick(40);
+    expect(entryCover()).toBeDefined();
+    const refresh = deferred<{ data: api.TeamChatHistory }>();
+    jest.mocked(api.history).mockReturnValueOnce(refresh.promise);
+    const refreshControl = history().props.refreshControl;
+    act(() => refreshControl.props.onRefresh());
+    expect(history().props.refreshControl.props.refreshing).toBe(true);
+    mockMeasured.tailVisible = true;
+    await tick(40);
+    expect(entryCover()).toBeDefined();
+    mockMeasuredNodes.length = 0;
+    await act(async () => refresh.resolve(page([])));
+    await tick(40);
+    expect(mockMeasuredNodes).toContain('team-chat-latest-tail');
+    expect(entryCover()).toBeUndefined();
+    expect(history().props.scrollEnabled).toBe(true);
+    expect(api.send).not.toHaveBeenCalled(); expect(api.markRead).not.toHaveBeenCalled();
   });
 
   it('keeps the first re-entry render covered until a no-op bottom position is confirmed', async () => {

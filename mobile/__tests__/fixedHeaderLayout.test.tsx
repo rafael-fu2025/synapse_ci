@@ -39,7 +39,7 @@ beforeEach(() => { jest.mocked(useHealthSummary).mockReturnValue({ isLoading: tr
 it('keeps the fixed header inside the safe top but outside the padded scroll body', () => {
   const root = render(<Screen header={<PageHeader edgeToEdge title="Fixed" />}><Text>Body</Text></Screen>);
   const safe = root.findAllByType(View).find(node => node.props.edges?.[0] === 'top')!;
-  expect(safe.props.edges).toEqual(['top']);
+  expect(safe.props.edges).toEqual(['top', 'bottom']);
   const viewport = root.findByType(ScrollView);
   expect(safe.findByType(PageHeader)).toBeTruthy();
   expect(viewport.findAllByType(PageHeader)).toHaveLength(0);

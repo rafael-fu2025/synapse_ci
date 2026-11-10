@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { Theme, memoizeStyles, type } from '../theme/tokens';
 import { Action } from './Action';
 import { useOverlayFocus, useOverlayHost } from './OverlayProvider';
+import { useSystemNavigationBar } from './SystemNavigationBar';
 
 export type ConfirmDialogProps = {
   visible: boolean;
@@ -45,6 +46,7 @@ type SurfaceProps = ConfirmDialogProps & {
 function ConfirmDialogSurface({ visible, nativeVisible, progress, onNativeDismiss, abandoned, title, message, confirmLabel, cancelLabel = 'Cancel', onConfirm, onCancel, destructive = false, loading = false }: SurfaceProps) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
+  useSystemNavigationBar('dialog', nativeVisible);
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardVisible();
   const { heading, capture, onShow, requestRestore } = useOverlayFocus(visible, undefined, abandoned);

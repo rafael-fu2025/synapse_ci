@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './src/store/auth';
 import { WorkspaceProvider } from './src/features/workspace/WorkspaceContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import { OverlayProvider } from './src/components/OverlayProvider';
+import { SystemNavigationBarProvider } from './src/components/SystemNavigationBar';
 import { WorkspaceUnitPicker } from './src/features/workspace/WorkspaceUnitPicker';
 import { WorkspaceDiscardDialog } from './src/features/workspace/WorkspaceDiscardDialog';
 
@@ -37,12 +38,14 @@ export default function App(): React.JSX.Element {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <ConnectionProvider>
-          <QueryLifecycle />
-          <AuthProvider>
-            <SessionScreens />
-          </AuthProvider>
-        </ConnectionProvider>
+        <SystemNavigationBarProvider>
+          <ConnectionProvider>
+            <QueryLifecycle />
+            <AuthProvider>
+              <SessionScreens />
+            </AuthProvider>
+          </ConnectionProvider>
+        </SystemNavigationBarProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

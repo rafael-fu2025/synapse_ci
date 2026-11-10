@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useLayoutEffe
 import { AppState, findNodeHandle, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import type { BlurEvent, FocusEvent, KeyboardEvent, KeyboardMetrics, LayoutChangeEvent, ScrollViewProps, StyleProp, TextInputProps, ViewStyle } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
+import { TabOwnsBottomInsetContext } from './ScreenInsets';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { useOverlayActivity } from './OverlayProvider';
@@ -11,7 +12,7 @@ import { useTheme } from '../theme/ThemeProvider';
 /** ScreenShell equivalent: canvas background, safe-area padding, scrollable content. */
 export function Screen({
   children, scroll = true, header, bodyStyle, keyboardAware = false,
-  footer, footerStyle, bottomSafeArea = false, refreshControl,
+  footer, footerStyle, bottomSafeArea, refreshControl,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
@@ -24,11 +25,14 @@ export function Screen({
   footer?: React.ReactNode;
   /** Overrides the pinned footer's surface and spacing without affecting the body. */
   footerStyle?: StyleProp<ViewStyle>;
+  /** Standalone screens own the bottom inset by default; tab screens defer to their bar. */
   bottomSafeArea?: boolean;
   refreshControl?: ScrollViewProps['refreshControl'];
 }) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
+  const tabOwnsBottomInset = useContext(TabOwnsBottomInsetContext);
+  const ownsBottomInset = bottomSafeArea ?? !tabOwnsBottomInset;
   const keyboardVisible = useKeyboardVisible();
   const reveal = useKeyboardViewport({ enabled: keyboardAware, scroll, keyboardVisible });
   const body = (
@@ -51,7 +55,7 @@ export function Screen({
         </ScrollView>
       ) : body}
       {footer != null ? (
-        bottomSafeArea ? (
+        ownsBottomInset ? (
           <SafeAreaView testID="screen-footer" style={[styles.footer, footerStyle]} edges={{ bottom: keyboardVisible ? 'off' : 'additive' }}>
             {footer}
           </SafeAreaView>
@@ -60,7 +64,7 @@ export function Screen({
     </>
   );
   return (
-    <SafeAreaView style={styles.safe} edges={bottomSafeArea && footer == null && !keyboardVisible ? ['top', 'bottom'] : ['top']}>
+    <SafeAreaView style={styles.safe} edges={ownsBottomInset && footer == null && !keyboardVisible ? ['top', 'bottom'] : ['top']}>
       {header}
       {keyboardAware ? (
         <KeyboardAvoidingView

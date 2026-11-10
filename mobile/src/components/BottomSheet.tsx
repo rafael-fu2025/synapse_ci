@@ -11,6 +11,7 @@ import { Theme, memoizeStyles, type } from '../theme/tokens';
 import { IconAction } from './IconAction';
 import { useOverlayFocus, useOverlayHost } from './OverlayProvider';
 import { KeyboardRevealContext, useKeyboardViewport } from './Screen';
+import { useSystemNavigationBar } from './SystemNavigationBar';
 
 export type BottomSheetProps = {
   visible: boolean;
@@ -61,6 +62,7 @@ type SurfaceProps = BottomSheetProps & {
 function BottomSheetSurface({ visible, nativeVisible, progress, onNativeDismiss, onReady, settled, abandoned, title, description, children, footer, onClose, dismissible = true, closeLabel = 'Close sheet', testID }: SurfaceProps) {
   const { theme } = useTheme();
   const styles = makeStyles(theme);
+  useSystemNavigationBar('sheet', nativeVisible);
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const keyboard = useKeyboardVisible();
