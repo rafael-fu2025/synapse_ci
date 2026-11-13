@@ -23,7 +23,8 @@ $pastBatches = $pastBatches ?? [];
 </div>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
-<div class="bmg-workspace" data-bmg-base-url="<?= esc(site_url('/facilities'), 'attr') ?>">
+<div class="bmg-workspace" data-bmg-base-url="<?= esc(site_url('/facilities'), 'attr') ?>" data-refresh-owner="facilities.unit.<?= $id ?>">
+<div data-refresh-region="unit">
 <header class="card mb-3"><div class="card-body pt-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
   <div class="d-flex align-items-center gap-3">
     <?php $gearSeed = $id; require __DIR__ . '/_gear.php'; ?>
@@ -157,11 +158,12 @@ $pastBatches = $pastBatches ?? [];
   </aside>
 </div>
 <?php require __DIR__ . '/_history.php'; ?>
-</div>
 <?php if ($configure): ?>
 <?php $editUnit = $unit; require __DIR__ . '/_unit_modal.php'; ?>
 <?php require __DIR__ . '/_archive_modal.php'; ?>
 <?php endif; ?>
 <?php if ($configure || $manage): require __DIR__ . '/_operation_modals.php'; endif; ?>
+</div>
+</div>
 <?= $this->endSection() ?>
 <?= $this->section('scripts') ?><script src="<?= esc(base_url('assets/js/bmg.js')) ?>"></script><script src="<?= esc(base_url('assets/js/bmg-gear.js')) ?>"></script><?= $this->endSection() ?>

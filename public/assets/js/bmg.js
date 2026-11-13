@@ -74,7 +74,9 @@
     try {
       const response = await fetch(url.href, {
         method: 'POST', body: data, credentials: 'same-origin', redirect: 'error',
-        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}) }
+        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}),
+          ...(form.closest('[data-refresh-owner]')?.dataset.refreshOwner
+            ? { 'X-Synapse-Refresh-Owner': form.closest('[data-refresh-owner]').dataset.refreshOwner } : {}) }
       });
       window.SynapseCsrf?.fromResponse(response);
       const payload = await response.json();
@@ -104,8 +106,15 @@
         await hidden;
         modal.removeEventListener('shown.bs.modal', hide);
       }
-      if (mutations) await mutations.refresh(redirect.href, payload.message, { form });
-      else location.assign(redirect.href);
+      if (mutations) {
+        const descriptor = window.SynapseRefreshRegions?.descriptor?.(payload.refresh, redirect.href) || null;
+        if (descriptor?.mode === 'regions') {
+          const root = document.querySelector(`[data-refresh-owner="${CSS.escape(descriptor.owner)}"]`);
+          if (!root) location.assign(redirect.href);
+          else await mutations.refresh(payload.refresh?.url ? descriptor.url : location.href, payload.message,
+            { form, descriptor: payload.refresh });
+        } else await mutations.refresh(redirect.href, payload.message, { form, descriptor: payload.refresh });
+      } else location.assign(redirect.href);
     } catch (_) {
       errorBox(form, 'The save response could not be received. Your fields are retained. The write may have completed; check the facilities record before retrying.');
     } finally {
@@ -215,6 +224,9 @@
     (error || event.target.querySelector('input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), button[type="submit"]:not(:disabled)'))?.focus();
   });
   document.addEventListener('synapse:page-load', init);
+  document.addEventListener('synapse:region-load', event => {
+    if (event.detail?.owner?.startsWith('facilities.')) init();
+  });
   document.addEventListener('synapse:before-swap', clearTokens);
   window.addEventListener('pagehide', clearTokens);
   init();

@@ -11,6 +11,7 @@ use App\Services\EngagementAudience;
 use App\Services\EngagementNotifications;
 use App\Services\NotificationInvalidation;
 use App\Services\PortalContent;
+use App\Services\Push\PushPublisher;
 use App\Services\Reporting\ExportAccess;
 use App\Services\Reporting\ExportCsv;
 use App\Services\Reporting\ExportRange;
@@ -598,7 +599,7 @@ final class SurveyService
             $response === null ? $metadata : ['response_id' => $response], (int) $actor['id'], $actor['role']);
     }
 
-    private function transaction(callable $callback, ?NotificationInvalidation $invalidation = null): mixed
+    private function transaction(callable $callback, ?NotificationInvalidation $invalidation = null, ?PushPublisher $push = null): mixed
     {
         $db = Database::connect();
         if ($db->transDepth !== 0) { throw new RuntimeException('Survey operations require an independent transaction.', 409); }
@@ -626,6 +627,15 @@ final class SurveyService
             }
         } catch (Throwable) {
             // Optional realtime setup cannot fail or roll back a committed write.
+        }
+        // Push is independently best effort, even if realtime setup or publication failed.
+        try {
+            if ($notifications !== []) {
+                $push ??= new PushPublisher($db);
+                foreach ($notifications as $tenant => $ids) $push->publishCommitted((int) $tenant, $ids);
+            }
+        } catch (Throwable) {
+            // A missed push cannot fail or roll back the committed survey and inbox rows.
         }
         return $result;
     }

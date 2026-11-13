@@ -20,12 +20,34 @@
     each(root, '[data-bs-toggle="tooltip"]', element => {
       const Tooltip = window.bootstrap?.Tooltip;
       if (!Tooltip || Tooltip.getInstance(element)) return; // core/main.js owns initial instances.
-      const tooltip = new Tooltip(element, { trigger: 'hover' });
+      const tooltip = new Tooltip(element, { trigger: 'hover', animation: false, delay: 0 });
       element.addEventListener('click', () => tooltip.hide(), { signal: events.signal });
     });
     each(root, '[data-bs-toggle="popover"]', element => {
       const Popover = window.bootstrap?.Popover;
       if (Popover && !Popover.getInstance(element)) new Popover(element);
+    });
+    each(root, 'img[data-avatar-fallback]', image => {
+      image.addEventListener('error', () => {
+        const fallback = image.dataset.avatarFallback;
+        if (!fallback || image.src === fallback) return;
+        image.removeAttribute('data-avatar-fallback');
+        image.src = fallback;
+      }, { signal: events.signal });
+      if (image.complete && image.naturalWidth === 0) image.dispatchEvent(new Event('error'));
+    });
+    each(root, '[data-auto-submit]', control => {
+      control.addEventListener('change', () => control.form?.requestSubmit(), { signal: events.signal });
+    });
+    each(root, '[data-reset-pages]', control => {
+      control.addEventListener('change', () => {
+        const form = control.form;
+        if (!form) return;
+        for (const name of ['pending_page', 'scheduled_page']) {
+          const field = form.elements.namedItem(name);
+          if (field) field.value = '1';
+        }
+      }, { signal: events.signal });
     });
     if (window.Quill) each(root, editorSelector, element => {
       // Older Quill versions expose __quill; the container marker also protects

@@ -7,7 +7,9 @@ $inventoryFilters = ($filters ?? []) + ['q' => '', 'status' => 'all', 'per_page'
 <?php if (!empty($canManage)): ?><a href="<?= esc(site_url('/clinic/inventory/create')) ?>" class="btn btn-primary" data-app-modal-open><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Medicine</a><?php endif; ?>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
-<section data-live-table data-endpoint="<?= esc($inventoryBaseUrl) ?>">
+<section data-live-table data-endpoint="<?= esc($inventoryBaseUrl) ?>"
+         data-refresh-owner="inventory.catalog"
+         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <p class="text-muted">Medicine stock in whole catalog units, not fractional doses. Usable stock excludes expired and quarantined batches.</p>
   <div class="card mb-4">
     <div class="card-body pt-3">
@@ -44,7 +46,7 @@ $inventoryFilters = ($filters ?? []) + ['q' => '', 'status' => 'all', 'per_page'
     <span data-table-error-message></span>
     <button data-table-retry type="button" class="btn btn-outline-danger btn-sm ms-2">Retry</button>
   </div>
-  <div data-table-results id="inventoryResults">
+  <div data-table-results id="inventoryResults" data-refresh-region="catalog" data-refresh-heading tabindex="-1">
     <?= view('inventory/_results', [
         'medicines' => $medicines ?? [], 'pagination' => $pagination ?? null,
         'filters' => $inventoryFilters, 'baseUrl' => $inventoryBaseUrl,

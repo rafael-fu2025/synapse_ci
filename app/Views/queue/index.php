@@ -65,6 +65,8 @@
      hx-get="<?= site_url($unit . '/queue/board') ?>"
      hx-include="#queueDateFilter_iso"
      data-queue-unit="<?= esc($unit, 'attr') ?>"
+     data-refresh-owner="queue.board.<?= esc($unit, 'attr') ?>"
+     data-refresh-region="board"
      hx-trigger="queue:refresh"
      hx-swap="innerHTML">
   <?= $this->include('queue/board_partial', ['summary' => $summary, 'unit' => $unit]) ?>
@@ -331,7 +333,7 @@
               bootstrap.Modal.getOrCreateInstance(this.$root).hide();
             });
           }
-          await window.SynapseMutations.refresh(location.href, payload.message, { form });
+          await window.SynapseMutations.refresh(location.href, payload.message, { form, descriptor: payload.refresh });
         } catch (error) {
           tell(this.committed
             ? 'Ticket issued, but refreshing failed. Do not submit again; reload to review the queue.'

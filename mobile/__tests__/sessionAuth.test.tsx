@@ -1,4 +1,5 @@
 import React from 'react';
+import { AppState } from 'react-native';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import {
   __resetClientForTests,
@@ -114,6 +115,7 @@ async function signIn(id = 1) {
 beforeEach(() => {
   __resetClientForTests();
   jest.resetAllMocks();
+  jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
   jest.mocked(getRefreshToken).mockResolvedValue(null);
   jest.mocked(setRefreshToken).mockResolvedValue(undefined);
   jest.mocked(clearRefreshToken).mockResolvedValue(undefined);
@@ -124,6 +126,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => renderer?.unmount());
   renderer = undefined;
+  jest.restoreAllMocks();
   globalThis.fetch = originalFetch;
 });
 

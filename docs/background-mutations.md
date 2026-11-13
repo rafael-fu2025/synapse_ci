@@ -335,3 +335,40 @@ connections, completed migrations, and left no `humus_fresh_` schemas behind.
 This certifies the named regression and CI validation scope, not the unfiltered
 historical suite or every live integration. No operational database, real clinical
 or stock records, deployment keys, or hardware operations were used.
+
+## Regional refresh rollout architecture (SynapseRefreshRegions)
+
+To avoid full document or entire `#main` replacements when only specific data sections change, the web application provides an opt-in named-region refresh system (`public/assets/js/refresh-regions.js`).
+
+### Rollout controls and killswitch
+
+The system is **disabled by default** via `app/Config/RefreshRegions.php`:
+
+```php
+class RefreshRegions extends BaseConfig
+{
+    public bool $enabled = false;
+    public array $owners = [];
+}
+```
+
+- **Master switch:** Set environment variable `refreshRegions.enabled=true` (or `false` to disable).
+- **Owner allowlist:** Set `refreshRegions.owners=appointments.staff.clinic,inventory.catalog,...` or `*` for all.
+- **Config-only instant rollback:** Setting `refreshRegions.enabled=false` immediately reverts the application to existing full-navigation behavior without requiring code deployment or DOM changes.
+
+### Authoritative mutation descriptors
+
+Controllers returning mutation JSON payloads can provide an optional `refresh` descriptor via `BaseController` helpers:
+
+1. `mode: 'regions'`: Authoritative GET extraction of named regions. Container identities and outer DOM remain mounted; only child nodes are replaced atomically.
+2. `mode: 'navigate'`: Explicit destination change with push or replace history.
+3. `mode: 'none'`: Mutation feedback is self-contained; no reconciliation GET needed.
+
+### Invariants and safety guarantees
+
+1. **Native fallback:** If JavaScript is disabled or an unmigrated client submits a form, native form POSTs and server-side HTTP 303 redirects function normally.
+2. **GET-only retry:** When a follow-up GET fails, the committed form stays locked against duplicate POSTs. Only the GET read is retried.
+3. **Atomic commit & rollback:** All requested regions are parsed, checked against safety rules (no inline scripts, base, iframes, or executable attributes), and verified against concurrent edits before swapping.
+4. **Security escalation:** 401, 403, 419, login redirects, or navigation scope changes trigger full document navigation; no privileged stale content is retained.
+5. **Persistent shell isolation:** Header, sidebar, and layout shell never participate in regional transactions.
+6. **Keyed Team Chat reconciliation:** Messages and separators are keyed and reused in-place rather than cleared and re-inserted, preserving selection, tooltips, and scroll anchors.

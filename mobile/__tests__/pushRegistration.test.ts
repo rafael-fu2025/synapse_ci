@@ -1,13 +1,15 @@
 import * as Keychain from 'react-native-keychain';
 import { request, type ApiRuntime } from '../src/api/client';
 import {
-  capturePushCleanup, getPushSetupStatus, pausePushSession, registerDevice, revokeDevice, watchPushToken,
+  capturePushCleanup, getPushSetupStatus, pausePushSession, registerDevice, retryPushSetup, revokeDevice, watchPushToken,
   __resetPushRegistrationForTests,
 } from '../src/lib/push/registration';
 import { acceptsPushMessage, currentPushOwner, currentPushScope, __resetPushScopeForTests } from '../src/lib/push/scope';
 
 const mockGetToken = jest.fn();
 const mockPermission = jest.fn();
+const mockRequestPermission = jest.fn();
+let mockPlatform: 'android' | 'ios' = 'android';
 const mockInstallation = jest.fn();
 const mockTokenRefresh = jest.fn();
 const mockCleanupRequest = jest.fn();
@@ -19,10 +21,13 @@ let mockLegacyRuntime: ApiRuntime;
 jest.mock('../src/lib/config', () => ({ config: { apiBaseUrl: 'http://api.test', lanTest: false } }));
 jest.mock('../src/lib/secureNonce', () => ({ secureClientNonce: () => mockNonce() }));
 jest.mock('../src/lib/keychain', () => ({ getOrCreateInstallationId: (...args: unknown[]) => mockInstallation(...args) }));
+jest.mock('../src/lib/push/permission', () => ({
+  refreshNotificationPermission: (...args: unknown[]) => mockPermission(...args),
+}));
 jest.mock('../src/lib/push/fcm', () => ({
-  requestPushPermission: (...args: unknown[]) => mockPermission(...args),
+  requestPushPermission: (...args: unknown[]) => mockRequestPermission(...args),
   currentDeviceToken: () => mockGetToken(),
-  currentPushPlatform: () => 'android',
+  currentPushPlatform: () => mockPlatform,
   onPushTokenRefresh: (handler: (token: string) => void) => {
     mockTokenHandler = handler;
     return mockTokenRefresh;
@@ -84,6 +89,8 @@ beforeEach(() => {
   mockTokenHandler = null;
   mockLegacyRuntime = runtime({ id: 0, apiBaseUrl: 'http://api.test', profileId: null, credentialBinding: null, lanTest: false });
   mockPermission.mockResolvedValue('granted');
+  mockRequestPermission.mockResolvedValue('granted');
+  mockPlatform = 'android';
   mockGetToken.mockResolvedValue('device-token-1');
   mockInstallation.mockResolvedValue('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
   mockNonce.mockReturnValue(registrationId);
@@ -122,6 +129,25 @@ describe('legacy normal device lifecycle', () => {
     expect(mockRequest).not.toHaveBeenCalled();
   });
 
+  it('only checks Android permission during registration and never reopens a denied prompt', async () => {
+    mockPermission.mockResolvedValue('denied');
+    await registerDevice();
+    await registerDevice();
+    expect(mockRequestPermission).not.toHaveBeenCalled();
+    expect(mockGetToken).not.toHaveBeenCalled();
+    expect(mockRequest).not.toHaveBeenCalled();
+  });
+
+  it('preserves the existing signed-in permission request on iOS', async () => {
+    mockPlatform = 'ios';
+    await registerDevice();
+    expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+    expect(mockPermission).not.toHaveBeenCalled();
+    expect(mockRequest).toHaveBeenCalledWith('api/v1/push/token', expect.objectContaining({
+      body: expect.objectContaining({ platform: 'ios' }),
+    }), mockLegacyRuntime);
+  });
+
   it('survives refused registration and withdrawal without propagating raw errors', async () => {
     mockRequest.mockRejectedValue(new Error('offline server URL/token should never be shown'));
     await expect(registerDevice()).resolves.toBeUndefined();
@@ -149,7 +175,7 @@ describe('legacy normal device lifecycle', () => {
 });
 
 describe('scoped LAN registration', () => {
-  it('checks authenticated scoped capability before requesting permission/token and persists no token', async () => {
+  it('checks authenticated scoped capability before checking permission/token and persists no token', async () => {
     const api = runtime();
     await registerDevice({ runtime: api, user });
     expect(mockRequest).toHaveBeenNthCalledWith(1, 'api/v1/push/capabilities', undefined, api);
@@ -423,6 +449,51 @@ describe('scoped LAN registration', () => {
     await expect(cleanup.clearScope).rejects.toThrow('native deletion failed');
     expect(acceptsPushMessage(scopedMessage())).toBe(false);
     await cleanup();
+  });
+});
+
+describe('screen-triggered registration recovery', () => {
+  it('keeps the session owner active when the Settings screen unmounts during a retry', async () => {
+    const api = runtime();
+    let authenticated = true;
+    const options = { runtime: api, user, isCurrent: () => authenticated };
+    await registerDevice(options);
+    const owner = currentPushOwner();
+    const stop = watchPushToken(options);
+    const token = deferred<string>();
+    mockGetToken.mockReturnValueOnce(token.promise);
+    let screenMounted = true;
+    const pending = retryPushSetup(api, user, () => screenMounted);
+    await tick();
+    screenMounted = false;
+    token.resolve('retry-token');
+    await pending;
+    expect(currentPushOwner()).toBe(owner);
+    expect(acceptsPushMessage(scopedMessage())).toBe(true);
+    mockRequest.mockClear();
+    mockTokenHandler!('rotated-after-settings');
+    await tick();
+    expect(mockRequest).toHaveBeenCalledWith('api/v1/push/token', expect.objectContaining({
+      body: expect.objectContaining({ token: 'rotated-after-settings' }),
+    }), api);
+    authenticated = false;
+    expect(acceptsPushMessage(scopedMessage())).toBe(false);
+    stop();
+  });
+
+  it('does not create or retarget registration from a stale, unsigned, or wrong-account screen', async () => {
+    const api = runtime();
+    await retryPushSetup(api, user, () => true);
+    expect(mockPermission).not.toHaveBeenCalled();
+    await registerDevice({ runtime: api, user });
+    const owner = currentPushOwner();
+    mockRequest.mockClear(); mockPermission.mockClear();
+    await retryPushSetup(api, user, () => false);
+    await retryPushSetup(api, { tenant_id: 7, id: 99 }, () => true);
+    await retryPushSetup(runtime({ id: 9 }), user, () => true);
+    expect(mockRequest).not.toHaveBeenCalled();
+    expect(mockPermission).not.toHaveBeenCalled();
+    expect(currentPushOwner()).toBe(owner);
   });
 });
 

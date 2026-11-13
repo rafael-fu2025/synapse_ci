@@ -19,7 +19,7 @@ $selectedWindows = array_values(array_filter($availability, static fn ($row) => 
 $selectedWindow = count($selectedWindows) === 1 ? $selectedWindows[0] : [];
 $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 ?>
-<section id="availability-workspace" class="availability-workspace" data-availability-workspace data-workspace-url="<?= esc($base) ?>" aria-label="<?= esc(ucfirst($unit)) ?> provider availability">
+<section id="availability-workspace" class="availability-workspace" data-availability-workspace data-workspace-url="<?= esc($base) ?>" data-refresh-owner="availability.<?= esc($unit, 'attr') ?>" aria-label="<?= esc(ucfirst($unit)) ?> provider availability">
   <p class="text-muted mb-4">Manage <?= $unit === 'clinic' ? 'Clinic' : 'Guidance' ?> staff enrollment, recurring weekly hours, and date-specific exceptions. All scheduling times use <strong>Asia/Manila</strong>.</p>
   <div class="card"><div class="card-body p-3 p-lg-4">
     <form method="get" action="<?= esc($base) ?>" class="row g-3 align-items-end" role="search" aria-label="Filter availability" data-availability-filters>
@@ -31,7 +31,7 @@ $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
   </div></div>
   <p class="small text-muted" data-availability-filter-status role="status" aria-live="polite">Choose a staff name or provider to narrow this workspace.</p>
   <div class="alert alert-danger" data-availability-filter-error role="alert" hidden><span data-availability-filter-error-text></span> <button type="button" class="btn btn-outline-secondary btn-sm ms-2" data-availability-filter-retry>Retry</button></div>
-  <div data-availability-results>
+  <div data-availability-results data-refresh-region="results">
   <nav class="av-section-nav" aria-label="Availability sections">
     <?php foreach (['enrollment' => 'Department setup', 'weekly' => 'Weekly schedules', 'exceptions' => 'Leave & exceptions'] as $key => $label): ?><a class="av-section-link <?= $section === $key ? 'is-active' : '' ?>" href="<?= esc($sectionUrl($key)) ?>" <?= $section === $key ? 'aria-current="page"' : '' ?>><?= esc($label) ?></a><?php endforeach; ?>
   </nav>

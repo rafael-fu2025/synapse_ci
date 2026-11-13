@@ -40,7 +40,7 @@
     const events = new AbortController();
     const options = { signal: events.signal };
     const dirty = new Set();
-    let sequence = 0, edits = 0, timer = null, pending = null, composing = false, asking = false, syncing = false, retry = null, live = null;
+    let sequence = 0, edits = 0, timer = null, pending = null, composing = false, asking = false, syncing = false, retry = null, live = null, unregisterRegional = null;
 
     function queryUrl(source = form) {
       const url = new URL(endpoint);
@@ -178,9 +178,13 @@
           });
         const canonical = queryUrl(incomingForm);
         if (url.searchParams.has('page') && !incomingForm.elements.namedItem('page')) canonical.searchParams.set('page', url.searchParams.get('page'));
-        if (window.SynapseNavigation) {
-          if (!window.SynapseNavigation.updateHistory(canonical.href, mode)) throw new Error('Another navigation interrupted filtering. Please retry.');
-        } else history[mode === 'push' ? 'pushState' : 'replaceState'](history.state, '', canonical.href);
+        if (mode !== 'none') {
+          if (window.SynapseNavigation) {
+            const regional = regionalOwner && regionalRegions.length === currentRegions.size
+              ? { owner: regionalOwner, regions: regionalRegions } : null;
+            if (!window.SynapseNavigation.updateHistory(canonical.href, mode, regional)) throw new Error('Another navigation interrupted filtering. Please retry.');
+          } else history[mode === 'push' ? 'pushState' : 'replaceState'](history.state, '', canonical.href);
+        }
         for (const [name, region] of currentRegions) {
           window.SynapsePageLifecycle?.destroy(region);
           region.querySelectorAll('.modal').forEach(modal => window.bootstrap?.Modal.getInstance(modal)?.dispose());
@@ -294,13 +298,35 @@
       document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(live); live = null; } else refresh(); }, options);
       arm();
     }
+    const regionalOwner = root.dataset.refreshOwner || root.closest('[data-refresh-owner]')?.dataset.refreshOwner;
+    const regionalRegions = [...currentRegions.values()].map(region => region.dataset.refreshRegion).filter(Boolean);
+    if (regionalOwner && window.SynapseRefreshRegions?.enabled(regionalOwner) && regionalRegions.length === currentRegions.size) {
+      unregisterRegional = window.SynapseRefreshRegions.register({
+        owner: regionalOwner,
+        root: root.closest('[data-refresh-owner]') || root,
+        owns(request) {
+          return request.regions.length === regionalRegions.length && request.regions.every(name => regionalRegions.includes(name));
+        },
+        canRefresh(request) {
+          if (request.cause === 'mutation' && request.source instanceof HTMLFormElement) dirty.delete(request.source);
+          return !(pending || timer !== null || composing || asking || syncing || editorOpen() || hasDrafts());
+        },
+        cancel: invalidate,
+        async refresh(request) {
+          const refreshed = await load(new URL(request.url), false, 'none', request.cause === 'history', request.cause === 'history');
+          return refreshed === true
+            ? { status: 'refreshed', owner: regionalOwner, regions: request.regions, roots: [...currentRegions.values()] }
+            : { status: 'failed', owner: regionalOwner, regions: request.regions, reason: 'live-filter' };
+        },
+      });
+    }
     instances.set(root, { invalidate,
       async refresh() {
         if (pending || timer !== null || composing || asking || syncing || editorOpen() || hasDrafts()) return false;
         const url = new URL(location.href); url.hash = '';
         return await load(validUrl(url) ? url : filterUrl()) === true;
       },
-      destroy() { invalidate(); clearTimeout(live); events.abort(); instances.delete(root); } });
+      destroy() { unregisterRegional?.(); unregisterRegional = null; invalidate(); clearTimeout(live); events.abort(); instances.delete(root); } });
   }
   function scan(root = document) {
     for (const [element, instance] of instances) if (!element.isConnected) instance.destroy();

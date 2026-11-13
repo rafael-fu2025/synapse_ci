@@ -82,6 +82,12 @@
   window.SynapseBmgGear = Object.freeze({ init, destroy });
   document.addEventListener('synapse:page-load', event => init(event.detail?.root || document));
   document.addEventListener('synapse:before-swap', event => destroy(event.detail?.root || document));
+  document.addEventListener('synapse:before-region-swap', event => {
+    for (const root of event.detail?.current?.values?.() || []) destroy(root);
+  });
+  document.addEventListener('synapse:region-load', event => {
+    for (const root of event.detail?.current?.values?.() || []) init(root);
+  });
   window.addEventListener('pagehide', () => destroy());
   window.addEventListener('pageshow', () => init());
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => init(), { once: true });

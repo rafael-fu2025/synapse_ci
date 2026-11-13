@@ -12,11 +12,13 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<section data-refresh-owner="guidance.case-list" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
+         data-live-filters data-filter-key="guidance-cases" data-filter-url="<?= esc(site_url('/guidance/cases'), 'attr') ?>" data-mutation-refresh>
 <div class="card border-0 shadow-sm">
   <div class="card-header bg-transparent d-flex flex-wrap align-items-center py-3 gap-2">
     <!-- Filter form -->
-    <form method="GET" class="d-flex align-items-center gap-2">
-      <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+    <form method="GET" action="<?= esc(site_url('/guidance/cases'), 'attr') ?>" class="d-flex align-items-center gap-2" data-filter-form>
+      <select name="status" class="form-select form-select-sm">
         <option value="">All Statuses</option>
         <option value="open" <?= ($status === 'open') ? 'selected' : '' ?>>Open</option>
         <option value="active" <?= ($status === 'active') ? 'selected' : '' ?>>Active</option>
@@ -24,7 +26,7 @@
         <option value="closed" <?= ($status === 'closed') ? 'selected' : '' ?>>Closed</option>
       </select>
 
-      <select name="category" class="form-select form-select-sm" onchange="this.form.submit()">
+      <select name="category" class="form-select form-select-sm">
         <option value="">All Categories</option>
         <option value="academic" <?= ($category === 'academic') ? 'selected' : '' ?>>Academic</option>
         <option value="personal" <?= ($category === 'personal') ? 'selected' : '' ?>>Personal / Mental Health</option>
@@ -33,9 +35,14 @@
         <option value="behavioral" <?= ($category === 'behavioral') ? 'selected' : '' ?>>Behavioral</option>
         <option value="family" <?= ($category === 'family') ? 'selected' : '' ?>>Family Concerns</option>
       </select>
+      <button type="submit" class="btn btn-outline-primary btn-sm">Filter</button>
     </form>
   </div>
-
+</div>
+<p class="small text-muted" data-filter-status role="status" aria-live="polite">Showing counseling cases.</p>
+<div class="alert alert-danger" data-filter-error role="alert" hidden><span data-filter-error-text></span> <button type="button" class="btn btn-outline-danger btn-sm" data-filter-retry>Retry</button></div>
+<div data-filter-region="list" data-refresh-region="list" data-refresh-heading tabindex="-1">
+<div class="card border-0 shadow-sm">
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
@@ -137,5 +144,8 @@
     'baseUrl' => site_url('/guidance/cases'),
     'totalLabel' => 'counseling cases',
     'paginationLabel' => 'Counseling case pages',
+    'paginationLiveFilters' => true,
 ], ['saveData' => false]) ?>
+</div>
+</section>
 <?= $this->endSection() ?>

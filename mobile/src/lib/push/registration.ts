@@ -3,6 +3,7 @@ import { createPushApi, type PushCapabilities, type PushRegistrationScope } from
 import { getOrCreateInstallationId } from '../keychain';
 import { secureClientNonce } from '../secureNonce';
 import { currentDeviceToken, currentPushPlatform, onPushTokenRefresh, requestPushPermission } from './fcm';
+import { refreshNotificationPermission } from './permission';
 import {
   activatePushOwner, canBindPushScope, clearPushScope, clearUnownedPushScope, currentPushOwner,
   isPushOwnerCurrent, makePushScope, publishPushScope, readPushScope, retirePushOwner, savePushScope,
@@ -290,7 +291,9 @@ async function setup(captured: Registration): Promise<void> {
   updateStatus(captured.owner, 'checking');
   const binding = captured.owner.lanTest ? await prepareScope(captured) : null;
   if (!current(captured) || (captured.owner.lanTest && !binding)) { return; }
-  const permission = await requestPushPermission(() => current(captured));
+  const permission = currentPushPlatform() === 'ios'
+    ? await requestPushPermission(() => current(captured))
+    : await refreshNotificationPermission();
   if (!current(captured)) { return; }
   if (permission !== 'granted') {
     warn(captured.owner, `permission_${permission}`, 'Phone notification permission is not enabled. The in-app inbox remains available.');
@@ -306,10 +309,15 @@ async function setup(captured: Registration): Promise<void> {
   await submit(captured, token, binding);
 }
 
-/** Runtime and auth-bound registration; no unsafe legacy fallback is permitted in a LAN build. */
-export function registerDevice(options: PushRegistrationOptions = {}): Promise<void> {
-  const captured = ensureRegistration(options);
-  if (!captured) { return Promise.resolve(); }
+/** Registration retry must not replace the session's guard with a screen's lifetime. */
+export function retryPushSetup(runtime: ApiRuntime, user: PushOwner['account'], isCurrent: () => boolean): Promise<void> {
+  const captured = registration;
+  if (!captured || captured.owner.runtimeId !== runtime.id || captured.owner.account?.tenant_id !== user?.tenant_id ||
+      captured.owner.account?.id !== user?.id || !isCurrent() || !current(captured)) { return Promise.resolve(); }
+  return startSetup(captured);
+}
+
+function startSetup(captured: Registration): Promise<void> {
   if (captured.pending) { return captured.pending; }
   const pending = setup(captured).catch(() => {
     if (current(captured)) { warn(captured.owner, 'setup_failed', 'Phone push setup could not finish. The in-app inbox remains available.'); }
@@ -318,6 +326,12 @@ export function registerDevice(options: PushRegistrationOptions = {}): Promise<v
   });
   captured.pending = pending;
   return pending;
+}
+
+/** Runtime and auth-bound registration; no unsafe legacy fallback is permitted in a LAN build. */
+export function registerDevice(options: PushRegistrationOptions = {}): Promise<void> {
+  const captured = ensureRegistration(options);
+  return captured ? startSetup(captured) : Promise.resolve();
 }
 
 /** Signout invalidates scope before returning its bounded best-effort network withdrawal. */

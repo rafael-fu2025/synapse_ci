@@ -97,6 +97,11 @@ test('walk-in rejects an old same-term response even inside the debounce gap', a
   assert.equal(state.searchComplete, false);
 });
 
+test('queue board exposes its stable regional owner and walk-in consumes an optional descriptor', () => {
+  assert.match(view, /id="queue-board-container"[\s\S]*?data-refresh-owner="queue\.board\.<\?= esc\(\$unit, 'attr'\) \?>"[\s\S]*?data-refresh-region="board"/);
+  assert.match(view, /SynapseMutations\.refresh\(location\.href, payload\.message, \{ form, descriptor: payload\.refresh \}\)/);
+});
+
 test('walk-in failures are safe, empty success is distinct, and lifecycle clears feedback', async () => {
   for (const response of [
     () => Promise.reject(new Error('private exception')),

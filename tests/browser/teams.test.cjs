@@ -51,9 +51,16 @@ before(async () => {
         return;
       }
       posts.push(post);
+      const unit = url.pathname.split('/')[1];
+      const owner = req.headers['x-synapse-refresh-owner'];
+      const calendar = url.pathname.includes('/calendar/');
+      const refresh = owner === `teams.${calendar ? 'calendar' : 'tasks'}.${unit}` ? {
+        mode: 'regions', owner,
+        regions: calendar ? ['notice', 'summary', 'results'] : ['navigation', 'results']
+      } : undefined;
       res.writeHead(rejectSave ? 422 : 200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: !rejectSave, message: rejectSave ? 'Fixture validation error' : 'Saved',
-        redirect: origin + '/' + url.pathname.split('/')[1] + '/teams',
+        redirect: origin + '/' + unit + '/teams', ...(!rejectSave && refresh ? { refresh } : {}),
         csrf: { name: 'csrf_test_name', hash: 'fixture-refreshed-token' } }));
       return;
     }
@@ -166,7 +173,7 @@ for (const dark of [false, true]) {
     await taskFilterUpdate(page, () => page.goForward(), true);
     await page.locator('[data-filter-region="results"] table tbody tr').waitFor();
     assert.equal(await page.locator('#teamSearch').inputValue(), '');
-    assert.equal(reads.length, 5, 'Exactly one XHR for each filter action, no Apply click');
+    assert.equal(reads.length, 7, 'Exactly one XHR for each filter action and each regional history traversal');
     assert.equal(posts.length, postCount, 'Task filtering must not mutate data; observed POST paths: ' + JSON.stringify(posts.slice(postCount).map(post => post.path)));
   });
 }

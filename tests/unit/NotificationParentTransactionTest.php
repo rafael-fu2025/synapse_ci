@@ -8,6 +8,7 @@ use App\Services\AnnouncementService;
 use App\Services\CurrentTenant;
 use App\Services\Guidance\SurveyService;
 use App\Services\NotificationInvalidation;
+use App\Services\Push\PushPublisher;
 use App\Services\Referrals\ReferralService;
 use App\Services\Scheduling\AppointmentService;
 use CodeIgniter\Database\BaseBuilder;
@@ -69,7 +70,8 @@ final class NotificationParentTransactionTest extends CIUnitTestCase
 
     private function fixture(string $owner): array
     {
-        $state = (object) ['depth' => 0, 'healthy' => true, 'commit' => true, 'begin' => true, 'order' => [], 'ids' => []];
+        $state = (object) ['depth' => 0, 'healthy' => true, 'commit' => true, 'begin' => true, 'order' => [], 'ids' => [],
+            'pushBatches' => [], 'pushSent' => [], 'authorized' => []];
         $db = $this->createMock(BaseConnection::class);
         $db->method('__get')->willReturnCallback(static fn ($name) => match ($name) {
             'transDepth' => $state->depth, 'DBDriver' => 'MySQLi', default => null,
@@ -133,12 +135,19 @@ final class NotificationParentTransactionTest extends CIUnitTestCase
                 throw new RuntimeException('Synthetic publisher outage after commit');
             }, true,
         );
-        return [$service, $invalidation, $state];
+        return [$service, $invalidation, $state, $db];
     }
 
-    private function runTransaction(object $service, NotificationInvalidation $invalidation, callable $operation): mixed
+    private function runTransaction(object $service, NotificationInvalidation $invalidation, callable $operation, ?PushPublisher $push = null): mixed
     {
-        return (new ReflectionMethod($service, 'transaction'))->invoke($service, $operation, $invalidation);
+        $transaction = new ReflectionMethod($service, 'transaction');
+        if ($service instanceof SurveyService) {
+            // Never construct the deployment-configured publisher in these synthetic parent tests.
+            $push ??= new PushPublisher(\Config\Database::connect(), static fn (): array => [],
+                static fn (): bool => false, static fn (): bool => true, false, static fn (): float => 0.0);
+            return $transaction->invoke($service, $operation, $invalidation, $push);
+        }
+        return $transaction->invoke($service, $operation, $invalidation);
     }
 
     #[DataProvider('owners')]
@@ -221,5 +230,249 @@ final class NotificationParentTransactionTest extends CIUnitTestCase
             self::assertSame([], $state->order);
             self::assertSame([], $state->ids);
         }
+    }
+
+    private function surveyPush(BaseConnection $db, object $state, string $failure = '', ?array $rows = null, ?array $allowedUsers = null): PushPublisher
+    {
+        if ($failure === 'escaping error') {
+            // An initialization error escapes the publisher's internal best-effort guards.
+            return (new ReflectionClass(PushPublisher::class))->newInstanceWithoutConstructor();
+        }
+        return new PushPublisher($db,
+            static function ($tenant, $ids) use ($state, $failure, $rows): array {
+                $state->order[] = 'push.resolve';
+                $state->pushBatches[] = [$tenant, $ids, $state->depth, $state->healthy];
+                if ($failure === 'audience exception') throw new RuntimeException('Synthetic push audience failure');
+                return $rows ?? array_map(static fn ($id): array => [
+                    'id' => $id, 'tenant_id' => $tenant, 'recipient_user_id' => $id - 26,
+                    'type' => 'survey_published', 'survey_id' => 42,
+                    'title' => 'PRIVATE synthetic survey title', 'message' => 'PRIVATE synthetic survey details',
+                ], $ids);
+            },
+            static function ($tenant, $user, $ids) use ($state, $allowedUsers): bool {
+                $state->authorized[] = [$tenant, $user, $ids, $state->depth];
+                return $allowedUsers === null || in_array($user, $allowedUsers, true);
+            },
+            static function ($tenant, $user, $message) use ($state, $failure): bool {
+                $state->order[] = 'push.send';
+                $state->pushSent[] = [$tenant, $user, $message, $state->depth, $state->healthy];
+                if ($failure === 'transport exception') throw new RuntimeException('Synthetic push transport failure');
+                return $failure !== 'transport rejection';
+            }, true, static fn (): float => 0.0,
+        );
+    }
+
+    private function surveyRealtime(BaseConnection $db, object $state, string $failure = ''): NotificationInvalidation
+    {
+        if ($failure === 'escaping error') {
+            return (new ReflectionClass(NotificationInvalidation::class))->newInstanceWithoutConstructor();
+        }
+        return new NotificationInvalidation($db,
+            static function ($tenant, $ids) use ($state, $failure): array {
+                $state->order[] = 'realtime.resolve';
+                $state->ids[] = [$tenant, $ids, $state->depth, $state->healthy];
+                if ($failure === 'audience exception') throw new RuntimeException('Synthetic realtime audience failure');
+                return [['id' => 5, 'tenant_id' => $tenant]];
+            }, static fn (): bool => true,
+            static function () use ($state, $failure): bool {
+                $state->order[] = 'realtime.send';
+                if ($failure === 'transport exception') throw new RuntimeException('Synthetic realtime transport failure');
+                return true;
+            }, true, static fn (): float => 0.0,
+        );
+    }
+
+    private function clearSurveyEmissions(object $state): void
+    {
+        foreach (['order', 'ids', 'pushBatches', 'authorized', 'pushSent'] as $field) $state->{$field} = [];
+    }
+
+    public function testSurveyPushOnlyUsesNewIdsAfterOuterCommitAndNeverReplaysThem(): void
+    {
+        [$service, , $state, $db] = $this->fixture(SurveyService::class);
+        $invalidation = $this->surveyRealtime($db, $state);
+        $push = $this->surveyPush($db, $state);
+        $result = $this->runTransaction($service, $invalidation, static function (array &$notifications) use ($state): array {
+            self::assertSame(1, $state->depth);
+            self::assertSame([], $state->order);
+            $notifications[7] = [31, 32, 31];
+            return ['survey_id' => 42, 'status' => 'published'];
+        }, $push);
+        self::assertSame(['survey_id' => 42, 'status' => 'published'], $result);
+        self::assertSame([[7, [31, 32], 0, true]], $state->ids);
+        self::assertSame([[7, [31, 32], 0, true]], $state->pushBatches);
+        self::assertSame([[7, 5, [31], 0], [7, 6, [32], 0]], $state->authorized);
+        self::assertSame(['commit', 'realtime.resolve', 'realtime.send', 'push.resolve', 'push.send', 'push.send'], $state->order);
+        self::assertSame([5, 6], array_column($state->pushSent, 1));
+        self::assertSame([0, 0], array_column($state->pushSent, 3));
+        self::assertSame([true, true], array_column($state->pushSent, 4));
+
+        // Reuse the service and both successful publishers: a no-op must not replay previous IDs.
+        $this->clearSurveyEmissions($state);
+        self::assertSame([], $this->runTransaction($service, $invalidation, static function (array &$notifications): array {
+            self::assertSame([], $notifications);
+            $notifications[7] = [];
+            return [];
+        }, $push));
+        self::assertSame(['commit'], $state->order);
+        self::assertSame([], $state->ids);
+        self::assertSame([], $state->pushBatches);
+        self::assertSame([], $state->pushSent);
+
+        $this->clearSurveyEmissions($state);
+        self::assertNull($this->runTransaction($service, $invalidation, static function (): void {}, $push));
+        self::assertSame(['commit'], $state->order);
+        self::assertSame([], $state->ids);
+        self::assertSame([], $state->pushBatches);
+        self::assertSame([], $state->pushSent);
+    }
+
+    public static function surveyTransactionFailures(): array
+    {
+        return ['write failure' => ['write'], 'failed transaction status' => ['status'], 'failed outer commit' => ['commit']];
+    }
+
+    #[DataProvider('surveyTransactionFailures')]
+    public function testSurveyRollbackDiscardsPushIdsAndNextTransactionStartsEmpty(string $failure): void
+    {
+        [$service, $invalidation, $state, $db] = $this->fixture(SurveyService::class);
+        $push = $this->surveyPush($db, $state);
+        $state->commit = $failure !== 'commit';
+        try {
+            $this->runTransaction($service, $invalidation, static function (array &$notifications) use ($state, $failure): array {
+                $notifications[7] = [99];
+                if ($failure === 'write') throw new RuntimeException('Synthetic survey write failure');
+                if ($failure === 'status') $state->healthy = false;
+                return [];
+            }, $push);
+            self::fail('The survey transaction must fail.');
+        } catch (RuntimeException $error) {
+            self::assertSame($failure === 'write' ? 'Synthetic survey write failure' : 'Unable to save survey.', $error->getMessage());
+        }
+        self::assertSame($failure === 'commit' ? ['commit', 'rollback'] : ['rollback'], $state->order);
+        self::assertSame([], $state->pushBatches);
+        self::assertSame([], $state->pushSent);
+        self::assertSame([], $state->ids);
+        self::assertSame(0, $state->depth);
+        self::assertTrue($state->healthy);
+
+        $state->commit = true;
+        $this->clearSurveyEmissions($state);
+        $this->runTransaction($service, $invalidation, static function (array &$notifications): void {
+            self::assertSame([], $notifications);
+        }, $push);
+        self::assertSame(['commit'], $state->order);
+        self::assertSame([], $state->pushBatches);
+        self::assertSame([], $state->pushSent);
+
+        // A subsequent real batch must contain only its own IDs, not those collected before rollback.
+        $this->clearSurveyEmissions($state);
+        $this->runTransaction($service, $invalidation, static function (array &$notifications): void {
+            self::assertSame([], $notifications);
+            $notifications[7] = [31];
+        }, $push);
+        self::assertSame([[7, [31], 0, true]], $state->pushBatches);
+        self::assertCount(1, $state->pushSent);
+        self::assertNotContains('rollback', $state->order);
+    }
+
+    public static function rejectedSurveyTransactions(): array
+    {
+        return ['caller-owned transaction' => ['nested'], 'failed begin' => ['begin']];
+    }
+
+    #[DataProvider('rejectedSurveyTransactions')]
+    public function testSurveyRejectedTransactionNeverRunsOperationOrDispatchesPush(string $failure): void
+    {
+        [$service, $invalidation, $state, $db] = $this->fixture(SurveyService::class);
+        $push = $this->surveyPush($db, $state);
+        $state->depth = $failure === 'nested' ? 1 : 0;
+        $state->begin = $failure !== 'begin';
+        try {
+            $this->runTransaction($service, $invalidation, static function (): void {
+                self::fail('Rejected transaction must not run its operation.');
+            }, $push);
+            self::fail('The survey transaction must be rejected.');
+        } catch (RuntimeException $error) {
+            self::assertSame($failure === 'nested' ? 409 : 503, $error->getCode());
+        }
+        self::assertSame([], $state->order);
+        self::assertSame([], $state->ids);
+        self::assertSame([], $state->pushBatches);
+        self::assertSame([], $state->pushSent);
+        self::assertSame($failure === 'nested' ? 1 : 0, $state->depth);
+    }
+
+    public static function surveyRealtimeFailures(): array
+    {
+        return ['audience exception' => ['audience exception'], 'transport exception' => ['transport exception'],
+            'escaping initialization error' => ['escaping error']];
+    }
+
+    #[DataProvider('surveyRealtimeFailures')]
+    public function testSurveyRealtimeFailureDoesNotPreventCommittedPush(string $failure): void
+    {
+        [$service, , $state, $db] = $this->fixture(SurveyService::class);
+        $result = $this->runTransaction($service, $this->surveyRealtime($db, $state, $failure),
+            static function (array &$notifications): string {
+                $notifications[7] = [31];
+                return 'survey business result';
+            }, $this->surveyPush($db, $state));
+        self::assertSame('survey business result', $result);
+        self::assertSame('commit', $state->order[0]);
+        self::assertNotContains('rollback', $state->order);
+        self::assertSame([[7, [31], 0, true]], $state->pushBatches);
+        self::assertCount(1, $state->pushSent);
+        self::assertSame(0, $state->pushSent[0][3]);
+        self::assertSame(0, $state->depth);
+        self::assertTrue($state->healthy);
+    }
+
+    public static function surveyPushFailures(): array
+    {
+        return ['audience exception' => ['audience exception'], 'transport rejection' => ['transport rejection'],
+            'transport exception' => ['transport exception'], 'escaping initialization error' => ['escaping error']];
+    }
+
+    #[DataProvider('surveyPushFailures')]
+    public function testSurveyPushFailureCannotChangeCommittedBusinessResult(string $failure): void
+    {
+        [$service, , $state, $db] = $this->fixture(SurveyService::class);
+        $result = $this->runTransaction($service, $this->surveyRealtime($db, $state),
+            static function (array &$notifications): array {
+                $notifications[7] = [31, 32];
+                return ['survey_id' => 42, 'status' => 'published'];
+            }, $this->surveyPush($db, $state, $failure));
+        self::assertSame(['survey_id' => 42, 'status' => 'published'], $result);
+        self::assertSame('commit', $state->order[0]);
+        self::assertNotContains('rollback', $state->order);
+        self::assertContains('realtime.send', $state->order);
+        self::assertSame($failure === 'escaping error' ? [] : [[7, [31, 32], 0, true]], $state->pushBatches);
+        self::assertCount(str_starts_with($failure, 'transport') ? 1 : 0, $state->pushSent);
+        self::assertSame(0, $state->depth);
+        self::assertTrue($state->healthy);
+    }
+
+    public function testSurveyCommittedPushRetainsRecipientAuthorityAndGenericPayload(): void
+    {
+        [$service, , $state, $db] = $this->fixture(SurveyService::class);
+        $row = ['tenant_id' => 7, 'type' => 'survey_published', 'survey_id' => 42,
+            'title' => 'PRIVATE synthetic survey title', 'message' => 'PRIVATE synthetic survey details'];
+        $rows = [
+            ['id' => 31, 'recipient_user_id' => 5] + $row,
+            ['id' => 32, 'recipient_user_id' => 6] + $row,
+            ['id' => 33, 'recipient_user_id' => 5, 'tenant_id' => 8] + $row,
+            ['id' => 34, 'recipient_user_id' => 0] + $row,
+        ];
+        $this->runTransaction($service, $this->surveyRealtime($db, $state), static function (array &$notifications): void {
+            $notifications[7] = [31, 32, 33, 34];
+        }, $this->surveyPush($db, $state, '', $rows, [5]));
+        self::assertSame([[7, [31, 32, 33, 34], 0, true]], $state->pushBatches);
+        self::assertSame([[7, 5, [31], 0], [7, 6, [32], 0]], $state->authorized);
+        self::assertSame([[7, 5, [
+            'title' => 'New survey',
+            'body' => 'An identified Guidance survey is available in your portal.',
+            'data' => ['type' => 'survey_published', 'id' => '42'],
+        ], 0, true]], $state->pushSent);
     }
 }

@@ -33,6 +33,8 @@ jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }))
 jest.mock('react-native-linear-gradient', () => jest.requireActual('react-native').View);
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }) }));
 jest.mock('../src/features/auth/components/LoginCarousel', () => ({ LoginCarousel: () => null }));
+// Notification permission/setup is covered separately; these fixtures isolate server-switch ownership.
+jest.mock('../src/components/PhoneNotificationControl', () => ({ PhoneNotificationControl: () => null }));
 
 let mockDark = false;
 let renderer: ReactTestRenderer | undefined;

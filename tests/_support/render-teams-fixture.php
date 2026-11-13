@@ -9,6 +9,10 @@ if (PHP_SAPI !== 'cli') {
 }
 $fixture = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
 require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootstrap.php';
+config(\Config\Realtime::class)->enabled = false;
+config(\Config\RefreshRegions::class)->enabled = true;
+config(\Config\RefreshRegions::class)->owners = ['teams.tasks.clinic', 'teams.tasks.guidance', 'teams.tasks.facilities',
+    'teams.calendar.clinic', 'teams.calendar.guidance', 'teams.calendar.facilities'];
 $app = config('App');
 $app->baseURL = $fixture['origin'] . '/';
 $app->indexPage = '';

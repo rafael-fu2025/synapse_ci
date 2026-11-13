@@ -52,14 +52,26 @@ before(async () => {
       posts.push(post);
       if (saveGate) await saveGate;
       res.writeHead(failSave ? 422 : 200, { 'Content-Type': 'application/json' });
+      const redirect = origin + '/' + url.pathname.split('/')[1] + '/referrals';
+      const unit = url.pathname.split('/')[1];
+      const destination = /\/handoff$/.test(url.pathname) ? origin + '/' + unit + (unit === 'clinic' ? '/encounters/81' : '/cases/81') : null;
+      const refresh = destination
+        ? { mode: 'navigate', url: destination, history: 'push' }
+        : /\/(acknowledge|review|close)$/.test(url.pathname)
+          ? { mode: 'regions', owner: 'referrals.' + unit, regions: ['referrals.folders', 'referrals.results'] }
+          : undefined;
       res.end(JSON.stringify({ success: !failSave, message: failSave ? 'Correct the shared summary.' : 'Saved',
-        redirect: origin + '/' + url.pathname.split('/')[1] + '/referrals', csrf: { name: 'csrf_test_name', hash: 'retry-token' } }));
+        redirect: destination || redirect, ...(!failSave && refresh ? { refresh } : {}), csrf: { name: 'csrf_test_name', hash: 'retry-token' } }));
       return;
     }
     if (url.pathname === '/api/patients/search') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ results: [{ id: 11, first_name: 'Ada', last_name: 'Student', mis_id: 'S001', kind: 'student' }] }));
       return;
+    }
+    if (/^\/(clinic|guidance)\/(?:encounters|cases)\/81$/.test(url.pathname)) {
+      const unit = url.pathname.split('/')[1];
+      res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(render('/' + unit + '/referrals')); return;
     }
     if (/^\/(clinic|guidance)\/referrals(?:\/create|\/2\/handoff)?$/.test(url.pathname) || url.pathname === '/referrals') {
       res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(render(url.pathname + url.search)); return;
@@ -95,14 +107,29 @@ async function pageFor(t, unit, theme) {
   return page;
 }
 async function open(page, suffix = '/create') {
-  // Change only the fixture URL to exercise server-provided prefill/empty options.
+  await page.waitForFunction(() => !document.body.classList.contains('is-navigating'));
+  // Change and open the same connected link, even when a prior save replaced main.
   const link = page.locator(`a[data-app-modal-open][href*="${suffix.startsWith('/create') ? '/create' : '/2/handoff'}"]`).first();
-  if (suffix.includes('?')) await link.evaluate((a, suffix) => { a.href = a.href.split('/referrals')[0] + '/referrals' + suffix; }, suffix);
-  await link.click();
+  await link.evaluate((a, suffix) => {
+    if (suffix.includes('?')) a.href = a.href.split('/referrals')[0] + '/referrals' + suffix;
+    a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+  }, suffix);
   await page.waitForFunction(() => {
     const modal = document.querySelector('#appFormModal');
     return modal?.querySelector('form') && bootstrap.Modal.getInstance(modal)?._focustrap?._isActive;
   });
+}
+async function submitTransition(page, button) {
+  const owner = await page.locator('[data-refresh-owner]').evaluateHandle(node => node);
+  const folders = await page.locator('[data-refresh-region="referrals.folders"]').evaluateHandle(node => node);
+  const results = await page.locator('[data-refresh-region="referrals.results"]').evaluateHandle(node => node);
+  await button.dispatchEvent('click');
+  await page.waitForFunction(([owner, folders, results]) => owner.isConnected && folders.isConnected && results.isConnected &&
+    owner === document.querySelector('[data-refresh-owner]') &&
+    folders === document.querySelector('[data-refresh-region="referrals.folders"]') &&
+    results === document.querySelector('[data-refresh-region="referrals.results"]') &&
+    !document.querySelector('[data-refresh-region="referrals.results"] [aria-busy="true"]'), [owner, folders, results]);
+  await owner.dispose(); await folders.dispose(); await results.dispose();
 }
 async function dismiss(page, selector) {
   await page.locator('#appFormModal ' + selector).click();
@@ -175,7 +202,18 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
       assert.equal(await page.locator('.sidebar-nav a[href="' + origin + base + '"]').count(), 1);
       assert.equal(await page.locator('[aria-label="Referral folders"] [aria-current=page]').count(), 1);
       if (tab !== 'incoming') assert.equal(await page.locator('tbody form, tbody [data-app-modal-open]').count(), 0);
-      if (tab === 'sent') assert.equal(await page.locator('tbody a, tbody button').count(), 0);
+      if (tab === 'incoming') {
+        assert.equal(await page.locator('[data-refresh-owner]').getAttribute('data-refresh-owner'), 'referrals.' + unit);
+        const before = posts.length;
+        const refresh = page.waitForRequest(request => request.method() === 'GET' &&
+          new URL(request.url()).pathname === base && request.headers()['x-synapse-refresh'] === '1');
+        await submitTransition(page, row('REF-1').getByRole('button', { name: 'Acknowledge', exact: true }));
+        const read = await refresh;
+        assert.equal(new URL(read.url()).searchParams.get('tab'), 'incoming');
+        assert.equal(posts.length, before + 1);
+        assert.equal(posts.at(-1).path, base + '/1/acknowledge');
+        assert.equal(page.url(), origin + base + '?tab=incoming');
+      }
       await page.locator('#referralSearch').fill('Ada');
       await page.waitForFunction(() => new URL(location.href).searchParams.get('q') === 'Ada');
       assert.equal(new URL(page.url()).searchParams.get('tab'), tab);
@@ -225,6 +263,7 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
         if (mode === 'create') assert.match(await page.locator('#appFormModal').innerText(), /patient is present/);
       }
       let release; saveGate = new Promise(resolve => { release = resolve; }); t.after(() => release());
+      const previousMain = await page.locator('#main').evaluateHandle(node => node);
       const before = posts.length, allBefore = allPosts.length;
       await page.locator('#appFormModal button[type=submit]').click();
       await page.waitForFunction(() => document.querySelector('#appFormModal button[type=submit]').disabled);
@@ -232,6 +271,10 @@ for (const theme of ['light', 'dark']) for (const unit of ['clinic', 'guidance']
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#appFormModal').isVisible(), true);
       release(); saveGate = null;
+      const targetPath = '/' + unit + (unit === 'clinic' ? '/encounters/81' : '/cases/81');
+      await page.waitForFunction(([main, path]) => !main.isConnected && location.pathname === path &&
+        !document.body.classList.contains('is-navigating'), [previousMain, targetPath]);
+      await previousMain.dispose();
       await page.waitForFunction(() => !document.querySelector('#appFormModal'));
       assert.equal(posts.length, before + 1,
         `Expected exactly one referral mutation; all POST paths: ${JSON.stringify(allPosts.slice(allBefore).map(post => post.path))}`);
@@ -265,6 +308,8 @@ test('referral live search shows failure, retry, no matches and clears selection
   await modal.locator('.list-group button').filter({ hasText: 'Student, Ada' }).click();
   await page.locator('#referralPatientSearch').waitFor({ state: 'hidden' });
   await modal.getByRole('button', { name: 'Change', exact: true }).click();
+  await modal.getByRole('button', { name: 'Change', exact: true }).waitFor({ state: 'hidden' });
+  await page.locator('#referralPatientSearch').waitFor({ state: 'visible' });
   assert.equal(await page.locator('#referralPatientSearch').inputValue(), '');
   assert.equal(await modal.locator('[name=patient_person_id]').inputValue(), '');
   assert.equal(await modal.getByRole('button', { name: 'Change', exact: true }).isVisible(), false);

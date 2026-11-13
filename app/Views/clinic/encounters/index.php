@@ -7,11 +7,13 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<section data-refresh-owner="clinic.encounters" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
+         data-live-filters data-filter-key="clinic-encounters" data-filter-url="<?= esc(site_url('/clinic/encounters'), 'attr') ?>" data-mutation-refresh>
 <div class="card border-0 shadow-sm">
   <div class="card-header bg-transparent d-flex flex-wrap align-items-center py-3 gap-2">
     <!-- Filter form -->
-    <form method="GET" class="d-flex align-items-center gap-2">
-      <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+    <form method="GET" action="<?= esc(site_url('/clinic/encounters'), 'attr') ?>" class="d-flex align-items-center gap-2" data-filter-form>
+      <select name="status" class="form-select form-select-sm">
         <option value="">All Statuses</option>
         <option value="in_progress" <?= ($status === 'in_progress') ? 'selected' : '' ?>>In Progress</option>
         <option value="completed" <?= ($status === 'completed') ? 'selected' : '' ?>>Completed</option>
@@ -23,18 +25,22 @@
              id="encounterDateFilter"
              data-datepicker
              data-target="#encounterDateFilter_iso"
-             value=""
-             onchange="this.form.submit()">
+             value="">
       <input type="hidden" name="date" id="encounterDateFilter_iso" value="<?= esc($date) ?>">
       <label for="encounterPerPage" class="visually-hidden">Encounters per page</label>
-      <select name="per_page" id="encounterPerPage" class="form-select form-select-sm" onchange="this.form.submit()">
+      <select name="per_page" id="encounterPerPage" class="form-select form-select-sm">
         <?php foreach ([20, 25, 50, 100] as $size): ?>
           <option value="<?= $size ?>" <?= $pagination['per_page'] === $size ? 'selected' : '' ?>><?= $size ?> per page</option>
         <?php endforeach; ?>
       </select>
+      <button type="submit" class="btn btn-outline-primary btn-sm">Filter</button>
     </form>
   </div>
-
+</div>
+<p class="small text-muted" data-filter-status role="status" aria-live="polite">Showing clinic encounters.</p>
+<div class="alert alert-danger" data-filter-error role="alert" hidden><span data-filter-error-text></span> <button type="button" class="btn btn-outline-danger btn-sm" data-filter-retry>Retry</button></div>
+<div data-filter-region="list" data-refresh-region="list" data-refresh-heading tabindex="-1">
+<div class="card border-0 shadow-sm">
   <div class="card-body p-0">
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
@@ -114,9 +120,11 @@
       <?= view('partials/table_pagination', [
           'pagination' => $pagination, 'baseUrl' => site_url('/clinic/encounters'),
           'filters' => ['status' => $status], 'paginationExtraQuery' => ['date' => $date],
-          'paginationLabel' => 'Clinic encounter pages',
+          'paginationLabel' => 'Clinic encounter pages', 'paginationLiveFilters' => true,
       ], ['saveData' => false]) ?>
     </div>
   </div>
 </div>
+</div>
+</section>
 <?= $this->endSection() ?>

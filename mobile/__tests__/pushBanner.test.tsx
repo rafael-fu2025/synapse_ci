@@ -7,6 +7,10 @@ import {
 import type { PushMessage } from '../src/lib/push/fcm';
 
 let mockMessageHandler: ((message: PushMessage) => void) | null = null;
+let mockSystemEnabled: boolean | null = null;
+let mockHasSystem = false;
+jest.mock('../src/lib/push/permission', () => ({ getNotificationPermission: () => ({ systemEnabled: mockSystemEnabled }) }));
+jest.mock('../src/lib/push/systemNotifications', () => ({ hasSystemNotifications: () => mockHasSystem, clearSystemNotifications: jest.fn() }));
 jest.mock('../src/lib/config', () => ({ config: { lanTest: false } }));
 jest.mock('../src/theme/ThemeProvider', () => ({ useTheme: () => ({ theme: { mode: 'light' } }) }));
 jest.mock('../src/lib/push/fcm', () => ({
@@ -36,6 +40,8 @@ function message(overrides: Partial<NonNullable<PushMessage['data']>> = {}): Pus
 beforeEach(() => {
   __resetPushScopeForTests();
   mockMessageHandler = null;
+  mockSystemEnabled = null;
+  mockHasSystem = false;
   tree = null;
   notice = null;
   jest.useFakeTimers();
@@ -70,6 +76,22 @@ it('hides an accepted old notice as soon as its scope retires and ignores later 
   });
   await act(async () => { mockMessageHandler!(message()); });
   expect(notice).toBeNull();
+});
+
+it('does not duplicate an Android system notification with an in-app banner', async () => {
+  mockHasSystem = true;
+  mockSystemEnabled = true;
+  await act(async () => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { mockMessageHandler!({ messageId: 'fcm-1', notification: { title: 'Update', body: 'Open the app' } }); });
+  expect(notice).toBeNull();
+});
+
+it.each([false, null])('keeps an in-app fallback when native notifications are %s', async enabled => {
+  mockHasSystem = true;
+  mockSystemEnabled = enabled;
+  await act(async () => { tree = TestRenderer.create(<Probe />); });
+  await act(async () => { mockMessageHandler!({ messageId: 'fcm-1', notification: { title: 'Update', body: 'Open the app' } }); });
+  expect(notice).toEqual({ title: 'Update', body: 'Open the app' });
 });
 
 it('expires foreground notices and preserves legacy phone text outside a LAN runtime', async () => {

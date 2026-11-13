@@ -14,7 +14,7 @@
     const endpoint = new URL(root.dataset.endpoint, location.href);
     if (endpoint.origin !== location.origin) return;
     const initialPath = location.pathname;
-    let sequence = 0, controller = null, timer = null, failedUrl = null, failedHistoryMode = 'replace', composing = false;
+    let sequence = 0, controller = null, timer = null, failedUrl = null, failedHistoryMode = 'replace', composing = false, unregisterRegional = null;
     const events = new AbortController();
     const options = { signal: events.signal };
 
@@ -81,11 +81,16 @@
         if (field instanceof HTMLSelectElement) field.dispatchEvent(new Event('bd-select:sync'));
       }
     }
+    const regionalRoot = root.matches('[data-refresh-owner]') ? root : root.closest('[data-refresh-owner]');
+    const regionalOwner = regionalRoot?.dataset.refreshOwner;
+    const regionalName = results.dataset.refreshRegion;
     function remember(url, mode) {
       if (mode === 'none') return;
       const method = mode === 'push' && url.href !== location.href ? 'pushState' : 'replaceState';
+      const regional = regionalOwner && regionalName && window.SynapseRefreshRegions?.enabled(regionalOwner)
+        ? { owner: regionalOwner, regions: [regionalName] } : null;
       if (window.SynapseNavigation) {
-        window.SynapseNavigation.updateHistory(url.href, method === 'pushState' ? 'push' : 'replace');
+        window.SynapseNavigation.updateHistory(url.href, method === 'pushState' ? 'push' : 'replace', regional);
       } else history[method](history.state, '', url.href);
     }
     async function load(destination, historyMode = 'replace') {
@@ -132,6 +137,7 @@
         remember(url, historyMode);
         failedUrl = null;
         busy(false, announce(meta));
+        return true;
       } catch (error) {
         if (token !== sequence || requestController.signal.aborted || error.name === 'AbortError') return;
         errorText.textContent = error.message || 'Unable to load results. Please retry.';
@@ -195,8 +201,12 @@
         load(failedUrl, failedHistoryMode);
       }
     }, options);
-    window.addEventListener('popstate', () => {
+    window.addEventListener('popstate', event => {
       if (![endpoint.pathname, initialPath].includes(location.pathname) || !root.isConnected) return;
+      const entry = event.state?.__synapseNavigation;
+      if (regionalOwner && regionalName && entry?.region?.owner === regionalOwner && Array.isArray(entry.region.regions) &&
+          entry.region.regions.length === 1 && entry.region.regions[0] === regionalName &&
+          window.SynapseRefreshRegions?.enabled(regionalOwner)) return;
       const url = cleanUrl(location.href);
       syncFilters(url);
       load(url, 'none');
@@ -211,7 +221,22 @@
     }, options);
     try { busy(false, announce(metadata(results))); }
     catch (_) { /* The GET fallback remains usable if server markup is incomplete. */ }
-    instances.set(root, { destroy() { invalidate(); busy(false); events.abort(); instances.delete(root); } });
+    if (regionalOwner && regionalName && window.SynapseRefreshRegions?.enabled(regionalOwner)) {
+      unregisterRegional = window.SynapseRefreshRegions.register({
+        owner: regionalOwner,
+        root: regionalRoot,
+        owns(request) { return request.regions.length === 1 && request.regions[0] === regionalName; },
+        canRefresh() { return controller === null && timer === null; },
+        cancel() { invalidate(); busy(false); },
+        async refresh(request) {
+          const refreshed = await load(new URL(request.url), 'none');
+          return refreshed === true
+            ? { status: 'refreshed', owner: regionalOwner, regions: [regionalName], roots: [results] }
+            : { status: 'failed', owner: regionalOwner, regions: [regionalName], reason: 'live-table' };
+        },
+      });
+    }
+    instances.set(root, { destroy() { unregisterRegional?.(); unregisterRegional = null; invalidate(); busy(false); events.abort(); instances.delete(root); } });
   }
 
   function start(event) {

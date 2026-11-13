@@ -20,9 +20,16 @@
     if (!/^https?:$/.test(url.protocol) || url.origin !== location.origin || url.username || url.password) return null;
     return url;
   }
-  function fullNavigation(url) {
-    if (url === location.href) location.reload();
+  function fullNavigation(url, replace = false) {
+    if (replace) location.replace(url);
+    else if (url === location.href) location.reload();
     else location.assign(url);
+  }
+  function requireFullDocument(value, options = {}) {
+    const url = urlFor(value);
+    if (!url) return false;
+    fullNavigation(url.href, options.replace === true);
+    return true;
   }
   function ownState(state) {
     const entry = state?.[stateKey];
@@ -122,6 +129,16 @@
       link.classList.contains('nav-link'), Boolean(link.parentElement?.classList.contains('has-submenu')),
       link.getAttribute('data-navigation'), link.getAttribute('data-bs-toggle'), link.getAttribute('hx-get')
     ]));
+  }
+  function inspectDocument(doc, finalUrl) {
+    const incoming = shell(doc);
+    const current = shell(document);
+    if (!incoming || !current || doc.querySelector('base')) return { status: 'incompatible' };
+    if (incoming.scope !== current.scope ||
+        linkSignature(current.nav, location.href) !== linkSignature(incoming.nav, finalUrl)) {
+      return { status: 'security' };
+    }
+    return { status: 'compatible', incoming, current };
   }
   function syncSidebar(oldNav, newNav) {
     const scroll = oldNav.scrollTop;
@@ -362,6 +379,7 @@
       if (!popEntry && finalUrl.hash && !options.scroll) {
         try { document.getElementById(decodeURIComponent(finalUrl.hash.slice(1)))?.scrollIntoView(); } catch (_) { /* Invalid fragment encoding. */ }
       }
+      failed = null;
       announce('Page loaded.');
       return true;
     } catch (error) {
@@ -382,27 +400,75 @@
     }
   }
 
+  async function restoreRegionalHistory(entry) {
+    const token = ++sequence;
+    const detail = { url: entry.url, from: currentUrl, root: document.getElementById('main'), popstate: true, regional: true };
+    if (!emit('synapse:before-navigate', detail, true)) {
+      restorePop(entry);
+      return;
+    }
+    failed = null;
+    announce('Updating page…');
+    let result;
+    try {
+      result = await window.SynapseRefreshRegions.refresh({ url: entry.url, owner: entry.region.owner,
+        regions: entry.region.regions, cause: 'history', history: 'none',
+        isCurrent: () => token === sequence && location.href === entry.url && !restoring });
+    } catch (_) { result = { status: 'failed' }; }
+    if (token !== sequence || location.href !== entry.url || restoring) return;
+    if (result.status === 'refreshed') {
+      currentEntry = entry;
+      currentUrl = entry.url;
+      window.scrollTo({ left: entry.scroll[0], top: entry.scroll[1], behavior: 'instant' });
+      announce('Page updated.');
+      return;
+    }
+    if (result.status === 'security' || result.recovery === 'document') return;
+    if (result.status === 'not-owned') {
+      void navigate(entry.url, { popEntry: entry });
+      return;
+    }
+    restorePop(entry);
+    failed = { url: entry.url, regionalEntry: entry, entryId: entry.id };
+    announce('Unable to refresh this history entry. Your current page and edits have been kept. Retry when ready.', entry.url);
+  }
+
   window.SynapseNavigation = {
     navigate,
-    hasUnsavedChanges(exceptForm) {
-      return Array.from(dirty).some(form => form !== exceptForm && form.isConnected && isDirtyForm(form));
+    hasUnsavedChanges(exceptForm, options = {}) {
+      const roots = Array.isArray(options.within) ? options.within.filter(root => root instanceof Element) : null;
+      return Array.from(dirty).some(form => {
+        if (form === exceptForm || !form.isConnected || !isDirtyForm(form)) return false;
+        if (!roots) return true;
+        return roots.some(root => root === form || root.contains(form) || form.contains(root) ||
+          Array.from(form.elements).some(control => root.contains(control)));
+      });
     },
     markSaved(form) {
       dirty.delete(form);
     },
     // Fragment owners update the address without replacing their current page.
     // Keep those entries in the same history sequence as full content swaps.
-    updateHistory(value, mode = 'replace') {
+    canUpdateHistory(value) {
+      return Boolean(urlFor(value) && !pending && !restoring && currentEntry);
+    },
+    updateHistory(value, mode = 'replace', regional = null) {
       const url = urlFor(value);
       if (!url || pending || restoring || !currentEntry) return false;
       rememberScroll();
       const push = mode === 'push' && url.href !== location.href;
+      const regionState = regional && typeof regional.owner === 'string' && Array.isArray(regional.regions)
+        ? { owner: regional.owner, regions: regional.regions.filter(name => typeof name === 'string') } : null;
       currentEntry = { ...currentEntry, id: `${owner}:${++sequence}`, index: currentEntry.index + (push ? 1 : 0),
-        url: url.href, scroll: [window.scrollX, window.scrollY] };
+        url: url.href, scroll: [window.scrollX, window.scrollY], region: regionState };
       history[push ? 'pushState' : 'replaceState'](stateWith(currentEntry), '', url.href);
       currentUrl = url.href;
+      failed = null;
+      announce('Page updated.');
       return true;
     },
+    inspectDocument,
+    requireFullDocument,
     registerCleanup(callback) {
       if (typeof callback !== 'function') throw new TypeError('Cleanup must be a function.');
       cleanups.add(callback);
@@ -421,7 +487,12 @@
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
       if (target?.closest('#navigation-retry') && failed) {
         event.preventDefault();
-        if (!restoring) void navigate(failed.url, failed.options);
+        if (restoring) return;
+        if (failed.regionalEntry) {
+          const entry = failed.regionalEntry;
+          const distance = currentEntry ? entry.index - currentEntry.index : 0;
+          if (distance && entry.id === failed.entryId) history.go(distance);
+        } else void navigate(failed.url, failed.options);
         return;
       }
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || restoring) return;
@@ -470,6 +541,7 @@
     }, { passive: true });
     window.addEventListener('pagehide', () => { rememberScroll(); pending?.abort(); });
     window.addEventListener('popstate', event => {
+      window.SynapseRefreshRegions?.cancelHistory?.();
       if (restoring) { restoring = false; return; }
       const entry = ownState(event.state);
       if (!committing) {
@@ -485,6 +557,10 @@
         currentEntry = entry;
         currentUrl = location.href;
         window.scrollTo({ left: entry.scroll[0], top: entry.scroll[1], behavior: 'instant' });
+        return;
+      }
+      if (entry && entry.url === location.href && entry.region?.owner && window.SynapseRefreshRegions?.enabled(entry.region.owner)) {
+        void restoreRegionalHistory(entry);
         return;
       }
       const table = document.querySelector('#main [data-live-table]');

@@ -9,13 +9,17 @@
 </div>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
+<?php $refreshOwner = 'appointments.staff.' . $unit; ?>
 <section data-live-filters
+         data-mutation-refresh
+         data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>"
+         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
          data-filter-url="<?= esc(site_url('/' . $unit . '/appointments')) ?>"
          data-filter-key="staff-appointments-<?= esc($unit) ?>"
          data-live-events="notifications.changed queue.invalidated">
   <?= view('partials/live_filter_feedback') ?>
 
-  <div data-filter-region="requests">
+  <div data-filter-region="requests" data-refresh-region="appointments.pending">
     <div class="card mb-4">
       <div class="card-header bg-transparent py-3">
         <h5 class="mb-1">Pending <?= $unit === 'clinic' ? 'Clinic' : 'Guidance' ?> Requests <span class="badge bg-light text-muted border"><?= number_format($pendingPagination['filtered']) ?></span></h5>
@@ -55,13 +59,13 @@
         <label for="appointmentDateFilter" class="visually-hidden">Appointment date</label>
         <div class="appointment-date-field">
           <input type="text" class="form-control form-control-sm" id="appointmentDateFilter" data-datepicker data-target="#appointmentDateFilter_iso" data-datepicker-counts-url="<?= esc(site_url('/' . $unit . '/appointments/calendar-counts')) ?>">
-          <input type="hidden" name="date" id="appointmentDateFilter_iso" value="<?= esc($date) ?>" onchange="this.form.elements.scheduled_page.value = 1; this.form.elements.pending_page.value = 1">
+          <input type="hidden" name="date" id="appointmentDateFilter_iso" value="<?= esc($date) ?>" data-reset-pages>
         </div>
         <input type="hidden" name="pending_page" value="<?= $pendingPagination['page'] ?>">
         <input type="hidden" name="scheduled_page" value="<?= $scheduledPagination['page'] ?>">
         <label for="appointmentPerPage" class="visually-hidden">Rows per page</label>
         <div class="appointment-page-size">
-          <select name="per_page" id="appointmentPerPage" class="form-select form-select-sm" onchange="this.form.elements.pending_page.value = 1; this.form.elements.scheduled_page.value = 1">
+          <select name="per_page" id="appointmentPerPage" class="form-select form-select-sm" data-reset-pages>
             <?php foreach ([20, 25, 50, 100] as $size): ?>
               <option value="<?= $size ?>" <?= $scheduledPagination['per_page'] === $size ? 'selected' : '' ?>><?= $size ?> per page</option>
             <?php endforeach; ?>
@@ -69,7 +73,7 @@
         </div>
       </form>
     </div>
-    <div data-filter-region="schedule">
+    <div data-filter-region="schedule" data-refresh-region="appointments.schedule">
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0"><thead><tr><th class="ps-3">Time</th><th>Patient</th><th><?= $unit === 'clinic' ? 'Assigned clinician' : 'Assigned counselor' ?></th><th>Type</th><th>Status</th><th class="text-end pe-3">Actions</th></tr></thead><tbody>
           <?php $calendar = $appointments; ?>

@@ -52,9 +52,13 @@ before(async () => {
         const csrf = { name: 'csrf_test_name', hash: reply.hash || 'fixture-refreshed-token', header: 'X-CSRF-TOKEN' };
         res.writeHead(reply.status || 200, { 'Content-Type': 'application/json',
           'X-CSRF-NAME': csrf.name, 'X-CSRF-TOKEN': csrf.hash, 'X-CSRF-HEADER': csrf.header });
+        const sourceOwner = req.headers['x-synapse-refresh-owner'];
+        const refresh = reply.refresh ?? (!reply.status && reply.regional && sourceOwner === 'facilities.list'
+          ? { mode: 'regions', owner: sourceOwner, regions: ['stats', 'units'] }
+          : undefined);
         res.end(JSON.stringify({ success: !reply.status || reply.status === 200,
           message: reply.message || 'Fixture write accepted', redirect: reply.redirect || req.url,
-          ...(reply.headerOnly ? {} : { csrf }) })); return;
+          ...(refresh ? { refresh } : {}), ...(reply.headerOnly ? {} : { csrf }) })); return;
       }
       const url = new URL(req.url, origin);
       const assetPath = url.pathname.replace(/^\/campus\//, '/');
@@ -150,6 +154,21 @@ test('gear assets are static local files at root and campus deployments', async 
   }
 });
 
+test('regional rollout uses stable list/unit groups, optional descriptors and GET-only retries', () => {
+  const list = fs.readFileSync(path.join(root, 'app/Views/facilities/index.php'), 'utf8');
+  const detail = fs.readFileSync(path.join(root, 'app/Views/facilities/unit_detail.php'), 'utf8');
+  const controller = fs.readFileSync(path.join(root, 'app/Controllers/FacilitiesController.php'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'public/assets/js/bmg.js'), 'utf8');
+  assert.match(list, /data-refresh-owner="facilities\.list"/);
+  assert.match(list, /data-refresh-region="stats"/);
+  assert.match(list, /data-refresh-region="units"/);
+  assert.match(detail, /data-refresh-owner="facilities\.unit\.<\?= \$id \?>"/);
+  assert.match(detail, /data-refresh-region="unit"/);
+  assert.match(controller, /RefreshRegions::class\)->enables\(\$owner\)/);
+  assert.match(client, /descriptor: payload\.refresh/);
+  assert.doesNotMatch(client, /Retry[^\n]*save|requestSubmit\([^\n]*Retry/i);
+});
+
 test('overview, empty states and permitted create modal', async t => {
   const page = await pageFor(t, '/facilities?variant=empty');
   await page.getByRole('heading', { name: 'No drums registered' }).waitFor();
@@ -161,6 +180,33 @@ test('overview, empty states and permitted create modal', async t => {
   assert.equal(await form.locator('[name="status"] option[value="active"]').count(), 1);
   assert.equal(await page.locator('form[method="POST"]').evaluateAll(forms => forms.every(form => !!form.querySelector('input[name="csrf_test_name"]'))), true);
 });
+test('enabled list refresh replaces the committed create modal and permits a second deliberate create', { timeout: 20000 }, async t => {
+  responses.push({ regional: true }, { regional: true });
+  t.after(() => { responses.length = 0; });
+  const page = await pageFor(t, '/facilities?variant=empty&regional=1');
+  assert.equal(await page.evaluate(() => SynapseRefreshRegions.enabled('facilities.list')), true);
+  const fillAndSave = async code => {
+    if (await page.locator('.synapse-toast-close').count()) {
+      await page.locator('.synapse-toast-close').first().click();
+      await page.locator('.synapse-toast').waitFor({ state: 'hidden' });
+    }
+    await page.getByRole('button', { name: 'Add drum', exact: true }).click();
+    await page.locator('#unitCode').fill(code);
+    await page.locator('#unitName').fill('Fixture drum ' + code);
+    await page.getByLabel('Capacity (kg)', { exact: true }).fill('125.25');
+    const before = posts.length;
+    const read = page.waitForRequest(request => request.method() === 'GET' && new URL(request.url()).pathname.endsWith('/facilities') &&
+      request.headers()['x-synapse-refresh'] === '1');
+    await page.locator('#unitModal button[type="submit"]').click();
+    await read;
+    await page.waitForFunction(() => !document.querySelector('#unitModal.show, .modal-backdrop') && !document.querySelector('[data-refresh-region="units"] [aria-busy="true"]'));
+    assert.equal(posts.length, before + 1);
+    assert.equal(posts.at(-1).headers['x-synapse-refresh-owner'], 'facilities.list');
+  };
+  await fillAndSave('DRUM-FIRST');
+  await fillAndSave('DRUM-SECOND');
+});
+
 test('capacity is required, bounded and blank on create; create and edit submit exact values', async t => {
   const page = await pageFor(t, '/facilities');
   assert.match(await page.locator('article').textContent(), /275\.50 kg/);

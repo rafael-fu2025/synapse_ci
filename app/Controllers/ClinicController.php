@@ -295,7 +295,8 @@ final class ClinicController extends BaseController
             }
             $result = $inventory->dispense($id, (int) $medicineId, $this->request->getPost('quantity'),
                 $this->inventoryPostString('instructions'), $actorId, $this->inventoryPostString('idempotency_key'));
-            return $this->inventoryFormResponse(true, 'Medicine dispensed and inventory deducted via FEFO.', $redirect, 200, $result);
+            return $this->inventoryFormResponse(true, 'Medicine dispensed and inventory deducted via FEFO.', $redirect, 200, $result,
+                $this->encounterRefresh($id));
         } catch (\Throwable $e) {
             return $this->inventoryFailure($e, $redirect);
         }
@@ -310,7 +311,8 @@ final class ClinicController extends BaseController
             $actorId = $this->authorizeEncounter(true);
             $this->encounterService->completeEncounter($id, $this->inventoryPostString('disposition'),
                 pendingDraft: $this->encounterDraftFields(), recordedByUserId: $actorId);
-            return $this->inventoryFormResponse(true, 'Visit completed and sealed successfully.', '/clinic/encounters', 200);
+            return $this->inventoryFormResponse(true, 'Visit completed and sealed successfully.', '/clinic/encounters', 200, [],
+                $this->navigationRefresh('/clinic/encounters', 'clinic.encounters'));
         } catch (\Throwable $e) {
             return $this->inventoryFailure($e, '/clinic/encounters/' . $id);
         }
@@ -422,7 +424,8 @@ final class ClinicController extends BaseController
             return $this->inventoryFailure($error, '/clinic/patients/' . $personId);
         }
 
-        return $this->inventoryFormResponse(true, 'Health profile updated successfully.', '/clinic/patients/' . $personId, 200);
+        return $this->inventoryFormResponse(true, 'Health profile updated successfully.', '/clinic/patients/' . $personId, 200, [],
+            $this->patientRefresh($personId));
     }
 
     /**
@@ -449,7 +452,8 @@ final class ClinicController extends BaseController
                 appointmentId: !empty($ticket['appointment_id']) ? (int) $ticket['appointment_id'] : null
             );
 
-            return redirect()->to('/clinic/encounters/' . $encounter['encounter']['id']);
+            return $this->inventoryFormResponse(true, 'Encounter opened.', '/clinic/encounters/' . $encounter['encounter']['id'], 200, [],
+                $this->navigationRefresh('/clinic/encounters/' . $encounter['encounter']['id'], 'clinic.encounters'));
         } catch (\Throwable $e) {
             return $this->inventoryFailure($e, '/clinic/queue');
         }
@@ -514,16 +518,56 @@ final class ClinicController extends BaseController
         return $this->inventoryFormResponse(false, $status === 500 ? 'Clinic request failed.' : $e->getMessage(), $redirect, $status);
     }
 
-    private function inventoryFormResponse(bool $success, string $message, string $redirect, int $status, array $data = [])
+    private function encounterRefresh(int $encounterId): ?array
+    {
+        $owner = 'clinic.encounter.' . $encounterId;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) {
+            return null;
+        }
+
+        return $this->refreshRegions($owner, ['dispensed-items', 'dispense-form'], site_url('/clinic/encounters/' . $encounterId));
+    }
+
+    private function patientRefresh(int $personId): ?array
+    {
+        $owner = 'clinic.patient.' . $personId;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) {
+            return null;
+        }
+
+        return $this->refreshRegions($owner, ['profile', 'history'], site_url('/clinic/patients/' . $personId));
+    }
+
+    private function navigationRefresh(string $url, string $rolloutOwner): ?array
+    {
+        if (!config(\Config\RefreshRegions::class)->enables($rolloutOwner)) {
+            return null;
+        }
+
+        return $this->refreshNavigation(site_url($url));
+    }
+
+    private function inventoryFormResponse(
+        bool $success,
+        string $message,
+        string $redirect,
+        int $status,
+        array $data = [],
+        ?array $refresh = null
+    )
     {
         if ($this->request->isAJAX()) {
             if ($success && $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
-            return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store')->setJSON([
+            $payload = [
                 'success' => $success, 'message' => $message, 'redirect' => site_url($redirect),
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
-            ] + $data);
+            ] + $data;
+            if ($success && $refresh !== null) {
+                $payload['refresh'] = $refresh;
+            }
+            return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store')->setJSON($payload);
         }
         if (!$success && $status === 503) {
             return $this->response->setStatusCode(503)->setHeader('Cache-Control', 'no-store')
@@ -547,7 +591,8 @@ final class ClinicController extends BaseController
         try {
             $userId = $this->authorizeEncounter(create: true);
             $encounter = $this->encounterService->startEncounter($personId, $userId);
-            return redirect()->to('/clinic/encounters/' . $encounter['encounter']['id']);
+            return $this->inventoryFormResponse(true, 'Encounter opened.', '/clinic/encounters/' . $encounter['encounter']['id'], 200, [],
+                $this->navigationRefresh('/clinic/encounters/' . $encounter['encounter']['id'], 'clinic.encounters'));
         } catch (\Throwable $e) {
             return $this->inventoryFailure($e, '/clinic/patients/' . $personId);
         }

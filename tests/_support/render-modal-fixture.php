@@ -66,6 +66,9 @@ switch ($kind) {
     case 'guidance-availability':
         $view = 'appointments/availability';
         $unit = explode('-', $kind)[0];
+        $refreshRegions = config(\Config\RefreshRegions::class);
+        $refreshRegions->enabled = true;
+        $refreshRegions->owners = ['availability.' . $unit];
         $base = '/' . $unit . '/appointments';
         unset($data['formModalPage']);
         $data += ['title' => ucfirst($unit) . ' Provider Availability',

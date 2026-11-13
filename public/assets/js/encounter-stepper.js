@@ -3,19 +3,65 @@
   'use strict';
   if (window.SynapseEncounterStepper) return;
 
+  window.encounterStepper = function () {
+    return {
+      init() {
+        this.$nextTick(() => { this.stopDraftSaving = window.SynapseEncounterStepper.init(this.$el); });
+      },
+      destroy() { this.stopDraftSaving?.(); },
+      bpSys: null,
+      bpDia: null,
+      tempC: null,
+      weight: null,
+      height: null,
+      calcBmi() {
+        if (this.weight && this.height && this.height > 0) {
+          const hMeter = this.height / 100;
+          return (this.weight / (hMeter * hMeter)).toFixed(2);
+        }
+        return null;
+      },
+      bmiCategory() {
+        const bmi = parseFloat(this.calcBmi());
+        if (!bmi) return '';
+        if (bmi < 18.5) return 'Underweight';
+        if (bmi < 25) return 'Normal';
+        if (bmi < 30) return 'Overweight';
+        return 'Obese';
+      },
+      bmiBadgeClass() {
+        const category = this.bmiCategory();
+        if (category === 'Normal') return 'bg-success';
+        if (category === 'Overweight') return 'bg-warning text-dark';
+        if (category === 'Obese' || category === 'Underweight') return 'bg-danger';
+        return 'd-none';
+      }
+    };
+  };
+
   function init(root) {
     const events = new AbortController();
     const on = (element, type, handler, capture = false) => element.addEventListener(type, handler, { signal: events.signal, capture });
-    const forms = Array.from(root.querySelectorAll('[data-clinical-form]'));
-    const fields = forms.flatMap(form => Array.from(form.querySelectorAll('[name]')))
+    let forms = Array.from(root.querySelectorAll('[data-clinical-form]'));
+    let fields = forms.flatMap(form => Array.from(form.querySelectorAll('[name]')))
       .filter(field => field.type !== 'hidden' || field.name === 'follow_up_date');
     const status = root.querySelector('[data-encounter-save-status]');
     const retry = root.querySelector('[data-save-draft]');
     const review = root.querySelector('[data-review-completion]');
-    const medicine = root.querySelector('#step-dispense form');
-    const medicineFields = medicine ? ['medicine_id', 'quantity', 'instructions'].map(name => medicine.elements.namedItem(name)) : [];
-    const medicineDefaults = medicineFields.map(field => field.value);
+    let medicine = root.querySelector('#step-dispense form');
+    let medicineFields = medicine ? ['medicine_id', 'quantity', 'instructions'].map(name => medicine.elements.namedItem(name)) : [];
+    let medicineDefaults = medicineFields.map(field => field.value);
     let saved = snapshot(), busy = false, leaving = false, allowedTab = null, dispensed = false;
+
+    const alpineData = window.Alpine?.$data?.(root);
+    if (alpineData) {
+      for (const [name, property] of Object.entries({
+        bp_systolic: 'bpSys', bp_diastolic: 'bpDia', temp_c: 'tempC', weight_kg: 'weight', height_cm: 'height'
+      })) {
+        const field = forms.flatMap(form => Array.from(form.elements)).find(control => control.name === name);
+        if (field && field.value !== '') alpineData[property] = Number(field.value);
+      }
+    }
 
     function snapshot() { return Object.fromEntries(fields.map(field => [field.name, field.value])); }
     function patch() {
@@ -127,6 +173,7 @@
       } finally {
         busy = false;
         root.inert = false;
+        root.removeAttribute('inert');
         root.removeAttribute('aria-busy');
       }
     }
@@ -150,7 +197,8 @@
       });
     });
     // Runs after the shared confirmation controller has granted dispensing consent.
-    if (medicine) on(medicine, 'submit', event => {
+    on(root, 'submit', event => {
+      if (!medicine || event.target !== medicine) return;
       event.preventDefault();
       if (busy || dispensed) return;
       void save().then(async ok => {
@@ -168,9 +216,10 @@
             // Release the private navigation veto only after stock deduction is confirmed.
             busy = false;
             root.inert = false;
+            root.removeAttribute('inert');
             medicine.inert = true;
             announce('Medicine dispensed');
-            await mutations.refresh(location.href, result.message, { form: medicine });
+            await mutations.refresh(location.href, result.message, { form: medicine, descriptor: result.refresh });
           } else {
             leaving = true;
             window.location.assign(result.redirect);
@@ -179,7 +228,7 @@
           // Inventory feedback is not a clinical draft-save failure and must not offer its retry.
           announce(dispensed ? 'Medicine was dispensed, but refreshing failed. Do not dispense again; reload to review.' : error.message, !dispensed, false);
         }
-        finally { busy = false; root.inert = false; }
+        finally { busy = false; root.inert = false; root.removeAttribute('inert'); }
       });
     });
     on(retry, 'click', () => { void save(); });
@@ -198,6 +247,19 @@
       if (busy || !medicineReady()) return;
       if (await save()) { leaving = true; window.location.assign(url); }
     }
+    on(document, 'synapse:before-region-swap', event => {
+      if (event.detail?.root !== root || !event.detail.regions?.includes('dispense-form')) return;
+      if (busy && !dispensed) event.preventDefault();
+      else { root.inert = false; root.removeAttribute('inert'); }
+    });
+    on(document, 'synapse:region-load', event => {
+      if (event.detail?.root !== root || !event.detail.regions?.includes('dispense-form')) return;
+      medicine = root.querySelector('#step-dispense form');
+      medicineFields = medicine ? ['medicine_id', 'quantity', 'instructions'].map(name => medicine.elements.namedItem(name)) : [];
+      medicineDefaults = medicineFields.map(field => field.value);
+      dispensed = false;
+      announce('Medicine dispensed');
+    });
     on(document, 'synapse:before-swap', event => {
       if (!root.isConnected || !event.detail.root.contains(root) || event.detail.url !== location.href) return;
       const next = event.detail.incoming?.querySelector('[data-encounter-stepper]');

@@ -17,7 +17,7 @@
     if (endpoint.origin !== location.origin) return;
     const events = new AbortController();
     const dirty = new Set();
-    let sequence = 0, edits = 0, timer = null, pending = null, finish = null, composing = false, asking = false;
+    let sequence = 0, edits = 0, timer = null, pending = null, finish = null, composing = false, asking = false, unregisterRegional = null;
     const options = { signal: events.signal };
     apply.hidden = true;
     status.textContent = 'Search updates as you type. Provider changes apply immediately.';
@@ -41,6 +41,18 @@
       }
       return url;
     }
+    function historyUrl(value) {
+      try {
+        const source = new URL(value, location.href);
+        if (source.origin !== endpoint.origin || source.pathname !== endpoint.pathname || source.username || source.password) return null;
+        const url = new URL(endpoint);
+        for (const name of ['q', 'provider', 'day', 'section']) {
+          const value = source.searchParams.get(name);
+          if (value !== null) url.searchParams.set(name, name === 'q' ? value.trim() : value);
+        }
+        return url;
+      } catch (_) { return null; }
+    }
     function safeContent(container) {
       if (container.querySelector('script, iframe, object, embed, base')) return false;
       return Array.from(container.querySelectorAll('template')).every(template => safeContent(template.content));
@@ -52,8 +64,10 @@
       const label = table?.matches('[data-department-staff]') ? 'staff members' : table ? 'weekly windows' : 'exceptions';
       return `Showing ${count.toLocaleString()} matching ${label}.`;
     }
-    async function load(manual = false, historyMode = 'replace') {
+    async function load(manual = false, historyMode = 'replace', destination = null) {
       invalidate();
+      const url = destination === null ? queryUrl() : historyUrl(destination);
+      if (!url) return false;
       if (!form.reportValidity()) { paused('Correct the filters before searching.'); return; }
       if (root.querySelector('[data-availability-save][aria-busy="true"]')) { paused('Wait for the current save before filtering.'); return; }
       if (hasOpenDialog()) { paused('Finish or close the editor before filtering. Your values have been kept.'); return; }
@@ -71,7 +85,6 @@
       }
       const version = edits;
       const token = sequence;
-      const url = queryUrl();
       const controller = new AbortController(); pending = controller;
       let timedOut = false;
       const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
@@ -98,9 +111,13 @@
         if (version !== edits || hasOpenDialog()) { paused('New edits were kept. Filters were not applied.'); return; }
         const canonical = new URL(endpoint);
         for (const name of ['q', 'provider', 'day', 'section']) canonical.searchParams.set(name, incomingFilters.elements.namedItem(name)?.value || '');
-        if (window.SynapseNavigation) {
-          if (!window.SynapseNavigation.updateHistory(canonical.href, historyMode)) throw new Error('Another navigation interrupted filtering. Please retry.');
-        } else history[historyMode === 'push' ? 'pushState' : 'replaceState'](history.state, '', canonical.href);
+        if (historyMode !== 'none') {
+          const owner = root.dataset.refreshOwner;
+          const regional = owner && window.SynapseRefreshRegions?.enabled(owner) ? { owner, regions: ['results'] } : null;
+          if (window.SynapseNavigation) {
+            if (!window.SynapseNavigation.updateHistory(canonical.href, historyMode, regional)) throw new Error('Another navigation interrupted filtering. Please retry.');
+          } else history[historyMode === 'push' ? 'pushState' : 'replaceState'](history.state, '', canonical.href);
+        }
         finish?.(); finish = null;
         window.SynapsePageLifecycle?.destroy(results);
         results.querySelectorAll('.modal').forEach(modal => window.bootstrap?.Modal.getInstance(modal)?.dispose());
@@ -116,7 +133,9 @@
         select.replaceChildren(...Array.from(freshSelect.options, option => document.importNode(option, true)));
         select.value = freshSelect.value;
         select.dispatchEvent(new Event('bd-select:sync'));
-        for (const name of ['day', 'section']) form.elements.namedItem(name).value = incomingFilters.elements.namedItem(name).value;
+        for (const name of ['q', 'day', 'section']) {
+          form.elements.namedItem(name).value = incomingFilters.elements.namedItem(name).value;
+        }
         const name = page.querySelector('meta[name="csrf-name"]')?.content;
         const hash = page.querySelector('meta[name="csrf-token"]')?.content;
         if (name && hash) window.SynapseCsrf?.sync({ name, hash, header: page.querySelector('meta[name="csrf-header"]')?.content });
@@ -124,6 +143,7 @@
         window.SynapsePageLifecycle?.init(results);
         window.htmx?.process(results);
         status.textContent = announce(results);
+        return true;
       } catch (error) {
         if (token !== sequence || (!timedOut && controller.signal.aborted)) return;
         errorText.textContent = timedOut ? 'Filtering timed out. Your previous results are still displayed.' : error instanceof TypeError ? 'Connection or sign-in changed. Retry or reload this page.' : error.message;
@@ -171,7 +191,27 @@
       for (const name of ['q', 'provider', 'day']) url.searchParams.set(name, form.elements.namedItem(name).value.trim());
       link.href = url.href;
     }, options);
-    instances.set(root, { invalidate, destroy() { invalidate(); events.abort(); instances.delete(root); } });
+    const regionalOwner = root.dataset.refreshOwner;
+    if (regionalOwner && window.SynapseRefreshRegions?.enabled(regionalOwner)) {
+      unregisterRegional = window.SynapseRefreshRegions.register({
+        owner: regionalOwner,
+        root,
+        owns(request) { return request.regions.length === 1 && request.regions[0] === 'results'; },
+        canRefresh(request) {
+          if (request.cause === 'mutation' && request.source instanceof HTMLFormElement) dirty.delete(request.source);
+          return !(pending || timer !== null || asking || hasDrafts() || hasOpenDialog() ||
+            root.querySelector('[data-availability-save][aria-busy="true"]'));
+        },
+        cancel: invalidate,
+        async refresh(request) {
+          const refreshed = await load(false, 'none', request.url);
+          return refreshed === true
+            ? { status: 'refreshed', owner: regionalOwner, regions: ['results'], roots: [results] }
+            : { status: 'failed', owner: regionalOwner, regions: ['results'], reason: 'availability' };
+        },
+      });
+    }
+    instances.set(root, { invalidate, destroy() { unregisterRegional?.(); unregisterRegional = null; invalidate(); events.abort(); instances.delete(root); } });
   }
   function scan(root = document) {
     if (root.matches?.('[data-availability-workspace]')) init(root);

@@ -10,6 +10,7 @@ import { Action } from '../../../components/Action';
 import { EmptyState } from '../../../components/EmptyState';
 import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
+import { PhoneNotificationControl } from '../../../components/PhoneNotificationControl';
 import { NotificationItem } from '../../../api/endpoints/notifications';
 import { poll } from '../../../api/poll';
 import { Theme, font, lightTheme, palette, memoizeStyles } from '../../../theme/tokens';
@@ -64,6 +65,7 @@ export function NotificationsScreen() {
           ) : undefined
         }
       />
+      <PhoneNotificationControl />
       <View style={styles.filters}>
         {(['all', 'unread'] as const).map(value => (
           <Pressable

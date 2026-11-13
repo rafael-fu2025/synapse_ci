@@ -9,7 +9,7 @@ $last = (new DateTimeImmutable($endDate, new DateTimeZone('Asia/Manila')))->modi
 $heading = $view === 'month' ? $anchor->format('F Y') : (new DateTimeImmutable($startDate))->format('M j') . ' – ' . $last->format('M j, Y');
 $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(array_replace(['date' => $date, 'view' => $view, 'mine' => $mine, 'status' => $status], $changes));
 ?>
-<div class="teams-workspace" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="teams-calendar-<?= esc($unit) ?>">
+<div class="teams-workspace" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="teams-calendar-<?= esc($unit) ?>" data-mutation-refresh data-refresh-owner="teams.calendar.<?= esc($unit, 'attr') ?>">
   <nav class="d-flex flex-wrap align-items-center gap-2 mb-3" aria-label="Teams views">
     <a class="btn btn-outline-secondary" href="<?= esc($teamsUrl) ?>"><i class="bi bi-kanban me-2" aria-hidden="true"></i>Team board</a>
     <a class="btn btn-outline-secondary" href="<?= esc($teamsUrl . '?mine=1&view=list') ?>"><i class="bi bi-list-check me-2" aria-hidden="true"></i>My tasks</a>
@@ -17,7 +17,7 @@ $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(a
     <a class="btn btn-primary" href="<?= esc($baseUrl) ?>" aria-current="page"><i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Team calendar</a>
   </nav>
   <div class="alert alert-light border small"><i class="bi bi-info-circle me-2" aria-hidden="true"></i>Internal events and task deadlines only. This calendar does not reserve patient appointments, block provider availability, or send invitations/reminders. All times are <strong>Asia/Manila</strong>. Do not enter patient details or confidential counseling notes.</div>
-  <div data-filter-region="notice">
+  <div data-filter-region="notice" data-refresh-region="notice">
   <?php if ($truncated): ?><div class="alert alert-warning" role="status">This range contains <?= $totalEvents ?> events and <?= $totalTasks ?> task deadlines. Only the first <?= \App\Services\TeamCalendarService::LIST_LIMIT ?> of each are shown. Switch to Week or My schedule to narrow the range.</div><?php endif; ?>
   </div>
   <?= view('partials/live_filter_feedback') ?>
@@ -34,9 +34,9 @@ $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(a
         </form>
         <p class="small text-muted mt-3 mb-0">My schedule shows events you created or participate in, and tasks assigned to you.</p>
       </div></div>
-      <div class="card"><div class="card-body p-3"><h2 class="h6">Calendar key</h2><p class="small"><span class="team-calendar-key is-event" aria-hidden="true"></span>Team event</p><p class="small"><span class="team-calendar-key is-task" aria-hidden="true"></span>Task due date</p><p class="small text-muted mb-0" data-filter-region="summary"><?= $totalEvents ?> matching events<br><?= $totalTasks ?> task deadlines<br><?= count($members) ?> active members</p></div></div>
+      <div class="card"><div class="card-body p-3"><h2 class="h6">Calendar key</h2><p class="small"><span class="team-calendar-key is-event" aria-hidden="true"></span>Team event</p><p class="small"><span class="team-calendar-key is-task" aria-hidden="true"></span>Task due date</p><p class="small text-muted mb-0" data-filter-region="summary" data-refresh-region="summary"><?= $totalEvents ?> matching events<br><?= $totalTasks ?> task deadlines<br><?= count($members) ?> active members</p></div></div>
     </aside>
-    <section class="card team-calendar-main" aria-labelledby="calendarHeading" data-filter-region="results">
+    <section class="card team-calendar-main" aria-labelledby="calendarHeading" data-filter-region="results" data-refresh-region="results">
       <header class="team-calendar-toolbar">
         <div class="d-flex flex-wrap align-items-center gap-2"><a class="btn btn-outline-secondary btn-sm" data-filter-link href="<?= esc($link(['date' => $prevDate])) ?>" aria-label="Previous calendar period"><i class="bi bi-chevron-left" aria-hidden="true"></i></a><a class="btn btn-outline-secondary btn-sm" data-filter-link href="<?= esc($link(['date' => $today])) ?>">Today</a><a class="btn btn-outline-secondary btn-sm" data-filter-link href="<?= esc($link(['date' => $nextDate])) ?>" aria-label="Next calendar period"><i class="bi bi-chevron-right" aria-hidden="true"></i></a><h2 class="h5 mb-0 ms-1" id="calendarHeading"><?= esc($heading) ?></h2></div>
         <nav class="d-flex gap-1" aria-label="Calendar display"><?php foreach (['month' => 'Month', 'week' => 'Week', 'agenda' => 'Agenda'] as $value => $label): ?><a class="btn btn-sm <?= $view === $value ? 'btn-primary' : 'btn-outline-secondary' ?>" data-filter-link href="<?= esc($link(['view' => $value])) ?>" <?= $view === $value ? 'aria-current="page"' : '' ?>><?= esc($label) ?></a><?php endforeach; ?></nav>

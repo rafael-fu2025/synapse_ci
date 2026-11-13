@@ -77,8 +77,11 @@ async function open(t, width = 320, theme = 'light', query = '') {
       return new Promise(resolve => pending.push({
         request,
         async respond(options = {}) {
+          const defaults = { success: true, message: 'Order saved by fixture.' };
+          if (new URL(request.url()).pathname === '/admin/carousel/reorder'
+              && request.headers()['x-synapse-feedback'] === 'toast') defaults.refresh = { mode: 'none' };
           await route.fulfill({ status: 200, contentType: 'application/json',
-            body: JSON.stringify({ success: true, message: 'Order saved by fixture.' }), ...options });
+            body: JSON.stringify(defaults), ...options });
           resolve();
         },
         async abort() { await route.abort('failed'); resolve(); },
@@ -94,7 +97,7 @@ async function open(t, width = 320, theme = 'light', query = '') {
   page.setDefaultTimeout(6000); page.setDefaultNavigationTimeout(15000);
   page.on('pageerror', error => errors.push(error.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.goto(origin + '/admin/carousel' + query);
+  await page.goto(origin + '/admin/carousel' + query, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.SynapseConfirm && window.SynapseToast && (!document.querySelector('#slideList') || document.querySelector('#slideList').dataset.reorderReady));
   assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
   return { page, posts, saves, actions, reads, refresh };
@@ -430,6 +433,7 @@ test('repeated saves rotate header/body CSRF without navigation, rerender or scr
     const headers = saves[index].request.headers();
     assert.equal(headers['x-requested-with'], 'XMLHttpRequest');
     assert.equal(headers.accept, 'application/json');
+    assert.equal(headers['x-synapse-feedback'], 'toast');
     assert.match(headers['content-type'], /^application\/x-www-form-urlencoded/);
     assert.equal(saves[index].request.resourceType(), 'fetch');
     const csrf = index === 0 ? undefined : { name: 'body_csrf', hash: 'body-token' };
@@ -548,7 +552,7 @@ test('progressive navigation cleans up and initializes reorder once on return', 
 for (const action of ['toggle', 'delete']) {
   test(`${action} uses one background POST and authoritative GET with shared feedback`, { timeout: 25000 }, async t => {
     const { page, posts, actions, reads, refresh } = await open(t, action === 'delete' ? 320 : 1440, action === 'delete' ? 'dark' : 'light');
-    // Exercise the real generic asset even while the shell integration is being landed separately.
+    await page.waitForFunction(() => window.SynapseRefreshRegions && window.SynapseRefreshRegions.enabled('carousel.admin'));
     if (!await page.evaluate(() => Boolean(window.SynapseBackgroundActions))) {
       await page.addScriptTag({ url: origin + '/assets/js/background-actions.js' });
     }
@@ -568,6 +572,8 @@ for (const action of ['toggle', 'delete']) {
     }
     const form = page.locator(`[data-id="17"] form[action$="/${action}"]`);
     const button = form.getByRole('button');
+    assert.equal(await page.locator('[data-refresh-owner="carousel.admin"]').count(), 1);
+    assert.equal(await page.locator('[data-refresh-region="carousel.slides"]').count(), 1);
     await button.click();
     if (action === 'delete') {
       const modal = page.getByRole('dialog', { name: 'Delete carousel slide' });
@@ -594,22 +600,35 @@ for (const action of ['toggle', 'delete']) {
     assert.equal(await page.evaluate(() => document.dispatchEvent(new CustomEvent('synapse:before-navigate', { cancelable: true }))), false);
     assert.equal(reads.length, 1, 'no refresh before the write is confirmed');
     await page.evaluate(() => {
-      window.actionSnapshot = { document, main: document.querySelector('#main'), url: location.href, length: history.length, loads: 0 };
+      window.actionSnapshot = { document, main: document.querySelector('#main'), owner: document.querySelector('[data-refresh-owner="carousel.admin"]'),
+        region: document.querySelector('[data-refresh-region="carousel.slides"]'), url: location.href, length: history.length, loads: 0, regionLoads: 0 };
       document.addEventListener('synapse:page-load', () => window.actionSnapshot.loads++);
+      document.addEventListener('synapse:region-load', event => {
+        if (event.detail?.owner === 'carousel.admin') window.actionSnapshot.regionLoads++;
+      });
     });
     if (action === 'toggle') {
       await form.evaluate(form => form.dispatchEvent(new SubmitEvent('submit', { bubbles: true, cancelable: true, submitter: form.querySelector('button') })));
       await page.waitForTimeout(80);
       assert.equal(posts.length, 1);
     }
-    await actions[0].respond({ body: JSON.stringify({ success: true, message: `${action} confirmed by fixture.`, csrf: { name: 'after_action_csrf', hash: 'after-action-token' } }) });
-    await page.waitForFunction(() => window.actionSnapshot.loads === 1);
+    await actions[0].respond({ body: JSON.stringify({ success: true, message: `${action} confirmed by fixture.`,
+      refresh: { mode: 'regions', owner: 'carousel.admin', regions: ['carousel.slides'] },
+      csrf: { name: 'after_action_csrf', hash: 'after-action-token' } }) });
+    await page.waitForFunction(action => action === 'delete'
+      ? document.querySelector('[data-refresh-region="carousel.slides"]')?.textContent.includes('2 total')
+      : document.querySelector('[data-id="17"] form[action$="/toggle"] button')?.getAttribute('aria-label')?.startsWith('Show on login:'), action);
     await expectToast(page, `${action} confirmed by fixture.`, 'success');
     assert.equal(reads.length, 2);
     assert.equal(posts.length, 1);
     assert.deepEqual(documents, []);
-    assert.equal(await page.evaluate(() => window.actionSnapshot.document === document && window.actionSnapshot.main !== document.querySelector('#main')
-      && window.actionSnapshot.url === location.href && window.actionSnapshot.length === history.length && !document.querySelector('#main').inert), true);
+    assert.equal(await page.evaluate(() => window.actionSnapshot.document === document
+      && window.actionSnapshot.main === document.querySelector('#main')
+      && window.actionSnapshot.owner === document.querySelector('[data-refresh-owner="carousel.admin"]')
+      && window.actionSnapshot.region === document.querySelector('[data-refresh-region="carousel.slides"]')
+      && window.actionSnapshot.url === location.href && window.actionSnapshot.length === history.length
+      && window.actionSnapshot.loads === 0 && window.actionSnapshot.regionLoads === 1
+      && !document.querySelector('#main').inert), true);
     assert.deepEqual(await token(page), ['after_action_csrf', 'after-action-token']);
     assert.equal(await page.locator('.slide-row').count(), action === 'delete' ? 2 : 3);
     if (action === 'delete') assert.equal(await page.locator('[data-id="17"]').count(), 0);

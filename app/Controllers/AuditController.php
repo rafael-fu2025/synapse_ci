@@ -69,15 +69,26 @@ final class AuditController extends BaseController
             if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata($result['valid'] ? 'success' : 'error', $msg);
             }
+            $payload = [
+                'success' => $result['valid'], 'message' => $msg,
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
+            ];
+            $refresh = $result['valid'] ? $this->verificationRefresh() : null;
+            if ($refresh !== null) { $payload['refresh'] = $refresh; }
             return $this->response->setStatusCode($result['valid'] ? 200 : 422)
-                ->setHeader('Cache-Control', 'private, no-store')->setJSON([
-                    'success' => $result['valid'], 'message' => $msg,
-                    'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
-                ]);
+                ->setHeader('Cache-Control', 'private, no-store')->setJSON($payload);
         }
 
         $redirect = redirect()->to('/admin/audit');
         return $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast'
             ? $redirect : $redirect->with($result['valid'] ? 'success' : 'error', $msg);
+    }
+
+    private function verificationRefresh(): ?array
+    {
+        if (!config(\Config\RefreshRegions::class)->enables('audit.ledger')
+            || $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') { return null; }
+
+        return $this->refreshNone();
     }
 }

@@ -8,7 +8,7 @@
 $today = (new DateTimeImmutable('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d');
 $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(array_replace($filters + ['view' => $mode], $changes));
 ?>
-<div class="teams-workspace" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="teams-tasks-<?= esc($unit) ?>" data-mutation-refresh>
+<div class="teams-workspace" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="teams-tasks-<?= esc($unit) ?>" data-mutation-refresh data-refresh-owner="teams.tasks.<?= esc($unit, 'attr') ?>">
   <section class="card teams-intro">
     <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
       <div><span class="teams-eyebrow">Work together · <?= esc(ucfirst($unit)) ?></span><h2 class="h5 mt-1 mb-1">One team. A clear plan.</h2><p class="text-muted small mb-0">Plan operational work, assign responsibilities, and follow progress.</p></div>
@@ -16,7 +16,7 @@ $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(a
     </div>
   </section>
   <div class="alert alert-light border small"><i class="bi bi-shield-lock me-2" aria-hidden="true"></i>Visible to authorized <?= esc(ucfirst($unit)) ?> staff. Do not enter patient information, diagnoses, or confidential counseling notes.</div>
-  <nav class="d-flex flex-wrap align-items-center gap-2 mb-3" aria-label="Teams views" data-filter-region="navigation">
+  <nav class="d-flex flex-wrap align-items-center gap-2 mb-3" aria-label="Teams views" data-filter-region="navigation" data-refresh-region="navigation">
     <a class="btn <?= $filters['mine'] !== '1' ? 'btn-primary' : 'btn-outline-secondary' ?>" data-filter-link href="<?= esc($link(['mine' => '', 'page' => 1])) ?>" <?= $filters['mine'] !== '1' ? 'aria-current="page"' : '' ?>><i class="bi bi-kanban me-2" aria-hidden="true"></i>Team board</a>
     <a class="btn <?= $filters['mine'] === '1' ? 'btn-primary' : 'btn-outline-secondary' ?>" data-filter-link href="<?= esc($link(['mine' => '1', 'view' => 'list', 'page' => 1])) ?>" <?= $filters['mine'] === '1' ? 'aria-current="page"' : '' ?>><i class="bi bi-list-check me-2" aria-hidden="true"></i>My tasks</a>
     <a class="btn btn-outline-secondary" href="<?= esc($baseUrl . '/chat') ?>"><i class="bi bi-chat-dots me-2" aria-hidden="true"></i>Team chat</a>
@@ -36,7 +36,7 @@ $link = static fn(array $changes): string => $baseUrl . '?' . http_build_query(a
     </div>
   </form>
   <?= view('partials/live_filter_feedback') ?>
-  <div data-filter-region="results">
+  <div data-filter-region="results" data-refresh-region="results">
   <?php if ($mode === 'board'): ?>
     <p class="small text-muted" id="task-drag-help">Drag an editable task to another status column. Keyboard: focus its move handle, press Space, choose a column with arrow keys, then Enter. Escape cancels.</p>
     <div class="teams-board" aria-label="Task board" data-team-board aria-describedby="task-drag-help">

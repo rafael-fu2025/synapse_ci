@@ -1,6 +1,7 @@
 import * as Keychain from 'react-native-keychain';
 import { config } from '../config';
 import type { PushMessage } from './fcm';
+import { clearSystemNotifications } from './systemNotifications';
 
 const PUSH_SERVICE = 'com.humus.synapse.lantest.push';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -99,6 +100,7 @@ export function activatePushOwner(options: PushOwnerOptions = {}): PushOwner {
       (options.isCurrent?.() ?? true),
   });
   // A new activation must never inherit an in-memory registration or foreground notice.
+  if (owner) { clearSystemNotifications(owner); }
   owner = captured;
   scope = null;
   scopedMode = captured.lanTest;
@@ -240,6 +242,7 @@ export function clearPushScope(captured: PushOwner): Promise<void> {
 
 /** Retiring a stale owner cannot erase a newer owner's native binding. */
 export function retirePushOwner(captured: PushOwner, clearSaved = true): Promise<void> {
+  clearSystemNotifications(captured);
   if (owner !== captured) { return Promise.resolve(); }
   if (clearSaved && captured.lanTest) { retiredBindings.add(bindingKey(captured)); }
   const cleared = clearSaved && captured.lanTest ? clearPushScope(captured) : Promise.resolve();

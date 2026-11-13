@@ -177,6 +177,27 @@ async function sendDraft(page, id) {
 }
 
 
+async function rememberTranscriptNodes(page, name, ids, { days = false, unread = false } = {}) {
+  await page.evaluate(({ name, ids, days, unread }) => {
+    window.fixtureTranscriptNodes ||= {};
+    window.fixtureTranscriptNodes[name] = {
+      messages: Object.fromEntries(ids.map(id => [id, document.querySelector(`[data-message-id="${id}"]`)])),
+      days: days ? [...document.querySelectorAll('[data-chat-day]')] : [],
+      unread: unread ? document.querySelector('[data-chat-unread-divider]') : null
+    };
+  }, { name, ids, days, unread });
+}
+async function transcriptNodeIdentity(page, name, ids, { days = false, unread = false } = {}) {
+  return page.evaluate(({ name, ids, days, unread }) => {
+    const saved = window.fixtureTranscriptNodes[name];
+    return {
+      messages: Object.fromEntries(ids.map(id => [id, saved.messages[id] === document.querySelector(`[data-message-id="${id}"]`)])),
+      days: days ? saved.days.map((node, index) => node === document.querySelectorAll('[data-chat-day]')[index]) : [],
+      unread: unread ? saved.unread === document.querySelector('[data-chat-unread-divider]') : undefined
+    };
+  }, { name, ids, days, unread });
+}
+
 async function realtimeEvent(page, detail) {
   await page.evaluate(detail => document.dispatchEvent(new CustomEvent('synapse:realtime-event', { detail })), detail);
 }
@@ -666,6 +687,99 @@ test('composer grows to four lines then scrolls; Shift+Enter adds a newline and 
   assert.equal(await body.inputValue(), '');
   assert.ok((await metrics()).height <= initial.height + 1);
   assert.equal((await metrics()).overflow, 'hidden');
+});
+
+test('poll append preserves unchanged message, separator, scroll, and draft nodes', async t => {
+  const messages = [
+    message(1, { created_at: '2026-10-01 16:15:00' }),
+    message(2, { created_at: '2026-10-02 16:15:00' })
+  ];
+  const { page, f } = await pageFor(t, { realtime: 'ready', messages, lastRead: 1 });
+  await page.locator('[data-chat-body]').fill('Keep append draft');
+  const top = await page.locator('[data-chat-log]').evaluate(log => { log.scrollTop = 0; return log.scrollTop; });
+  await rememberTranscriptNodes(page, 'append', [1, 2], { days: true, unread: true });
+  f.messages.push(message(3, { created_at: '2026-10-02 16:20:00' }));
+  await realtimeEvent(page, { event: 'team.chat.changed', data: { unit: 'clinic' } });
+  await page.clock.runFor(150);
+  await page.locator('[data-message-id="3"]').waitFor();
+  assert.deepEqual(await transcriptNodeIdentity(page, 'append', [1, 2], { days: true, unread: true }), {
+    messages: { 1: true, 2: true }, days: [true, true], unread: true
+  });
+  assert.equal(await page.locator('[data-chat-log]').evaluate(log => log.scrollTop), top);
+  assert.equal(await page.locator('[data-chat-body]').inputValue(), 'Keep append draft');
+  assert.deepEqual(await page.locator('[data-message-id]').evaluateAll(nodes => nodes.map(node => Number(node.dataset.messageId))), [1, 2, 3]);
+});
+
+test('older prepend preserves existing message nodes and the visible scroll anchor', async t => {
+  const { page, f } = await pageFor(t, { messages: Array.from({ length: 80 }, (_, i) => message(i + 1)) });
+  await page.locator('[data-chat-log]').evaluate(log => { log.scrollTop = 120; });
+  await rememberTranscriptNodes(page, 'prepend', [41, 55, 80], { days: true, unread: true });
+  const before = await page.locator('[data-message-id="55"]').evaluate(node => {
+    const log = node.closest('[data-chat-log]');
+    return { top: node.getBoundingClientRect().top - log.getBoundingClientRect().top, scrollTop: log.scrollTop };
+  });
+  await page.locator('[data-chat-older]').click();
+  await page.waitForFunction(() => document.querySelectorAll('[data-message-id]').length === 80);
+  assert.ok(f.gets.includes('?before=41'));
+  assert.deepEqual(await transcriptNodeIdentity(page, 'prepend', [41, 55, 80], { days: true, unread: true }), {
+    messages: { 41: true, 55: true, 80: true }, days: [true], unread: true
+  });
+  const after = await page.locator('[data-message-id="55"]').evaluate(node => {
+    const log = node.closest('[data-chat-log]');
+    return { top: node.getBoundingClientRect().top - log.getBoundingClientRect().top, scrollTop: log.scrollTop };
+  });
+  assert.ok(Math.abs(after.top - before.top) <= 1, JSON.stringify({ before, after }));
+  assert.ok(after.scrollTop > before.scrollTop, 'Prepending older rows adjusts scrollTop by the inserted height');
+});
+
+test('Show latest replaces the window while reusing unchanged authoritative messages', async t => {
+  const all = Array.from({ length: 60 }, (_, i) => message(i + 1));
+  const { page, f } = await pageFor(t, { messages: all, initial: {
+    messages: all.slice(0, 40), has_more: false, next_before: null,
+    last_read_id: 0, unread_count: 60, latest_id: 60
+  }, browsingHistory: true });
+  await rememberTranscriptNodes(page, 'latest', [1, 20, 21, 40], { days: true, unread: true });
+  await page.getByRole('button', { name: 'Show latest', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('[data-message-id="60"]'));
+  assert.deepEqual(await transcriptNodeIdentity(page, 'latest', [1, 20, 21, 40], { days: true, unread: true }), {
+    messages: { 1: false, 20: false, 21: true, 40: true }, days: [true], unread: true
+  });
+  assert.equal(await page.locator('[data-message-id="1"]').count(), 0);
+  assert.equal(await page.locator('[data-message-id]').first().getAttribute('data-message-id'), '21');
+  assert.equal(await page.locator('[data-message-id]').last().getAttribute('data-message-id'), '60');
+  assert.ok(f.gets.includes(''));
+});
+
+test('authoritative changes replace only changed message nodes and reconcile day separators', async t => {
+  const changed = message(2, { body: 'Authoritative correction', sender_name: 'Corrected member', created_at: '2026-10-01 16:20:00' });
+  const { page, f } = await pageFor(t, { realtime: 'ready', lastRead: 1, messages: [
+    message(1, { created_at: '2026-10-01 16:15:00' }),
+    message(2, { created_at: '2026-10-01 16:20:00' }),
+    message(3, { created_at: '2026-10-02 16:15:00' })
+  ] });
+  await rememberTranscriptNodes(page, 'changed', [1, 2, 3], { days: true, unread: true });
+  f.messages.push(message(4, { created_at: '2026-10-03 16:25:00' }));
+  await page.route('**/chat/history?after=3', async route => {
+    const data = await route.fetch().then(response => response.json());
+    data.data.messages.unshift(changed);
+    await route.fulfill({ json: data });
+  }, { times: 1 });
+  await realtimeEvent(page, { event: 'team.chat.changed', data: { unit: 'clinic' } });
+  await page.clock.runFor(150);
+  await page.waitForFunction(() => document.querySelector('[data-message-id="2"] .teams-preserve').textContent === 'Authoritative correction');
+  assert.deepEqual(await transcriptNodeIdentity(page, 'changed', [1, 2, 3], { unread: true }), {
+    messages: { 1: true, 2: false, 3: true }, days: [], unread: true
+  });
+  assert.deepEqual(await page.locator('[data-chat-day]').allTextContents(), [
+    await page.locator('[data-message-id="1"] time').getAttribute('title').then(title => title.split(' · ')[0]),
+    await page.locator('[data-message-id="3"] time').getAttribute('title').then(title => title.split(' · ')[0]),
+    await page.locator('[data-message-id="4"] time').getAttribute('title').then(title => title.split(' · ')[0])
+  ]);
+  assert.equal(await page.locator('[data-message-id="2"] .team-chat-message-header strong').textContent(), 'Corrected member');
+  assert.equal(await page.locator('[data-chat-unread-divider]').count(), 1);
+  assert.deepEqual(await page.locator('[data-chat-log] > *').evaluateAll(nodes => nodes.map(node => node.dataset.chatDay ? `day:${node.dataset.chatDay}` : node.dataset.chatUnreadDivider !== undefined ? 'unread' : node.dataset.messageId ? `message:${node.dataset.messageId}` : 'other')), [
+    'day:2026-10-02', 'message:1', 'unread', 'message:2', 'day:2026-10-03', 'message:3', 'day:2026-10-04', 'message:4'
+  ]);
 });
 
 test('40-message pages merge chronologically with overlapping response deduplication', async t => {

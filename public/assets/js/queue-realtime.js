@@ -9,6 +9,9 @@
   function init() {
     const board = document.getElementById('queue-board-container');
     if (!board || board.dataset.queueRealtime) return;
+    const owner = `queue.board.${board.dataset.queueUnit || ''}`;
+    const regional = window.SynapseRefreshRegions;
+    const regionalEnabled = Boolean(regional?.enabled?.(owner));
     board.dataset.queueRealtime = 'true';
     const events = new AbortController();
     const options = { signal: events.signal };
@@ -46,6 +49,11 @@
       syncCallNext();
       syncHistory();
     }, options);
+    document.addEventListener('synapse:region-load', event => {
+      if (event.detail?.owner !== owner || !event.detail?.regions?.includes('board')) return;
+      syncCallNext();
+      syncHistory();
+    }, options);
     historyDrawer?.addEventListener('show.bs.offcanvas', event => {
       if (document.body.classList.contains('is-navigating')) event.preventDefault();
     }, options);
@@ -54,6 +62,24 @@
       if (historyDrawer?.matches('.show, .showing, .hiding')) event.preventDefault();
     }, options);
 
+    let unregisterRegional = null;
+    if (regionalEnabled) {
+      unregisterRegional = regional.register({
+        owner,
+        root: board,
+        owns(request) {
+          return request.regions.length === 1 && request.regions[0] === 'board';
+        },
+        canRefresh() {
+          return active() && ![...requests].some(request => request !== owner);
+        },
+        refresh(request) {
+          return regionalBoardGet().then(refreshed => refreshed
+            ? { status: 'refreshed', owner, regions: ['board'], roots: [board] }
+            : { status: 'failed', owner, regions: ['board'], reason: 'board-get' });
+        }
+      });
+    }
     function attached() {
       return document.getElementById('queue-board-container') === board;
     }
@@ -65,11 +91,55 @@
       clearTimeout(debounce);
       poll = debounce = null;
     }
+    function triggerBoardGet() {
+      if (!window.htmx || !active()) return Promise.resolve(false);
+      return new Promise(resolve => {
+        let settled = false;
+        const finish = value => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          document.removeEventListener('htmx:afterRequest', complete);
+          document.removeEventListener('htmx:sendError', failed);
+          resolve(value);
+        };
+        const matches = event => event.detail?.target === board
+          && String(event.detail?.requestConfig?.verb || '').toLowerCase() === 'get';
+        const complete = event => { if (matches(event)) finish(event.detail.successful === true); };
+        const failed = event => { if (matches(event)) finish(false); };
+        const timeout = setTimeout(() => finish(false), 20000);
+        document.addEventListener('htmx:afterRequest', complete);
+        document.addEventListener('htmx:sendError', failed);
+        events.signal.addEventListener('abort', () => finish(false), { once: true });
+        // hx-include reads the currently selected ISO date, never the event's date.
+        window.htmx.trigger(board, 'queue:refresh');
+      });
+    }
+    function boardUrl() {
+      try {
+        const url = new URL(board.getAttribute('hx-get') || location.href, location.href);
+        const date = document.getElementById('queueDateFilter_iso')?.value;
+        if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) url.searchParams.set('date', date);
+        return url.href;
+      } catch (_) { return location.href; }
+    }
+    function regionalBoardGet() {
+      return triggerBoardGet();
+    }
     function refresh() {
       debounce = null;
       if (!active()) return;
-      if (requests.size || !window.htmx) { pending = true; return; }
+      if (requests.size) { pending = true; return; }
       pending = false;
+      if (regionalEnabled) {
+        requests.add(owner);
+        regional.refresh({ owner, regions: ['board'], url: boardUrl(), cause: 'queue', history: 'none' }).finally(() => {
+          requests.delete(owner);
+          if (pending) invalidate();
+        });
+        return;
+      }
+      if (!window.htmx) { pending = true; return; }
       // hx-include reads the currently selected ISO date, never the event's date.
       window.htmx.trigger(board, 'queue:refresh');
     }
@@ -125,6 +195,8 @@
       paused = true;
       cancelTimers();
       events.abort();
+      unregisterRegional?.();
+      unregisterRegional = null;
       requests.clear();
       delete board.dataset.queueRealtime;
     }, options);

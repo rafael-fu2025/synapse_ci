@@ -100,14 +100,17 @@ async function update(page, action) {
   const response = page.waitForResponse(response => {
     const url = new URL(response.url());
     return tables.some(table => table.url === url.pathname.replace(/^\/index\.php(?=\/)/, '')) && url.searchParams.get('fragment') === '1';
-  });
+  }, { timeout: 10_000 });
   await action();
   await response;
   await settled(page);
 }
 async function choose(page, id, label) {
   const wrap = page.locator(id).locator('..');
+  await wrap.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(50);
   await wrap.locator('.bd-select-toggle').click();
+  await wrap.locator('.bd-select-menu.show').waitFor({ state: 'visible' });
   await wrap.getByRole('option', { name: label, exact: true }).click();
 }
 async function meta(page, expected) {
@@ -257,7 +260,9 @@ describe('live tables: real views with read-only response fixtures', { timeout: 
       assert.equal(new URL(canonicalUrl).pathname, canonical.url);
       assert.equal(new URL(canonicalUrl).searchParams.has('fragment'), false);
       const historyLength = await page.evaluate(() => history.length);
+      const beforeBack = requests.length;
       await update(page, () => page.goBack());
+      assert.equal(requests.length, beforeBack + 1, 'regional Back issues one authoritative table GET');
       assert.equal(requests.at(-1).url.pathname, canonical.url, 'alias popstate fetch uses the canonical endpoint');
       assert.deepEqual(Object.fromEntries(requests.at(-1).url.searchParams), { index: '1', fragment: '1' });
       await meta(page, { page: 1, perPage: 25, filtered: 63 });
@@ -268,7 +273,9 @@ describe('live tables: real views with read-only response fixtures', { timeout: 
       assert.equal(await rows(page), 25);
       assert.equal(await page.locator('tbody').innerText(), initialRows);
       assert.equal(await page.evaluate(() => history.length), historyLength);
+      const beforeForward = requests.length;
       await update(page, () => page.goForward());
+      assert.equal(requests.length, beforeForward + 1, 'regional Forward issues one authoritative table GET');
       assertQuery(requests.at(-1), canonical, { per_page: '50' });
       assert.equal(page.url(), canonicalUrl);
       await meta(page, { page: 1, perPage: 50 });

@@ -6,7 +6,9 @@
 <?php else: ?>
 <p class="text-muted">One role per employee account. Replacing a role removes its previous workstation access. Returning an account to Employee revokes workstation access but preserves its records.</p>
 <?php endif; ?>
-<section data-live-table data-endpoint="<?= esc($baseUrl) ?>">
+<section data-live-table data-endpoint="<?= esc($baseUrl) ?>"
+         data-refresh-owner="admin.access"
+         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <div class="card"><div class="card-body pt-3">
 <form data-table-filters action="<?= esc($baseUrl) ?>" method="GET" class="row g-2 mb-3" role="search">
 <div class="col-sm-6"><label for="employee-search" class="form-label">Find an employee</label><input id="employee-search" type="search" name="q" maxlength="100" value="<?= esc($search) ?>" class="form-control" placeholder="Name, employee ID or username"></div>
@@ -20,7 +22,7 @@
 <span data-table-error-message></span>
 <button data-table-retry type="button" class="btn btn-outline-danger btn-sm ms-2">Retry</button>
 </div>
-<div data-table-results id="employeeAccessResults">
+<div data-table-results id="employeeAccessResults" data-refresh-region="results" data-refresh-heading tabindex="-1">
 <?= view('admin/_employee_access_results', [
     'employees' => $employees ?? [], 'pagination' => $pagination ?? null,
     'filters' => ['q' => $search ?? ''], 'search' => $search ?? '',

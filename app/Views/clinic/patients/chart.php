@@ -43,6 +43,10 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
     $dispensationsByEncounter[$item['encounter_id']][] = $item;
 }
 ?>
+<section data-patient-chart="<?= (int) $person['id'] ?>"
+         data-refresh-owner="clinic.patient.<?= (int) $person['id'] ?>"
+         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<div data-refresh-region="profile" data-refresh-heading tabindex="-1">
 
 <!-- 1. NiceAdmin v3 Profile Board Banner Component -->
 <div class="page-profile mb-4">
@@ -92,7 +96,8 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
     </div>
   </div>
 </div>
-
+</div>
+<div data-refresh-region="history">
 <div class="row g-4">
   <!-- Left Side: Health Profile & Emergency Contacts -->
   <div class="col-lg-4">
@@ -144,7 +149,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
   </div>
 
   <!-- Right Side: Tabbed History & Details -->
-  <div class="col-lg-8" data-patient-chart="<?= (int) $person['id'] ?>">
+  <div class="col-lg-8">
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-transparent border-bottom p-0">
         <ul class="nav nav-tabs nav-tabs-bordered" role="tablist">
@@ -348,6 +353,8 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
     </div>
   </div>
 </div>
+</div>
+</section>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

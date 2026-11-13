@@ -27,7 +27,54 @@ abstract class BaseController extends Controller
      * The creation of dynamic property is deprecated in PHP 8.2.
      */
 
-    // protected $session;
+    /**
+     * Build a validated client hint for authoritative same-screen region reconciliation.
+     * The ordinary redirect remains the no-JavaScript fallback.
+     *
+     * @param list<string> $regions
+     *
+     * @return array{mode: string, owner: string, regions: list<string>, url?: string}
+     */
+    protected function refreshRegions(string $owner, array $regions, ?string $url = null): array
+    {
+        if (!$this->validRefreshToken($owner)) {
+            throw new \InvalidArgumentException('Invalid refresh owner.');
+        }
+
+        $regions = array_values(array_unique($regions));
+        if ($regions === [] || array_filter($regions, fn ($region): bool => !is_string($region) || !$this->validRefreshToken($region)) !== []) {
+            throw new \InvalidArgumentException('Invalid refresh regions.');
+        }
+
+        $descriptor = [
+            'mode' => 'regions',
+            'owner' => $owner,
+            'regions' => $regions,
+        ];
+        if ($url !== null && $url !== '') { $descriptor['url'] = $url; }
+        return $descriptor;
+    }
+
+    /** @return array{mode: string, url: string, history: string} */
+    protected function refreshNavigation(string $url, string $history = 'push'): array
+    {
+        if (!in_array($history, ['push', 'replace'], true)) {
+            throw new \InvalidArgumentException('Invalid refresh history mode.');
+        }
+
+        return ['mode' => 'navigate', 'url' => $url, 'history' => $history];
+    }
+
+    /** @return array{mode: string} */
+    protected function refreshNone(): array
+    {
+        return ['mode' => 'none'];
+    }
+
+    private function validRefreshToken(string $value): bool
+    {
+        return preg_match('/^[a-z][a-z0-9._-]{0,63}$/D', $value) === 1;
+    }
 
     /**
      * @param CLIRequest|IncomingRequest $request

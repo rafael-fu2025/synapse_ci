@@ -317,6 +317,27 @@ instrumentation slows the fake-timer suites enough to time them out.
 
 `npm run ios` also uses Metro on 8083 without starting a second packager. iOS requires macOS/Xcode and CocoaPods (`bundle install`, then `bundle exec pod install` from `ios/`). The Android USB routing helpers do not configure physical iOS devices; select a reachable API URL for your iOS setup.
 
-Device push needs the per-machine Firebase project files, which are never committed. `android/app/google-services.json` is picked up by the Google Services Gradle plugin whenever it is present, and `ios/SynapseMobile/GoogleService-Info.plist` must be given Target Membership of the `SynapseMobile` target in Xcode so it is copied into the app bundle. Without either file the app still builds and runs, reporting push as unavailable. iOS push additionally needs a physical device and an APNs key uploaded to the Firebase console.
+Device push uses machine-local Firebase project files, which are never committed. Android **debug**
+builds can run without `android/app/google-services.json` and report push as unavailable; Android
+**release** and **lanTestRelease** builds require Firebase configuration matching the variant's
+application ID. A configuration for another package does not satisfy that requirement. On iOS,
+`ios/SynapseMobile/GoogleService-Info.plist` needs Target Membership in `SynapseMobile` so Xcode copies
+it into the app bundle; push testing also needs a physical device and an APNs key configured in Firebase.
+**Rebuild and reinstall the native app** after changing Firebase files or notification native code,
+channels, icons, or manifest entries. Restarting Metro alone does not install those changes.
+
+Android 13+ requests permission once on the first active launch, independently of sign-in, Firebase,
+or LAN readiness. A denial is not automatically prompted again on resume. The **Phone notifications**
+control in Notifications and Settings supports light/dark mode and offers an explicit Enable action,
+check-only setup retry, or phone notification settings as appropriate. Signed-in Android token
+registration checks permission without prompting, remains bound to the captured account/server, and
+recovers on resume/reconnect. iOS keeps its existing signed-in permission flow.
+
+Accepted foreground pushes use the Android notification bridge, with a React banner fallback if native
+posting is unavailable. Background `notification` + `data` messages are displayed by Firebase/OS,
+without a duplicate app poster. Supported server notices, including survey publication, use the
+existing best-effort push path only after commit. **Ready confirms registration, not device receipt**:
+server setup, transport, connectivity, permission/channel settings, and OS policy still affect delivery.
+The in-app inbox remains available. See [Device push](../docs/MOBILE.md#device-push) for the full behavior.
 
 See [architecture and troubleshooting](../docs/MOBILE.md), [API contract](../docs/MOBILE_API.md), the [LAN Test build and two-server setup](../docs/MOBILE_LAN_TEST.md), and the [React Native environment setup](https://reactnative.dev/docs/set-up-your-environment). `mobileScreenReference/` is design reference only, excluded from Metro, TypeScript, and ESLint.

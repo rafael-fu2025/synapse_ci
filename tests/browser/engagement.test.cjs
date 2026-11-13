@@ -10,12 +10,22 @@ const http = require('node:http');
 const { once } = require('node:events');
 const { spawnSync } = require('node:child_process');
 const root = path.resolve(__dirname, '../..');
-const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
+const { chromium } = require('playwright');
 let browser, server, origin, failSave = false, persistTargeting = false, bankUnavailable = false, bankMulti = false;
 // Read state is server state, not a query-string artifact: the production
 // background form refreshes the current URL after its confirmed POST.
 let portalNoticeRead = false;
 const posts = [], cache = new Map(), savedTargets = new Map();
+const refreshOwnerFor = pathname => /^\/clinic\/announcements(?:\/|$)/.test(pathname) ? 'announcements.staff.clinic'
+  : /^\/guidance\/announcements(?:\/|$)/.test(pathname) ? 'announcements.staff.guidance'
+    : pathname === '/portal/announcements/1/read' ? 'portal-announcement-detail.1' : null;
+const refreshDescriptor = (url, redirect) => {
+  const owner = refreshOwnerFor(url.pathname);
+  if (!owner) return undefined;
+  return owner.startsWith('portal-')
+    ? { mode: 'regions', owner, regions: ['read-state', 'read-action'], url: origin + '/portal/announcements/1' }
+    : { mode: 'regions', owner, regions: ['announcements.list', 'announcements.read-history'] };
+};
 // Engagement POST assertions must never count the realtime ticket handshake
 // (or other non-engagement traffic) that can race with a test.
 const engagementPosts = () => posts.filter(post => !post.path.startsWith('/realtime/'));
@@ -23,7 +33,8 @@ function render(requestPath) {
   // A confirmed read mutation must bypass the fixture's GET cache so the
   // post-save soft refresh observes committed server state.
   const committedRead = portalNoticeRead && requestPath.startsWith('/portal/announcements/1');
-  if (!persistTargeting && !committedRead && cache.has(requestPath)) return cache.get(requestPath);
+  const cacheKey = `refresh-regions-v1:${requestPath}`;
+  if (!persistTargeting && !committedRead && cache.has(cacheKey)) return cache.get(cacheKey);
   const base = '/' + requestPath.split('/').slice(1, 3).join('/').split('?')[0];
   const result = spawnSync('php', ['tests/_support/render-engagement-fixture.php'], {
     cwd: root, input: JSON.stringify({ origin, path: requestPath, savedTarget: persistTargeting ? savedTargets.get(base) : undefined,
@@ -32,7 +43,7 @@ function render(requestPath) {
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, /Fatal error|Warning:|Parse error|"code": 500/);
   assert.match(result.stdout, /<div/);
-  if (!persistTargeting && !committedRead) cache.set(requestPath, result.stdout);
+  if (!persistTargeting && !committedRead) cache.set(cacheKey, result.stdout);
   return result.stdout;
 }
 function fields(body, contentType) {
@@ -77,8 +88,10 @@ before(async () => {
         if (req.headers['x-requested-with'] === 'XMLHttpRequest') {
           res.writeHead(failSave ? 422 : 200, { 'Content-Type': 'application/json',
                       ...(!failSave && url.pathname.endsWith('/submit') ? { 'Set-Cookie': 'engagementSubmitted=1; Path=/; SameSite=Strict' } : {}) });
+          const redirect = origin + (url.pathname.endsWith('/submit') ? base + '/1?submitted=1' : base);
+          const refresh = refreshDescriptor(url, redirect);
           res.end(JSON.stringify({ success: !failSave, message: failSave ? 'Please correct the engagement form.' : 'Saved',
-            redirect: origin + (url.pathname.endsWith('/submit') ? base + '/1?submitted=1' : base),
+            redirect, ...(refresh ? { refresh } : {}),
             csrf: { name: 'csrf_test_name', hash: 'retry-token' } }));
         } else { res.writeHead(303, { Location: base + (url.pathname.endsWith('/read') ? '/1?read=1' : '') }); res.end(); }
         return;
@@ -120,7 +133,7 @@ async function pageFor(t, route, theme, mobile = false) {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.text().includes('Alpine Expression Error')) errors.push(message.text()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.goto(origin + route);
+  await page.goto(origin + route, { waitUntil: 'load', timeout: 40000 });
   await page.waitForFunction(() => !!window.SynapseConfirm);
   assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
   return page;
@@ -348,7 +361,7 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
   });
   test(`${variant} lifecycle confirmations: publish/archive announcements, publish/close surveys`, { timeout: 30000 }, async t => {
     const page = await pageFor(t, '/guidance/announcements', theme, mobile);
-    for (const [route, action, label, target, version] of [
+      for (const [route, action, label, target, version] of [
       ['/guidance/announcements', 'Publish', 'Publish announcement', '/guidance/announcements/1/publish', '7'],
       ['/clinic/announcements', 'Archive', 'Archive announcement', '/clinic/announcements/1/archive', '7'],
       ['/guidance/surveys', 'Publish', 'Publish', '/guidance/surveys/1/publish', null],
@@ -359,6 +372,14 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
       const button = route.endsWith('/surveys') && action === 'Close'
         ? page.locator(`#main form[action$="${target}"] button[type="submit"]`)
         : page.locator('#main').getByRole('button', { name: action, exact: true }).first();
+      const regional = route.endsWith('/announcements');
+      const identities = regional ? await page.locator('#main').evaluateHandle(main => ({
+        main,
+        owner: document.querySelector('[data-refresh-owner^="announcements.staff."]'),
+        list: document.querySelector('[data-refresh-region="announcements.list"]'),
+        history: document.querySelector('[data-refresh-region="announcements.read-history"]'),
+        child: document.querySelector('[data-refresh-region="announcements.list"]').firstElementChild,
+      })) : null;
       const before = engagementPosts().length; await button.click();
       await page.locator('#synapseConfirmModal.show').waitFor();
       await noOverflow(page, '#synapseConfirmModal .modal-content');
@@ -372,7 +393,16 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
         page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === target),
         acceptConfirm(page)
       ]);
-      await page.waitForFunction(() => !document.body.classList.contains('is-navigating'));
+      await page.waitForFunction(() => !document.body.classList.contains('is-navigating') &&
+        !document.querySelector('[data-refresh-region][aria-busy="true"]'));
+      if (regional) {
+        assert.equal(await page.locator('#main').evaluate((main, nodes) => nodes.main === main &&
+          nodes.owner === document.querySelector('[data-refresh-owner^="announcements.staff."]') &&
+          nodes.list === document.querySelector('[data-refresh-region="announcements.list"]') &&
+          nodes.history === document.querySelector('[data-refresh-region="announcements.read-history"]') &&
+          nodes.child !== document.querySelector('[data-refresh-region="announcements.list"]').firstElementChild, identities), true);
+        await identities.dispose();
+      }
       assert.equal(engagementPosts().length, before + 1); assert.equal(engagementPosts().at(-1).path, target);
       const sent = Object.fromEntries(engagementPosts().at(-1).fields); assert.ok(sent.csrf_test_name);
       if (version) assert.equal(sent.version, version);
@@ -385,12 +415,38 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     await noOverflow(page);
     assert.match(await page.locator('#main article').innerText(), /<img src=x/);
     assert.equal(await page.locator('#main article img').count(), 0);
+    const detailIdentities = await page.locator('#main').evaluateHandle(main => ({
+      main,
+      owner: document.querySelector('[data-refresh-owner="portal-announcement-detail.1"]'),
+      badge: document.querySelector('[data-refresh-region="read-state"]'),
+      action: document.querySelector('[data-refresh-region="read-action"]'),
+      oldAction: document.querySelector('[data-refresh-region="read-action"]').firstElementChild,
+    }));
     const readBefore = engagementPosts().length;
+    assert.deepEqual(await page.evaluate(() => ({
+      enabled: document.querySelector('meta[name="synapse-refresh-regions-enabled"]')?.content,
+      owners: document.querySelector('meta[name="synapse-refresh-region-owners"]')?.content,
+      registry: Boolean(window.SynapseRefreshRegions),
+      claimed: window.SynapseRefreshRegions?.enabled('portal-announcement-detail.1'),
+    })), { enabled: '1', owners: 'announcements.staff.clinic announcements.staff.guidance portal-announcement-detail.1', registry: true, claimed: true });
+    const readResponse = page.waitForResponse(response => response.request().method() === 'POST' &&
+      new URL(response.url()).pathname === '/portal/announcements/1/read');
     await page.getByRole('button', { name: 'Mark as read', exact: true }).click();
+    const readPayload = await (await readResponse).json();
+    assert.deepEqual(readPayload.refresh, { mode: 'regions', owner: 'portal-announcement-detail.1',
+      regions: ['read-state', 'read-action'], url: origin + '/portal/announcements/1' });
     // The confirmed POST refreshes the current page; it must not invent a query marker.
-    await page.waitForURL(origin + '/portal/announcements/1');
-    assert.equal(engagementPosts().length, readBefore + 1); assert.equal(engagementPosts().at(-1).path, '/portal/announcements/1/read');
     await page.getByRole('button', { name: 'Mark as read', exact: true }).waitFor({ state: 'detached' });
+    assert.equal(page.url(), origin + '/portal/announcements/1');
+    assert.equal(engagementPosts().length, readBefore + 1); assert.equal(engagementPosts().at(-1).path, '/portal/announcements/1/read');
+    assert.deepEqual(await page.locator('#main').evaluate((main, nodes) => ({
+      main: nodes.main === main,
+      owner: nodes.owner === document.querySelector('[data-refresh-owner="portal-announcement-detail.1"]'),
+      badge: nodes.badge === document.querySelector('[data-refresh-region="read-state"]'),
+      action: nodes.action === document.querySelector('[data-refresh-region="read-action"]'),
+      actionChildReplaced: nodes.oldAction !== document.querySelector('[data-refresh-region="read-action"]').firstElementChild,
+    }), detailIdentities), { main: true, owner: true, badge: true, action: true, actionChildReplaced: true });
+    await detailIdentities.dispose();
     await page.goto(origin + '/portal/surveys'); await noOverflow(page);
     // Direct-route submission is independent of the soft-navigation regression below.
     await page.goto(origin + '/portal/surveys/1');

@@ -76,6 +76,8 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 <?php else: ?>
 <!-- 2. The 4-Step Consultation Stepper -->
 <div class="card border-0 shadow-sm" x-data="encounterStepper()" data-encounter-stepper data-navigation-dirty="false"
+     data-refresh-owner="clinic.encounter.<?= (int) $enc['id'] ?>"
+     data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
      data-draft-url="<?= site_url('/clinic/encounters/' . $enc['id'] . '/draft') ?>">
   <div class="px-4 pt-3">
     <p class="small text-muted mb-1">Clinical entries save when you change steps. Medicine dispensing always requires its own confirmation.</p>
@@ -281,7 +283,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
         <!-- Dispensed items list -->
         <div class="col-lg-7">
           <h6 class="fw-bold mb-3"><i class="bi bi-card-checklist text-primary me-1"></i> Medicines Dispensed for this Visit</h6>
-          <div class="table-responsive border rounded">
+          <div class="table-responsive border rounded" data-refresh-region="dispensed-items">
             <table class="table table-hover align-middle mb-0">
               <thead class="table-light small text-uppercase">
                 <tr>
@@ -325,7 +327,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
         </div>
 
         <!-- Dispense new item form -->
-        <div class="col-lg-5">
+        <div class="col-lg-5" data-refresh-region="dispense-form">
           <?php if (!empty($canDispense) && $enc['status'] === 'in_progress'): ?>
           <div class="card bg-light border-0 p-3">
             <h6 class="fw-bold mb-3"><i class="bi bi-plus-circle text-primary me-1"></i> Dispense from Stock (FEFO)</h6>
@@ -443,44 +445,4 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 
 <?= $this->section('scripts') ?>
 <script src="<?= base_url('assets/js/encounter-stepper.js') ?>"></script>
-<script>
-  function encounterStepper() {
-    return {
-      init() {
-        this.$nextTick(() => { this.stopDraftSaving = window.SynapseEncounterStepper.init(this.$el); });
-      },
-      destroy() { this.stopDraftSaving?.(); },
-      bpSys: <?= !empty($vitals['bp_systolic']) ? (int) $vitals['bp_systolic'] : 'null' ?>,
-      bpDia: <?= !empty($vitals['bp_diastolic']) ? (int) $vitals['bp_diastolic'] : 'null' ?>,
-      tempC: <?= !empty($vitals['temp_c']) ? (float) $vitals['temp_c'] : 'null' ?>,
-      weight: <?= !empty($vitals['weight_kg']) ? (float) $vitals['weight_kg'] : 'null' ?>,
-      height: <?= !empty($vitals['height_cm']) ? (float) $vitals['height_cm'] : 'null' ?>,
-
-      calcBmi() {
-        if (this.weight && this.height && this.height > 0) {
-          const hMeter = this.height / 100.0;
-          return (this.weight / (hMeter * hMeter)).toFixed(2);
-        }
-        return null;
-      },
-
-      bmiCategory() {
-        const bmi = parseFloat(this.calcBmi());
-        if (!bmi) return '';
-        if (bmi < 18.5) return 'Underweight';
-        if (bmi < 25.0) return 'Normal';
-        if (bmi < 30.0) return 'Overweight';
-        return 'Obese';
-      },
-
-      bmiBadgeClass() {
-        const cat = this.bmiCategory();
-        if (cat === 'Normal') return 'bg-success';
-        if (cat === 'Overweight') return 'bg-warning text-dark';
-        if (cat === 'Obese' || cat === 'Underweight') return 'bg-danger';
-        return 'd-none';
-      }
-    };
-  }
-</script>
 <?= $this->endSection() ?>
