@@ -128,7 +128,9 @@ final class ReferralController extends BaseController
                 if ($this->request->getPost($field) !== null) { $data[$field] = $this->request->getPost($field); }
             }
             $referral = $this->referralService->createReferral($data, $actor);
-            return $this->success('Referral ' . $referral['referral_code'] . ' sent successfully.', '/' . $unit . '/referrals?tab=sent');
+            $redirect = '/' . $unit . '/referrals?tab=sent';
+            return $this->success('Referral ' . $referral['referral_code'] . ' sent successfully.', $redirect,
+                $this->navigationRefresh($unit, $redirect));
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -163,7 +165,8 @@ final class ReferralController extends BaseController
             $unit = $this->actionContext($id, $actor, $unit);
             if ($action === 'close') { $this->referralService->close($id, $actor); }
             else { $this->referralService->$action($id, (int) $actor['id'], $actor); }
-            return $this->success($message, '/' . $unit . '/referrals?tab=' . ($action === 'close' ? 'history' : 'incoming'));
+            $redirect = '/' . $unit . '/referrals?tab=' . ($action === 'close' ? 'history' : 'incoming');
+            return $this->success($message, $redirect, $this->folderRefresh($unit));
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -190,7 +193,8 @@ final class ReferralController extends BaseController
                 'mode' => $this->text('mode'), 'target_id' => $this->request->getPost('target_id'),
                 'title' => $this->text('title'), 'category' => $this->text('category'),
             ], $actor);
-            return $this->success($result['created'] ? 'Referral handoff created.' : 'Referral linked to the existing record.', $result['target_url']);
+            return $this->success($result['created'] ? 'Referral handoff created.' : 'Referral linked to the existing record.',
+                $result['target_url'], $this->navigationRefresh($unit, $result['target_url']));
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -199,10 +203,27 @@ final class ReferralController extends BaseController
     {
         try {
             $actor = $this->actor('referrals.review');
-            $this->actionContext($id, $actor, $unit);
+            $unit = $this->actionContext($id, $actor, $unit);
             $result = $this->referralService->convertToCase($id, (int) $actor['id'], $this->text('title'), $this->text('category'), $actor);
-            return $this->success('Guidance case linked.', '/guidance/cases/' . $result['case']['case']['id']);
+            $redirect = '/guidance/cases/' . $result['case']['case']['id'];
+            return $this->success('Guidance case linked.', $redirect, $this->navigationRefresh($unit, $redirect));
         } catch (Throwable $e) { return $this->failure($e); }
+    }
+
+    private function folderRefresh(string $unit): ?array
+    {
+        $owner = 'referrals.' . $unit;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshRegions($owner, ['referrals.folders', 'referrals.results']);
+    }
+
+    private function navigationRefresh(string $unit, string $destination): ?array
+    {
+        $owner = 'referrals.' . $unit;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshNavigation(site_url($destination));
     }
 
     private function text(string $field): string
@@ -230,14 +251,16 @@ final class ReferralController extends BaseController
         return $this->response->setContentType('text/plain')->setBody($message);
     }
 
-    private function success(string $message, string $redirect)
+    private function success(string $message, string $redirect, ?array $refresh = null)
     {
         if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
             session()->setFlashdata('success', $message);
         }
         if ($this->request->isAJAX() || str_contains(strtolower($this->request->getHeaderLine('Accept')), 'json')) {
-            return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => site_url($redirect),
-                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            $payload = ['success' => true, 'message' => $message, 'redirect' => site_url($redirect),
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+            if ($refresh !== null) { $payload['refresh'] = $refresh; }
+            return $this->response->setJSON($payload);
         }
         return redirect()->to(site_url($redirect))->setHeader('Cache-Control', 'no-store, private');
     }

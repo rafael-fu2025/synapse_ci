@@ -70,7 +70,7 @@
       unlock();
       // Row actions stay in the current folder/date/filter/page. Never replay a POST
       // if the following read fails: the shared helper offers only a GET retry.
-      await window.SynapseMutations.refresh(location.href, payload.message, { form });
+      await window.SynapseMutations.refresh(location.href, payload.message, { form, descriptor: payload.refresh });
     } catch (error) {
       tell(confirmed ? 'Saved, but refreshing the page failed. Do not submit again; reload to review the result.'
         : job.timedOut ? 'The request timed out; its outcome is unknown. Review the record before retrying.'

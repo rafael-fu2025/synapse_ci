@@ -218,6 +218,50 @@ final class FacilitiesAuditTest extends CIUnitTestCase
         } catch (\RuntimeException $error) { $this->assertSame(409, $error->getCode()); }
     }
 
+    public function testRegionalOwnersAreStableAndResponseDescriptorsAreAllowlisted(): void
+    {
+        $list = $this->xpath($this->render('index', [
+            'archivedView' => false,
+            'stats' => ['total' => 1, 'active' => 1, 'maintenance' => 0, 'bound' => 1],
+            'pagination' => ['page' => 1, 'pages' => 1, 'per_page' => 25, 'total' => 1, 'filtered' => 1, 'from' => 1, 'to' => 1],
+        ]));
+        $this->assertCount(1, $list->query('//*[@data-refresh-owner="facilities.list"]'));
+        $this->assertCount(1, $list->query('//*[@data-refresh-owner="facilities.list"]//*[@data-refresh-region="stats"]'));
+        $this->assertCount(1, $list->query('//*[@data-refresh-owner="facilities.list"]//*[@data-refresh-region="units"]'));
+
+        $detail = $this->xpath($this->render('unit_detail'));
+        $this->assertCount(1, $detail->query('//*[@data-refresh-owner="facilities.unit.1"]'));
+        $this->assertCount(1, $detail->query('//*[@data-refresh-owner="facilities.unit.1"]/*[@data-refresh-region="unit"]'));
+
+        $controller = (new ReflectionClass(FacilitiesController::class))->newInstanceWithoutConstructor();
+        $request = service('request');
+        $controller->initController($request, service('response'), service('logger'));
+        $previousEnabled = config(\Config\RefreshRegions::class)->enabled;
+        $previousOwners = config(\Config\RefreshRegions::class)->owners;
+        try {
+            config(\Config\RefreshRegions::class)->enabled = true;
+            config(\Config\RefreshRegions::class)->owners = ['facilities.list', 'facilities.unit.1'];
+            $refresh = new ReflectionMethod(FacilitiesController::class, 'successRefresh');
+            $request->setHeader('X-Synapse-Refresh-Owner', 'facilities.list');
+            $this->assertSame([
+                'mode' => 'regions', 'owner' => 'facilities.list', 'regions' => ['stats', 'units'],
+            ], $refresh->invoke($controller, 1, 'list', site_url('/facilities')));
+            $request->removeHeader('X-Synapse-Refresh-Owner');
+            $this->assertSame([
+                'mode' => 'navigate', 'url' => site_url('/facilities/unit/1'), 'history' => 'push',
+            ], $refresh->invoke($controller, 1, 'list', site_url('/facilities/unit/1')));
+            $this->assertSame([
+                'mode' => 'regions', 'owner' => 'facilities.unit.1', 'regions' => ['unit'],
+                'url' => site_url('/facilities/unit/1'),
+            ], $refresh->invoke($controller, 1, 'unit', site_url('/facilities/unit/1')));
+            $this->assertNull($refresh->invoke($controller, 2, 'unit', site_url('/facilities/unit/2')));
+            $this->assertNull($refresh->invoke($controller, 0, 'none', site_url('/facilities')));
+        } finally {
+            config(\Config\RefreshRegions::class)->enabled = $previousEnabled;
+            config(\Config\RefreshRegions::class)->owners = $previousOwners;
+        }
+    }
+
     public function testUsbLinksAreHiddenAndCreationAndCompletionNotesBothEscaped(): void
     {
         foreach (['dashboard', 'unit_detail'] as $view) {

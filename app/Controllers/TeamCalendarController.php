@@ -145,8 +145,13 @@ final class TeamCalendarController extends BaseController
             session()->setFlashdata('success', $message);
         }
         if ($this->json()) {
-            return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => $redirect,
-                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            $payload = ['success' => true, 'message' => $message, 'redirect' => $redirect,
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+            $owner = 'teams.calendar.' . $unit;
+            if (config(\Config\RefreshRegions::class)->enables($owner)) {
+                $payload['refresh'] = $this->refreshRegions($owner, ['notice', 'summary', 'results']);
+            }
+            return $this->response->setJSON($payload);
         }
         return redirect()->to($redirect)->setHeader('Cache-Control', 'no-store, private');
     }

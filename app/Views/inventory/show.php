@@ -19,6 +19,9 @@ foreach ($batches as $batch) {
 </div>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
+<section data-refresh-owner="inventory.detail.<?= $id ?>"
+         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<div data-refresh-region="summary" data-refresh-heading tabindex="-1">
 <div class="card mb-4"><div class="card-body pt-3">
   <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <h2 class="h5 mb-0 text-break"><?= esc($medicine['name']) ?></h2>
@@ -43,6 +46,8 @@ foreach ($batches as $batch) {
   <?php endforeach; ?>
 </div>
 <p class="small text-muted mb-4">Usable stock expiring within 90 days: <strong><?= number_format((int) $medicine['near_expiry_stock']) ?> <?= esc($medicine['unit_of_measure']) ?></strong>. Usable and blocked stock are subsets of physical stock; expired and quarantined subsets may overlap, and near-expiry stock is part of usable stock. Do not sum these figures.</p>
+</div>
+<div data-refresh-region="batches">
 <div class="card mb-4" id="inventory-batches">
   <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Batches</h2><p class="small text-muted mb-0">Ordered by expiry date. Received is cumulative receipts for the lot; remaining is physical stock.</p></div>
   <div class="table-responsive">
@@ -68,6 +73,8 @@ foreach ($batches as $batch) {
     </table>
   </div>
 </div>
+</div>
+<div data-refresh-region="operations">
 <div class="card mb-4" id="inventory-operations">
   <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Latest operations</h2><p class="small text-muted mb-0">Latest 100 operations only, newest first; independent of the movement page. One correction per dispensation. Legacy allocations with a null operation ID cannot be corrected.</p></div>
   <div class="table-responsive">
@@ -110,6 +117,8 @@ foreach ($batches as $batch) {
     </table>
   </div>
 </div>
+</div>
+<div data-refresh-region="movements">
 <div class="card" id="inventory-movements">
   <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Stock movements</h2><p class="small text-muted mb-0">Page <?= $page ?> · <?= (int) $movementPagination['per_page'] ?> movements per page, newest first. Signed quantities use <?= esc($medicine['unit_of_measure']) ?>; zero indicates no physical stock change.</p></div>
   <div class="table-responsive">
@@ -159,4 +168,6 @@ foreach ($batches as $batch) {
     ], ['saveData' => false]) ?>
   </div>
 </div>
+</div>
+</section>
 <?= $this->endSection() ?>

@@ -11,12 +11,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { once } = require('node:events');
 const root = path.resolve(__dirname, '../..');
-let playwright;
-try { playwright = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright')); }
-catch (error) {
-  if (error.code !== 'MODULE_NOT_FOUND') throw error;
-  playwright = require('playwright');
-}
+const { chromium } = require('playwright');
 const publicRoot = path.join(root, 'public');
 const layout = fs.readFileSync(path.join(root, 'app/Views/layouts/app.php'), 'utf8');
 const modalStart = layout.indexOf('<div class="modal fade" id="synapseConfirmModal"');
@@ -129,7 +124,7 @@ before(async () => {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   origin = `http://127.0.0.1:${server.address().port}`;
-  let executablePath = playwright.chromium.executablePath();
+  let executablePath = chromium.executablePath();
   if (!fs.existsSync(executablePath)) {
     const cache = path.join(os.homedir(), 'AppData/Local/ms-playwright');
     executablePath = fs.existsSync(cache) && fs.readdirSync(cache).filter(name => /^chromium-\d+$/.test(name))
@@ -137,7 +132,7 @@ before(async () => {
       .map(name => path.join(cache, name, 'chrome-win64/chrome.exe')).find(file => fs.existsSync(file));
     assert.ok(executablePath, 'Install Chromium for Playwright before running this test');
   }
-  browser = await playwright.chromium.launch({ headless: true, executablePath, timeout: 20000 });
+  browser = await chromium.launch({ headless: true, executablePath, timeout: 20000 });
 }, { timeout: 40000 });
 after(async () => {
   await browser?.close();
@@ -166,7 +161,7 @@ async function fixture(t, options = {}) {
     assert.deepEqual(errors, [], 'No uncaught browser JavaScript errors');
   });
   const url = `${origin}/case/${state.id}/list?folder=inbox&date=2026-11-01&page=3`;
-  await page.goto(url);
+  await page.goto(url, { waitUntil: 'load', timeout: 20000 });
   await page.waitForFunction(() => !!history.state?.__synapseNavigation && !!window.SynapseBackgroundActions);
   await page.evaluate(() => {
     window.shellIdentity = [document.body, document.querySelector('#header'), document.querySelector('#sidebar'), document.querySelector('.sidebar-nav')];
@@ -207,7 +202,8 @@ function fields(request) {
 test('one POST then authoritative GET preserves shell, query, scroll and initializes fresh state', async t => {
   const { page, state, documents, dialogs, url } = await fixture(t, { message: hostileMessage });
   await page.locator('[name="title"]').fill('Submitted edit');
-  await page.evaluate(() => window.scrollTo(0, 640));
+  await page.evaluate(() => window.scrollTo({ top: 640, behavior: 'instant' }));
+  await page.waitForFunction(() => scrollY === 640);
   // requestSubmit avoids Playwright scrolling the button into view before submission.
   await page.evaluate(() => document.querySelector('#action').requestSubmit(document.querySelector('#save')));
   await refreshed(page);

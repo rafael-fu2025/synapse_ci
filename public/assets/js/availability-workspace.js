@@ -93,7 +93,7 @@
         await hidden;
         modal.removeEventListener('shown.bs.modal', hide);
       }
-      if (mutations) await mutations.refresh(redirect.href, payload.message, { form });
+      if (mutations) await mutations.refresh(redirect.href, payload.message, { form, descriptor: payload.refresh });
       else location.assign(redirect.href);
     } catch (error) {
       if (!job.disposed) feedback(form, job.timedOut ? 'The request timed out; its outcome is unknown. Refresh and review the schedule before retrying.'

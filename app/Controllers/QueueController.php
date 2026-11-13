@@ -141,7 +141,7 @@ final class QueueController extends BaseController
             $entry = $this->queueService->enqueueWalkIn($unit, $personId, $priority, $this->queueDate());
             $message = "Ticket {$entry['ticket_code']} issued successfully.";
             if ($this->wantsBackgroundFeedback()) {
-                return $this->queueJson(true, $message);
+                return $this->queueJson(true, $message, 200, $this->boardRefresh($unit));
             }
             return redirect()->to('/' . $unit . '/queue')->with('success', $message);
         } catch (\Throwable $e) {
@@ -242,9 +242,26 @@ final class QueueController extends BaseController
         }
 
         if ($this->wantsBackgroundFeedback()) {
-            return $this->queueJson(true, 'Queue updated successfully.');
+            return $this->queueJson(true, 'Queue updated successfully.', 200, $this->boardRefresh($unit));
         }
         return redirect()->to('/' . $unit . '/queue');
+    }
+
+    private function boardRefresh(string $unit): ?array
+    {
+        $unit = ($unit === 'guidance') ? 'guidance' : 'clinic';
+        $owner = 'queue.board.' . $unit;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) {
+            return null;
+        }
+
+        $url = site_url('/' . $unit . '/queue');
+        $date = $this->queueDate();
+        if ($date !== SchedulingClock::today()) {
+            $url .= '?' . http_build_query(['date' => $date]);
+        }
+
+        return $this->refreshRegions($owner, ['board'], $url);
     }
 
     private function wantsBackgroundFeedback(): bool
@@ -254,12 +271,17 @@ final class QueueController extends BaseController
             && $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast';
     }
 
-    private function queueJson(bool $success, string $message, int $status = 200)
+    private function queueJson(bool $success, string $message, int $status = 200, ?array $refresh = null)
     {
-        return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store')->setJSON([
+        $payload = [
             'success' => $success,
             'message' => $message,
             'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
-        ]);
+        ];
+        if ($refresh !== null) {
+            $payload['refresh'] = $refresh;
+        }
+
+        return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'no-store')->setJSON($payload);
     }
 }

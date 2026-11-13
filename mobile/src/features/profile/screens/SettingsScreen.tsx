@@ -6,6 +6,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ChevronRight, Moon, ShieldCheck, Smartphone, LogOut } from 'lucide-react-native';
 import { Screen } from '../../../components/Screen';
 import { PageHeader } from '../../../components/PageHeader';
+import { PhoneNotificationControl } from '../../../components/PhoneNotificationControl';
 import { Theme, font, memoizeStyles } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { useSignOutConfirmation } from '../../auth/useSignOutConfirmation';
@@ -33,6 +34,7 @@ export function SettingsScreen() {
         <SettingsRow icon={<ShieldCheck size={16} color={theme.brandIcon} />} title="Privacy & security" caption="Data handling and session control" onPress={() => navigation.navigate('PrivacySecurity')} />
       </View>
 
+      <PhoneNotificationControl />
       <ServerConnectionControl presentation="settings" requiresSignIn />
 
       <Pressable accessibilityRole="button" accessibilityLabel="Sign out" style={styles.signOut} onPress={requestSignOut}>

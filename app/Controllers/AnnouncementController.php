@@ -43,7 +43,7 @@ final class AnnouncementController extends BaseController
     {
         return $this->respond(function () use ($unit) {
             $this->announcements->create($unit, $this->request->getPost());
-            return $this->success('Announcement saved as a draft. Publish it separately when ready.', '/' . $unit . '/announcements');
+            return $this->success('Announcement saved as a draft. Publish it separately when ready.', '/' . $unit . '/announcements', $this->staffRefresh($unit));
         });
     }
 
@@ -56,7 +56,7 @@ final class AnnouncementController extends BaseController
     {
         return $this->respond(function () use ($id, $unit) {
             $this->announcements->update($id, $unit, $this->request->getPost());
-            return $this->success('Announcement draft updated.', '/' . $unit . '/announcements');
+            return $this->success('Announcement draft updated.', '/' . $unit . '/announcements', $this->staffRefresh($unit));
         });
     }
 
@@ -64,7 +64,7 @@ final class AnnouncementController extends BaseController
     {
         return $this->respond(function () use ($id, $unit) {
             $this->announcements->publish($id, $unit, $this->request->getPost('version'));
-            return $this->success('Announcement published. Its content can no longer be edited.', '/' . $unit . '/announcements');
+            return $this->success('Announcement published. Its content can no longer be edited.', '/' . $unit . '/announcements', $this->staffRefresh($unit));
         });
     }
 
@@ -72,7 +72,7 @@ final class AnnouncementController extends BaseController
     {
         return $this->respond(function () use ($id, $unit) {
             $this->announcements->archive($id, $unit, $this->request->getPost('version'));
-            return $this->success('Announcement archived.', '/' . $unit . '/announcements');
+            return $this->success('Announcement archived.', '/' . $unit . '/announcements', $this->staffRefresh($unit));
         });
     }
 
@@ -91,8 +91,24 @@ final class AnnouncementController extends BaseController
     {
         return $this->respond(function () use ($id) {
             $this->announcements->read($id);
-            return $this->success('Announcement marked as read.', '/portal/announcements/' . $id);
+            return $this->success('Announcement marked as read.', '/portal/announcements/' . $id, $this->portalDetailRefresh($id));
         });
+    }
+
+    private function staffRefresh(string $unit): ?array
+    {
+        $owner = 'announcements.staff.' . $unit;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshRegions($owner, ['announcements.list', 'announcements.read-history']);
+    }
+
+    private function portalDetailRefresh(int $id): ?array
+    {
+        $owner = 'portal-announcement-detail.' . $id;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshRegions($owner, ['read-state', 'read-action'], site_url('/portal/announcements/' . $id));
     }
 
     private function form(string $unit, ?array $announcement = null): string
@@ -126,14 +142,16 @@ final class AnnouncementController extends BaseController
         return $this->request->isAJAX() || str_contains(strtolower($this->request->getHeaderLine('Accept')), 'json');
     }
 
-    private function success(string $message, string $redirect)
+    private function success(string $message, string $redirect, ?array $refresh = null)
     {
         if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
             session()->setFlashdata('success', $message);
         }
         if ($this->json()) {
-            return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => site_url($redirect),
-                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            $payload = ['success' => true, 'message' => $message, 'redirect' => site_url($redirect),
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+            if ($refresh !== null) { $payload['refresh'] = $refresh; }
+            return $this->response->setJSON($payload);
         }
         return redirect()->to(site_url($redirect))->setHeader('Cache-Control', 'no-store, private');
     }

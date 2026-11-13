@@ -10,6 +10,7 @@ import { WorkspaceProvider } from './src/features/workspace/WorkspaceContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
 import { OverlayProvider } from './src/components/OverlayProvider';
 import { SystemNavigationBarProvider } from './src/components/SystemNavigationBar';
+import { NotificationPermissionLifecycle } from './src/components/NotificationPermissionLifecycle';
 import { WorkspaceUnitPicker } from './src/features/workspace/WorkspaceUnitPicker';
 import { WorkspaceDiscardDialog } from './src/features/workspace/WorkspaceDiscardDialog';
 
@@ -39,6 +40,7 @@ export default function App(): React.JSX.Element {
     <SafeAreaProvider>
       <ThemeProvider>
         <SystemNavigationBarProvider>
+          <NotificationPermissionLifecycle />
           <ConnectionProvider>
             <QueryLifecycle />
             <AuthProvider>

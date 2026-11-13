@@ -196,7 +196,7 @@
           detail: { form, done: promise => { closed = promise; } }
         }));
         await closed;
-        if (mutations) await mutations.refresh(payload.redirect, payload.message, { form });
+        if (mutations) await mutations.refresh(payload.redirect, payload.message, { form, descriptor: payload.refresh });
         else window.location.assign(payload.redirect);
       } else {
         status.textContent = 'Not saved';

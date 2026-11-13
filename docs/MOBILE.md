@@ -231,13 +231,52 @@ repairs missed/bounded fanout.
 
 Deliberately out of scope for v1: offline write queue, biometric unlock, i18n, tablet layouts.
 
-Device push is **in place on both sides**: the server registers a device token
-(`POST api/v1/push/token`) and delivers committed notices over Firebase Cloud Messaging, and the client
-registers the device when a session starts and withdraws it when that session ends. A foreground push
-raises no banner, so it only refreshes the in-app inbox; the banner comes from the operating system
-while the app is backgrounded or killed. `push.enabled` stays `false` until staging verification
-passes, so the in-app inbox, the realtime hint and the polling cadences remain the only live channels.
-See `docs/MOBILE_PUSH_OPTIONS.md` for the evaluation that produced this split.
+### Device push
+
+Device permission, server registration, and device receipt are separate states:
+
+- **Android permission onboarding:** on the first active launch on Android 13+ (API 33+), the app
+  can request notification permission once. This device-local prompt does not wait for sign-in,
+  Firebase initialization, or a LAN server capability check. Denial does not cause repeated automatic
+  prompts on later launches/resumes. The **Phone notifications** control in Notifications and Settings
+  is available in both light and dark themes: **Enable notifications** is a deliberate permission
+  request; blocked permission or a disabled notification channel leads to Android notification settings.
+  A fresh denial can also report system notifications as disabled, so it still offers Enable rather
+  than incorrectly treating the first denial as permanently blocked.
+- **Signed-in registration:** the client registers with `POST api/v1/push/token` under the captured
+  account and API runtime, and withdraws the old registration at sign-out/server change. Android
+  registration is check-only for permission; it never triggers another automatic permission prompt.
+  Foreground resume and connectivity recovery recheck permission and retry setup for the current
+  signed-in session. Delayed results from a retired account/server are ignored. The existing iOS
+  permission request remains part of signed-in activation; Android's first-launch policy does not
+  replace the iOS flow.
+- **Foreground display:** an accepted foreground push attempts to post a phone notification through
+  the Android native bridge and refreshes the in-app data. The React banner remains a fallback when
+  the bridge is absent or system notifications are not known to be enabled. When the bridge and
+  channel are enabled, the in-app banner is suppressed to avoid a duplicate alert. Native posting is
+  still best-effort; permission changes and OS notification policy can prevent an alert.
+- **Background/closed display:** supported FCM messages use `notification` plus `data`. The Firebase
+  SDK/OS owns their background notification display; the app does not add a duplicate background
+  poster. Force-stop, Do Not Disturb, battery restrictions, connectivity, and device policy can affect
+  whether or when a notification is visible.
+- **Committed server notices:** supported notification IDs are sent to the existing best-effort push
+  publisher only after the owning transaction commits. Survey publication now follows this path;
+  rollback/no-op operations do not send survey push, and realtime failure does not prevent the
+  independent push attempt. Existing recipient authorization, generic payloads, and delivery budgets
+  are unchanged. The durable in-app inbox, realtime invalidation, and polling remain the recovery path.
+
+Firebase project files stay machine-local and uncommitted. Android debug builds can run without
+Firebase configuration and report push as unavailable. Android `release` and `lanTestRelease` builds
+require matching Firebase configuration for the variant's application ID; a file for another package
+is not a substitute. iOS needs the matching `GoogleService-Info.plist` in its app target, plus physical
+hardware and configured APNs for push testing. Rebuild and install the native app after adding/changing
+Firebase files or the notification bridge, channel, icon, or manifest; a Metro reload alone cannot
+install those native changes.
+
+**Ready means registered, not delivered.** Receipt also depends on the server's enabled/configured
+push transport, FCM/APNs, the connection, and phone/channel settings. Unit tests and a successful build
+are not proof that a device received a notice. See `docs/MOBILE_PUSH_OPTIONS.md` for the original
+transport evaluation; the behavior above describes the current implementation.
 
 ### Public carousel realtime
 

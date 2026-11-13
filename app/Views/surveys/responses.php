@@ -19,7 +19,9 @@ $analytics = $analytics ?? [
     'daily_trend' => [],
 ];
 $overallRating = $analytics['overall_avg_rating'] ?? null;
+$refreshOwner = 'survey-responses.' . (int) $survey['id'];
 ?>
+<section data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 
 <!-- Survey Title & Status Header -->
 <div class="card border-0 shadow-sm mb-4">
@@ -274,6 +276,7 @@ $overallRating = $analytics['overall_avg_rating'] ?? null;
 
     <!-- TAB 2: INDIVIDUAL SUBMISSIONS -->
     <div class="tab-pane fade" id="tab-submissions" role="tabpanel">
+      <div data-refresh-region="submissions">
       <!-- Preserves required identified submissions notice for automated audit & feature tests -->
       <div class="alert alert-info small mb-3">
         <strong><?= number_format($pagination['total']) ?> identified submissions.</strong> This is a completion count, not anonymous participation data. Response access is audited.
@@ -321,7 +324,9 @@ $overallRating = $analytics['overall_avg_rating'] ?? null;
       <div class="mt-3">
         <?= $this->include('partials/table_pagination') ?>
       </div>
+      </div>
     </div>
   </div>
 </div>
+</section>
 <?= $this->endSection() ?>

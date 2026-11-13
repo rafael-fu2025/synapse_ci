@@ -89,6 +89,9 @@ async function open(t, width, theme) {
   await page.goto(origin + responsesPath);
   await page.evaluate(() => document.fonts.ready);
   assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
+  assert.equal(await page.locator('[data-refresh-owner="survey-responses.1"]').count(), 1);
+  assert.equal(await page.locator('[data-refresh-region="submissions"]').count(), 1);
+  assert.equal(await page.evaluate(() => window.SynapseRefreshRegions?.enabled('survey-responses.1')), true);
   assert.equal(await page.locator('.survey-q-card').count(), 4);
   return page;
 }
@@ -168,11 +171,15 @@ for (const theme of ['light', 'dark']) for (const width of [320, 390, 768, 1440]
     const unanswered = page.locator('.survey-q-card').nth(3);
     assert.equal(await unanswered.getByText('No answers recorded for this question yet.', { exact: true }).isVisible(), true);
     assert.equal(await unanswered.locator('.survey-bar-row, .survey-bar-track').count(), 0);
-    await page.getByRole('tab', { name: /Individual Submissions/ }).click();
+    const tabSubmissions = page.getByRole('tab', { name: /Individual Submissions/ });
+    await tabSubmissions.scrollIntoViewIfNeeded();
+    await tabSubmissions.click();
     await page.locator('#tab-submissions.show.active').waitFor({ state: 'visible' });
     assert.equal(await page.getByText('8 identified submissions.', { exact: true }).isVisible(), true);
     assert.equal(await page.locator('#tab-submissions tbody tr').count(), 8);
-    await page.getByRole('tab', { name: /Visual Analytics/ }).click();
+    const tabVisuals = page.getByRole('tab', { name: /Visual Analytics/ });
+    await tabVisuals.scrollIntoViewIfNeeded();
+    await tabVisuals.click();
     await page.locator('#tab-visualizations.show.active').waitFor({ state: 'visible' });
     assert.deepEqual(await page.locator('.survey-bar-fill').allTextContents().then(values => values.map(value => value.trim())), expectedRows.flat().map(row => row[2]));
     await page.goto(origin + responsesPath + '?empty=1');
@@ -180,7 +187,9 @@ for (const theme of ['light', 'dark']) for (const width of [320, 390, 768, 1440]
     assert.equal(await page.locator('#tab-visualizations').getByText('No responses recorded yet', { exact: true }).isVisible(), true);
     assert.equal(await page.locator('.survey-q-card, .survey-bar-row, .survey-bar-track').count(), 0);
     assert.equal(await page.locator('.nd-kpi-card').first().locator('.nd-kpi-value').innerText(), '0');
-    await page.getByRole('tab', { name: /Individual Submissions \(0\)/ }).click();
+    const tabEmptySubmissions = page.getByRole('tab', { name: /Individual Submissions \(0\)/ });
+    await tabEmptySubmissions.scrollIntoViewIfNeeded();
+    await tabEmptySubmissions.click();
     await page.locator('#tab-submissions.show.active').waitFor({ state: 'visible' });
     assert.equal(await page.getByText('0 identified submissions.', { exact: true }).isVisible(), true);
     assert.equal(await page.locator('#tab-submissions').getByText('No responses recorded yet.', { exact: true }).isVisible(), true);

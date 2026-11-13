@@ -105,6 +105,7 @@ async function open(t, unit = 'clinic', query = 'section=enrollment&day=3') {
   });
   await page.goto(`${origin}/${unit}/appointments/availability?${query}`);
   await page.waitForFunction(() => window.SynapseAvailabilityFilters && window.SynapseConfirm && window.Alpine && document.querySelector('[data-availability-apply]')?.hidden);
+  await page.waitForFunction(unit => window.SynapseRefreshRegions?.enabled(`availability.${unit}`), unit);
   await page.locator('#workspaceProvider').locator('..').locator('.bd-select-toggle').waitFor();
   await page.evaluate(() => {
     window.filterTestNodes = {
@@ -203,13 +204,17 @@ test('Provider custom dropdown and reset auto-apply; Back/Forward restore URL an
   assert.equal(await page.locator('#workspaceProvider').inputValue(), '');
   assert.equal(documents.length, 1);
   await mounted(page);
-  // SynapseNavigation is allowed to swap main for history traversal, not reload the document.
+  // Regional Back/Forward keeps the persistent workspace and refetches the historical filter URL.
   await page.evaluate(() => history.back());
   await page.waitForFunction(() => document.querySelector('#workspaceSearch')?.value === 'Fixture' && document.querySelector('#workspaceProvider')?.value === '7');
   await page.waitForFunction(() => document.querySelectorAll('[data-department-staff] tbody tr').length === 1);
+  assert.deepEqual(Object.fromEntries(reads.at(-1).searchParams), { q: 'Fixture', provider: '7', day: '4', section: 'enrollment' });
+  await mounted(page);
   urlState(page, { q: 'Fixture', provider: '7', day: '4', section: 'enrollment' });
   await page.evaluate(() => history.forward());
   await page.waitForFunction(() => document.querySelector('#workspaceSearch')?.value === '' && document.querySelector('#workspaceProvider')?.value === '' && document.querySelectorAll('[data-department-staff] tbody tr').length === 4);
+  assert.deepEqual(Object.fromEntries(reads.at(-1).searchParams), { q: '', provider: '', day: '4', section: 'enrollment' });
+  await mounted(page);
   urlState(page, { q: '', provider: '', day: '4', section: 'enrollment' });
   assert.equal(documents.length, 1);
 });
@@ -359,7 +364,11 @@ test('Replaced results reinitialize Alpine/select/time widgets and retain refres
   assert.equal((await next).headers()['x-csrf-token'], 'filters-refreshed-token');
   await shown(page, ['Provider Fixture', 'New Staff Fixture']);
   const wrap = page.locator('#departmentDuration').locator('..');
+  await page.waitForFunction(() => document.querySelector('#departmentDuration')?.parentElement?.querySelectorAll('[role="option"]').length === 4);
+  await wrap.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(50);
   await wrap.locator('.bd-select-toggle').click();
+  await wrap.locator('.bd-select-menu.show').waitFor({ state: 'visible' });
   await wrap.getByRole('option', { name: '45 minutes', exact: true }).click();
   assert.equal(await page.locator('#departmentDuration').inputValue(), '45');
   await page.getByRole('checkbox', { name: 'Select all eligible staff', exact: true }).check();

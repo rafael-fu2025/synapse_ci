@@ -9,6 +9,8 @@
 
 <?= $this->section('content') ?>
 
+<section data-refresh-owner="carousel.admin" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<div data-refresh-region="carousel.slides">
 <div class="row g-4 carousel-admin">
 
   <!-- Full-width: Slide List only. Add opens a modal. -->
@@ -41,12 +43,12 @@
                 <div class="d-flex flex-shrink-0 slide-thumbnails<?= $hasDarkVariant ? '' : ' slide-thumbnails-single' ?>">
                   <!-- Light thumb: front card in light mode, peeks out behind in dark mode -->
                   <div class="slide-thumb slide-thumb-light" data-bs-toggle="tooltip" data-bs-title="Light mode variant">
-                    <img src="<?= base_url(esc($slide['light_image'])) ?>" alt="Light" onerror="this.src='<?= base_url('assets/img/favicon.png') ?>'">
+                    <img src="<?= base_url(esc($slide['light_image'])) ?>" alt="Light">
                   </div>
                   <!-- Dark thumb: front card in dark mode, peeks out behind in light mode -->
                   <?php if ($hasDarkVariant): ?>
                     <div class="slide-thumb slide-thumb-dark" data-bs-toggle="tooltip" data-bs-title="Dark mode variant">
-                      <img src="<?= base_url(esc($slide['dark_image'])) ?>" alt="Dark" onerror="this.src='<?= base_url('assets/img/favicon.png') ?>'">
+                      <img src="<?= base_url(esc($slide['dark_image'])) ?>" alt="Dark">
                     </div>
                   <?php endif; ?>
                 </div>
@@ -132,6 +134,8 @@
     </div>
   </div>
 </div>
+</div>
+</section>
 
 <style>
 
@@ -253,10 +257,12 @@
 <?= $this->section('scripts') ?>
 <script>
 (function() {
-  function init() {
+  var lifecycle = new AbortController();
+  var disposeCurrent = null;
+  function init(root) {
 
   // --- Drag-and-drop reordering of the slide list ---
-  var list = document.getElementById('slideList');
+  var list = (root || document).querySelector('#slideList');
   if (!list || list.dataset.reorderReady) return;
   list.dataset.reorderReady = 'true';
 
@@ -264,6 +270,19 @@
   var submitting = false;
   var savedOrder = currentOrder();
   var feedback = null;
+  var events = new AbortController();
+  disposeCurrent = function() {
+    events.abort();
+    feedback?.dismiss();
+    delete list.dataset.reorderReady;
+    disposeCurrent = null;
+  };
+  var options = { signal: events.signal };
+  list.querySelectorAll('.slide-thumb img').forEach(function(image) {
+    image.addEventListener('error', function fallback() {
+      image.src = <?= json_encode(base_url('assets/img/favicon.png')) ?>;
+    }, { once: true, signal: events.signal });
+  });
 
   function announce(message, state) {
     feedback = window.SynapseToast.show(message, {
@@ -281,13 +300,15 @@
     event.preventDefault();
     event.returnValue = '';
   }
-  document.addEventListener('synapse:before-navigate', guardNavigation);
-  window.addEventListener('beforeunload', guardUnload);
+  document.addEventListener('synapse:before-navigate', guardNavigation, options);
+  window.addEventListener('beforeunload', guardUnload, options);
   window.SynapseNavigation?.registerCleanup(function() {
-    document.removeEventListener('synapse:before-navigate', guardNavigation);
-    window.removeEventListener('beforeunload', guardUnload);
-    feedback?.dismiss();
+    lifecycle.abort();
+    disposeCurrent?.();
   });
+  document.addEventListener('synapse:before-region-swap', function(event) {
+    if (event.detail?.owner === 'carousel.admin') disposeCurrent?.();
+  }, { signal: lifecycle.signal });
 
   function currentOrder() {
     return [].slice.call(list.querySelectorAll('.slide-row')).map(function(row) { return row.dataset.id; }).join(',');
@@ -321,7 +342,7 @@
     if (button.dataset.slideMove === 'up') list.insertBefore(row, sibling);
     else list.insertBefore(sibling, row);
     persistOrder();
-  }, true);
+  }, { capture: true, signal: events.signal });
   updateControls();
 
   list.querySelectorAll('.slide-row').forEach(function(row) {
@@ -336,13 +357,13 @@
         event.dataTransfer.setData('text/plain', row.dataset.id);
       }
       row.classList.add('dragging');
-    });
+    }, options);
     row.addEventListener('dragend', function() {
       if (dragged !== row) return;
       row.classList.remove('dragging');
       dragged = null;
       persistOrder();
-    });
+    }, options);
   });
 
   list.addEventListener('dragover', function(e) {
@@ -354,7 +375,7 @@
     } else {
       list.insertBefore(dragged, after);
     }
-  });
+  }, options);
 
   function getDragAfterElement(container, y) {
     var rows = [].slice.call(container.querySelectorAll('.slide-row:not(.dragging)'));
@@ -389,7 +410,8 @@
     try {
       var response = await fetch(<?= json_encode(site_url('/admin/carousel/reorder')) ?>, {
         method: 'POST', credentials: 'same-origin', body: body, signal: controller.signal,
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json',
+          ...(window.SynapseMutations ? { 'X-Synapse-Feedback': 'toast' } : {}) }
       });
       window.SynapseCsrf?.fromResponse(response);
       if (response.redirected || !(response.headers.get('Content-Type') || '').includes('application/json')) {
@@ -400,8 +422,14 @@
       if (!response.ok || data.success !== true) {
         throw new Error(typeof data.message === 'string' ? data.message : 'The order could not be saved.');
       }
+      if (data.refresh !== undefined && data.refresh?.mode !== 'none') {
+        throw new Error('Unexpected reorder refresh instruction. Reload to verify the saved order.');
+      }
+      if (data.refresh?.mode === 'none') {
+        await window.SynapseMutations?.refresh(location.href, data.message, { descriptor: data.refresh, key: 'carousel-reorder' });
+      }
       savedOrder = orderValue;
-      announce(data.message || 'Slide order updated.', 'success');
+      if (data.refresh?.mode !== 'none') announce(data.message || 'Slide order updated.', 'success');
     } catch (error) {
       var rows = new Map([].slice.call(list.querySelectorAll('.slide-row')).map(function(row) { return [row.dataset.id, row]; }));
       savedOrder.split(',').forEach(function(id) { if (rows.has(id)) list.appendChild(rows.get(id)); });
@@ -443,12 +471,15 @@
   }
 
   if (window.SynapseNavigation) {
-    document.addEventListener('synapse:page-load', init, { once: true });
+    document.addEventListener('synapse:page-load', function(event) { init(event.detail?.root); }, { once: true });
   } else if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
+    document.addEventListener('DOMContentLoaded', function() { init(document); }, { once: true });
   } else {
-    init();
+    init(document);
   }
+  document.addEventListener('synapse:region-load', function(event) {
+    if (event.detail?.owner === 'carousel.admin') init(event.detail.root);
+  }, { signal: lifecycle.signal });
 })();
 </script>
 <?= $this->endSection() ?>

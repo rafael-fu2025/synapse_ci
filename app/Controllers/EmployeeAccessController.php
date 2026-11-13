@@ -10,6 +10,8 @@ use Throwable;
 
 final class EmployeeAccessController extends BaseController
 {
+    private const REFRESH_OWNER = 'admin.access';
+
     public function index()
     {
         return $this->respond(function () {
@@ -34,10 +36,25 @@ final class EmployeeAccessController extends BaseController
             if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
-            if ($this->json()) return $this->response->setJSON(['success' => true, 'message' => $message,
-                'redirect' => site_url('admin/access'), 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            if ($this->json()) {
+                $payload = ['success' => true, 'message' => $message,
+                    'redirect' => site_url('admin/access'), 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+                $refresh = $this->accessRefresh();
+                if ($refresh !== null) $payload['refresh'] = $refresh;
+                return $this->response->setJSON($payload);
+            }
             return redirect()->to(site_url('admin/access'))->setHeader('Cache-Control', 'private, no-store');
         });
+    }
+
+    /** Refresh only the employee results table, keeping search, page and the shell mounted. */
+    private function accessRefresh(): ?array
+    {
+        $owner = self::REFRESH_OWNER;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) return null;
+        return $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === $owner
+            ? $this->refreshRegions($owner, ['results'])
+            : $this->refreshNavigation(site_url('admin/access'), 'replace');
     }
 
     private function json(): bool

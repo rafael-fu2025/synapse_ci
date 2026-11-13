@@ -6,6 +6,8 @@ import { font, memoizeStyles, Theme } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { onPushMessage } from '../lib/push/fcm';
 import { acceptsPushMessage, currentPushOwner, pushScopeRevision, subscribePushScope } from '../lib/push/scope';
+import { getNotificationPermission } from '../lib/push/permission';
+import { hasSystemNotifications } from '../lib/push/systemNotifications';
 
 interface PushNotice {
   title: string;
@@ -17,16 +19,16 @@ const NOTICE_MS = 5000;
 /**
  * Subscribes to foreground pushes and holds the latest notice for NOTICE_MS.
  *
- * The operating system raises its own banner only for backgrounded or killed
- * apps; while the user is looking at the app, this is what makes the notice
- * visible. Tapping it is not needed — the inbox refetch has already updated
- * the content underneath.
+ * Android uses its system notification when the native bridge and channel are
+ * enabled; this remains the fallback for older binaries, disabled system notices
+ * and other platforms. The inbox refetch has already updated content underneath.
  */
 export function usePushNotice(): PushNotice | null {
   const scopeRevision = useSyncExternalStore(subscribePushScope, pushScopeRevision, pushScopeRevision);
   const [notice, setNotice] = useState<{ value: PushNotice; revision: number } | null>(null);
   useEffect(() => onPushMessage(message => {
     if (!acceptsPushMessage(message)) { return; }
+    if (message.messageId && message.notification && hasSystemNotifications() && getNotificationPermission().systemEnabled === true) { return; }
     const lanTest = currentPushOwner()?.lanTest === true;
     setNotice({
       revision: pushScopeRevision(),

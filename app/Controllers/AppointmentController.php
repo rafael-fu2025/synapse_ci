@@ -133,7 +133,8 @@ final class AppointmentController extends BaseController
                 $data['person_id'] = (int) $this->postString('person_id');
             }
             $this->appointmentService->requestAppointment($unit, $data, $this->actor(), $personal);
-            return $this->respondToForm('Appointment requested. Department staff will confirm the time and assign a provider.', true, $redirect);
+            $refresh = $personal ? $this->portalRefresh() : $this->staffRefresh($unit);
+            return $this->respondToForm('Appointment requested. Department staff will confirm the time and assign a provider.', true, $redirect, refresh: $refresh);
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -168,7 +169,8 @@ final class AppointmentController extends BaseController
                 'starts_at' => $this->postString('starts_at'), 'ends_at' => $this->postString('ends_at'),
                 'version' => $this->postString('version'),
             ], $this->actor());
-            return $this->respondToForm('Appointment confirmed and provider assigned.', true, $redirect);
+            return $this->respondToForm('Appointment confirmed and provider assigned.', true, $redirect,
+                refresh: $this->staffRefresh($unit));
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -178,7 +180,9 @@ final class AppointmentController extends BaseController
     {
         try {
             $entry = $this->queueService->enqueueAppointment($id, $unit, $this->actor());
-            return $this->respondToForm('Patient checked in. Queue ticket ' . $entry['ticket_code'] . ' issued.', true, '/' . $unit . '/queue');
+            $destination = '/' . $unit . '/queue';
+            return $this->respondToForm('Patient checked in. Queue ticket ' . $entry['ticket_code'] . ' issued.', true, $destination,
+                refresh: $this->navigationRefresh('appointments.staff.' . $unit, $destination));
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, '/' . $unit . '/appointments', $this->status($e));
         }
@@ -193,7 +197,8 @@ final class AppointmentController extends BaseController
                 throw new \InvalidArgumentException('An appointment version is required.');
             }
             $this->appointmentService->markNoShow($unit, $id, $version, $this->actor());
-            return $this->respondToForm('Appointment and linked unstarted tickets marked no-show. No clinical records were closed.', true, $redirect);
+            return $this->respondToForm('Appointment and linked unstarted tickets marked no-show. No clinical records were closed.', true, $redirect,
+                refresh: $this->staffRefresh($unit));
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -215,7 +220,8 @@ final class AppointmentController extends BaseController
         try {
             $reason = $this->postString('reason');
             $this->appointmentService->cancelAppointment($id, $reason, $unit, $this->actor(), $personal);
-            return $this->respondToForm('Appointment cancelled.', true, $redirect);
+            $refresh = $personal ? $this->portalRefresh() : $this->staffRefresh($unit);
+            return $this->respondToForm('Appointment cancelled.', true, $redirect, refresh: $refresh);
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -258,7 +264,7 @@ final class AppointmentController extends BaseController
                 'is_active' => $this->postString('is_active'),
             ], $this->actor());
             $redirect = $this->availabilityReturnPath($unit, true, true);
-            return $this->respondToForm('Provider availability saved.', true, $redirect);
+            return $this->respondToForm('Provider availability saved.', true, $redirect, 422, $this->availabilityRefresh($unit, $redirect));
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -285,7 +291,7 @@ final class AppointmentController extends BaseController
             $data['id'] = $data['id'] === '' ? '0' : $data['id'];
             $this->appointmentService->saveAvailabilityException($unit, $data, $this->actor(), $remove);
             $redirect = $this->availabilityReturnPath($unit, true);
-            return $this->respondToForm('Availability exception ' . ($remove ? 'removed' : 'saved') . '. Existing appointments were preserved; review any affected reservations separately.', true, $redirect);
+            return $this->respondToForm('Availability exception ' . ($remove ? 'removed' : 'saved') . '. Existing appointments were preserved; review any affected reservations separately.', true, $redirect, 422, $this->availabilityRefresh($unit, $redirect));
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -303,7 +309,7 @@ final class AppointmentController extends BaseController
                 'slot_duration_minutes' => $this->postString('slot_duration_minutes'),
             ], $this->actor());
             return $this->respondToForm('Department availability applied. Created: ' . $result['created']
-                . ' staff/day windows. Skipped: ' . $result['skipped'] . ' existing staff/day schedules (preserved).', true, $redirect);
+                . ' staff/day windows. Skipped: ' . $result['skipped'] . ' existing staff/day schedules (preserved).', true, $redirect, 422, $this->availabilityRefresh($unit, $redirect));
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -319,7 +325,7 @@ final class AppointmentController extends BaseController
             }
             $result = $this->appointmentService->enrollDepartmentStaff($unit, $personIds, $this->actor());
             return $this->respondToForm('Scheduling enrollment saved. Created: ' . $result['created']
-                . '; skipped: ' . $result['skipped'] . ' (already enrolled). No login accounts or access permissions were changed.', true, $redirect);
+                . '; skipped: ' . $result['skipped'] . ' (already enrolled). No login accounts or access permissions were changed.', true, $redirect, 422, $this->availabilityRefresh($unit, $redirect));
         } catch (\Exception $e) {
             return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
         }
@@ -351,6 +357,37 @@ final class AppointmentController extends BaseController
         }
     }
 
+    private function availabilityRefresh(string $unit, string $destination): ?array
+    {
+        $owner = 'availability.' . $unit;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshRegions($owner, ['results'], site_url($destination));
+    }
+
+    private function staffRefresh(string $unit): ?array
+    {
+        $owner = 'appointments.staff.' . $unit;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshRegions($owner, ['appointments.pending', 'appointments.schedule']);
+    }
+
+    private function portalRefresh(): ?array
+    {
+        $owner = 'appointments.portal';
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshRegions($owner, ['appointments.results']);
+    }
+
+    private function navigationRefresh(string $owner, string $destination): ?array
+    {
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+
+        return $this->refreshNavigation(site_url($destination));
+    }
+
     private function actor(): array
     {
         $actor = (new AuthenticatedUser())->current();
@@ -377,16 +414,18 @@ final class AppointmentController extends BaseController
         return $this->response->setStatusCode($this->status($e))->setBody(esc($e->getMessage()));
     }
 
-    private function respondToForm(string $message, bool $success, string $redirect, int $status = 422)
+    private function respondToForm(string $message, bool $success, string $redirect, int $status = 422, ?array $refresh = null)
     {
         if ($this->request->isAJAX()) {
             if ($success && $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
-            return $this->response->setStatusCode($success ? 200 : $status)->setJSON([
+            $payload = [
                 'success' => $success, 'message' => $message, 'redirect' => site_url($redirect),
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
-            ]);
+            ];
+            if ($success && $refresh !== null) { $payload['refresh'] = $refresh; }
+            return $this->response->setStatusCode($success ? 200 : $status)->setJSON($payload);
         }
         if ($success) {
             $response = redirect()->to($redirect);

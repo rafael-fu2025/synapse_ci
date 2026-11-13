@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { AppState } from 'react-native';
+import { onlineManager, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { pushNavigationIntent } from '../../features/workspace/navigationIntent';
 import { queryKeys } from '../../api/queryKeys';
 import { initialPushMessage, onPushMessage, onPushOpened, type PushMessage } from './fcm';
 import { pausePushSession, registerDevice, revokeDevice, watchPushToken, type PushRegistrationOptions } from './registration';
 import { routePushTap } from './router';
 import { acceptsPushMessage, currentPushOwner, isPushOwnerCurrent, subscribePushScope } from './scope';
+import { getPushSetupStatus } from './setupStatus';
+import { getNotificationPermission, refreshNotificationPermission, subscribeNotificationPermission } from './permission';
+import { showSystemNotification } from './systemNotifications';
 
 export { getPushSetupStatus, subscribePushSetupStatus, usePushSetupStatus } from './setupStatus';
 export type { PushSetupStatus } from './setupStatus';
@@ -45,9 +49,32 @@ export function usePushSession(status: PushSessionStatus, options: PushSessionOp
     const owner = currentPushOwner();
     if (!owner) { return undefined; }
     const current = () => stillSignedIn() && isPushOwnerCurrent(owner);
+    let state = AppState.currentState;
+    const eligible = () => current() && state === 'active' && onlineManager.isOnline();
+    const retry = () => {
+      if (!eligible()) { return; }
+      const setup = getPushSetupStatus();
+      if (setup.state === 'checking' || (setup.state === 'ready' && setup.runtimeId === owner.runtimeId)) { return; }
+      registerDevice(capturedOptions).catch(() => undefined);
+    };
+    let lastPermission = getNotificationPermission().permission;
+    const stopPermission = subscribeNotificationPermission(() => {
+      const permission = getNotificationPermission().permission;
+      const granted = permission === 'granted' && lastPermission !== 'granted';
+      lastPermission = permission;
+      if (granted) { retry(); }
+    });
+    const stopActivity = AppState.addEventListener('change', next => {
+      const resumed = state !== 'active' && next === 'active';
+      state = next;
+      if (!resumed || !current()) { return; }
+      refreshNotificationPermission().then(retry).catch(() => undefined);
+    });
+    const stopOnline = onlineManager.subscribe(online => { if (online) { retry(); } });
     const stopTokens = watchPushToken(capturedOptions);
     const stopMessages = onPushMessage(message => {
       if (!current() || !acceptsPushMessage(message, owner)) { return; }
+      showSystemNotification(message, owner);
       queryClient.invalidateQueries({ queryKey: queryKeys.notifications, exact: false }).catch(() => undefined);
       const intent = pushNavigationIntent(message);
       if (!intent || !('unit' in intent)) { return; }
@@ -82,6 +109,9 @@ export function usePushSession(status: PushSessionStatus, options: PushSessionOp
       active = false;
       pendingTap = null;
       stopTokens();
+      stopPermission();
+      stopActivity.remove();
+      stopOnline();
       stopMessages();
       stopOpened();
       stopScope();

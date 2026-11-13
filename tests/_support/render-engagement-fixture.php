@@ -6,6 +6,18 @@ require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootst
 $app = config('App');
 $app->baseURL = $fixture['origin'] . '/';
 $app->indexPage = '';
+$fixturePath = parse_url($fixture['path'], PHP_URL_PATH);
+$refreshOwners = [];
+if (str_contains($fixturePath, '/announcements')) {
+    $refreshOwners = ['announcements.staff.clinic', 'announcements.staff.guidance', 'portal-announcement-detail.1'];
+}
+if ($fixturePath === '/guidance/surveys') { $refreshOwners[] = 'surveys.staff'; }
+if (!empty($fixture['refreshOwners'])) { $refreshOwners = array_merge($refreshOwners, array_filter($fixture['refreshOwners'], 'is_string')); }
+$refreshRegions = $refreshOwners !== [] ? config(\Config\RefreshRegions::class) : null;
+if ($refreshRegions !== null) {
+    $refreshRegions->enabled = true;
+    $refreshRegions->owners = array_values(array_unique($refreshOwners));
+}
 $_SERVER['HTTP_HOST'] = parse_url($fixture['origin'], PHP_URL_HOST);
 $_SERVER['REQUEST_METHOD'] = 'GET';
 parse_str(parse_url($fixture['path'], PHP_URL_QUERY) ?? '', $_GET);
@@ -16,7 +28,11 @@ $request->setGlobal('get', $_GET);
 helper(['url', 'form']);
 $actor = ['id' => 1, 'name' => 'Fixture Admin', 'username' => 'fixture', 'role' => 'superadmin', 'logged_in' => true];
 session()->set(['user' => $actor, 'tenant_id' => 1]);
-$path = parse_url($fixture['path'], PHP_URL_PATH);
+$path = $fixturePath;
+if ($refreshRegions !== null) {
+    $refreshRegions->enabled = true;
+    $refreshRegions->owners = array_values(array_unique($refreshOwners));
+}
 $portal = str_starts_with($path, '/portal/');
 if ($portal) {
     $actor['role'] = ($_GET['profile'] ?? '') === 'employee' ? 'employee' : 'student';

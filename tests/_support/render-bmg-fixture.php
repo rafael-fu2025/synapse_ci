@@ -12,13 +12,17 @@ set_error_handler(static function (int $severity, string $message, string $file,
 }, E_WARNING | E_NOTICE | E_USER_WARNING | E_USER_NOTICE);
 // Page fixtures must not inherit realtime connections or retry writes from local .env.
 config(\Config\Realtime::class)->enabled = false;
+parse_str(parse_url($fixture['path'], PHP_URL_QUERY) ?? '', $_GET);
+if (!empty($_GET['regional'])) {
+    config(\Config\RefreshRegions::class)->enabled = true;
+    config(\Config\RefreshRegions::class)->owners = ['facilities.list', 'facilities.unit.11'];
+}
 $app = config('App');
 $app->baseURL = $fixture['origin'] . ($fixture['basePath'] ?? '/');
 $app->indexPage = $fixture['indexPage'] ?? '';
 $_SERVER['HTTP_HOST'] = parse_url($fixture['origin'], PHP_URL_HOST);
 $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SERVER['REQUEST_URI'] = $fixture['path'];
-parse_str(parse_url($fixture['path'], PHP_URL_QUERY) ?? '', $_GET);
 $request = new \CodeIgniter\HTTP\IncomingRequest($app, new \CodeIgniter\HTTP\SiteURI($app, $fixture['path']), null, new \CodeIgniter\HTTP\UserAgent());
 $request->setGlobal('get', $_GET);
 \Config\Services::injectMock('request', $request);

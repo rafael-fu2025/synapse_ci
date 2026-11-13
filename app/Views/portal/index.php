@@ -224,6 +224,9 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
   <div class="col-12 col-xl">
     <section id="my-appointments" class="card border-0 shadow-sm"
              data-live-filters
+             data-mutation-refresh
+             data-refresh-owner="appointments.portal"
+             data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
              data-filter-url="<?= esc(site_url('/portal')) ?>"
              data-filter-key="portal-appointments"
              data-live-events="portal.appointments.changed portal.queue.changed"
@@ -287,7 +290,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
         <span data-filter-error-text></span>
         <button class="btn btn-secondary btn-sm ms-2" type="button" data-filter-retry>Retry</button>
       </div>
-      <div data-filter-region="results">
+      <div data-filter-region="results" data-refresh-region="appointments.results">
         <div class="card-body p-0">
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0 small">

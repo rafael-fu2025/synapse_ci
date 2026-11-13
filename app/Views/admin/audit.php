@@ -10,6 +10,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<section data-refresh-owner="audit.ledger" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <?php
 $filters = $filters ?? [];
 $filterErrors = $filterErrors ?? [];
@@ -28,6 +29,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
 ?>
 <div class="card border-0 shadow-sm mb-3">
   <div class="card-body p-3">
+    <div data-refresh-region="filter-feedback">
     <?php if (! empty($filterErrors)): ?>
       <div class="alert alert-danger" role="alert">
         <p class="fw-bold mb-1">Please correct the audit filters:</p>
@@ -38,6 +40,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
         </ul>
       </div>
     <?php endif; ?>
+    </div>
     <form action="<?= esc(site_url('/admin/audit'), 'attr') ?>" method="GET" class="row g-2" aria-label="Filter audit ledger">
       <?php foreach ([
           'event_type' => 'Event type',
@@ -80,6 +83,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
   </div>
 </div>
 
+<div data-refresh-region="results">
 <div class="card border-0 shadow-sm">
   <div class="card-body p-0">
     <p class="small text-muted px-3 pt-3 mb-0">Append-only SHA-256 hash-chained log for clinical, governance, and facilities mutations. Verification checks the whole tenant chain, not the current filtered page. No external checkpoint is used.</p>
@@ -177,4 +181,6 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
     </nav>
   </div>
 </div>
+</div>
+</section>
 <?= $this->endSection() ?>

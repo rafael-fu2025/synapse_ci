@@ -59,7 +59,7 @@ final class SurveyController extends BaseController
     {
         try {
             (new SurveyService())->create($this->payload());
-            return $this->success('Survey draft created.');
+            return $this->success('Survey draft created.', $this->staffRefresh());
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -67,7 +67,7 @@ final class SurveyController extends BaseController
     {
         try {
             (new SurveyService())->update($id, $this->payload());
-            return $this->success('Survey draft updated.');
+            return $this->success('Survey draft updated.', $this->staffRefresh());
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -75,7 +75,7 @@ final class SurveyController extends BaseController
     {
         try {
             (new SurveyService())->publish($id, $this->request->getPost('version'));
-            return $this->success('Survey published. Questions and targeting are now immutable.');
+            return $this->success('Survey published. Questions and targeting are now immutable.', $this->staffRefresh());
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -83,7 +83,7 @@ final class SurveyController extends BaseController
     {
         try {
             (new SurveyService())->close($id, $this->request->getPost('version'));
-            return $this->success('Survey closed. Existing responses remain available.');
+            return $this->success('Survey closed. Existing responses remain available.', $this->staffRefresh());
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -127,18 +127,29 @@ final class SurveyController extends BaseController
         return $post;
     }
 
-    private function success(string $message)
+    private function success(string $message, ?array $refresh = null)
     {
         if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
             session()->setFlashdata('success', $message);
         }
         if ($this->request->isAJAX()) {
-            return $this->response->setHeader('Cache-Control', 'private, no-store')->setJSON([
+            $payload = [
                 'success' => true, 'message' => $message, 'redirect' => site_url('guidance/surveys'),
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
-            ]);
+            ];
+            if ($refresh !== null) { $payload['refresh'] = $refresh; }
+            return $this->response->setHeader('Cache-Control', 'private, no-store')->setJSON($payload);
         }
         return redirect()->to(site_url('guidance/surveys'))->setHeader('Cache-Control', 'private, no-store');
+    }
+
+    private function staffRefresh(): ?array
+    {
+        $owner = 'surveys.staff';
+        if (!config(\Config\RefreshRegions::class)->enables($owner)
+            || $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') { return null; }
+
+        return $this->refreshRegions($owner, ['surveys.list']);
     }
 
     private function failure(Throwable $e)

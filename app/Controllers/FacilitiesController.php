@@ -111,7 +111,7 @@ final class FacilitiesController extends BaseController
     {
         return $this->respond(function () {
             $result = $this->rotation->saveUnit(null, $this->input(['unit_code', 'name', 'status', 'drum_capacity_kg']));
-            return $this->success('Drum created. Automated operation remains disabled.', (int) $result['unit']['id']);
+            return $this->success('Drum created. Automated operation remains disabled.', (int) $result['unit']['id'], 'list');
         });
     }
 
@@ -127,7 +127,7 @@ final class FacilitiesController extends BaseController
     {
         return $this->respond(function () use ($id) {
             $this->rotation->archiveUnit($id, $this->input(['expected_version', 'retirement_confirmed']));
-            return $this->success('Drum archived. History is retained, controller credentials revoked and saved schedule intent disabled. This does not confirm a physical motor stop.', 0);
+            return $this->success('Drum archived. History is retained, controller credentials revoked and saved schedule intent disabled. This does not confirm a physical motor stop.', 0, 'none');
         });
     }
 
@@ -135,7 +135,7 @@ final class FacilitiesController extends BaseController
     {
         return $this->respond(function () use ($id) {
             $this->rotation->restoreUnit($id, $this->input(['expected_version']));
-            return $this->success('Drum restored offline. Review its setup and register a controller again before operation.', $id);
+            return $this->success('Drum restored offline. Review its setup and register a controller again before operation.', $id, 'list');
         });
     }
 
@@ -228,14 +228,34 @@ final class FacilitiesController extends BaseController
         return $value;
     }
 
-    private function success(string $message, int $unit)
+    private function success(string $message, int $unit, string $scope = 'unit')
     {
-        $target = site_url($unit > 0 ? '/facilities/unit/' . $unit : '/facilities');
+        $listOwner = $scope === 'list' && $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === 'facilities.list';
+        $target = site_url($listOwner || $unit < 1 ? '/facilities' : '/facilities/unit/' . $unit);
         if ($this->json()) {
-            return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => $target,
-                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            $payload = ['success' => true, 'message' => $message, 'redirect' => $target,
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+            $refresh = $this->successRefresh($unit, $scope, $target);
+            if ($refresh !== null) { $payload['refresh'] = $refresh; }
+            return $this->response->setJSON($payload);
         }
         return redirect()->to($target)->with('success', $message)->setHeader('Cache-Control', 'private, no-store');
+    }
+
+    private function successRefresh(int $unit, string $scope, string $target): ?array
+    {
+        if ($scope === 'list') {
+            $owner = 'facilities.list';
+            if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+            return $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === $owner
+                ? $this->refreshRegions($owner, ['stats', 'units'])
+                : ($unit > 0 ? $this->refreshNavigation($target) : null);
+        }
+        if ($scope !== 'unit' || $unit < 1) { return null; }
+
+        $owner = 'facilities.unit.' . $unit;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) { return null; }
+        return $this->refreshRegions($owner, ['unit'], $target);
     }
 
     private function respond(callable $operation)

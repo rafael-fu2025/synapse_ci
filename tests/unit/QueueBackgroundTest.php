@@ -28,6 +28,9 @@ final class QueueBackgroundTest extends CIUnitTestCase
         parent::setUp();
         helper(['url', 'form']);
         session()->remove(['success', 'error', 'user']);
+        unset($_ENV['refreshRegions.enabled'], $_ENV['refreshRegions.owners'], $_SERVER['refreshRegions.enabled'], $_SERVER['refreshRegions.owners']);
+        putenv('refreshRegions.enabled');
+        putenv('refreshRegions.owners');
         $this->request = Services::incomingrequest(null, false);
         $this->request->setMethod('POST');
         foreach (['HX-Request', 'X-Requested-With', 'X-Synapse-Feedback'] as $header) {
@@ -61,14 +64,14 @@ final class QueueBackgroundTest extends CIUnitTestCase
         $this->request->setHeader('X-Synapse-Feedback', 'toast');
     }
 
-    private function payload(ResponseInterface $response, bool $success, int $status): array
+    private function payload(ResponseInterface $response, bool $success, int $status, bool $refresh = false): array
     {
         self::assertSame($status, $response->getStatusCode());
         self::assertStringContainsString('application/json', $response->getHeaderLine('Content-Type'));
         self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
         self::assertFalse($response->hasHeader('Location'));
         $body = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertSame(['success', 'message', 'csrf'], array_keys($body), 'No patient or clinical data in response');
+        self::assertSame($refresh ? ['success', 'message', 'csrf', 'refresh'] : ['success', 'message', 'csrf'], array_keys($body), 'No patient or clinical data in response');
         self::assertSame($success, $body['success']);
         self::assertSame(['name' => csrf_token(), 'hash' => csrf_hash()], $body['csrf']);
         return $body;
@@ -171,6 +174,36 @@ final class QueueBackgroundTest extends CIUnitTestCase
         self::assertSame('Ticket C001 issued successfully.', $body['message']);
         self::assertNull(session()->getFlashdata('success'));
         self::assertNull(session()->getFlashdata('error'));
+    }
+
+    public function testTicketJsonIncludesRefreshDescriptorOnlyWhenQueueOwnerIsEnabled(): void
+    {
+        $previousEnabled = config(\Config\RefreshRegions::class)->enabled;
+        $previousOwners = config(\Config\RefreshRegions::class)->owners;
+        try {
+            config(\Config\RefreshRegions::class)->enabled = true;
+            config(\Config\RefreshRegions::class)->owners = ['queue.board.clinic'];
+            $this->background();
+            $this->request->setGlobal('post', ['date' => '2026-10-20']);
+            $refresh = $this->invoke('boardRefresh', 'clinic');
+            $body = $this->payload($this->invoke('queueJson', true, 'Ticket C001 issued successfully.', 200, $refresh), true, 200, true);
+            self::assertSame([
+                'mode' => 'regions',
+                'owner' => 'queue.board.clinic',
+                'regions' => ['board'],
+                'url' => site_url('/clinic/queue') . '?date=2026-10-20',
+            ], $body['refresh']);
+
+            self::assertNull($this->invoke('boardRefresh', 'guidance'));
+            self::assertArrayNotHasKey('refresh', $this->payload(
+                $this->invoke('queueJson', true, 'Queue updated successfully.', 200, $this->invoke('boardRefresh', 'guidance')),
+                true,
+                200,
+            ));
+        } finally {
+            config(\Config\RefreshRegions::class)->enabled = $previousEnabled;
+            config(\Config\RefreshRegions::class)->owners = $previousOwners;
+        }
     }
 
     public function testWalkinKeepsPermissionGateBeforeEnqueueAndNativeSuccessFlash(): void

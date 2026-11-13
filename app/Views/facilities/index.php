@@ -10,7 +10,7 @@
 $archivedView = !empty($archivedView);
 $perPage = (int) $pagination['per_page'];
 ?>
-<div class="bmg-workspace" data-bmg-base-url="<?= esc(site_url('/facilities'), 'attr') ?>" <?= !empty($openCreate) && !empty($canConfigure) ? 'data-bmg-open-create' : '' ?>>
+<div class="bmg-workspace" data-bmg-base-url="<?= esc(site_url('/facilities'), 'attr') ?>" data-refresh-owner="facilities.list" <?= !empty($openCreate) && !empty($canConfigure) ? 'data-bmg-open-create' : '' ?>>
   <header class="card mb-3">
     <div class="card-body pt-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
       <div>
@@ -21,7 +21,7 @@ $perPage = (int) $pagination['per_page'];
       <span class="badge bg-light text-dark border"><i class="bi bi-shield-lock me-1" aria-hidden="true"></i><?= empty($hardwareEnabled) ? 'Motor control disabled' : 'Motor controls permission-gated' ?></span>
     </div>
   </header>
-  <div class="row g-3 mb-3" aria-label="Drums at a glance">
+  <div class="row g-3 mb-3" aria-label="Drums at a glance" data-refresh-region="stats">
     <?php foreach ([['Total drums', $stats['total'], $archivedView ? 'All archived drum records' : 'All current drum records', 'bi-box-seam'], ['Active units', $stats['active'], 'Configured operational status', 'bi-check-circle'], ['Maintenance', $stats['maintenance'], 'Marked for maintenance', 'bi-tools'], ['Bound controllers', $stats['bound'], 'Not a connection-health count', 'bi-cpu']] as [$label, $value, $description, $icon]): ?>
     <div class="col-sm-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3">
       <div class="d-flex align-items-center gap-2 mb-2"><i class="bi <?= esc($icon, 'attr') ?> text-primary" aria-hidden="true"></i><span class="small text-muted"><?= esc($label) ?></span></div>
@@ -44,6 +44,7 @@ $perPage = (int) $pagination['per_page'];
     </ol>
   </div></div>
   <?php endif; ?>
+  <div data-refresh-region="units">
   <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <div><h2 class="h5 mb-1"><?= $archivedView ? 'Archived drums' : 'Drum workspace' ?></h2><span class="small text-muted"><?= $archivedView ? 'History is retained. Restoring leaves the drum offline and its controller revoked.' : 'Select a drum to manage its operations' ?></span></div>
     <?php if (!empty($canConfigure)): ?>
@@ -75,8 +76,9 @@ $perPage = (int) $pagination['per_page'];
       'paginationExtraQuery' => $archivedView ? ['view' => 'archived'] : [],
       'paginationLabel' => $archivedView ? 'Archived drum pages' : 'Current drum pages',
   ]) ?>
-</div>
 <?php if (!empty($canConfigure)): $editUnit = null; require __DIR__ . '/_unit_modal.php'; endif; ?>
+  </div>
+</div>
 <?= $this->endSection() ?>
 <?= $this->section('scripts') ?>
 <script src="<?= esc(base_url('assets/js/bmg.js'), 'attr') ?>"></script>

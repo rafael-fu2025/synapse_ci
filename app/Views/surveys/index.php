@@ -4,8 +4,10 @@
 <a class="btn btn-primary btn-sm" href="<?= esc(site_url('guidance/surveys/create')) ?>" data-app-modal-open>Create survey</a>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
-<div class="card"><div class="card-body pt-3">
+<section data-refresh-owner="surveys.staff" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <div class="alert alert-info small">These surveys collect identified responses, not anonymous feedback. Published surveys cannot be edited; create a new survey for corrections. Windows use Asia/Manila when entered.</div>
+  <div data-refresh-region="surveys.list">
+  <div class="card"><div class="card-body pt-3">
   <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Survey</th><th>Audience</th><th>Status</th><th>Actions</th></tr></thead><tbody>
   <?php foreach ($items as $survey): $base = site_url('guidance/surveys/' . $survey['id']); ?>
     <tr><td><?= esc($survey['title']) ?></td><td><?= esc(ucfirst($survey['audience'])) ?><?= view('announcements/_targeting_summary', ['targetRecord' => $survey], ['saveData' => false]) ?></td><td><span class="badge bg-secondary"><?= esc(ucfirst($survey['status'])) ?></span></td><td><div class="d-flex gap-2 flex-wrap">
@@ -22,4 +24,6 @@
   </tbody></table></div>
   <?= $this->include('partials/table_pagination') ?>
 </div></div>
+  </div>
+</section>
 <?= $this->endSection() ?>

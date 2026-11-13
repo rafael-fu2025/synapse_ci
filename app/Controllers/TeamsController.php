@@ -115,8 +115,15 @@ final class TeamsController extends BaseController
             session()->setFlashdata('success', $message);
         }
         if ($this->json()) {
-            return $this->response->setJSON(['success' => true, 'message' => $message, 'redirect' => $redirect,
-                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            $payload = ['success' => true, 'message' => $message, 'redirect' => $redirect,
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+            $owner = 'teams.tasks.' . $unit;
+            if (config(\Config\RefreshRegions::class)->enables($owner)) {
+                $payload['refresh'] = $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === $owner || $id === null
+                    ? $this->refreshRegions($owner, ['navigation', 'results'])
+                    : $this->refreshNavigation($redirect);
+            }
+            return $this->response->setJSON($payload);
         }
         return redirect()->to($redirect)->setHeader('Cache-Control', 'no-store, private');
     }

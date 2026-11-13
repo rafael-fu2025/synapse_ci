@@ -1,14 +1,17 @@
 import React from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { usePushSession, type PushSessionOptions, type PushSessionStatus } from '../src/lib/push/session';
+import * as pushScope from '../src/lib/push/scope';
 import {
-  activatePushOwner, currentPushOwner, makePushScope, publishPushScope, retirePushOwner,
+  activatePushOwner, currentPushOwner, isPushOwnerCurrent, makePushScope, publishPushScope, retirePushOwner,
   __resetPushScopeForTests,
 } from '../src/lib/push/scope';
 import { queueNavigationIntent } from '../src/features/workspace/navigationIntent';
-import { getPushSetupStatus, publishPushSetupStatus, usePushSetupStatus, __resetPushSetupStatusForTests } from '../src/lib/push/setupStatus';
-import type { PushMessage } from '../src/lib/push/fcm';
+import { getPushSetupStatus, publishPushSetupStatus, usePushSetupStatus, __resetPushSetupStatusForTests, type PushSetupState } from '../src/lib/push/setupStatus';
+import type { PushMessage, PushPermission } from '../src/lib/push/fcm';
+import type { NotificationPermissionStatus } from '../src/lib/push/permission';
 import type { ApiRuntime } from '../src/api/client';
 
 const mockRegister = jest.fn();
@@ -16,9 +19,30 @@ const mockRevoke = jest.fn();
 const mockPause = jest.fn();
 const mockWatch = jest.fn();
 const mockInitial = jest.fn();
+const mockRefreshPermission = jest.fn();
+const mockShowSystemNotification = jest.fn();
 let mockMessages: Array<(message: PushMessage) => void> = [];
 let mockOpened: Array<(message: PushMessage) => void> = [];
+let mockPermissionStatus: NotificationPermissionStatus;
+const mockPermissionListeners = new Set<() => void>();
+let mockPermissionCallbacks: Array<() => void> = [];
+let mockPermissionStops: jest.Mock[] = [];
+let mockMessageStops: jest.Mock[] = [];
+let mockOpenedStops: jest.Mock[] = [];
+let mockTokenStops: jest.Mock[] = [];
+const activityListeners = new Set<(state: AppStateStatus) => void>();
+let activityCallbacks: Array<(state: AppStateStatus) => void> = [];
+let activityStops: jest.Mock[] = [];
+const onlineListeners = new Set<(online: boolean) => void>();
+let onlineCallbacks: Array<(online: boolean) => void> = [];
+let onlineStops: jest.Mock[] = [];
+const scopeListeners = new Set<() => void>();
+let scopeStops: jest.Mock[] = [];
+let registrationAttempts: Array<{ resolve: () => void }> = [];
+const originalAppState = AppState.currentState;
+const originalOnline = onlineManager.isOnline();
 
+jest.mock('react-native/Libraries/AppState/AppState', () => ({ __esModule: true, default: { currentState: 'active', addEventListener: jest.fn() } }));
 jest.mock('../src/lib/config', () => ({ config: { lanTest: false } }));
 jest.mock('react-native-keychain', () => ({
   getGenericPassword: jest.fn().mockResolvedValue(false), resetGenericPassword: jest.fn().mockResolvedValue(true),
@@ -31,8 +55,32 @@ jest.mock('../src/lib/push/registration', () => ({
 }));
 jest.mock('../src/lib/push/fcm', () => ({
   initialPushMessage: () => mockInitial(),
-  onPushMessage: (handler: (message: PushMessage) => void) => { mockMessages.push(handler); return () => undefined; },
-  onPushOpened: (handler: (message: PushMessage) => void) => { mockOpened.push(handler); return () => undefined; },
+  onPushMessage: (handler: (message: PushMessage) => void) => {
+    mockMessages.push(handler);
+    const stop = jest.fn(); mockMessageStops.push(stop); return stop;
+  },
+  onPushOpened: (handler: (message: PushMessage) => void) => {
+    mockOpened.push(handler);
+    const stop = jest.fn(); mockOpenedStops.push(stop); return stop;
+  },
+}));
+// Keep an observable permission store: publishing notifies real hook callbacks,
+// independently of a refresh promise (including a grant before .then(retry)).
+// Native prompting/storage has its own suite and is not executed by this hook.
+jest.mock('../src/lib/push/permission', () => ({
+  getNotificationPermission: () => mockPermissionStatus,
+  refreshNotificationPermission: () => mockRefreshPermission(),
+  subscribeNotificationPermission: (listener: () => void) => {
+    mockPermissionListeners.add(listener);
+    mockPermissionCallbacks.push(listener);
+    const stop = jest.fn(() => { mockPermissionListeners.delete(listener); });
+    mockPermissionStops.push(stop); return stop;
+  },
+}));
+// No acceptance guard in the spy: session.ts itself must gate every native post.
+jest.mock('../src/lib/push/systemNotifications', () => ({
+  showSystemNotification: (...args: unknown[]) => mockShowSystemNotification(...args),
+  clearSystemNotifications: jest.fn(),
 }));
 jest.mock('../src/features/workspace/navigationIntent', () => ({
   ...jest.requireActual('../src/features/workspace/navigationIntent'), queueNavigationIntent: jest.fn(),
@@ -60,19 +108,76 @@ function Probe({ status = 'signedIn', options }: { status?: PushSessionStatus; o
   usePushSession(status, options); return null;
 }
 
+function publishPermission(permission: PushPermission) {
+  mockPermissionStatus = { permission, requesting: false, systemEnabled: permission === 'granted' };
+  for (const listener of mockPermissionListeners) { listener(); }
+}
+function setupState(state: PushSetupState, runtimeId: number | null = 1) {
+  publishPushSetupStatus({ state, runtimeId, code: state === 'warning' ? 'registration_failed' : null,
+    warning: state === 'warning' ? 'Phone setup could not finish.' : null });
+}
+async function application(state: AppStateStatus) {
+  await act(async () => {
+    jest.replaceProperty(AppState, 'currentState', state);
+    for (const listener of activityListeners) { listener(state); }
+  });
+}
+async function network(online: boolean) {
+  await act(async () => {
+    onlineManager.setOnline(online);
+    for (const listener of onlineListeners) { listener(online); }
+  });
+}
+
 beforeEach(() => {
   __resetPushScopeForTests();
   __resetPushSetupStatusForTests();
   jest.resetAllMocks();
-  mockMessages = [];
-  mockOpened = [];
+  mockMessages = []; mockOpened = []; mockMessageStops = []; mockOpenedStops = []; mockTokenStops = [];
+  mockPermissionCallbacks = []; mockPermissionStops = []; mockPermissionListeners.clear();
+  activityCallbacks = []; activityStops = []; activityListeners.clear();
+  onlineCallbacks = []; onlineStops = []; onlineListeners.clear();
+  scopeStops = []; scopeListeners.clear(); registrationAttempts = [];
+  mockPermissionStatus = { permission: 'denied', requesting: false, systemEnabled: false };
+  jest.replaceProperty(AppState, 'currentState', 'active');
+  onlineManager.setOnline(true);
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+    activityListeners.add(listener); activityCallbacks.push(listener);
+    const remove = jest.fn(() => { activityListeners.delete(listener); });
+    activityStops.push(remove); return { remove };
+  });
+  jest.spyOn(onlineManager, 'subscribe').mockImplementation(listener => {
+    onlineListeners.add(listener); onlineCallbacks.push(listener);
+    const stop = jest.fn(() => { onlineListeners.delete(listener); });
+    onlineStops.push(stop); return stop;
+  });
+  const subscribeScope = pushScope.subscribePushScope;
+  jest.spyOn(pushScope, 'subscribePushScope').mockImplementation(listener => {
+    scopeListeners.add(listener);
+    const unsubscribe = subscribeScope(listener);
+    const stop = jest.fn(() => { scopeListeners.delete(listener); unsubscribe(); });
+    scopeStops.push(stop); return stop;
+  });
   tree = null;
   mockInitial.mockResolvedValue(null);
-  mockWatch.mockReturnValue(() => undefined);
+  mockWatch.mockImplementation(() => { const stop = jest.fn(); mockTokenStops.push(stop); return stop; });
+  mockRefreshPermission.mockImplementation(async () => mockPermissionStatus.permission);
   mockRevoke.mockResolvedValue(undefined);
-  mockRegister.mockImplementation((options: PushSessionOptions) => { activatePushOwner(options); return Promise.resolve(); });
+  mockRegister.mockImplementation((options: PushSessionOptions) => {
+    const existing = currentPushOwner();
+    if (!existing || !isPushOwnerCurrent(existing) || existing.runtimeId !== (options.runtime?.id ?? null)) { activatePushOwner(options); }
+    setupState('checking', options.runtime?.id ?? null);
+    const attempt = deferred<void>();
+    registrationAttempts.push({ resolve: () => attempt.resolve() });
+    return attempt.promise;
+  });
 });
-afterEach(async () => { await act(async () => { tree?.unmount(); }); });
+afterEach(async () => {
+  await act(async () => { tree?.unmount(); registrationAttempts.forEach(attempt => attempt.resolve()); });
+  jest.restoreAllMocks();
+  AppState.currentState = originalAppState;
+  onlineManager.setOnline(originalOnline);
+});
 
 it('buffers the killed-app initial tap until the same-server saved scope is validated and published', async () => {
   const api = runtime();
@@ -201,6 +306,106 @@ it('never subscribes token or initial callbacks while signed out and does not re
   await act(async () => { tree!.unmount(); tree = null; });
   expect(mockRevoke).not.toHaveBeenCalled();
   expect(mockPause).toHaveBeenCalledWith(api);
+});
+
+it.each(['resume', 'reconnect'] as const)('retries incomplete setup on %s without duplicating checking work', async trigger => {
+  const api = runtime();
+  const client = new QueryClient();
+  await act(async () => { tree = TestRenderer.create(<Probe options={{ runtime: api, user, queryClient: client }} />); });
+  expect(mockRegister).toHaveBeenCalledTimes(1);
+  await act(async () => { registrationAttempts[0].resolve(); setupState('warning'); });
+  if (trigger === 'resume') { await application('background'); await application('active'); }
+  else { await network(false); await network(true); }
+  expect(mockRegister).toHaveBeenCalledTimes(2);
+  if (trigger === 'resume') { await application('background'); await application('active'); }
+  else { await network(false); await network(true); }
+  expect(mockRegister).toHaveBeenCalledTimes(2);
+  await act(async () => { registrationAttempts[1].resolve(); setupState('ready'); });
+  await application('background'); await application('active');
+  await network(false); await network(true);
+  expect(mockRegister).toHaveBeenCalledTimes(2);
+});
+
+it('retries a permission grant once even when settings return also runs the resume callback', async () => {
+  const api = runtime();
+  const client = new QueryClient();
+  await act(async () => { tree = TestRenderer.create(<Probe options={{ runtime: api, user, queryClient: client }} />); });
+  await act(async () => { registrationAttempts[0].resolve(); setupState('warning'); });
+  mockRefreshPermission.mockImplementation(async () => { publishPermission('granted'); return 'granted'; });
+  await application('background'); await application('active');
+  expect(mockRefreshPermission).toHaveBeenCalledTimes(1);
+  expect(mockRegister).toHaveBeenCalledTimes(2);
+  await act(async () => { publishPermission('granted'); });
+  expect(mockRegister).toHaveBeenCalledTimes(2);
+});
+
+it('does not retry while backgrounded or offline and catches up on a foreground reconnection', async () => {
+  const api = runtime();
+  const client = new QueryClient();
+  await act(async () => { tree = TestRenderer.create(<Probe options={{ runtime: api, user, queryClient: client }} />); });
+  await act(async () => { registrationAttempts[0].resolve(); setupState('warning'); });
+  await application('background');
+  await network(false); await network(true);
+  await act(async () => { publishPermission('granted'); });
+  expect(mockRegister).toHaveBeenCalledTimes(1);
+  await network(false); await application('active');
+  expect(mockRegister).toHaveBeenCalledTimes(1);
+  await network(true);
+  expect(mockRegister).toHaveBeenCalledTimes(2);
+});
+
+it('posts only accepted foreground messages and never posts notification-open callbacks', async () => {
+  const api = runtime();
+  const client = new QueryClient();
+  await act(async () => { tree = TestRenderer.create(<Probe options={{ runtime: api, user, queryClient: client }} />); });
+  const owner = currentPushOwner()!;
+  const accepted = { ...message(), messageId: 'foreground-1', notification: { title: 'Update', body: 'Open the app' } };
+  await act(async () => { mockMessages[0](accepted); });
+  expect(mockShowSystemNotification).not.toHaveBeenCalled();
+  await act(async () => { publishPushScope(owner, makePushScope(owner, 'deployment-a', registrationId)); });
+  await act(async () => { mockMessages[0](message(initialId)); mockOpened[0](accepted); });
+  expect(mockShowSystemNotification).not.toHaveBeenCalled();
+  await act(async () => { mockMessages[0](accepted); });
+  expect(mockShowSystemNotification).toHaveBeenCalledTimes(1);
+  expect(mockShowSystemNotification).toHaveBeenCalledWith(accepted, owner);
+  await act(async () => { await retirePushOwner(owner); mockMessages[0](accepted); });
+  expect(mockShowSystemNotification).toHaveBeenCalledTimes(1);
+});
+
+it.each(['signout', 'unmount', 'runtime'] as const)('rejects delayed resume and old event callbacks after %s', async boundary => {
+  const api = runtime();
+  const client = new QueryClient();
+  await act(async () => { tree = TestRenderer.create(<Probe options={{ runtime: api, user, queryClient: client }} />); });
+  const owner = currentPushOwner()!;
+  await act(async () => { publishPushScope(owner, makePushScope(owner, 'deployment-a', registrationId)); setupState('warning'); });
+  const refresh = deferred<PushPermission>();
+  mockRefreshPermission.mockReturnValueOnce(refresh.promise);
+  await application('background'); await application('active');
+  const oldMessage = mockMessages[0];
+  const oldOnline = onlineCallbacks[0];
+  const oldPermission = mockPermissionCallbacks[0];
+  if (boundary === 'signout') {
+    await act(async () => { tree!.update(<Probe status="signedOut" options={{ runtime: api, user, queryClient: client }} />); });
+  } else if (boundary === 'unmount') {
+    await act(async () => { tree!.unmount(); tree = null; });
+  } else {
+    (api as { active: boolean }).active = false;
+    const next = runtime({ id: 2, credentialBinding: 'new-activation' });
+    await act(async () => { tree!.update(<Probe options={{ runtime: next, user, queryClient: client }} />); });
+  }
+  mockRegister.mockClear();
+  await act(async () => {
+    refresh.resolve('granted'); oldOnline(true); oldPermission(); oldMessage(message());
+  });
+  expect(mockRegister).not.toHaveBeenCalled();
+  expect(mockShowSystemNotification).not.toHaveBeenCalled();
+  expect(activityStops[0]).toHaveBeenCalledTimes(1);
+  expect(onlineStops[0]).toHaveBeenCalledTimes(1);
+  expect(mockPermissionStops[0]).toHaveBeenCalledTimes(1);
+  expect(mockMessageStops[0]).toHaveBeenCalledTimes(1);
+  expect(mockOpenedStops[0]).toHaveBeenCalledTimes(1);
+  expect(mockTokenStops[0]).toHaveBeenCalledTimes(1);
+  expect(scopeStops[0]).toHaveBeenCalledTimes(1);
 });
 
 it('exposes immutable warning status through a lightweight event/hook without starting push', async () => {

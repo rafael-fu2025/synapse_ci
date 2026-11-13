@@ -123,7 +123,8 @@ final class ClinicInventoryController extends BaseController
                 'name', 'generic_name', 'category', 'dosage_form', 'strength', 'unit_of_measure',
                 'minimum_stock_level', 'is_active', 'version',
             ]), $actor, $key);
-            return $this->respond(true, 'Medicine saved.', self::BASE . '/' . $medicine['id'], ['medicine' => $medicine]);
+            return $this->respond(true, 'Medicine saved.', self::BASE . '/' . $medicine['id'], ['medicine' => $medicine], 422,
+                $id === null ? $this->navigationRefresh((int) $medicine['id']) : $this->detailRefresh((int) $medicine['id']));
         } catch (Throwable $e) {
             return $this->mutationError($e, $form);
         }
@@ -150,7 +151,7 @@ final class ClinicInventoryController extends BaseController
             $result = $this->inventory->receive($id, $this->postFields([
                 'batch_number', 'expiration_date', 'quantity', 'supplier', 'reference',
             ]), $actor, $this->postString('idempotency_key'));
-            return $this->respond(true, 'Medicine received.', self::BASE . '/' . $id, $result);
+            return $this->respond(true, 'Medicine received.', self::BASE . '/' . $id, $result, 422, $this->detailRefresh($id));
         } catch (Throwable $e) {
             return $this->mutationError($e, $form);
         }
@@ -186,7 +187,8 @@ final class ClinicInventoryController extends BaseController
             $context = $this->batchContext($id);
             $result = $this->inventory->adjust($id, $this->postFields(['quantity', 'reason', 'note']),
                 $actor, $this->postString('idempotency_key'));
-            return $this->respond(true, 'Stock removed.', self::BASE . '/' . $context['medicine']['id'], $result);
+            return $this->respond(true, 'Stock removed.', self::BASE . '/' . $context['medicine']['id'], $result, 422,
+                $this->detailRefresh((int) $context['medicine']['id']));
         } catch (Throwable $e) {
             return $this->mutationError($e, $form);
         }
@@ -200,7 +202,8 @@ final class ClinicInventoryController extends BaseController
             $context = $this->batchContext($id);
             $result = $this->inventory->setBatchStatus($id, $this->postString('status'),
                 $this->postString('reason'), $actor, $this->postString('idempotency_key'));
-            return $this->respond(true, 'Batch status updated.', self::BASE . '/' . $context['medicine']['id'], $result);
+            return $this->respond(true, 'Batch status updated.', self::BASE . '/' . $context['medicine']['id'], $result, 422,
+                $this->detailRefresh((int) $context['medicine']['id']));
         } catch (Throwable $e) {
             return $this->mutationError($e, $form);
         }
@@ -229,7 +232,8 @@ final class ClinicInventoryController extends BaseController
             }
             $result = $this->inventory->reverse($id, $this->postString('mode'),
                 $this->postString('reason'), $actor, $this->postString('idempotency_key'));
-            return $this->respond(true, 'Dispensation corrected.', self::BASE . '/' . $context['medicine']['id'], $result);
+            return $this->respond(true, 'Dispensation corrected.', self::BASE . '/' . $context['medicine']['id'], $result, 422,
+                $this->detailRefresh((int) $context['medicine']['id']));
         } catch (Throwable $e) {
             return $this->mutationError($e, $form);
         }
@@ -397,16 +401,53 @@ final class ClinicInventoryController extends BaseController
         return $this->respond(false, $status === 500 ? 'Inventory request failed.' : $e->getMessage(), $form, [], $status);
     }
 
-    private function respond(bool $success, string $message, string $redirect, array $data = [], int $status = 422)
+    private function detailRefresh(int $medicineId): ?array
+    {
+        $source = $this->request->getHeaderLine('X-Synapse-Refresh-Owner');
+        if ($source === 'inventory.catalog' && config(\Config\RefreshRegions::class)->enables($source)) {
+            return $this->refreshRegions($source, ['catalog']);
+        }
+        $owner = 'inventory.detail.' . $medicineId;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) {
+            return null;
+        }
+        if ($source !== '' && $source !== $owner) {
+            return $this->refreshNavigation(site_url(self::BASE . '/' . $medicineId));
+        }
+
+        return $this->refreshRegions($owner, ['summary', 'batches', 'operations', 'movements']);
+    }
+
+    private function navigationRefresh(int $medicineId): ?array
+    {
+        if (!config(\Config\RefreshRegions::class)->enables('inventory.catalog')) {
+            return null;
+        }
+
+        return $this->refreshNavigation(site_url(self::BASE . '/' . $medicineId));
+    }
+
+    private function respond(
+        bool $success,
+        string $message,
+        string $redirect,
+        array $data = [],
+        int $status = 422,
+        ?array $refresh = null
+    )
     {
         if ($this->request->isAJAX()) {
             if ($success && $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
-            return $this->response->setStatusCode($success ? 200 : $status)->setHeader('Cache-Control', 'no-store')->setJSON([
+            $payload = [
                 'success' => $success, 'message' => $message, 'redirect' => site_url($redirect),
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
-            ] + $data);
+            ] + $data;
+            if ($success && $refresh !== null) {
+                $payload['refresh'] = $refresh;
+            }
+            return $this->response->setStatusCode($success ? 200 : $status)->setHeader('Cache-Control', 'no-store')->setJSON($payload);
         }
         if (!$success && $status === 503) {
             return $this->response->setStatusCode(503)->setHeader('Cache-Control', 'no-store')

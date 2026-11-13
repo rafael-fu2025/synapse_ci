@@ -186,6 +186,9 @@
     if (url.origin !== location.origin) { location.assign(url); return; }
     url.searchParams.set('fragment', '1');
     const record = attach(loadingRoot(), link);
+    record.sourceOwner = link.closest('[data-refresh-owner]')?.dataset.refreshOwner
+      || (document.querySelectorAll('#main [data-refresh-owner]').length === 1
+        ? document.querySelector('#main [data-refresh-owner]').dataset.refreshOwner : null);
     try {
       const response = await fetch(url, { credentials: 'same-origin', signal: record.controller.signal,
         headers: { 'X-Requested-With': 'XMLHttpRequest' } });
@@ -268,7 +271,8 @@
     record.root.querySelector('[data-modal-error]').classList.add('d-none');
     try {
       const response = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin',
-        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}) } });
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}),
+          ...(record.sourceOwner ? { 'X-Synapse-Refresh-Owner': record.sourceOwner } : {}) } });
       window.SynapseCsrf?.fromResponse(response);
       const payload = await response.json();
       updateCsrf(payload.csrf);
@@ -282,8 +286,11 @@
         const workspace = document.querySelector('[data-live-filters][data-mutation-refresh]');
         const destination = new URL(payload.redirect, location.href);
         const scoped = workspace && new URL(workspace.dataset.filterUrl, location.href);
-        const returnUrl = scoped && destination.origin === scoped.origin && destination.pathname === scoped.pathname ? location.href : payload.redirect;
-        if (mutations) await mutations.refresh(returnUrl, payload.message, { form });
+        const regional = window.SynapseRefreshRegions?.descriptor(payload.refresh, payload.redirect);
+        const mountedOwner = regional?.mode === 'regions' && document.querySelector('[data-refresh-owner="' + CSS.escape(regional.owner) + '"]');
+        const returnUrl = mountedOwner && !payload.refresh.url ? location.href
+          : scoped && destination.origin === scoped.origin && destination.pathname === scoped.pathname ? location.href : payload.redirect;
+        if (mutations) await mutations.refresh(returnUrl, payload.message, { form, descriptor: payload.refresh });
         else location.assign(payload.redirect);
       } else {
         error(record.root, payload.message || 'The form could not be saved.');

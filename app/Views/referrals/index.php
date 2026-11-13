@@ -5,6 +5,9 @@
 <?php endif; ?>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
+<?php $refreshOwner = 'referrals.' . $unit; ?>
+<section data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<div data-refresh-region="referrals.folders">
 <div class="card mb-3"><div class="card-body pt-3">
   <p class="text-muted small mb-3"><?= ucfirst($unit) ?> Workstation · <?= $unit === 'clinic' ? 'Send to Guidance; receive from Guidance.' : 'Send to Clinic; receive from Clinic.' ?> Shared handoff summaries only.</p>
   <nav class="nav nav-pills gap-2" aria-label="Referral folders">
@@ -13,6 +16,8 @@
     <?php endforeach; ?>
   </nav>
 </div></div>
+</div>
+<div data-refresh-region="referrals.results">
 <section data-live-table data-endpoint="<?= esc($baseUrl . '?' . http_build_query(['tab' => $tab])) ?>">
   <div class="card mb-3"><div class="card-body pt-3">
     <form data-table-filters method="GET" action="<?= esc($baseUrl) ?>" class="row g-3 align-items-end" role="search">
@@ -27,6 +32,8 @@
   <p data-table-status role="status" aria-live="polite" class="small text-muted"></p>
   <div data-table-error class="alert alert-danger" role="alert" hidden><span data-table-error-message></span><button data-table-retry type="button" class="btn btn-outline-danger btn-sm ms-2">Retry</button></div>
   <div data-table-results><?= view('referrals/_results', ['referrals' => $referrals, 'unit' => $unit, 'tab' => $tab, 'actor' => $actor, 'pagination' => $pagination, 'filters' => $filters, 'baseUrl' => $baseUrl], ['saveData' => false]) ?></div>
+</section>
+</div>
 </section>
 <?= $this->endSection() ?>
 <?= $this->section('scripts') ?>

@@ -11,6 +11,16 @@
   const timeFormat = new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' });
   const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' });
   const dateOf = value => new Date(value.replace(' ', 'T') + 'Z');
+  const canonical = value => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') {
+      const result = {};
+      Object.keys(value).sort().forEach(key => { result[key] = canonical(value[key]); });
+      return result;
+    }
+    return value;
+  };
+  const authoritativeSignature = message => JSON.stringify(canonical(message));
   const node = (tag, className, text) => {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -34,7 +44,7 @@
     const state = { stopped: false, revoked: false, polling: false, reading: false, sending: false,
       timer: null, readTimer: null, hintTimer: null, dirty: false,
       ready: window.SynapseRealtime?.status === 'ready',
-      pollAbort: null, messages: new Map(), pending: null,
+      pollAbort: null, messages: new Map(), signatures: new Map(), pending: null,
       lastRead: initial.last_read_id, entryRead: initial.last_read_id,
       older: initial.after_mode ? initial.last_read_id > 0 : initial.has_more,
       historyPaused: initial.browsing_history, writes: Promise.resolve(), unread: initial.unread_count };
@@ -181,74 +191,129 @@
       renderReferences();
       fresh.hidden = atBottom() && !state.historyPaused;
     }
-    function disposeReplyTooltips() {
-      log.querySelectorAll('[data-chat-reply]').forEach(button => window.bootstrap?.Tooltip?.getInstance(button)?.dispose());
+    function disposeReplyTooltip(article) {
+      const button = article?.querySelector?.('[data-chat-reply]');
+      if (button) window.bootstrap?.Tooltip?.getInstance(button)?.dispose();
     }
-    function render() {
-      disposeReplyTooltips();
-      const fragment = document.createDocumentFragment();
+    function disposeReplyTooltips() {
+      log.querySelectorAll('[data-message-id]').forEach(disposeReplyTooltip);
+    }
+    function initialiseReplyTooltip(article) {
+      const button = article.querySelector('[data-chat-reply]');
+      if (button && window.bootstrap?.Tooltip) {
+        window.bootstrap.Tooltip.getOrCreateInstance(button, { trigger: 'hover', container: 'body', placement: 'top', animation: false });
+      }
+    }
+    function messageArticle(message) {
+      const id = message.id, stamp = dateOf(message.created_at);
+      const article = node('article', 'team-chat-message' + (message.sender_user_id === Number(root.dataset.actorId) ? ' is-own' : ''));
+      article.dataset.messageId = String(id);
+      article.id = `chat-message-${id}`; article.tabIndex = -1;
+      article.classList.toggle('is-targeted', id === initial.target_message_id);
+      const bubble = node('div', 'team-chat-bubble'), header = node('div', 'team-chat-message-header');
+      header.append(node('strong', '', message.sender_name));
+      const time = node('time', '', timeFormat.format(stamp));
+      time.dateTime = stamp.toISOString(); time.title = dayFormat.format(stamp) + ' · Asia/Manila';
+      header.append(time); bubble.append(header);
+      if (message.reply_to) {
+        const quote = node('div', 'team-chat-reply-quote');
+        quote.append(node('strong', '', `Reply to ${message.reply_to.sender_name}`), node('p', '', message.reply_to.body)); bubble.append(quote);
+      }
+      const text = node('p', 'teams-preserve mb-0');
+      let offset = 0;
+      for (const mention of [...(message.mentions || [])].sort((a, b) => a.start - b.start)) {
+        if (!Number.isInteger(mention.start) || !Number.isInteger(mention.length) || mention.start < offset || mention.length < 1 || mention.start + mention.length > message.body.length) continue;
+        text.append(document.createTextNode(message.body.slice(offset, mention.start)));
+        const mark = node('span', 'team-chat-mention', message.body.slice(mention.start, mention.start + mention.length));
+        mark.title = mention.name || 'Team member'; text.append(mark); offset = mention.start + mention.length;
+      }
+      text.append(document.createTextNode(message.body.slice(offset))); bubble.append(text);
+      const tasks = message.tasks || (message.task_id ? [{ id: message.task_id, title: message.task_title }] : []);
+      for (const task of tasks) {
+        const link = node('a', 'team-chat-task', `Task #${task.id}: ${task.title || 'Task'}`);
+        link.href = `${root.dataset.teamsUrl}/${task.id}`;
+        link.setAttribute('data-app-modal-open', ''); bubble.append(link);
+      }
+      const reply = node('button', 'team-chat-reply-button');
+      const replyIcon = node('i', 'bi bi-reply'); replyIcon.setAttribute('aria-hidden', 'true'); reply.append(replyIcon);
+      reply.type = 'button'; reply.dataset.chatReply = ''; reply.disabled = !editable();
+      reply.setAttribute('aria-label', `Reply to ${message.sender_name}`);
+      reply.dataset.bsToggle = 'tooltip'; reply.dataset.bsTitle = 'Reply'; reply.dataset.bsPlacement = 'top';
+      reply.addEventListener('click', () => {
+        window.bootstrap?.Tooltip?.getInstance(reply)?.hide();
+        if (editable()) { replyTo = message; renderReferences(); body.focus(); }
+      });
+      article.append(bubble, reply);
+      return article;
+    }
+    function daySeparator(key, stamp) {
+      const separator = node('div', 'team-chat-day', dayFormat.format(stamp));
+      separator.dataset.chatDay = key;
+      return separator;
+    }
+    function unreadSeparator() {
+      const separator = node('div', 'team-chat-unread-divider', 'Unread messages');
+      separator.dataset.chatUnreadDivider = '';
+      return separator;
+    }
+    function reconcile(incoming = null) {
+      const existingMessages = new Map();
+      log.querySelectorAll('[data-message-id]').forEach(article => existingMessages.set(Number(article.dataset.messageId), article));
+      const existingDays = new Map();
+      log.querySelectorAll('[data-chat-day]').forEach(separator => existingDays.set(separator.dataset.chatDay, separator));
+      let existingUnread = log.querySelector('[data-chat-unread-divider]');
+      const desired = [], changed = [];
       let lastDay = null, divider = false;
       for (const id of ids()) {
         const message = state.messages.get(id), stamp = dateOf(message.created_at), key = dayKey.format(stamp);
-        if (key !== lastDay) { fragment.append(node('div', 'team-chat-day', dayFormat.format(stamp))); lastDay = key; }
+        if (key !== lastDay) {
+          desired.push(existingDays.get(key) || daySeparator(key, stamp));
+          existingDays.delete(key); lastDay = key;
+        }
         if (!divider && id > state.entryRead && message.sender_user_id !== Number(root.dataset.actorId)) {
-          fragment.append(node('div', 'team-chat-unread-divider', 'Unread messages'));
-          divider = true;
+          desired.push(existingUnread || unreadSeparator()); existingUnread = null; divider = true;
         }
-        const article = node('article', 'team-chat-message' + (message.sender_user_id === Number(root.dataset.actorId) ? ' is-own' : ''));
-        article.dataset.messageId = String(id); article.id = `chat-message-${id}`; article.tabIndex = -1;
-        article.classList.toggle('is-targeted', id === initial.target_message_id);
-        const bubble = node('div', 'team-chat-bubble'), header = node('div', 'team-chat-message-header');
-        header.append(node('strong', '', message.sender_name));
-        const time = node('time', '', timeFormat.format(stamp));
-        time.dateTime = stamp.toISOString(); time.title = dayFormat.format(stamp) + ' · Asia/Manila';
-        header.append(time); bubble.append(header);
-        if (message.reply_to) {
-          const quote = node('div', 'team-chat-reply-quote');
-          quote.append(node('strong', '', `Reply to ${message.reply_to.sender_name}`), node('p', '', message.reply_to.body)); bubble.append(quote);
+        const signature = authoritativeSignature(message);
+        let article = existingMessages.get(id);
+        if (!article || (incoming?.has(id) && state.signatures.get(id) !== signature)) {
+          if (article) disposeReplyTooltip(article);
+          article = messageArticle(message); changed.push(article);
         }
-        const text = node('p', 'teams-preserve mb-0');
-        let offset = 0;
-        for (const mention of [...(message.mentions || [])].sort((a, b) => a.start - b.start)) {
-          if (!Number.isInteger(mention.start) || !Number.isInteger(mention.length) || mention.start < offset || mention.length < 1 || mention.start + mention.length > message.body.length) continue;
-          text.append(document.createTextNode(message.body.slice(offset, mention.start)));
-          const mark = node('span', 'team-chat-mention', message.body.slice(mention.start, mention.start + mention.length));
-          mark.title = mention.name || 'Team member'; text.append(mark); offset = mention.start + mention.length;
-        }
-        text.append(document.createTextNode(message.body.slice(offset))); bubble.append(text);
-        const tasks = message.tasks || (message.task_id ? [{ id: message.task_id, title: message.task_title }] : []);
-        for (const task of tasks) {
-          const link = node('a', 'team-chat-task', `Task #${task.id}: ${task.title || 'Task'}`);
-          link.href = `${root.dataset.teamsUrl}/${task.id}`;
-          link.setAttribute('data-app-modal-open', ''); bubble.append(link);
-        }
-        const reply = node('button', 'team-chat-reply-button');
-        const replyIcon = node('i', 'bi bi-reply'); replyIcon.setAttribute('aria-hidden', 'true'); reply.append(replyIcon);
-        reply.type = 'button'; reply.dataset.chatReply = ''; reply.disabled = !editable();
-        reply.setAttribute('aria-label', `Reply to ${message.sender_name}`);
-        reply.dataset.bsToggle = 'tooltip'; reply.dataset.bsTitle = 'Reply'; reply.dataset.bsPlacement = 'top';
-        reply.addEventListener('click', () => {
-          window.bootstrap?.Tooltip?.getInstance(reply)?.hide();
-          if (editable()) { replyTo = message; renderReferences(); body.focus(); }
-        });
-        article.append(bubble, reply); fragment.append(article);
+        if (incoming?.has(id) || !state.signatures.has(id)) state.signatures.set(id, signature);
+        existingMessages.delete(id); desired.push(article);
       }
-      if (!state.messages.size) fragment.append(node('p', 'text-muted text-center p-4', 'No messages yet. Start an operational discussion.'));
-      log.replaceChildren(fragment);
-      log.querySelectorAll('[data-chat-reply]').forEach(button => {
-        if (window.bootstrap?.Tooltip) window.bootstrap.Tooltip.getOrCreateInstance(button, { trigger: 'hover', container: 'body', placement: 'top', animation: false });
-      });
+      for (const [id, article] of existingMessages) { disposeReplyTooltip(article); state.signatures.delete(id); }
+      if (!desired.length) {
+        const empty = log.querySelector('[data-chat-empty]') || node('p', 'text-muted text-center p-4', 'No messages yet. Start an operational discussion.');
+        empty.dataset.chatEmpty = ''; desired.push(empty);
+      }
+      let cursor = log.firstChild;
+      for (const item of desired) {
+        if (item === cursor) cursor = cursor.nextSibling;
+        else log.insertBefore(item, cursor);
+      }
+      while (cursor) {
+        const next = cursor.nextSibling;
+        if (cursor.matches?.('[data-message-id]')) disposeReplyTooltip(cursor);
+        cursor.remove(); cursor = next;
+      }
+      changed.forEach(initialiseReplyTooltip);
     }
-    function merge(messages, direction) {
-      messages.forEach(message => state.messages.set(message.id, message));
+    function merge(messages, direction, replace = false) {
+      if (replace) {
+        const keep = new Set(messages.map(message => message.id));
+        for (const id of state.messages.keys()) if (!keep.has(id)) state.messages.delete(id);
+      }
+      const incoming = new Set();
+      messages.forEach(message => { state.messages.set(message.id, message); incoming.add(message.id); });
       const ordered = ids();
       if (ordered.length > MAX_MESSAGES) {
         const remove = direction === 'older' ? ordered.slice(MAX_MESSAGES) : ordered.slice(0, ordered.length - MAX_MESSAGES);
-        remove.forEach(id => state.messages.delete(id));
+        remove.forEach(id => { state.messages.delete(id); incoming.delete(id); });
         if (direction === 'older') state.historyPaused = true;
         else state.older = true;
       }
-      render();
+      reconcile(incoming);
     }
     async function request(url, fields = null, polling = false) {
       const controller = new AbortController();
@@ -280,7 +345,7 @@
         window.SynapseCsrf?.sync(payload.csrf);
         if (!live()) throw new DOMException('Chat closed', 'AbortError');
         if (response.status === 401 || response.status === 403 || response.redirected) {
-          state.revoked = true; clearTimeout(state.timer); state.messages.clear(); disposeReplyTooltips(); log.replaceChildren();
+          state.revoked = true; clearTimeout(state.timer); state.messages.clear(); state.signatures.clear(); disposeReplyTooltips(); log.replaceChildren();
           body.value = ''; previousBody = ''; selectedTasks.clear(); mentions = []; replyTo = null; state.pending = null; resizeBody(); controls();
         }
         if (!response.ok || payload.success !== true) {
@@ -376,8 +441,8 @@
       state.polling = true; clearTimeout(state.timer);
       try {
         const data = await request(`${root.dataset.baseUrl}/history`);
-        state.messages.clear(); state.historyPaused = false; state.older = data.has_more;
-        merge(data.messages, 'newer'); log.scrollTop = log.scrollHeight; summary(data);
+        state.historyPaused = false; state.older = data.has_more;
+        merge(data.messages, 'newer', true); log.scrollTop = log.scrollHeight; summary(data);
         warn(''); controls(); scheduleRead();
       } catch (failure) { if (live()) warn(failure.message); }
       finally { state.polling = false; schedule(state.dirty ? 100 : cadence()); }
@@ -504,10 +569,10 @@
       state.stopped = true; clearTimeout(state.timer); clearTimeout(state.readTimer); clearTimeout(state.hintTimer); clearTimeout(taskSearchTimer); events.abort();
       disposeReplyTooltips();
       if (infoBtn) window.bootstrap?.Popover?.getInstance(infoBtn)?.dispose();
-      state.messages.clear(); state.pending = null; instances.delete(root);
+      state.messages.clear(); state.signatures.clear(); state.pending = null; instances.delete(root);
     });
     initial.messages.forEach(message => state.messages.set(message.id, message));
-    summary(initial); render();
+    summary(initial); reconcile();
     const target = Number.isSafeInteger(initial.target_message_id) ? log.querySelector(`[data-message-id="${initial.target_message_id}"]`) : null;
     const unread = log.querySelector('.team-chat-unread-divider');
     if (target) {

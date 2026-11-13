@@ -19,6 +19,9 @@ session()->set(['user' => $actor, 'tenant_id' => 1]);
 $path = parse_url($fixture['path'], PHP_URL_PATH);
 if ($path === '/referrals') { echo view('referrals/workstation', ['title' => 'Choose workstation']); exit; }
 $unit = str_starts_with($path, '/clinic/') ? 'clinic' : 'guidance';
+$refreshRegions = config(\Config\RefreshRegions::class);
+$refreshRegions->enabled = true;
+$refreshRegions->owners = ['referrals.' . $unit];
 $target = $unit === 'clinic' ? 'guidance' : 'clinic';
 $baseUrl = site_url('/' . $unit . '/referrals');
 $patient = ['id' => 11, 'first_name' => 'Ada', 'last_name' => 'Student', 'mis_id' => 'S001', 'kind' => 'student'];

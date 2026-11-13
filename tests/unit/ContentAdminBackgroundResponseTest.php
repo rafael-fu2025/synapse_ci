@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Controllers\AdminCarouselController;
+use App\Controllers\BaseController;
 use App\Controllers\AnnouncementController;
 use App\Controllers\AuditController;
 use App\Controllers\QuestionBankController;
@@ -12,6 +13,7 @@ use App\Controllers\SurveyController;
 use App\Models\AuditEventModel;
 use App\Services\Audit\AuditService;
 use App\Services\CurrentTenant;
+use CodeIgniter\Config\Factories;
 use CodeIgniter\HTTP\IncomingRequest;
 use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\HTTP\Response;
@@ -34,12 +36,17 @@ final class ContentAdminBackgroundResponseTest extends CIUnitTestCase
         AdminCarouselController::class => '/admin/carousel',
     ];
 
+    private array $refreshEnv = [];
+    private array $refreshServer = [];
     private IncomingRequest $request;
 
     protected function setUp(): void
     {
         parent::setUp();
         helper(['url', 'form']);
+        $this->refreshEnv = $_ENV;
+        $this->refreshServer = $_SERVER;
+        $this->disableRefreshOwners();
         session()->remove(['success', 'error']);
     }
 
@@ -47,7 +54,36 @@ final class ContentAdminBackgroundResponseTest extends CIUnitTestCase
     {
         session()->remove(['success', 'error']);
         CurrentTenant::reset();
+        $_ENV = $this->refreshEnv;
+        $_SERVER = $this->refreshServer;
+        putenv('refreshRegions.enabled');
+        putenv('refreshRegions.owners');
+        Factories::reset('config');
         parent::tearDown();
+    }
+
+    private function disableRefreshOwners(): void
+    {
+        unset(
+            $_ENV['refreshRegions.enabled'],
+            $_ENV['refreshRegions.owners'],
+            $_SERVER['refreshRegions.enabled'],
+            $_SERVER['refreshRegions.owners'],
+        );
+        putenv('refreshRegions.enabled');
+        putenv('refreshRegions.owners');
+        Factories::reset('config');
+    }
+
+    private function enableRefreshOwners(string $owners): void
+    {
+        $_ENV['refreshRegions.enabled'] = 'true';
+        $_ENV['refreshRegions.owners'] = $owners;
+        $_SERVER['refreshRegions.enabled'] = 'true';
+        $_SERVER['refreshRegions.owners'] = $owners;
+        putenv('refreshRegions.enabled=true');
+        putenv('refreshRegions.owners=' . $owners);
+        Factories::reset('config');
     }
 
     private function controller(string $class, string $transport, string $feedback): object
@@ -70,7 +106,7 @@ final class ContentAdminBackgroundResponseTest extends CIUnitTestCase
         return $controller;
     }
 
-    private function invoke(object $controller, string $method, mixed ...$args): ResponseInterface
+    private function invoke(object $controller, string $method, mixed ...$args): mixed
     {
         return (new ReflectionClass($controller))->getMethod($method)->invoke($controller, ...$args);
     }
@@ -215,6 +251,141 @@ final class ContentAdminBackgroundResponseTest extends CIUnitTestCase
         } finally {
             $db->close();
         }
+    }
+
+    public function testAnnouncementSuccessIncludesRefreshDescriptorOnlyWhenItsOwnerIsEnabled(): void
+    {
+        $previousEnv = $_ENV['refreshRegions.enabled'] ?? null;
+        $previousOwners = $_ENV['refreshRegions.owners'] ?? null;
+        try {
+            $_ENV['refreshRegions.enabled'] = 'true';
+            $_ENV['refreshRegions.owners'] = 'announcements.staff.clinic';
+            $controller = $this->controller(AnnouncementController::class, 'xhr', 'toast');
+            service('security')->generateHash();
+            $descriptor = (new ReflectionClass(BaseController::class))->getMethod('refreshRegions')
+                ->invoke($controller, 'announcements.staff.clinic', ['announcements.list', 'announcements.read-history']);
+            $payload = $this->json($this->invoke($controller, 'success', 'Saved.', '/clinic/announcements', $descriptor), 200, true);
+
+            self::assertSame([
+                'mode' => 'regions',
+                'owner' => 'announcements.staff.clinic',
+                'regions' => ['announcements.list', 'announcements.read-history'],
+            ], $payload['refresh']);
+            self::assertSame(site_url('/clinic/announcements'), $payload['redirect']);
+        } finally {
+            if ($previousEnv === null) unset($_ENV['refreshRegions.enabled']); else $_ENV['refreshRegions.enabled'] = $previousEnv;
+            if ($previousOwners === null) unset($_ENV['refreshRegions.owners']); else $_ENV['refreshRegions.owners'] = $previousOwners;
+        }
+    }
+
+    public function testSurveyAndQuestionBankSuccessDescriptorsRequireEnabledOwnerAndToastTransport(): void
+    {
+        foreach ([
+            [SurveyController::class, 'surveys.staff', ['surveys.list'], '/guidance/surveys'],
+            [QuestionBankController::class, 'question-bank.list', ['results'], '/guidance/question-bank'],
+        ] as [$class, $owner, $regions, $target]) {
+            $this->enableRefreshOwners($owner);
+            foreach ([['toast', true], ['', false]] as [$feedback, $expected]) {
+                $controller = $this->controller($class, 'xhr', $feedback);
+                service('security')->generateHash();
+                $descriptor = $this->invoke($controller, $class === SurveyController::class ? 'staffRefresh' : 'listRefresh');
+                $payload = $this->json($this->invoke($controller, 'success', 'Saved.', $descriptor), 200, true);
+
+                if ($expected) {
+                    self::assertSame(['mode' => 'regions', 'owner' => $owner, 'regions' => $regions], $payload['refresh']);
+                } else {
+                    self::assertArrayNotHasKey('refresh', $payload);
+                }
+                self::assertSame(site_url($target), $payload['redirect']);
+            }
+
+            $this->disableRefreshOwners();
+            $controller = $this->controller($class, 'xhr', 'toast');
+            self::assertNull($this->invoke($controller, $class === SurveyController::class ? 'staffRefresh' : 'listRefresh'));
+        }
+    }
+
+    public function testAuditVerificationUsesNoneOnlyForSuccessfulToastRequestWithEnabledOwner(): void
+    {
+        $this->enableRefreshOwners('audit.ledger');
+        $controller = $this->controller(AuditController::class, 'xhr', 'toast');
+        self::assertSame(['mode' => 'none'], $this->invoke($controller, 'verificationRefresh'));
+
+        $controller = $this->controller(AuditController::class, 'xhr', '');
+        self::assertNull($this->invoke($controller, 'verificationRefresh'));
+        $this->disableRefreshOwners();
+        $controller = $this->controller(AuditController::class, 'xhr', 'toast');
+        self::assertNull($this->invoke($controller, 'verificationRefresh'));
+    }
+
+    public function testCarouselRegionalAndReorderDescriptorsRequireEnabledOwnerAndToastTransport(): void
+    {
+        $this->enableRefreshOwners('carousel.admin');
+        $controller = $this->controller(AdminCarouselController::class, 'xhr', 'toast');
+        service('security')->generateHash();
+        self::assertSame([
+            'mode' => 'regions', 'owner' => 'carousel.admin', 'regions' => ['carousel.slides'],
+        ], $this->invoke($controller, 'regionalRefresh'));
+        self::assertSame(['mode' => 'none'], $this->invoke($controller, 'reorderRefresh'));
+
+        $payload = $this->json($this->invoke(
+            $controller,
+            'respond',
+            'Saved.',
+            true,
+            422,
+            $this->invoke($controller, 'regionalRefresh')
+        ), 200, true);
+        self::assertSame([
+            'mode' => 'regions', 'owner' => 'carousel.admin', 'regions' => ['carousel.slides'],
+        ], $payload['refresh']);
+
+        $reorder = $this->json($this->invoke(
+            $controller,
+            'respondToReorder',
+            'Slide order updated.',
+            true,
+            422,
+            $this->invoke($controller, 'reorderRefresh')
+        ), 200, true);
+        self::assertSame(['mode' => 'none'], $reorder['refresh']);
+        self::assertArrayNotHasKey('redirect', $reorder);
+
+        $controller = $this->controller(AdminCarouselController::class, 'xhr', '');
+        self::assertNull($this->invoke($controller, 'regionalRefresh'));
+        self::assertNull($this->invoke($controller, 'reorderRefresh'));
+    }
+
+    public function testRegionalOwnersAndRegionsAreAlwaysPresentAndCarouselRegionContainsNoExecutableMarkup(): void
+    {
+        $contracts = [
+            'surveys/index.php' => ['surveys.staff', ['surveys.list']],
+            'surveys/responses.php' => ['survey-responses.', ['submissions']],
+            'question_bank/index.php' => ['question-bank.list', []],
+            'question_bank/show.php' => ['question-bank.history.', ['selected-revision']],
+            'admin/audit.php' => ['audit.ledger', ['filter-feedback', 'results']],
+            'admin/carousel/index.php' => ['carousel.admin', ['carousel.slides']],
+        ];
+        foreach ($contracts as $view => [$owner, $regions]) {
+            $source = file_get_contents(APPPATH . 'Views/' . $view);
+            self::assertStringContainsString('data-refresh-owner=', $source, $view);
+            self::assertStringContainsString($owner, $source, $view);
+            self::assertSame(1, substr_count($source, 'data-refresh-owner='), $view);
+            foreach ($regions as $region) {
+                self::assertSame(1, substr_count($source, 'data-refresh-region="' . $region . '"'), $view . ':' . $region);
+            }
+        }
+        $questionBank = file_get_contents(APPPATH . 'Views/question_bank/index.php');
+        self::assertSame(1, substr_count($questionBank, 'data-filter-region="results"'));
+
+        $carousel = file_get_contents(APPPATH . 'Views/admin/carousel/index.php');
+        $start = strpos($carousel, '<div data-refresh-region="carousel.slides">');
+        $end = $start === false ? false : strpos($carousel, '</section>', $start);
+        self::assertNotFalse($start);
+        self::assertNotFalse($end);
+        $region = substr($carousel, $start, $end - $start);
+        self::assertDoesNotMatchRegularExpression('/<(?:script|style|iframe|object|embed|base|link)\\b/i', $region);
+        self::assertDoesNotMatchRegularExpression('/\\son[a-z]+\\s*=/i', $region);
     }
 
     public function testOnlyTheSevenRequestedNativeActionsAreMarked(): void

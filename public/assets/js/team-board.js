@@ -97,7 +97,8 @@
         const response = await fetch(url.href, {
           method: 'POST', body, credentials: 'same-origin', redirect: 'error', signal: request.signal,
           headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest',
-            'X-Synapse-Feedback': 'toast', ...window.SynapseCsrf.headers() }
+            'X-Synapse-Feedback': 'toast', 'X-Synapse-Refresh-Owner': board.closest('[data-refresh-owner]')?.dataset.refreshOwner || '',
+            ...window.SynapseCsrf.headers() }
         });
         if (stopped) return;
         window.SynapseCsrf.fromResponse(response);
@@ -117,7 +118,9 @@
         posting = false;
         lock(false);
         clearTimeout(timeout);
-        await mutations.refresh(location.href, payload.message || 'Task status updated.', { key: 'team-task-move' });
+        const refreshOpts = { key: 'team-task-move' };
+        if (payload.refresh) refreshOpts.descriptor = payload.refresh;
+        await mutations.refresh(location.href, payload.message || 'Task status updated.', refreshOpts);
       } catch (_) {
         if (stopped) return;
         stale = true;

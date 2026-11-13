@@ -10,7 +10,7 @@ const os = require('node:os');
 const http = require('node:http');
 const { once } = require('node:events');
 const root = path.resolve(__dirname, '../..');
-const { chromium } = require(path.join(root, 'writable/widget-test-tools/node_modules/playwright'));
+const { chromium } = require('playwright');
 let browser, server, origin, modalMarkup, pageScript;
 const people = [
   { id: 11, first_name: 'Ada', last_name: 'Student', mis_id: 'S001', kind: 'student' },
@@ -90,7 +90,7 @@ after(async () => {
       await new Promise(resolve => server.close(resolve));
     }
   }
-}, { timeout: 20000 });
+}, { timeout: 40000 });
 
 async function pageFor(t, acceptDialogs = false) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });

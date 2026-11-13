@@ -24,7 +24,10 @@ $followups = $package['followups'] ?? [];
 $outcomes = $outcomes ?? ['closure_disposition' => null, 'completion_notes' => []];
 ?>
 
-<div class="guidance-case-workspace" data-guidance-case="<?= (int) $case['id'] ?>">
+<div class="guidance-case-workspace" data-guidance-case="<?= (int) $case['id'] ?>"
+     data-refresh-owner="guidance.case.<?= (int) $case['id'] ?>"
+     data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<div data-refresh-region="workspace" data-refresh-heading tabindex="-1">
 <?php if (!empty($oversightMode)): ?>
   <div class="alert alert-info">Oversight mode · This access has been audited.</div>
 <?php elseif ($decryptedNote !== null && !empty($noteReadAudited)): ?>
@@ -38,7 +41,7 @@ $outcomes = $outcomes ?? ['closure_disposition' => null, 'completion_notes' => [
         <div class="gc-person-icon" aria-hidden="true">
           <img src="<?= esc(site_url('/guidance/cases/' . (int) $case['id'] . '/photo'), 'attr') ?>"
                alt="" width="48" height="48"
-               onerror="this.onerror=null;this.src='<?= esc(\App\Services\ProfileAvatar::dataUri($patient), 'attr') ?>'">
+               data-avatar-fallback="<?= esc(\App\Services\ProfileAvatar::dataUri($patient), 'attr') ?>">
         </div>
         <div>
           <div class="d-flex flex-wrap align-items-center gap-2 gc-case-heading">
@@ -337,6 +340,7 @@ $outcomes = $outcomes ?? ['closure_disposition' => null, 'completion_notes' => [
     </div>
 
   </div>
+</div>
 </div>
 </div>
 <?= $this->endSection() ?>

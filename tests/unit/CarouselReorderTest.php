@@ -9,6 +9,7 @@ use App\Models\CarouselSlideModel;
 use App\Services\Carousel\CarouselService;
 use App\Services\CurrentTenant;
 
+use CodeIgniter\Config\Factories;
 use CodeIgniter\HTTP\IncomingRequest;
 use CodeIgniter\HTTP\RedirectResponse;
 use CodeIgniter\HTTP\Response;
@@ -26,10 +27,23 @@ final class CarouselReorderTest extends CIUnitTestCase
 
     private AdminCarouselController $controller;
     private IncomingRequest $request;
+    private array $refreshEnv = [];
+    private array $refreshServer = [];
 
     protected function setUp(): void
     {
         parent::setUp();
+        $this->refreshEnv = $_ENV;
+        $this->refreshServer = $_SERVER;
+        unset(
+            $_ENV['refreshRegions.enabled'],
+            $_ENV['refreshRegions.owners'],
+            $_SERVER['refreshRegions.enabled'],
+            $_SERVER['refreshRegions.owners'],
+        );
+        putenv('refreshRegions.enabled');
+        putenv('refreshRegions.owners');
+        Factories::reset('config');
         CurrentTenant::set(1);
         session()->remove(['success', 'error']);
         $this->db = Database::connect([
@@ -66,6 +80,11 @@ final class CarouselReorderTest extends CIUnitTestCase
     {
         $this->db->close();
         CurrentTenant::reset();
+        $_ENV = $this->refreshEnv;
+        $_SERVER = $this->refreshServer;
+        putenv('refreshRegions.enabled');
+        putenv('refreshRegions.owners');
+        Factories::reset('config');
         parent::tearDown();
     }
 
@@ -109,6 +128,21 @@ final class CarouselReorderTest extends CIUnitTestCase
         service('security')->generateHash();
         $payload = $this->assertJsonResponse($this->reorder(['order' => ' 12,0,-3,11 ']), 200, true);
         self::assertSame('Slide order updated.', $payload['message']);
+        self::assertSame([2, 1, 70], $this->orders());
+    }
+
+    public function testEnabledToastReorderReturnsNoneWithoutNavigationOrFlash(): void
+    {
+        $_ENV['refreshRegions.enabled'] = $_SERVER['refreshRegions.enabled'] = 'true';
+        $_ENV['refreshRegions.owners'] = $_SERVER['refreshRegions.owners'] = 'carousel.admin';
+        putenv('refreshRegions.enabled=true');
+        putenv('refreshRegions.owners=carousel.admin');
+        Factories::reset('config');
+        $this->request->setHeader('X-Synapse-Feedback', 'toast');
+
+        $payload = $this->assertJsonResponse($this->reorder(['order' => '12,11']), 200, true);
+
+        self::assertSame(['mode' => 'none'], $payload['refresh']);
         self::assertSame([2, 1, 70], $this->orders());
     }
 

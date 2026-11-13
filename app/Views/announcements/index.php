@@ -4,7 +4,10 @@
 <a class="btn btn-primary btn-sm" href="<?= esc($baseUrl . '/create') ?>" data-app-modal-open><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New draft</a>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
+<?php $refreshOwner = 'announcements.staff.' . $unit; ?>
+<section data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <p class="text-muted"><?= esc(ucfirst($unit)) ?> announcements only. Published content is immutable; archive and create a new announcement for corrections.</p>
+<div data-refresh-region="announcements.list">
 <div class="card"><div class="card-body pt-3"><div class="table-responsive"><table class="table align-middle">
 <thead><tr><th>Announcement</th><th>Audience</th><th>Status / visibility (Asia/Manila)</th><th>Actions</th></tr></thead><tbody>
 <?php foreach ($announcements as $notice): $url = $baseUrl . '/' . (int) $notice['id']; ?>
@@ -28,6 +31,8 @@
     'paginationExtraQuery' => isset($readHistory) ? ['reads' => $readHistory['announcement']['id'], 'read_page' => $readHistory['pagination']['page']] : [],
     'paginationLabel' => 'Announcement pages',
 ], ['saveData' => false]) ?>
+</div>
+<div data-refresh-region="announcements.read-history">
 <?php if (isset($readHistory)): ?>
 <section class="card"><div class="card-body pt-3"><h2 class="h5">Read history: <?= esc($readHistory['announcement']['title']) ?></h2><p class="text-muted small">A read marker is not acknowledgement or proof of comprehension.</p>
 <table class="table"><thead><tr><th>Person</th><th>Marked read at (Asia/Manila)</th></tr></thead><tbody><?php foreach ($readHistory['reads'] as $read): ?><tr><td><?= esc($read['first_name'] . ' ' . $read['last_name']) ?></td><td><?= esc($announcementDate($read['read_at'])) ?></td></tr><?php endforeach; ?><?php if ($readHistory['reads'] === []): ?><tr><td colspan="2">No read markers yet.</td></tr><?php endif; ?></tbody></table>
@@ -38,4 +43,6 @@
 ], ['saveData' => false]) ?>
 </div></section>
 <?php endif; ?>
+</div>
+</section>
 <?= $this->endSection() ?>

@@ -209,6 +209,10 @@ __pycache__/
 !/tests/unit/PushLanScopeMigrationTest.php
 !/tests/unit/PushLanTransportTest.php
 !/tests/unit/QueueAppointmentInvalidationTest.php
+# Named-region rollout contracts ship with their implementation.
+!/tests/unit/RefreshRegionsConfigTest.php
+!/tests/unit/RefreshRegionDescriptorTest.php
+!/tests/unit/ClinicalRefreshRegionsTest.php
 !/tests/_support/
 /tests/_support/*
 !/tests/_support/api-token-race-worker.php
@@ -225,6 +229,9 @@ __pycache__/
 /tests/browser/*
 !/tests/browser/package.json
 !/tests/browser/package-lock.json
+!/tests/browser/refresh-regions.test.cjs
+!/tests/browser/announcement-refresh-regions.test.cjs
+!/tests/browser/clinical-refresh-regions.test.cjs
 /papers/
 
 #-------------------------

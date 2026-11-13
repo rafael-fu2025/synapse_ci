@@ -82,7 +82,7 @@ final class AdminCarouselController extends BaseController
         try {
             $this->carousel->createSlide($data, $lightFile, $darkFile);
 
-            return $this->respond('Carousel slide created successfully.');
+            return $this->respond('Carousel slide created successfully.', true, 422, $this->regionalRefresh());
         } catch (Exception $e) {
             return $this->respond('Unable to save slide: ' . $e->getMessage(), false);
         }
@@ -158,7 +158,7 @@ final class AdminCarouselController extends BaseController
             }
             $this->carousel->updateSlide($id, $data, $lightFile, $darkFile, $actor);
 
-            return $this->respond('Carousel slide updated successfully.');
+            return $this->respond('Carousel slide updated successfully.', true, 422, $this->regionalRefresh());
         } catch (RuntimeException $e) {
             return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
         } catch (Exception $e) {
@@ -174,7 +174,7 @@ final class AdminCarouselController extends BaseController
         try {
             $slide = $this->carousel->toggleActive($id, $this->actor());
             $state = ((int) $slide['is_active'] === 1) ? 'Slide is now visible.' : 'Slide is now hidden.';
-            return $this->respond($state);
+            return $this->respond($state, true, 422, $this->regionalRefresh());
         } catch (RuntimeException $e) {
             return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
         } catch (Throwable $e) {
@@ -199,7 +199,7 @@ final class AdminCarouselController extends BaseController
 
         try {
             if ($this->carousel->deleteSlide($id, $actor)) {
-                return $this->respond('Slide deleted.');
+                return $this->respond('Slide deleted.', true, 422, $this->regionalRefresh());
             }
         } catch (RuntimeException $e) {
             return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
@@ -255,18 +255,20 @@ final class AdminCarouselController extends BaseController
             return $this->respondToReorder('Unable to update slide order. Please try again.', false, 500);
         }
 
-        return $this->respondToReorder('Slide order updated.');
+        return $this->respondToReorder('Slide order updated.', true, 422, $this->reorderRefresh());
     }
 
-    private function respondToReorder(string $message, bool $success = true, int $errorStatus = 422)
+    private function respondToReorder(string $message, bool $success = true, int $errorStatus = 422, ?array $refresh = null)
     {
         if ($this->request->isAJAX()) {
             // Reordering stays on the current page; do not queue a later flash notice.
-            return $this->response->setStatusCode($success ? 200 : $errorStatus)->setJSON([
+            $payload = [
                 'success' => $success,
                 'message' => $message,
                 'csrf'    => ['name' => csrf_token(), 'hash' => csrf_hash()],
-            ]);
+            ];
+            if ($success && $refresh !== null) { $payload['refresh'] = $refresh; }
+            return $this->response->setStatusCode($success ? 200 : $errorStatus)->setJSON($payload);
         }
 
         return redirect()->to('/admin/carousel')->with($success ? 'success' : 'error', $message);
@@ -280,7 +282,7 @@ final class AdminCarouselController extends BaseController
      *
      * @return RedirectResponse|ResponseInterface
      */
-    private function respond(string $message, bool $success = true, int $errorStatus = 422)
+    private function respond(string $message, bool $success = true, int $errorStatus = 422, ?array $refresh = null)
     {
         if ($this->request->isAJAX()) {
             // Legacy uploads navigate after saving; toast-owned requests refresh in place.
@@ -288,18 +290,40 @@ final class AdminCarouselController extends BaseController
                 session()->setFlashdata('success', $message);
             }
 
+            $payload = [
+                'success'  => $success,
+                'message'  => $message,
+                'redirect' => site_url('/admin/carousel'),
+                'csrf'     => ['name' => csrf_token(), 'hash' => csrf_hash()],
+            ];
+            if ($refresh !== null) { $payload['refresh'] = $refresh; }
             return $this->response
                 ->setStatusCode($success ? 200 : $errorStatus)
-                ->setJSON([
-                    'success'  => $success,
-                    'message'  => $message,
-                    'redirect' => site_url('/admin/carousel'),
-                    'csrf'     => ['name' => csrf_token(), 'hash' => csrf_hash()],
-                ]);
+                ->setJSON($payload);
         }
 
         $redirect = redirect()->to('/admin/carousel');
         return $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast'
             ? $redirect : $redirect->with($success ? 'success' : 'error', $message);
+    }
+
+    private function regionalRefresh(): ?array
+    {
+        if (!$this->refreshEnabled()) { return null; }
+
+        return $this->refreshRegions('carousel.admin', ['carousel.slides']);
+    }
+
+    private function reorderRefresh(): ?array
+    {
+        if (!$this->refreshEnabled()) { return null; }
+
+        return $this->refreshNone();
+    }
+
+    private function refreshEnabled(): bool
+    {
+        return config(\Config\RefreshRegions::class)->enables('carousel.admin')
+            && $this->request->getHeaderLine('X-Synapse-Feedback') === 'toast';
     }
 }

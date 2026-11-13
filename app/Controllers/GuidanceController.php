@@ -266,10 +266,10 @@ final class GuidanceController extends BaseController
         }
 
         $case = $this->caseService->createCase($personId, $userId, $title, $category, $summaryNotes);
-        $redirect = site_url('/guidance/cases/' . $case['case']['id']);
+        $redirect = '/guidance/cases/' . $case['case']['id'];
         $successMsg = "Case {$case['case']['case_number']} opened successfully.";
 
-        return [$redirect, $successMsg];
+        return [$redirect, $successMsg, $this->navigationRefresh($redirect, 'guidance.case-list')];
     }
 
     /**
@@ -317,7 +317,7 @@ final class GuidanceController extends BaseController
     {
         return $this->mutate(function (int $userId) use ($caseId): array {
             $this->caseService->openSession($caseId, $userId, $this->postedSessionType());
-            return ['/guidance/cases/' . $caseId, 'Counseling session opened.'];
+            return ['/guidance/cases/' . $caseId, 'Counseling session opened.', $this->caseRefresh($caseId)];
         });
     }
 
@@ -327,7 +327,7 @@ final class GuidanceController extends BaseController
             $this->requireConfirmation();
             $this->caseService->closeCase($caseId, confirmed: true,
                 closureDisposition: $this->postedOutcome('closure_disposition'));
-            return ['/guidance/cases/' . $caseId, 'Case closed.'];
+            return ['/guidance/cases/' . $caseId, 'Case closed.', $this->caseRefresh($caseId)];
         });
     }
 
@@ -336,7 +336,7 @@ final class GuidanceController extends BaseController
         return $this->mutate(function (int $userId) use ($caseId): array {
             $this->requireConfirmation();
             $this->caseService->monitorCase($caseId);
-            return ['/guidance/cases/' . $caseId, 'Case moved to monitoring.'];
+            return ['/guidance/cases/' . $caseId, 'Case moved to monitoring.', $this->caseRefresh($caseId)];
         });
     }
 
@@ -413,7 +413,7 @@ final class GuidanceController extends BaseController
                 $msg = 'Draft notes autosaved.';
             }
 
-            return ['/guidance/cases/' . $session['case_id'], $msg];
+            return ['/guidance/cases/' . $session['case_id'], $msg, $this->caseRefresh((int) $session['case_id'])];
         });
     }
 
@@ -425,7 +425,7 @@ final class GuidanceController extends BaseController
         return $this->mutate(function (int $userId) use ($sessionId): array {
             $session = $this->caseService->getSession($sessionId);
             $this->caseService->closeSession($sessionId);
-            return ['/guidance/cases/' . $session['case_id'], 'Session closed successfully.'];
+            return ['/guidance/cases/' . $session['case_id'], 'Session closed successfully.', $this->caseRefresh((int) $session['case_id'])];
         });
     }
 
@@ -444,7 +444,7 @@ final class GuidanceController extends BaseController
             // this check intentionally emits no oversight-read audit event.
             $this->caseService->assertCaseReadable($caseId);
             $this->caseService->addFollowup($caseId, null, $dueDate, $actionPlan);
-            return ['/guidance/cases/' . $caseId, 'Action item assigned.'];
+            return ['/guidance/cases/' . $caseId, 'Action item assigned.', $this->caseRefresh($caseId)];
         });
     }
 
@@ -459,7 +459,7 @@ final class GuidanceController extends BaseController
                 throw new \RuntimeException('Action item not found.', 404);
             }
             $this->caseService->completeFollowup($followupId, $this->postedOutcome('completion_notes'));
-            return ['/guidance/cases/' . $followup['case_id'], 'Commitment marked as completed.'];
+            return ['/guidance/cases/' . $followup['case_id'], 'Commitment marked as completed.', $this->caseRefresh((int) $followup['case_id'])];
         });
     }
 
@@ -468,7 +468,7 @@ final class GuidanceController extends BaseController
         return $this->mutate(function (int $userId) use ($followupId): array {
             $this->requireConfirmation();
             $followup = $this->caseService->missFollowup($followupId);
-            return ['/guidance/cases/' . $followup['case_id'], 'Commitment explicitly marked missed.'];
+            return ['/guidance/cases/' . $followup['case_id'], 'Commitment explicitly marked missed.', $this->caseRefresh((int) $followup['case_id'])];
         });
     }
 
@@ -482,11 +482,13 @@ final class GuidanceController extends BaseController
             // only opens a picker, without changing the ticket, case or session.
             if ($this->request->getPost('session_type') === null) {
                 $this->caseService->getTicketForSessionSelection($queueEntryId);
-                return ['/guidance/cases/choose-for-ticket/' . $queueEntryId, 'Choose a session type to start or resume.'];
+                return ['/guidance/cases/choose-for-ticket/' . $queueEntryId, 'Choose a session type to start or resume.',
+                    $this->navigationRefresh('/guidance/cases/choose-for-ticket/' . $queueEntryId, 'guidance.case-list')];
             }
             // The service scopes the guidance ticket and selects an owned case atomically.
             $session = $this->caseService->openSessionForTicket($queueEntryId, $userId, $this->canReadAnyCase(), $this->postedSessionType());
-            return ['/guidance/cases/' . $session['case_id'], 'Counseling session opened.'];
+            return ['/guidance/cases/' . $session['case_id'], 'Counseling session opened.',
+                $this->navigationRefresh('/guidance/cases/' . $session['case_id'], 'guidance.case.' . $session['case_id'])];
         }, '/guidance/queue');
     }
 
@@ -555,10 +557,29 @@ final class GuidanceController extends BaseController
         }];
     }
 
+    private function caseRefresh(int $caseId): ?array
+    {
+        $owner = 'guidance.case.' . $caseId;
+        if (!config(\Config\RefreshRegions::class)->enables($owner)) {
+            return null;
+        }
+
+        return $this->refreshRegions($owner, ['workspace'], site_url('/guidance/cases/' . $caseId));
+    }
+
+    private function navigationRefresh(string $url, string $rolloutOwner): ?array
+    {
+        if (!config(\Config\RefreshRegions::class)->enables($rolloutOwner)) {
+            return null;
+        }
+
+        return $this->refreshNavigation(site_url($url));
+    }
+
     private function mutate(callable $operation, string $fallback = '/guidance/cases')
     {
         try {
-            [$url, $message] = $operation($this->actorId());
+            [$url, $message, $refresh] = array_pad($operation($this->actorId()), 3, null);
         } catch (\Throwable $error) {
             [$status, $message] = $this->safeFailure($error, 'mutation');
             if ($this->wantsJson()) {
@@ -574,9 +595,13 @@ final class GuidanceController extends BaseController
             if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
                 session()->setFlashdata('success', $message);
             }
+            $payload = ['success' => true, 'message' => $message, 'redirect' => $url,
+                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+            if ($refresh !== null) {
+                $payload['refresh'] = $refresh;
+            }
             return $this->response->setStatusCode(200)->setHeader('Cache-Control', 'no-store')
-                ->setJSON(['success' => true, 'message' => $message, 'redirect' => $url,
-                    'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+                ->setJSON($payload);
         }
         return redirect()->to($url)->with('success', $message);
     }

@@ -4,9 +4,10 @@
 <a class="btn btn-primary btn-sm" href="<?= esc($baseUrl . '/create') ?>" data-app-modal-open>Add bank question</a>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
+<section data-refresh-owner="question-bank.list" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <p class="text-muted">Reusable Guidance questions. Bank edits create revisions; existing survey copies never change. Audience labels are guidance for authors, not automatic survey targeting.</p>
 <div class="alert alert-warning small">Review sensitive wellbeing questions before reuse. This library does not validate clinical screening tools or provide diagnostic scoring. Respect instrument licensing and administration requirements.</div>
-<div class="card" data-live-filters data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="question-bank"><div class="card-body pt-3">
+<div class="card" data-live-filters data-mutation-refresh data-filter-url="<?= esc($baseUrl) ?>" data-filter-key="question-bank"><div class="card-body pt-3">
 <form method="GET" action="<?= esc($baseUrl) ?>" class="row g-2 mb-3" role="search" data-filter-form>
 <div class="col-md-4"><label for="bank-search" class="form-label">Search questions</label><input id="bank-search" class="form-control" name="q" maxlength="100" value="<?= esc($search) ?>" placeholder="Question text or category"></div>
 <div class="col-md-2"><label for="bank-category" class="form-label">Category</label><input id="bank-category" class="form-control" name="category" maxlength="80" value="<?= esc($category) ?>" placeholder="Exact category"></div>
@@ -15,7 +16,7 @@
 <div class="col-md-2 d-flex align-items-end gap-2"><button type="submit" class="btn btn-primary">Search</button><a href="<?= esc($baseUrl) ?>" class="btn btn-outline-secondary" data-filter-reset>Clear</a></div>
 </form>
 <?= view('partials/live_filter_feedback') ?>
-<div data-filter-region="results">
+<div data-filter-region="results" data-refresh-region="results">
 <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Question</th><th>Category / audience</th><th>Revision</th><th>Actions</th></tr></thead><tbody>
 <?php foreach ($items as $item): $url = $baseUrl . '/' . (int) $item['id']; ?>
 <tr><td><strong><?= esc($item['question']['label']) ?></strong><small class="d-block text-muted"><?= esc(ucfirst($item['question']['type'])) ?> · <?= $item['question']['required'] ? 'Required by default' : 'Optional by default' ?></small>
@@ -33,4 +34,5 @@
     'paginationExtraQuery' => ['category' => $category, 'audience' => $audience],
     'paginationLiveFilters' => true, 'paginationLabel' => 'Question bank pages',
 ], ['saveData' => false]) ?></div></div></div>
+</section>
 <?= $this->endSection() ?>

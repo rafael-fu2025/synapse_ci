@@ -12,6 +12,9 @@
   <meta name="csrf-token" content="<?= csrf_hash() ?>">
   <meta name="csrf-header" content="<?= csrf_header() ?>">
   <meta name="synapse-login-url" content="<?= esc(site_url('auth/login'), 'attr') ?>">
+  <?php $refreshRegions = config(\Config\RefreshRegions::class); ?>
+  <meta name="synapse-refresh-regions-enabled" content="<?= $refreshRegions->enabled ? '1' : '0' ?>">
+  <meta name="synapse-refresh-region-owners" content="<?= esc(implode(' ', $refreshRegions->owners), 'attr') ?>">
   <?php if (config(\Config\Realtime::class)->enabled): ?>
     <meta name="synapse-realtime-ticket-url" content="<?= esc(site_url('realtime/ticket'), 'attr') ?>">
   <?php endif; ?>
@@ -213,8 +216,9 @@
   <script src="<?= base_url('assets/js/responsive-tables.js') ?>"></script>
   <script src="<?= base_url('assets/js/core/main.js') ?>"></script>
   <script src="<?= base_url('assets/js/page-lifecycle.js') ?>"></script>
-  <script src="<?= base_url('assets/js/team-chat.js') ?>"></script>
   <script src="<?= base_url('assets/js/navigation.js') ?>"></script>
+  <script src="<?= base_url('assets/js/refresh-regions.js') ?>"></script>
+  <script src="<?= base_url('assets/js/team-chat.js') ?>"></script>
   <script src="<?= base_url('assets/js/background-actions.js') ?>"></script>
   <script src="<?= base_url('assets/js/global-search.js') ?>"></script>
 

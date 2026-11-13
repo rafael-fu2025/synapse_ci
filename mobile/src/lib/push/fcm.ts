@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 export type PushPlatform = 'android' | 'ios';
 
 export interface PushMessage {
+  messageId?: string;
   notification?: { title?: string; body?: string };
   data?: Record<string, string>;
 }
@@ -35,6 +36,7 @@ interface PermissionResponse {
 interface PermissionsModule {
   checkNotifications(): Promise<PermissionResponse>;
   requestNotifications(): Promise<PermissionResponse>;
+  openSettings(type: 'notifications'): Promise<void>;
 }
 
 let messagingModule: MessagingModule | null | undefined;
@@ -75,31 +77,60 @@ export function currentPushPlatform(): PushPlatform {
 
 export type PushPermission = 'granted' | 'denied' | 'blocked' | 'unavailable';
 
-/**
- * Ask the platform for the notification permission.
- *
- * A device that has not been granted the permission is never worth a token.
- */
-export async function requestPushPermission(isCurrent: () => boolean = () => true): Promise<PushPermission> {
-  const permissions = loadPermissionsModule();
-  if (!permissions || !isCurrent()) {
-    return 'unavailable';
-  }
+function permissionStatus(status: string): PushPermission {
+  if (status === 'granted' || status === 'limited') { return 'granted'; }
+  if (status === 'blocked') { return 'blocked'; }
+  return status === 'denied' ? 'denied' : 'unavailable';
+}
+
+/** Read permission without prompting, including when returning from Android settings. */
+export async function checkPushPermission(): Promise<PushPermission> {
   try {
-    const current = await permissions.checkNotifications();
-    if (!isCurrent()) { return 'unavailable'; }
-    if (current.status === 'granted' || current.status === 'limited') {
-      return 'granted';
+    const permissions = loadPermissionsModule();
+    return permissions ? permissionStatus((await permissions.checkNotifications()).status) : 'unavailable';
+  } catch { return 'unavailable'; }
+}
+
+let permissionRequest: Promise<PushPermission> | null = null;
+const permissionCallers = new Set<{ isCurrent: () => boolean; onRequest?: () => void }>();
+
+/** Native permission dialogs are device-wide; concurrent callers share one request. */
+export async function requestPushPermission(
+  isCurrent: () => boolean = () => true,
+  onRequest?: () => void,
+): Promise<PushPermission> {
+  const permissions = loadPermissionsModule();
+  if (!permissions || !isCurrent()) { return 'unavailable'; }
+  const caller = { isCurrent, onRequest };
+  permissionCallers.add(caller);
+  try {
+    if (!permissionRequest) {
+      const pending = (async (): Promise<PushPermission> => {
+        try {
+          const current = permissionStatus((await permissions.checkNotifications()).status);
+          const active = [...permissionCallers].filter(value => value.isCurrent());
+          if (!active.length) { return 'unavailable'; }
+          if (current !== 'denied') { return current; }
+          for (const value of active) { value.onRequest?.(); }
+          return permissionStatus((await permissions.requestNotifications()).status);
+        } catch { return 'unavailable'; }
+      })();
+      permissionRequest = pending;
+      pending.finally(() => { if (permissionRequest === pending) { permissionRequest = null; } });
     }
-    const requested = await permissions.requestNotifications();
-    if (!isCurrent()) { return 'unavailable'; }
-    if (requested.status === 'granted' || requested.status === 'limited') {
-      return 'granted';
-    }
-    return requested.status === 'blocked' ? 'blocked' : 'denied';
-  } catch {
-    return 'unavailable';
-  }
+    const result = await permissionRequest;
+    return isCurrent() ? result : 'unavailable';
+  } finally { permissionCallers.delete(caller); }
+}
+
+/** Let the user change a previously denied permission/channel; never alter it ourselves. */
+export async function openPushSettings(): Promise<boolean> {
+  try {
+    const permissions = loadPermissionsModule();
+    if (!permissions) { return false; }
+    await permissions.openSettings('notifications');
+    return true;
+  } catch { return false; }
 }
 
 /** The device's messaging token, or null when the platform cannot produce one. */

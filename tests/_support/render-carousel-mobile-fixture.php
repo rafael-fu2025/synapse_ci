@@ -11,6 +11,10 @@ $fixture = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERRO
 require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Test/bootstrap.php';
 // The fixture has no realtime service; leave all production shell markup/assets intact.
 config(\Config\Realtime::class)->enabled = false;
+$_ENV['refreshRegions.enabled'] = 'true';
+$_ENV['refreshRegions.owners'] = 'carousel.admin';
+putenv('refreshRegions.enabled=true');
+putenv('refreshRegions.owners=carousel.admin');
 $app = config('App');
 $app->baseURL = $fixture['origin'] . '/';
 $app->indexPage = '';
@@ -36,4 +40,9 @@ foreach ([17, 42, 93] as $index => $id) {
 if (!empty($fixture['empty'])) {
     $slides = [];
 }
-echo view('admin/carousel/index', ['title' => 'Carousel Slides', 'slides' => $slides]);
+echo view('admin/carousel/index', [
+    'title' => 'Carousel Slides',
+    'slides' => $slides,
+    'protectedSlides' => [],
+    'isSuperadmin' => true,
+]);

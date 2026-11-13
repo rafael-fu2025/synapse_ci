@@ -49,7 +49,7 @@ final class QuestionBankController extends BaseController
     {
         return $this->respond(function () {
             (new QuestionBankService())->create($this->input());
-            return $this->success('Question added to the bank.');
+            return $this->success('Question added to the bank.', $this->listRefresh());
         });
     }
 
@@ -57,7 +57,7 @@ final class QuestionBankController extends BaseController
     {
         return $this->respond(function () use ($id) {
             (new QuestionBankService())->update($id, $this->input());
-            return $this->success('New question revision saved. Existing survey copies are unchanged.');
+            return $this->success('New question revision saved. Existing survey copies are unchanged.', $this->listRefresh());
         });
     }
 
@@ -65,7 +65,7 @@ final class QuestionBankController extends BaseController
     {
         return $this->respond(function () use ($id) {
             (new QuestionBankService())->archive($id, $this->request->getPost('version'));
-            return $this->success('Question archived. Existing survey copies and revision history remain available.');
+            return $this->success('Question archived. Existing survey copies and revision history remain available.', $this->listRefresh());
         });
     }
 
@@ -83,14 +83,27 @@ final class QuestionBankController extends BaseController
         return $input;
     }
 
-    private function success(string $message)
+    private function success(string $message, ?array $refresh = null)
     {
         if ($this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') {
             session()->setFlashdata('success', $message);
         }
-        if ($this->json()) return $this->response->setJSON(['success' => true, 'message' => $message,
-            'redirect' => site_url('guidance/question-bank'), 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+        if ($this->json()) {
+            $payload = ['success' => true, 'message' => $message,
+                'redirect' => site_url('guidance/question-bank'), 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
+            if ($refresh !== null) { $payload['refresh'] = $refresh; }
+            return $this->response->setJSON($payload);
+        }
         return redirect()->to(site_url('guidance/question-bank'))->setHeader('Cache-Control', 'private, no-store');
+    }
+
+    private function listRefresh(): ?array
+    {
+        $owner = 'question-bank.list';
+        if (!config(\Config\RefreshRegions::class)->enables($owner)
+            || $this->request->getHeaderLine('X-Synapse-Feedback') !== 'toast') { return null; }
+
+        return $this->refreshRegions($owner, ['results']);
     }
 
     private function json(): bool

@@ -45,6 +45,11 @@ for ($id = 1; $id <= 63; $id++) {
         'near_expiry_stock' => $id % 4 === 0 ? 4 : 0, 'low_stock' => $active && $id % 2 === 0];
 }
 $patient = $fixture['kind'] === 'patients';
+if ($fixture['kind'] === 'inventory') {
+    $refreshRegions = config(\Config\RefreshRegions::class);
+    $refreshRegions->enabled = true;
+    $refreshRegions->owners = ['inventory.catalog'];
+}
 $baseUrl = site_url($patient ? '/clinic/patients' : '/clinic/inventory');
 $data = ['title' => 'Live Table Fixture', 'pageTitle' => $patient ? 'Patient Registry' : 'Medicine Inventory',
     'baseUrl' => $baseUrl, 'canManage' => $profile === 'manager', 'canWrite' => $profile !== 'reader',
