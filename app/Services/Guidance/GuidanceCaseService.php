@@ -11,7 +11,6 @@ use App\Models\EmployeeProfileModel;
 use App\Models\GuidanceFollowupModel;
 use App\Models\PersonModel;
 use App\Models\StudentProfileModel;
-use App\Models\UserModel;
 use App\Services\Crypto\EncryptionService;
 use App\Services\CurrentTenant;
 use App\Services\Scheduling\QueueService;
@@ -31,6 +30,7 @@ final class GuidanceCaseService
     private StudentProfileModel $studentModel;
     private EncryptionService $encryptionService;
     private QueueService $queueService;
+    private GuidanceAccessPolicy $accessPolicy;
     private BaseConnection $db;
 
     public function __construct(
@@ -42,7 +42,8 @@ final class GuidanceCaseService
         ?StudentProfileModel $studentModel = null,
         ?EncryptionService $encryptionService = null,
         ?QueueService $queueService = null,
-        ?BaseConnection $db = null
+        ?BaseConnection $db = null,
+        ?GuidanceAccessPolicy $accessPolicy = null
     ) {
         $models = array_filter([$caseModel, $sessionModel, $noteModel, $followupModel, $personModel, $studentModel]);
         $this->db = $db ?? ($models !== [] ? reset($models)->db : \Config\Database::connect());
@@ -59,13 +60,33 @@ final class GuidanceCaseService
         $this->studentModel = $studentModel ?? new StudentProfileModel($this->db);
         $this->encryptionService = $encryptionService ?? new EncryptionService();
         $this->queueService = $queueService ?? new QueueService(null, null, $this->db);
+        $this->accessPolicy = $accessPolicy ?? new GuidanceAccessPolicy(db: $this->db);
     }
 
-    public function createCase(int $personId, int $counsellorUserId, string $title, string $category = 'personal', ?string $summaryNotes = null): array
+    /** Refresh the current transport identity without trusting cached grants. */
+    public function currentActor(?string $permission = null): array
     {
-        return $this->transaction(function () use ($personId, $counsellorUserId, $title, $category, $summaryNotes): array {
+        return $this->accessPolicy->current($permission);
+    }
+
+    /** Require mutation authority before selecting or locking a target record. */
+    private function mutationActor(?array $actor, string $permission, ?int $expectedActorId = null): array
+    {
+        return $this->accessPolicy->resolve($actor, $permission, $expectedActorId, true);
+    }
+
+    public function createCase(
+        int $personId,
+        int $counsellorUserId,
+        string $title,
+        string $category = 'personal',
+        ?string $summaryNotes = null,
+        ?array $actor = null
+    ): array {
+        return $this->transaction(function () use ($personId, $counsellorUserId, $title, $category, $summaryNotes, $actor): array {
+            $authority = $this->writeActor($actor, $counsellorUserId, 'guidance.cases.create', true);
+            $counsellorUserId = (int) $authority['id'];
             $this->person($personId);
-            $this->counsellor($counsellorUserId);
             if (trim($title) === '' || mb_strlen($title) > 255
                 || !in_array($category, ['academic', 'personal', 'career', 'crisis', 'behavioral', 'family'], true)) {
                 throw new InvalidArgumentException('Provide a valid case title and category.', 422);
@@ -82,15 +103,23 @@ final class GuidanceCaseService
         });
     }
 
-    public function openSession(int $caseId, int $counsellorUserId, string $sessionType = 'regular', ?int $queueEntryId = null, ?int $appointmentId = null): array
-    {
-        return $this->transaction(function () use ($caseId, $counsellorUserId, $sessionType, $queueEntryId, $appointmentId): array {
-            $this->counsellor($counsellorUserId);
+    public function openSession(
+        int $caseId,
+        int $counsellorUserId,
+        string $sessionType = 'regular',
+        ?int $queueEntryId = null,
+        ?int $appointmentId = null,
+        ?array $actor = null
+    ): array {
+        return $this->transaction(function () use ($caseId, $counsellorUserId, $sessionType, $queueEntryId, $appointmentId, $actor): array {
             if (!in_array($sessionType, self::SESSION_TYPES, true)) {
                 throw new InvalidArgumentException('Invalid counseling session type.', 422);
             }
-            $ticket = $queueEntryId === null ? null : $this->lockTicket($queueEntryId);
+            $authority = $this->mutationActor($actor, 'guidance.cases.create', $counsellorUserId);
             $case = $this->caseRow($caseId, true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.create', $counsellorUserId, true);
+            $counsellorUserId = (int) $authority['id'];
+            $ticket = $queueEntryId === null ? null : $this->lockTicket($queueEntryId);
             if ($case['status'] === 'closed') {
                 throw new RuntimeException('Closed cases cannot open new sessions.', 409);
             }
@@ -138,10 +167,10 @@ final class GuidanceCaseService
     }
 
     /** Read-only picker boundary; intake revalidates the ticket under locks. */
-    public function getTicketForSessionSelection(int $queueEntryId): array
+    public function getTicketForSessionSelection(int $queueEntryId, ?array $actor = null): array
     {
-        $actor = \App\Services\EngagementAccess::actor('guidance.cases.create', 'guidance');
-        $ticket = $this->db->table('queue_entries')->where('tenant_id', $actor['tenant_id'])
+        $authority = $this->accessPolicy->resolve($actor, 'guidance.cases.create');
+        $ticket = $this->db->table('queue_entries')->where('tenant_id', $authority['tenant_id'])
             ->where('unit', 'guidance')->where('id', $queueEntryId)->get()->getRowArray();
         if ($ticket === null) {
             throw new InvalidArgumentException('Guidance queue ticket not found.', 404);
@@ -154,14 +183,19 @@ final class GuidanceCaseService
         return $ticket;
     }
 
-    /** Atomically find/create the accessible case and start/resume this guidance ticket. */
-    public function openSessionForTicket(int $queueEntryId, int $counsellorUserId, bool $readAny = false, string $sessionType = 'regular'): array
-    {
+    /** Atomically find/create an owned case and start/resume this guidance ticket. */
+    public function openSessionForTicket(
+        int $queueEntryId,
+        int $counsellorUserId,
+        string $sessionType = 'regular',
+        ?array $actor = null
+    ): array {
         if (!in_array($sessionType, self::SESSION_TYPES, true)) {
             throw new InvalidArgumentException('Invalid counseling session type.', 422);
         }
-        return $this->transaction(function () use ($queueEntryId, $counsellorUserId, $readAny, $sessionType): array {
-            $this->counsellor($counsellorUserId);
+        return $this->transaction(function () use ($queueEntryId, $counsellorUserId, $sessionType, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.create', $counsellorUserId);
+            $counsellorUserId = (int) $authority['id'];
             $ticket = $this->lockTicket($queueEntryId);
             if (!in_array($ticket['status'], ['called', 'in_consultation'], true)) {
                 throw new RuntimeException('Only called or active queue tickets may open a session.', 409);
@@ -173,33 +207,37 @@ final class GuidanceCaseService
                 [CurrentTenant::id(), $queueEntryId])->getRowArray();
             if ($existing !== null) {
                 $case = $this->caseRow((int) $existing['case_id'], true);
-                if (!$readAny && (int) $case['counsellor_user_id'] !== $counsellorUserId) {
-                    throw new RuntimeException('This ticket is linked to another counselor\'s case.', 403);
-                }
-                return $this->openSession((int) $case['id'], $counsellorUserId, $sessionType, $queueEntryId);
+                $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.create', $counsellorUserId, true);
+                return $this->openSession((int) $case['id'], $counsellorUserId, $sessionType, $queueEntryId,
+                    actor: $authority);
             }
             $cases = $this->table('counselling_cases');
-            $sql = "SELECT * FROM {$cases} WHERE tenant_id = ? AND person_id = ? AND deleted_at IS NULL
-                AND status IN ('open', 'active', 'monitoring')";
-            $params = [CurrentTenant::id(), $ticket['person_id']];
-            if (!$readAny) {
-                $sql .= ' AND counsellor_user_id = ?';
-                $params[] = $counsellorUserId;
-            }
-            $case = $this->db->query($sql . ' ORDER BY id DESC LIMIT 1 FOR UPDATE', $params)->getRowArray();
+            $case = $this->db->query("SELECT * FROM {$cases} WHERE tenant_id = ? AND person_id = ?
+                AND counsellor_user_id = ? AND deleted_at IS NULL
+                AND status IN ('open', 'active', 'monitoring') ORDER BY id DESC LIMIT 1 FOR UPDATE",
+                [CurrentTenant::id(), $ticket['person_id'], $counsellorUserId])->getRowArray();
             if ($case === null) {
                 $case = $this->createCase((int) $ticket['person_id'], $counsellorUserId,
-                    'Intake Guidance Session ' . date('Y-m-d'), 'personal')['case'];
+                    'Intake Guidance Session ' . date('Y-m-d'), 'personal', actor: $authority)['case'];
             }
-            return $this->openSession((int) $case['id'], $counsellorUserId, $sessionType, $queueEntryId);
+            return $this->openSession((int) $case['id'], $counsellorUserId, $sessionType, $queueEntryId,
+                actor: $authority);
         });
     }
 
-    public function saveDraftNotes(int $sessionId, string $plaintext, int $userId): array
-    {
-        return $this->transaction(function () use ($sessionId, $plaintext, $userId): array {
-            $this->lockedSession($sessionId);
-            $this->counsellor($userId);
+    public function saveDraftNotes(
+        int $sessionId,
+        string $plaintext,
+        int $userId,
+        ?array $actor = null
+    ): array {
+        return $this->transaction(function () use ($sessionId, $plaintext, $userId, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.write', $userId);
+            $candidate = $this->sessionRow($sessionId);
+            $case = $this->caseRow((int) $candidate['case_id'], true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.write', $userId, true);
+            $session = $this->lockedSession($sessionId, $candidate);
+            $userId = (int) $authority['id'];
             $payload = $this->notePayload($sessionId, $plaintext, $userId) + ['version' => 0, 'is_draft' => 1];
             $draft = $this->current('counselling_notes', 'session_id = ? AND is_draft = 1', [$sessionId]);
             if ($draft !== null) {
@@ -213,11 +251,27 @@ final class GuidanceCaseService
         });
     }
 
-    public function finalizeSessionNotes(int $sessionId, string $plaintext, int $userId): array
-    {
-        return $this->transaction(function () use ($sessionId, $plaintext, $userId): array {
-            $this->lockedSession($sessionId);
-            $this->counsellor($userId);
+    public function finalizeSessionNotes(
+        int $sessionId,
+        string $plaintext,
+        int $userId,
+        ?array $actor = null
+    ): array {
+        return $this->transaction(function () use ($sessionId, $plaintext, $userId, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.write', $userId);
+            $candidate = $this->sessionRow($sessionId);
+            $case = $this->caseRow((int) $candidate['case_id'], true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.write', $userId, true);
+            $counsellorId = (int) ($case['counsellor_user_id'] ?? 0);
+            if ($counsellorId > 0) {
+                $pTable = $this->table('guidance_practitioner_profiles');
+                $hasProfile = $this->db->query("SELECT id FROM {$pTable} WHERE tenant_id = ? AND user_id = ? AND is_active = 1", [CurrentTenant::id(), $counsellorId])->getRowArray();
+                if ($hasProfile !== null) {
+                    $this->accessPolicy->assertCanFinalizeNote($authority, $counsellorId, CurrentTenant::id());
+                }
+            }
+            $session = $this->lockedSession($sessionId, $candidate);
+            $userId = (int) $authority['id'];
             $table = $this->table('counselling_notes');
             $latest = $this->db->query("SELECT * FROM {$table} WHERE tenant_id = ? AND session_id = ? AND is_draft = 0
                 ORDER BY version DESC, id DESC LIMIT 1 FOR UPDATE", [CurrentTenant::id(), $sessionId])->getRowArray();
@@ -238,7 +292,6 @@ final class GuidanceCaseService
     /** Refresh read authority before ciphertext retrieval, including when no note exists. */
     public function getDecryptedSessionNote(int $sessionId): ?array
     {
-        \App\Services\EngagementAccess::actor('guidance.cases.read', 'guidance');
         $session = $this->getSession($sessionId);
         [, $actor] = $this->authorizedCase((int) $session['case_id'], 'guidance.cases.read');
         $note = $this->noteModel->getDraftNote($sessionId) ?? $this->noteModel->getLatestFinalNote($sessionId);
@@ -265,12 +318,15 @@ final class GuidanceCaseService
         return $session;
     }
 
-    public function closeSession(int $sessionId): array
+    public function closeSession(int $sessionId, ?array $actor = null): array
     {
-        return $this->transaction(function () use ($sessionId): array {
-            $candidate = $this->getSession($sessionId);
+        return $this->transaction(function () use ($sessionId, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.write');
+            $candidate = $this->sessionRow($sessionId);
+            $case = $this->caseRow((int) $candidate['case_id'], true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.write', null, true);
             $ticket = !empty($candidate['queue_entry_id']) ? $this->lockTicket((int) $candidate['queue_entry_id']) : null;
-            $session = $this->lockedSession($sessionId);
+            $session = $this->lockedSession($sessionId, $candidate);
             if (($session['queue_entry_id'] ?? null) != ($candidate['queue_entry_id'] ?? null)) {
                 throw new RuntimeException('Session changed. Reload before closing.', 409);
             }
@@ -281,7 +337,6 @@ final class GuidanceCaseService
                 throw new RuntimeException('Only an active session may be closed.', 409);
             }
             if ($ticket !== null) {
-                $case = $this->caseRow((int) $session['case_id']);
                 if ((int) $ticket['person_id'] !== (int) $case['person_id']
                     || (int) ($ticket['appointment_id'] ?? 0) !== (int) ($session['appointment_id'] ?? 0)) {
                     throw new RuntimeException('Session queue linkage is inconsistent.', 409);
@@ -293,35 +348,44 @@ final class GuidanceCaseService
         });
     }
 
-    public function closeCase(int $caseId, ?string $summaryNotes = null, bool $confirmed = false, ?string $closureDisposition = null): array
-    {
+    public function closeCase(
+        int $caseId,
+        ?string $summaryNotes = null,
+        bool $confirmed = false,
+        ?string $closureDisposition = null,
+        ?array $actor = null
+    ): array {
         if (!$confirmed) {
             throw new InvalidArgumentException('Explicit case closure confirmation is required.', 422);
         }
-        return $this->transaction(function () use ($caseId, $closureDisposition): array {
-            [$case, $actor] = $this->authorizedCase($caseId, 'guidance.cases.write', true);
+        return $this->transaction(function () use ($caseId, $closureDisposition, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.write');
+            $case = $this->caseRow($caseId, true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.write', null, true);
             $this->assertNoActiveSessions($caseId);
             if ($case['status'] !== 'closed') {
                 // summaryNotes remains a compatible legacy argument, never an intake overwrite.
-                $changes = ['status' => 'closed', 'closed_at' => date('Y-m-d H:i:s'), 'closed_by' => (int) $actor['id']]
+                $changes = ['status' => 'closed', 'closed_at' => date('Y-m-d H:i:s'), 'closed_by' => (int) $authority['id']]
                     + $this->outcomePayload('closure_disposition', $closureDisposition);
                 $this->must($this->caseModel->scoped()->update($caseId, $changes));
-                $this->audit('case', $caseId, 'closed', $actor);
+                $this->audit('case', $caseId, 'closed', $authority);
             }
             return $this->caseDetails($this->caseRow($caseId));
         });
     }
 
-    public function monitorCase(int $caseId): array
+    public function monitorCase(int $caseId, ?array $actor = null): array
     {
-        return $this->transaction(function () use ($caseId): array {
-            [$case, $actor] = $this->authorizedCase($caseId, 'guidance.cases.write', true);
+        return $this->transaction(function () use ($caseId, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.write');
+            $case = $this->caseRow($caseId, true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.write', null, true);
             if (!in_array($case['status'], ['open', 'active'], true)) {
                 throw new RuntimeException('Only open or active cases may enter monitoring.', 409);
             }
             $this->assertNoActiveSessions($caseId);
             $this->must($this->caseModel->scoped()->update($caseId, ['status' => 'monitoring']));
-            $this->audit('case', $caseId, 'monitoring', $actor);
+            $this->audit('case', $caseId, 'monitoring', $authority);
             return $this->caseDetails($this->caseRow($caseId));
         });
     }
@@ -414,16 +478,19 @@ final class GuidanceCaseService
         ];
     }
 
-    private function authorizedCase(int $caseId, string $permission, bool $lock = false): array
-    {
-        $actor = \App\Services\EngagementAccess::actor($permission, 'guidance');
+    private function authorizedCase(
+        int $caseId,
+        string $permission,
+        bool $lock = false,
+        ?array $identity = null,
+        bool $write = false,
+        ?int $expectedActorId = null
+    ): array {
         $case = $this->caseRow($caseId, $lock);
         $this->person((int) $case['person_id']);
-        if ((int) $case['tenant_id'] !== (int) $actor['tenant_id']
-            || ($actor['role'] !== 'superadmin' && (int) $case['counsellor_user_id'] !== (int) $actor['id']
-                && !in_array('guidance.cases.read_any', $actor['permissions'], true))) {
-            throw new \DomainException('Case access forbidden.', 403);
-        }
+        $actor = $write
+            ? $this->accessPolicy->writeCase($identity, $case, $permission, $expectedActorId, $lock)
+            : $this->accessPolicy->readCase($case, $identity, $permission, $lock);
         return [$case, $actor];
     }
 
@@ -433,22 +500,14 @@ final class GuidanceCaseService
      * Applies the same access rule as a case read without appending the public
      * oversight-read audit event; mutation helpers must never create read events.
      */
-    public function assertCaseReadable(int $caseId): void
+    public function assertCaseReadable(int $caseId, ?array $actor = null): void
     {
-        $this->assertCaseAccess($caseId);
+        $this->assertCaseAccess($caseId, $actor);
     }
 
-    private function assertCaseAccess(int $caseId, bool $lock = false): array
+    private function assertCaseAccess(int $caseId, ?array $actor = null, bool $lock = false): array
     {
-        $actor = \App\Services\EngagementAccess::actor('guidance.cases.read', 'guidance');
-        $case = $this->caseRow($caseId, $lock);
-        $this->person((int) $case['person_id']);
-        if ((int) $case['tenant_id'] !== (int) $actor['tenant_id']
-            || ($actor['role'] !== 'superadmin' && (int) $case['counsellor_user_id'] !== (int) $actor['id']
-                && !in_array('guidance.cases.read_any', $actor['permissions'], true))) {
-            throw new \DomainException('Case access forbidden.', 403);
-        }
-        return [$case, $actor];
+        return $this->authorizedCase($caseId, 'guidance.cases.read', $lock, $actor);
     }
 
     private function audit(string $entity, int $id, string $action, array $actor): void
@@ -461,12 +520,17 @@ final class GuidanceCaseService
         );
     }
 
-    public function addFollowup(int $caseId, ?int $sessionId, string $dueDate, string $actionPlan): array
-    {
-        return $this->transaction(function () use ($caseId, $sessionId, $dueDate, $actionPlan): array {
-            // Internal mutation helper: tenant-scoped lookup only, never a public read audit.
-            // The controller enforces case authorization at its boundary.
-            $this->caseRow($caseId, true);
+    public function addFollowup(
+        int $caseId,
+        ?int $sessionId,
+        string $dueDate,
+        string $actionPlan,
+        ?array $actor = null
+    ): array {
+        return $this->transaction(function () use ($caseId, $sessionId, $dueDate, $actionPlan, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.write');
+            $case = $this->caseRow($caseId, true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.write', null, true);
             if ($sessionId !== null && (int) $this->getSession($sessionId)['case_id'] !== $caseId) {
                 throw new InvalidArgumentException('Follow-up session does not belong to this case.', 422);
             }
@@ -484,25 +548,34 @@ final class GuidanceCaseService
         });
     }
 
-    public function completeFollowup(int $followupId, ?string $completionNotes = null): array
-    {
-        return $this->transitionFollowup($followupId, 'completed', $completionNotes);
+    public function completeFollowup(
+        int $followupId,
+        ?string $completionNotes = null,
+        ?array $actor = null
+    ): array {
+        return $this->transitionFollowup($followupId, 'completed', $completionNotes, $actor);
     }
 
-    public function missFollowup(int $followupId): array
+    public function missFollowup(int $followupId, ?array $actor = null): array
     {
-        return $this->transitionFollowup($followupId, 'missed');
+        return $this->transitionFollowup($followupId, 'missed', actor: $actor);
     }
 
-    private function transitionFollowup(int $followupId, string $status, ?string $completionNotes = null): array
-    {
-        return $this->transaction(function () use ($followupId, $status, $completionNotes): array {
+    private function transitionFollowup(
+        int $followupId,
+        string $status,
+        ?string $completionNotes = null,
+        ?array $actor = null
+    ): array {
+        return $this->transaction(function () use ($followupId, $status, $completionNotes, $actor): array {
+            $authority = $this->mutationActor($actor, 'guidance.cases.write');
             // Resolve without a lock, then follow the shared case -> session/follow-up order.
             $candidate = $this->followupModel->scoped()->find($followupId);
             if ($candidate === null) {
                 throw new InvalidArgumentException('Follow-up not found.', 404);
             }
-            [, $actor] = $this->authorizedCase((int) $candidate['case_id'], 'guidance.cases.write', true);
+            $case = $this->caseRow((int) $candidate['case_id'], true);
+            $this->accessPolicy->writeCase($authority, $case, 'guidance.cases.write', null, true);
             $followup = $this->current('guidance_followups', 'id = ?', [$followupId]);
             if ($followup === null || (int) $followup['case_id'] !== (int) $candidate['case_id']) {
                 throw new RuntimeException('Follow-up changed. Reload before trying again.', 409);
@@ -517,10 +590,10 @@ final class GuidanceCaseService
                 $changes = ['status' => $status, 'completed_at' => $status === 'completed' ? date('Y-m-d H:i:s') : null];
                 if ($status === 'completed') {
                     $changes += $this->outcomePayload('completion_notes', $completionNotes);
-                    $changes['completed_by'] = (int) $actor['id'];
+                    $changes['completed_by'] = (int) $authority['id'];
                 }
                 $this->must($this->followupModel->scoped()->update($followupId, $changes));
-                $this->audit('followup', $followupId, $status, $actor);
+                $this->audit('followup', $followupId, $status, $authority);
             }
             $resolved = $this->followupModel->scoped()->find($followupId);
             return $this->withoutOutcomeColumns($resolved ?? []);
@@ -587,18 +660,29 @@ final class GuidanceCaseService
         return $person;
     }
 
-    private function counsellor(int $id): void
-    {
-        $user = (new UserModel($this->db))->scoped()->where('status', 'active')->find($id);
-        if ($user === null || !in_array($user['role'], ['superadmin', 'guidance_admin', 'guidance_supervisor', 'counsellor'], true)) {
-            throw new \DomainException('An active same-tenant guidance account is required.', 403);
-        }
+    /** Resolve a mutation actor and prevent caller-supplied actor-ID substitution. */
+    private function writeActor(
+        ?array $actor,
+        ?int $expectedActorId,
+        string $permission,
+        bool $lock = true
+    ): array {
+        return $this->accessPolicy->resolve($actor, $permission, $expectedActorId, $lock);
     }
 
-    private function lockedSession(int $id): array
+    private function sessionRow(int $id): array
     {
-        $candidate = $this->getSession($id);
-        $this->caseRow((int) $candidate['case_id'], true);
+        $session = $this->sessionModel->scoped()->find($id);
+        if ($session === null) {
+            throw new InvalidArgumentException('Counseling session not found.', 404);
+        }
+
+        return $session;
+    }
+
+    private function lockedSession(int $id, ?array $candidate = null): array
+    {
+        $candidate ??= $this->sessionRow($id);
         $session = $this->current('counselling_sessions', 'id = ? AND deleted_at IS NULL', [$id]);
         if ($session === null || (int) $session['case_id'] !== (int) $candidate['case_id']) {
             throw new RuntimeException('Session changed. Reload before trying again.', 409);

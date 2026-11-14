@@ -90,6 +90,12 @@ function matrix() {
       <label for="neutral-text">Text</label><input id="neutral-text" class="form-control" value="Neutral text">
       <label for="neutral-select">Select</label><select id="neutral-select" class="form-select"><option>Neutral select</option></select>
       <label for="neutral-area">Notes</label><textarea id="neutral-area" class="form-control">Neutral notes</textarea>
+      <div class="p-2 rounded border bg-body-tertiary mt-2" data-surface-box><strong class="small" data-surface-text>Tertiary Header</strong> <span class="small text-muted" data-surface-text>Muted guidance copy</span> <code data-surface-text>gate_key</code> <span class="badge bg-body-tertiary text-body border" data-surface-text>Scope</span></div>
+      <div class="p-2 rounded border bg-body-secondary mt-2" data-surface-box><span class="small" data-surface-text>Secondary surface copy</span></div>
+      <div class="p-2 rounded border bg-body mt-2" data-surface-box><span class="small" data-surface-text>Body surface copy</span></div>
+      <div class="p-2 rounded border bg-light-subtle mt-2" data-surface-box><span class="small" data-surface-text>Light subtle copy</span></div>
+      <div class="p-2 rounded border bg-secondary-subtle mt-2" data-surface-box><span class="small" data-surface-text>Secondary subtle copy</span></div>
+      <div class="p-2 rounded border bg-dark-subtle mt-2" data-surface-box><span class="small" data-surface-text>Dark subtle copy</span></div>
     </div></section>
     <div class="table-responsive"><table class="table table-striped table-hover"><caption>Theme tags and actions</caption>
       <thead><tr><th>Soft tag</th><th>Subtle tag</th><th>Link</th><th>Action</th></tr></thead><tbody>${rows}
@@ -1160,14 +1166,14 @@ for (const mobile of [false, true]) for (const theme of ['light', 'dark']) {
     });
     await t.test('neutral body/form surfaces and Chromium autofill', async () => {
       if (theme === 'dark') {
-        const rows = await measurements(page, 'body, #neutral-text, #neutral-select, #neutral-area');
+        const rows = await measurements(page, 'body, #neutral-text, #neutral-select, #neutral-area, [data-surface-box]');
         for (const row of rows) {
           assert.ok(Math.max(...row.background) - Math.min(...row.background) <= 3,
             `${label} ${row.element}: dark surface must be achromatic, not blue; actual RGB=${row.background}`);
           assert.ok(Math.max(...row.background) < 100, `${row.element}: dark surface must stay dark, actual RGB=${row.background}`);
         }
       }
-      contrast(await measurements(page, '#neutral-text, #neutral-select, #neutral-area'), 4.5, `${label} form text`);
+      contrast(await measurements(page, '#neutral-text, #neutral-select, #neutral-area, [data-surface-text]'), 4.5, `${label} form and surface container text`);
       const clear = await forceState(page, '#autofill', 'autofill');
       try {
         const rows = await measurements(page, '#autofill');

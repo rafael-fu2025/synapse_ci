@@ -18,6 +18,33 @@ class LatexReportCompiler
     private const MAX_TOTAL = 20_971_520;
     private const FAILURE = 'PDF report compilation is unavailable.';
 
+    /**
+     * Canonical LaTeX escaping conventions for all plain text inputs.
+     */
+    public static function escapeLatex(string $value): string
+    {
+        $value = preg_replace('/[\p{Cc}\p{Cf}]/u', '', $value) ?? $value;
+        if (function_exists('iconv')) {
+            $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+            if ($ascii !== false) {
+                $value = $ascii;
+            }
+        }
+        $value = preg_replace('/[^\x20-\x7E]/', '', $value) ?? '';
+        return strtr($value, [
+            '\\' => '\\textbackslash{}',
+            '&'  => '\\&',
+            '%'  => '\\%',
+            '$'  => '\\$',
+            '#'  => '\\#',
+            '_'  => '\\_',
+            '{'  => '\\{',
+            '}'  => '\\}',
+            '~'  => '\\textasciitilde{}',
+            '^'  => '\\textasciicircum{}',
+        ]);
+    }
+
     public static function compile(string $source): string
     {
         $directory = null;

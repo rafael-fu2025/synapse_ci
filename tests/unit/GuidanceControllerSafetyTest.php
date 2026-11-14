@@ -40,6 +40,35 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
         Services::injectMock('response', $this->response);
         $this->controller = (new ReflectionClass(GuidanceController::class))->newInstanceWithoutConstructor();
         $this->controller->initController($this->request, $this->response, new NullLogger());
+        $this->setActor(['id' => 37]);
+    }
+
+    private function setActor(?array $user, array $permissions = ['guidance.cases.create', 'guidance.cases.write', 'guidance.cases.read']): void
+    {
+        session()->set('user', $user);
+        $resolver = function (?string $permission = null) use ($user, $permissions): array {
+            if (!is_array($user) || empty($user['id']) || !is_numeric($user['id']) || (int) $user['id'] <= 0) {
+                throw new \DomainException('An authenticated guidance account is required.', 403);
+            }
+            if ($permission !== null && !in_array($permission, $permissions, true)) {
+                throw new \DomainException('Guidance permission forbidden.', 403);
+            }
+            return [
+                'id' => (int) $user['id'],
+                'auth_version' => 1,
+                'person_id' => 10,
+                'tenant_id' => 1,
+                'username' => 'counsellor',
+                'email' => 'counsellor@example.com',
+                'name' => 'Guidance Counsellor',
+                'role' => $user['role'] ?? 'counsellor',
+                'permissions' => $permissions,
+                'logged_in' => true,
+            ];
+        };
+        $prop = (new ReflectionClass(GuidanceController::class))->getProperty('actorResolver');
+        $prop->setAccessible(true);
+        $prop->setValue($this->controller, $resolver);
     }
 
     private function invoke(string $method, mixed ...$arguments): mixed
@@ -57,31 +86,32 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
     #[DataProvider('invalidActors')]
     public function testActorNeverDefaultsOrUsesPostedIdentity(mixed $user): void
     {
-        session()->set('user', $user);
+        $this->setActor(is_array($user) ? $user : null);
         $this->request->setGlobal('post', ['user_id' => 1, 'counsellor_user_id' => 1]);
         $this->expectException(\DomainException::class);
         $this->expectExceptionCode(403);
-        $this->invoke('actorId');
+        $this->invoke('freshActor');
     }
 
     public function testActorUsesSessionArray(): void
     {
         foreach ([37, '82'] as $id) {
-            session()->set('user', ['id' => $id]);
-            self::assertSame((int) $id, $this->invoke('actorId'));
+            $this->setActor(['id' => $id]);
+            $actor = $this->invoke('freshActor');
+            self::assertSame((int) $id, $actor['id']);
         }
     }
 
     public function testOnlyExistingPolicyGrantsReadAny(): void
     {
-        foreach ([['role' => 'superadmin'], ['permissions' => ['guidance.cases.read_any']]] as $user) {
-            session()->set('user', $user);
-            self::assertTrue($this->invoke('canReadAnyCase'));
-        }
-        foreach ([[], ['role' => 'admin'], ['role' => 'guidance_staff'], ['permissions' => ['guidance.cases.read']]] as $user) {
-            session()->set('user', $user);
-            self::assertFalse($this->invoke('canReadAnyCase'));
-        }
+        $this->setActor(['id' => 37, 'role' => 'counsellor'], ['guidance.cases.read', 'guidance.cases.read_any']);
+        $actor = $this->invoke('freshActor', 'guidance.cases.read_any');
+        self::assertTrue(in_array('guidance.cases.read_any', $actor['permissions'], true));
+
+        $this->setActor(['id' => 37, 'role' => 'counsellor'], ['guidance.cases.read']);
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionCode(403);
+        $this->invoke('freshActor', 'guidance.cases.read_any');
     }
 
     public static function failures(): iterable
@@ -130,6 +160,7 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
 
     public function testMutationRequiresActorBeforeCallback(): void
     {
+        $this->setActor(null);
         $this->setTransport('htmx');
         $response = $this->invoke('mutate', static function (): never {
             self::fail('An unauthenticated mutation was executed.');
@@ -139,10 +170,10 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
 
     public function testSuccessfulMutationRunsOnceAndPreservesFormAndJsonContracts(): void
     {
-        session()->set('user', ['id' => 37]);
+        $this->setActor(['id' => 37]);
         $calls = 0;
-        $operation = static function (int $actor) use (&$calls): array {
-            self::assertSame(37, $actor);
+        $operation = static function (array $actor) use (&$calls): array {
+            self::assertSame(37, $actor['id']);
             ++$calls;
             return ['/guidance/cases/9', 'Saved.'];
         };
@@ -189,7 +220,7 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
         $method = new ReflectionMethod(GuidanceController::class, 'startForTicket');
         $lines = file(APPPATH . 'Controllers/GuidanceController.php');
         $ticketSource = implode('', array_slice($lines, $method->getStartLine() - 1, $method->getEndLine() - $method->getStartLine() + 1));
-        self::assertStringContainsString('openSessionForTicket($queueEntryId, $userId, $this->canReadAnyCase(), $this->postedSessionType())', $ticketSource);
+        self::assertStringContainsString('openSessionForTicket($queueEntryId, (int) $actor[\'id\']', $ticketSource);
         self::assertStringNotContainsString('createCase(', $ticketSource);
         self::assertStringNotContainsString('openSession(', $ticketSource);
         self::assertStringNotContainsString('->find(', $ticketSource);

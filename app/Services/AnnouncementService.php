@@ -40,8 +40,26 @@ final class AnnouncementService
     public function listing(string $unit, mixed $page = 1): array
     {
         $actor = $this->manager($unit);
-        return $this->paginate($this->db->table('announcements')->select('id,unit,title,body,audience,target_year_levels,target_student_categories,status,starts_at,ends_at,published_at,version')
+        return $this->paginate($this->db->table('announcements')->select('id,unit,title,body,audience,target_year_levels,target_student_categories,status,is_pinned_advisory,starts_at,ends_at,published_at,version')
             ->where('tenant_id', $actor['tenant_id'])->where('unit', $unit), $page);
+    }
+
+    /** Active pinned advisories (e.g. Clinic physician schedule / medical exam notices) for the portal top banner. */
+    public function pinnedAdvisories(int $limit = 3): array
+    {
+        $actor = EngagementAccess::actor();
+        if (!$this->db->fieldExists('is_pinned_advisory', 'announcements')) {
+            return [];
+        }
+        $builder = $this->visible($actor)
+            ->select('a.id, a.unit, a.title, a.body, a.published_at, r.read_at')
+            ->where('a.is_pinned_advisory', 1);
+        $this->withRead($builder, $actor);
+        return $builder->orderBy("CASE WHEN a.unit = 'clinic' THEN 0 ELSE 1 END", '', false)
+            ->orderBy('a.published_at', 'DESC')
+            ->orderBy('a.id', 'DESC')
+            ->limit(max(1, min($limit, 5)))
+            ->get()->getResultArray();
     }
 
     public function reads(int $id, string $unit, mixed $page = 1): array
@@ -236,6 +254,7 @@ final class AnnouncementService
             $data[$field] = trim($value);
         }
         $data['audience'] = EngagementAudience::validate($input['audience'] ?? null);
+        $data['is_pinned_advisory'] = !empty($input['is_pinned_advisory']) && (string) $input['is_pinned_advisory'] !== '0' ? 1 : 0;
         if ($stored) {
             // Only stored rows contain JSON; form submissions must supply arrays.
             foreach (['target_year_levels', 'target_student_categories'] as $field) {

@@ -5,7 +5,7 @@
   <i class="bi bi-arrow-left me-1"></i> Back to Encounters
 </a>
 <?php $referralActor = session()->get('user') ?? []; ?>
-<?php if ($encounter['encounter']['status'] === 'in_progress' && (($referralActor['role'] ?? '') === 'superadmin' || in_array('referrals.create', $referralActor['permissions'] ?? [], true))): ?>
+<?php if (($referralActor['role'] ?? '') === 'superadmin' || in_array('referrals.create', $referralActor['permissions'] ?? [], true)): ?>
 <a href="<?= esc(site_url('/clinic/referrals/create?' . http_build_query(['person_id' => $encounter['patient']['id'], 'source_encounter_id' => $encounter['encounter']['id']]))) ?>" class="btn btn-outline-primary btn-sm ms-2" data-app-modal-open><i class="bi bi-send me-1" aria-hidden="true"></i> Refer to Guidance</a>
 <?php endif; ?>
 <?= $this->endSection() ?>
@@ -18,6 +18,31 @@ $vitals = $encounter['vitals'] ?? [];
 $treatment = $encounter['treatment'] ?? [];
 $dispensations = $encounter['dispensations'] ?? [];
 $health = $healthProfile ?? [];
+$canSeal = $canSeal ?? true;
+$canAddendum = $canAddendum ?? false;
+$complaintCatalog = $complaintCatalog ?? \App\Services\Clinic\EncounterService::COMPLAINT_CATALOG;
+$visitCount = (int) ($encounter['patient_visit_count'] ?? 1);
+$visitedRaw = (string) ($enc['visited_at'] ?? $enc['started_at'] ?? '');
+$visitedManilaIso = '';
+if ($visitedRaw !== '') {
+    try {
+        $dtUtc = new \DateTimeImmutable($visitedRaw, new \DateTimeZone('UTC'));
+        $visitedManilaIso = $dtUtc->setTimezone(new \DateTimeZone('Asia/Manila'))->format('Y-m-d\TH:i');
+    } catch (\Throwable) {
+        $visitedManilaIso = '';
+    }
+}
+$selectedCategory = (string) ($enc['complaint_category'] ?? '');
+$selectedQualifier = (string) ($enc['complaint_qualifier'] ?? '');
+if ($selectedCategory === '' && !empty($enc['chief_complaint'])) {
+    $lowerCc = strtolower(trim((string) $enc['chief_complaint']));
+    foreach ($complaintCatalog as $catKey => $catMeta) {
+        if ($catKey !== 'other' && str_starts_with($lowerCc, strtolower($catKey))) {
+            $selectedCategory = $catKey;
+            break;
+        }
+    }
+}
 $dispenseOldValue = static function (string $field, string $default = ''): string {
     $value = old($field, $default, false);
     return is_string($value) || is_int($value) ? (string) $value : $default;
@@ -54,13 +79,21 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
       </div>
 
       <!-- Quick health flags -->
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="badge <?= $visitCount >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-info-subtle text-info-emphasis border border-info-subtle' ?> px-3 py-2" title="Total clinic visits on record">
+          <i class="bi bi-calendar2-check me-1"></i> Visits: <strong><?= $visitCount ?></strong>
+        </span>
         <span class="badge bg-light text-dark border px-3 py-2">
           Blood: <strong><?= esc($health['blood_type'] ?? 'Unknown') ?></strong>
         </span>
         <?php if (!empty($health['allergies'])): ?>
           <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2" title="Known allergies">
             <i class="bi bi-exclamation-triangle-fill me-1"></i> Allergies: <?= esc($health['allergies']) ?>
+          </span>
+        <?php endif; ?>
+        <?php if (!empty($health['chronic_conditions'])): ?>
+          <span class="badge bg-secondary-subtle text-dark border px-3 py-2" title="Chronic conditions">
+            <i class="bi bi-heart-pulse me-1"></i> <?= esc($health['chronic_conditions']) ?>
           </span>
         <?php endif; ?>
         <a href="<?= site_url('/clinic/patients/' . $patient['id']) ?>" target="_blank" class="btn btn-outline-primary btn-sm">
@@ -72,15 +105,28 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 </div>
 
 <?php if ($enc['status'] !== 'in_progress'): ?>
-  <?= view('clinic/encounters/_closed', compact('enc', 'vitals', 'treatment', 'dispensations'), ['saveData' => false]) ?>
+  <?= view('clinic/encounters/_closed', compact('enc', 'vitals', 'treatment', 'dispensations', 'encounter', 'canAddendum'), ['saveData' => false]) ?>
 <?php else: ?>
 <!-- 2. The 4-Step Consultation Stepper -->
 <div class="card border-0 shadow-sm" x-data="encounterStepper()" data-encounter-stepper data-navigation-dirty="false"
+     data-encounter-id="<?= (int) $enc['id'] ?>"
+     data-complaint-catalog="<?= esc((string) json_encode($complaintCatalog, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>"
      data-refresh-owner="clinic.encounter.<?= (int) $enc['id'] ?>"
      data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
      data-draft-url="<?= site_url('/clinic/encounters/' . $enc['id'] . '/draft') ?>">
   <div class="px-4 pt-3">
-    <p class="small text-muted mb-1">Clinical entries save when you change steps. Medicine dispensing always requires its own confirmation.</p>
+    <?php if (empty($canSeal)): ?>
+      <div class="alert alert-info py-2 small mb-2" role="status">
+        <i class="bi bi-info-circle me-1"></i> <strong>Student Nurse / Intern Mode:</strong> You can record vitals, structured complaints, and clinical draft notes. An attending nurse or physician must finalize dispensing and seal the encounter.
+      </div>
+    <?php endif; ?>
+    <div data-local-backup-banner hidden>
+      <div class="alert alert-warning py-2 small mb-2 d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-cloud-arrow-up me-1"></i> Unsaved local draft recovered from browser backup.</span>
+        <button type="button" class="btn btn-outline-dark btn-sm py-0" data-discard-local-backup>Dismiss</button>
+      </div>
+    </div>
+    <p class="small text-muted mb-1">Clinical entries auto-save after inactivity and when switching steps. Medicine dispensing always requires confirmation.</p>
     <div class="small mb-2" role="status" aria-live="polite" data-encounter-save-status>Saved</div>
     <button type="button" class="btn btn-outline-primary btn-sm mb-2" data-save-draft hidden>Retry saving draft</button>
     <a href="<?= site_url('/clinic/encounters/' . $enc['id']) ?>" target="_blank" rel="noopener" class="small mb-2" data-review-completion hidden>Check saved encounter in a new tab</a>
@@ -117,6 +163,22 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
     <div class="tab-pane fade show active" id="step-triage">
       <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/vitals') ?>" method="POST" data-clinical-form data-next-step="#step-assessment">
         <?= csrf_field() ?>
+
+        <div class="row g-3 mb-3 pb-3 border-bottom align-items-end">
+          <div class="col-md-5">
+            <label for="visitedAtDisplay" class="form-label fw-semibold">Actual Visit Date &amp; Time <span class="text-muted fw-normal">(Asia/Manila)</span></label>
+            <input type="text"
+                   class="form-control"
+                   id="visitedAtDisplay"
+                   data-datetimepicker
+                   data-target="#visited_at_iso"
+                   placeholder="DD/MM/YYYY hh:mm AM/PM">
+            <input type="hidden" name="visited_at" id="visited_at_iso" value="<?= esc($visitedManilaIso) ?>">
+          </div>
+          <div class="col-md-7">
+            <div class="form-text text-muted small">Adjust only when encoding a paper/brownout backlog visit from an earlier hour or date. Current school year: <strong><?= esc($schoolYear ?? '') ?></strong>.</div>
+          </div>
+        </div>
 
         <div class="row g-3 mb-4">
           <!-- Blood pressure -->
@@ -218,15 +280,40 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
       <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/assessment') ?>" method="POST" data-clinical-form data-next-step="#step-dispense">
         <?= csrf_field() ?>
 
-        <div class="mb-3">
-          <label for="chief_complaint" class="form-label fw-semibold">Chief Complaint / Reason for Visit</label>
-          <input type="text"
-                 name="chief_complaint" maxlength="255"
-                 id="chief_complaint"
-                 class="form-control"
-                 placeholder="e.g. Fever, persistent headache, dizziness"
-                 value="<?= esc($enc['chief_complaint'] ?? '') ?>"
-                 required>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label for="complaint_category" class="form-label fw-semibold">Structured Complaint Category</label>
+            <select name="complaint_category" id="complaint_category" class="form-select" data-complaint-category>
+              <option value="">-- Select category --</option>
+              <?php foreach ($complaintCatalog as $catKey => $catMeta): ?>
+                <option value="<?= esc($catKey) ?>" <?= $selectedCategory === $catKey ? 'selected' : '' ?>><?= esc($catMeta['label']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="complaint_qualifier" class="form-label fw-semibold">Body Location / Qualifier</label>
+            <?php $initialQualifiers = $selectedCategory !== '' && isset($complaintCatalog[$selectedCategory]['qualifiers']) ? $complaintCatalog[$selectedCategory]['qualifiers'] : []; ?>
+            <select name="complaint_qualifier" id="complaint_qualifier" class="form-select" data-complaint-qualifier data-initial-value="<?= esc($selectedQualifier) ?>">
+              <option value="">-- Optional qualifier --</option>
+              <?php foreach ($initialQualifiers as $qOpt): ?>
+                <option value="<?= esc($qOpt) ?>" <?= $selectedQualifier === $qOpt ? 'selected' : '' ?>><?= esc($qOpt) ?></option>
+              <?php endforeach; ?>
+              <?php if ($selectedQualifier !== '' && !in_array($selectedQualifier, $initialQualifiers, true)): ?>
+                <option value="<?= esc($selectedQualifier) ?>" selected><?= esc($selectedQualifier) ?></option>
+              <?php endif; ?>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label for="chief_complaint" class="form-label fw-semibold">Chief Complaint / Specifics</label>
+            <input type="text"
+                   name="chief_complaint" maxlength="255"
+                   id="chief_complaint"
+                   class="form-control"
+                   placeholder="e.g. Fever, persistent headache, dizziness"
+                   value="<?= esc($enc['chief_complaint'] ?? '') ?>"
+                   data-chief-complaint-input
+                   required>
+          </div>
         </div>
 
         <div class="mb-3">
@@ -342,8 +429,15 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
                 <select name="medicine_id" id="medicine_id" class="form-select" required>
                   <option value="">-- Choose Medicine --</option>
                   <?php foreach ($availableMedicines as $med): ?>
-                    <option value="<?= (int) $med['id'] ?>" <?= $dispenseOldValue('medicine_id') === (string) $med['id'] ? 'selected' : '' ?>>
-                      <?= esc($med['name']) ?> (<?= esc($med['generic_name']) ?> <?= esc($med['strength']) ?>) - Usable: <?= (int) $med['usable_stock'] ?> <?= esc($med['unit_of_measure']) ?>
+                    <?php
+                      $usable = (int) ($med['usable_stock'] ?? 0);
+                      $nextExp = !empty($med['next_expiry']) ? date('M j, Y', strtotime((string) $med['next_expiry'])) : null;
+                      $expDays = isset($med['next_expiry']) && $med['next_expiry'] ? (int) ((strtotime((string) $med['next_expiry']) - strtotime(date('Y-m-d'))) / 86400) : null;
+                      $stockText = $usable <= 0 ? 'OUT OF STOCK' : 'Usable: ' . $usable . ' ' . $med['unit_of_measure'];
+                      $expText = $usable > 0 && $nextExp !== null ? ($expDays !== null && $expDays <= 90 ? ' · Expiring ' . $nextExp : ' · Exp ' . $nextExp) : '';
+                    ?>
+                    <option value="<?= (int) $med['id'] ?>" <?= $usable <= 0 ? 'disabled' : '' ?> <?= $dispenseOldValue('medicine_id') === (string) $med['id'] ? 'selected' : '' ?>>
+                      <?= esc($med['name']) ?> (<?= esc($med['generic_name']) ?> <?= esc($med['strength']) ?>) — <?= esc($stockText . $expText) ?>
                     </option>
                   <?php endforeach; ?>
                 </select>
@@ -383,7 +477,11 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 
     <!-- STEP 4: OUTCOME & DISPOSITION -->
     <div class="tab-pane fade" id="step-outcome">
-      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/complete') ?>" method="POST" data-clinical-form data-complete-encounter>
+      <form action="<?= site_url('/clinic/encounters/' . $enc['id'] . '/complete') ?>" method="POST" data-clinical-form data-complete-encounter
+            data-confirm="Save your clinical entries and permanently seal this encounter? Once sealed, it becomes read-only and later updates must be appended as addenda."
+            data-confirm-title="Seal clinical encounter"
+            data-confirm-label="Save & seal encounter"
+            data-confirm-tone="success">
         <?= csrf_field() ?>
 
         <div class="row g-3 mb-4">
@@ -421,6 +519,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           </div>
         </div>
 
+        <?php if (!empty($canSeal)): ?>
         <div class="card bg-success-subtle border-success-subtle p-3 mb-4">
           <div class="d-flex align-items-center">
             <i class="bi bi-shield-check text-success fs-3 me-3"></i>
@@ -430,11 +529,30 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           </div>
         </div>
 
-        <div class="d-flex justify-content-end">
+        <div class="d-flex justify-content-end gap-2">
+          <button type="button" class="btn btn-outline-secondary" data-save-draft-manual>
+            <i class="bi bi-save me-1"></i> Save Draft Only
+          </button>
           <button type="submit" class="btn btn-success">
-            <i class="bi bi-check-circle-fill me-1"></i> Save & Complete Encounter
+            <i class="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Encounter
           </button>
         </div>
+        <?php else: ?>
+        <div class="card bg-info-subtle border-info-subtle p-3 mb-4">
+          <div class="d-flex align-items-center">
+            <i class="bi bi-lock text-info-emphasis fs-3 me-3"></i>
+            <div class="small">
+              <strong>Attending Signature Required to Seal:</strong> Student nurse / intern accounts cannot finalize or seal encounters. Save your draft so the attending physician or nurse can review and complete this visit.
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex justify-content-end">
+          <button type="button" class="btn btn-primary" data-save-draft-manual>
+            <i class="bi bi-save me-1"></i> Save Clinical Draft for Attending Review
+          </button>
+        </div>
+        <?php endif; ?>
       </form>
     </div>
 

@@ -18,7 +18,7 @@ final class SurveyRoutesTest extends SurveyTestCase
     private function getAs(array $actor, string $route)
     {
         AuthenticatedUser::clear();
-        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant])->withHeaders([])->get($route);
+        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant, '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()]])->withHeaders([])->get($route);
     }
 
     private function postAs(array $actor, string $route, array $data = [], bool $csrf = true)
@@ -28,7 +28,7 @@ final class SurveyRoutesTest extends SurveyTestCase
         service('superglobals')->setCookie(config('Cookie')->prefix . config('Security')->cookieName, $hash);
         Services::resetSingle('security');
         if ($csrf) { $data[config('Security')->tokenName] = $hash; }
-        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant])
+        return $this->withSession(['user' => $actor, 'tenant_id' => $this->tenant, '_auth' => ['started_at' => time(), 'last_seen_at' => time(), 'version' => 1, 'session_id' => session_id()]])
             ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])->post($route, $data);
     }
 
@@ -153,7 +153,7 @@ final class SurveyRoutesTest extends SurveyTestCase
         $page->assertStatus(200);
         $this->assertStringContainsString('&lt;script&gt;', $page->getBody());
         $this->assertStringNotContainsString('<script>alert(1)</script>', $page->getBody());
-        $this->assertStringContainsString('data-table-pagination', $page->getBody());
+        $this->assertStringContainsString('pe-pagination', $page->getBody());
         $this->getAs($this->student, 'portal/surveys?page[]=bad')->assertStatus(422);
         $this->getAs($this->student, 'portal/surveys/' . ($id + 100000))->assertStatus(404);
     }

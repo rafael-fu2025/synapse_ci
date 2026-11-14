@@ -98,6 +98,12 @@
                   </form>
                 <?php elseif ($appt['status'] === 'checked_in'): ?>
                   <a href="<?= site_url('/' . $unit . '/queue') ?>" class="btn btn-outline-primary btn-sm">View on Queue</a>
+                  <?php if ($unit === 'guidance'): ?>
+                    <a href="<?= site_url('/guidance/call-slips') ?>" class="btn btn-outline-secondary btn-sm">Call Slips</a>
+                    <?php if (!empty($appt['person_id'])): ?>
+                      <a href="<?= site_url('/guidance/students/' . (int) $appt['person_id'] . '/cumulative') ?>" class="btn btn-outline-info btn-sm">Cumulative</a>
+                    <?php endif; ?>
+                  <?php endif; ?>
                 <?php endif; ?>
               </td></tr>
           <?php endforeach; ?>

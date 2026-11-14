@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Clinic;
 
 use App\Models\ClinicDispensationModel;
+use App\Models\ClinicEncounterAddendumModel;
 use App\Models\ClinicEncounterModel;
+use App\Models\ClinicLabResultModel;
 use App\Models\ClinicMedicineBatchModel;
 use App\Models\ClinicMedicineModel;
 use App\Models\ClinicTreatmentModel;
@@ -37,7 +39,26 @@ final class EncounterService
         'assessment_notes' => 10000, 'treatment_plan' => 10000,
         'services_rendered' => 10000, 'disposition_notes' => 10000,
     ];
+    public const STRUCTURED_COMPLAINT_LIMITS = ['complaint_category' => 64, 'complaint_qualifier' => 120];
     public const DISPOSITIONS = ['discharged', 'admitted', 'referred_to_guidance', 'sent_home', 'referred_to_hospital'];
+    public const ADDENDUM_TYPES = ['lab_followup', 'clinical_note', 'time_correction'];
+
+    public const COMPLAINT_CATALOG = [
+        'headache' => ['label' => 'Headache', 'qualifiers' => ['Frontal', 'Temporal / Side', 'Occipital / Back', 'Radiating to Neck / Shoulder', 'Generalized']],
+        'fever' => ['label' => 'Fever', 'qualifiers' => ['Low-grade', 'High-grade', 'With chills', 'Persistent (>2 days)']],
+        'dizziness' => ['label' => 'Dizziness', 'qualifiers' => ['Lightheadedness', 'Vertigo / Spinning', 'Syncope / Near-fainting']],
+        'abdominal pain' => ['label' => 'Abdominal Pain', 'qualifiers' => ['Epigastric / Upper', 'Periumbilical', 'Lower Abdominal', 'Crampy / Colicky']],
+        'cough' => ['label' => 'Cough', 'qualifiers' => ['Dry Cough', 'Productive / With Phlegm', 'Persistent (>1 week)']],
+        'colds' => ['label' => 'Colds / Nasal Congestion', 'qualifiers' => ['Nasal Congestion', 'Runny Nose / Rhinorrhea', 'With Sore Throat']],
+        'toothache' => ['label' => 'Toothache / Dental', 'qualifiers' => ['Molar / Jaw', 'Swollen Gum', 'Post-extraction']],
+        'injury' => ['label' => 'Injury / Wound', 'qualifiers' => ['Abrasion / Scrape', 'Laceration / Cut', 'Sprain / Strain', 'Burn / Scald', 'Contusion / Bruise']],
+        'nausea' => ['label' => 'Nausea', 'qualifiers' => ['Post-meal', 'Motion / Morning', 'With Dizziness']],
+        'vomiting' => ['label' => 'Vomiting', 'qualifiers' => ['Acute / Recurrent', 'With Loose Stools']],
+        'menstrual cramps' => ['label' => 'Menstrual Cramps', 'qualifiers' => ['Mild', 'Moderate', 'Severe / Rest Advised']],
+        'checkup' => ['label' => 'Checkup / Clearance', 'qualifiers' => ['Enrollment Medical Exam', 'Return-to-Class Clearance', 'OJT / Athletic Clearance', 'Follow-up Checkup']],
+        'communicable' => ['label' => 'Suspected Communicable / Rash', 'qualifiers' => ['Chickenpox / Vesicular Rash', 'Measles-like Rash', 'Suspected Dengue', 'COVID-19 / ILI', 'Other Contagious']],
+        'other' => ['label' => 'Other Complaint (Specify)', 'qualifiers' => []],
+    ];
 
     public function __construct(
         ?ClinicEncounterModel $encounterModel = null,
@@ -163,16 +184,18 @@ final class EncounterService
                 }
                 return (int) $open['id'];
             }
-            $now = date('Y-m-d H:i:s');
+            $now = gmdate('Y-m-d H:i:s');
             $encounterId = $this->encounterModel->insert([
-                'tenant_id'         => CurrentTenant::id(),
-                'person_id'         => $personId,
-                'attending_user_id' => $attendingUserId,
-                'appointment_id'    => $appointmentId,
-                'queue_entry_id'    => $queueEntryId,
-                'status'            => 'in_progress',
-                'chief_complaint'   => $chiefComplaint,
-                'started_at'        => $now,
+                'tenant_id'          => CurrentTenant::id(),
+                'person_id'          => $personId,
+                'attending_user_id'  => $attendingUserId,
+                'encoded_by_user_id' => $attendingUserId,
+                'appointment_id'     => $appointmentId,
+                'queue_entry_id'     => $queueEntryId,
+                'status'             => 'in_progress',
+                'chief_complaint'    => $chiefComplaint,
+                'started_at'         => $now,
+                'visited_at'         => $now,
             ]);
 
             if ($encounterId === false || (int) $encounterId < 1) {
@@ -251,19 +274,31 @@ final class EncounterService
         ?string $assessmentNotes = null,
         ?string $diagnosis = null,
         ?string $treatmentPlan = null,
-        ?string $servicesRendered = null
+        ?string $servicesRendered = null,
+        ?string $complaintCategory = null,
+        ?string $complaintQualifier = null,
+        ?string $visitedAt = null
     ): array {
-        self::validateTexts(['chief_complaint' => $chiefComplaint, 'assessment_notes' => $assessmentNotes,
-            'diagnosis' => $diagnosis, 'treatment_plan' => $treatmentPlan, 'services_rendered' => $servicesRendered]);
-        return $this->transaction(function () use ($encounterId, $chiefComplaint, $assessmentNotes, $diagnosis, $treatmentPlan, $servicesRendered): array {
+        self::validateTexts([
+            'chief_complaint' => $chiefComplaint, 'complaint_category' => $complaintCategory,
+            'complaint_qualifier' => $complaintQualifier, 'assessment_notes' => $assessmentNotes,
+            'diagnosis' => $diagnosis, 'treatment_plan' => $treatmentPlan, 'services_rendered' => $servicesRendered,
+        ]);
+        $normalized = self::normalizeStructuredComplaint([
+            'chief_complaint' => $chiefComplaint,
+            'complaint_category' => $complaintCategory,
+            'complaint_qualifier' => $complaintQualifier,
+        ]);
+        $visitedUtc = $visitedAt !== null && trim($visitedAt) !== '' ? self::parseVisitedAt($visitedAt) : null;
+
+        return $this->transaction(function () use ($encounterId, $normalized, $assessmentNotes, $diagnosis, $treatmentPlan, $servicesRendered, $visitedUtc): array {
             $this->lockOpenEncounter($encounterId);
-            // Update encounter level notes
-            $encounterUpdates = [];
-            if ($chiefComplaint !== null) {
-                $encounterUpdates['chief_complaint'] = trim($chiefComplaint);
-            }
+            $encounterUpdates = $normalized;
             if ($assessmentNotes !== null) {
                 $encounterUpdates['assessment_notes'] = trim($assessmentNotes);
+            }
+            if ($visitedUtc !== null) {
+                $encounterUpdates['visited_at'] = $visitedUtc;
             }
             if ($encounterUpdates !== [] && !$this->encounterModel->scoped()->update($encounterId, $encounterUpdates)) {
                 throw new \RuntimeException('Could not save assessment.');
@@ -366,15 +401,19 @@ final class EncounterService
                 $followUpDate = array_key_exists('follow_up_date', $pendingDraft)
                     ? $pendingDraft['follow_up_date'] : ($followUpDate ?? $encounter['follow_up_date'] ?? null);
             }
-            $now = date('Y-m-d H:i:s');
+            $now = gmdate('Y-m-d H:i:s');
             $status = ($disposition === 'referred_to_guidance') ? 'referred' : 'completed';
-            if (!$this->encounterModel->scoped()->update($encounterId, [
+            $completionData = [
                 'status'            => $status,
                 'disposition'       => $disposition,
                 'disposition_notes' => $dispositionNotes !== null && trim($dispositionNotes) !== '' ? trim($dispositionNotes) : null,
                 'follow_up_date'    => !empty($followUpDate) ? $followUpDate : null,
                 'completed_at'      => $now,
-            ])) {
+            ];
+            if ($recordedByUserId !== null && $recordedByUserId > 0) {
+                $completionData['attending_user_id'] = $recordedByUserId;
+            }
+            if (!$this->encounterModel->scoped()->update($encounterId, $completionData)) {
                 throw new \RuntimeException('Could not update encounter.');
             }
 
@@ -398,7 +437,8 @@ final class EncounterService
 
     public const DRAFT_FIELDS = [
         'bp_systolic', 'bp_diastolic', 'pulse_bpm', 'temp_c', 'spo2_pct', 'weight_kg', 'height_cm',
-        'chief_complaint', 'assessment_notes', 'diagnosis', 'treatment_plan', 'services_rendered',
+        'chief_complaint', 'complaint_category', 'complaint_qualifier', 'visited_at',
+        'assessment_notes', 'diagnosis', 'treatment_plan', 'services_rendered',
         'disposition', 'disposition_notes', 'follow_up_date',
     ];
 
@@ -432,11 +472,17 @@ final class EncounterService
             if ($value !== null && !is_string($value)) {
                 throw new \InvalidArgumentException('Invalid ' . $field . '.', 422);
             }
-            if (isset(self::TEXT_LIMITS[$field])) {
+            if (isset(self::TEXT_LIMITS[$field]) || isset(self::STRUCTURED_COMPLAINT_LIMITS[$field])) {
                 self::validateTexts([$field => $value]);
             }
             $value = $value === null ? null : trim($value);
             $draft[$field] = $value === '' ? null : $value;
+            if ($field === 'complaint_category' && $draft[$field] !== null && !isset(self::COMPLAINT_CATALOG[$draft[$field]])) {
+                throw new \InvalidArgumentException('Invalid chief complaint category.', 422);
+            }
+            if ($field === 'visited_at' && $draft[$field] !== null) {
+                $draft[$field] = self::parseVisitedAt($draft[$field]);
+            }
             if ($field === 'disposition' && $draft[$field] !== null && !in_array($draft[$field], self::DISPOSITIONS, true)) {
                 throw new \InvalidArgumentException('Invalid clinical disposition.', 422);
             }
@@ -450,7 +496,7 @@ final class EncounterService
                 }
             }
         }
-        return $draft;
+        return self::normalizeStructuredComplaint($draft);
     }
 
     /** Patch only whitelisted fields, inside an existing transaction and encounter lock. */
@@ -466,7 +512,8 @@ final class EncounterService
             $this->persistTreatment($encounterId, $treatment);
         }
         $encounter = array_intersect_key($draft, array_flip([
-            'chief_complaint', 'assessment_notes', 'disposition', 'disposition_notes', 'follow_up_date',
+            'chief_complaint', 'complaint_category', 'complaint_qualifier', 'visited_at',
+            'assessment_notes', 'disposition', 'disposition_notes', 'follow_up_date',
         ]));
         if ($encounter !== [] && !$this->encounterModel->scoped()->update($encounterId, $encounter)) {
             throw new \RuntimeException('Could not save encounter draft.');
@@ -488,7 +535,8 @@ final class EncounterService
     private static function validateTexts(array $values): void
     {
         foreach ($values as $field => $value) {
-            if ($value !== null && (mb_strlen($value) > self::TEXT_LIMITS[$field] || strlen($value) > 65535)) {
+            $limit = self::TEXT_LIMITS[$field] ?? self::STRUCTURED_COMPLAINT_LIMITS[$field] ?? null;
+            if ($value !== null && $limit !== null && (mb_strlen($value) > $limit || strlen($value) > 65535)) {
                 throw new \InvalidArgumentException($field . ' exceeds the allowed length.', 422);
             }
         }
@@ -559,8 +607,107 @@ final class EncounterService
         return $result;
     }
 
+    public function appendAddendum(
+        int $encounterId,
+        int $authorUserId,
+        string $addendumType,
+        string $note,
+        ?int $labResultId = null
+    ): array {
+        if ($authorUserId < 1) {
+            throw new \InvalidArgumentException('An explicit addendum author is required.', 422);
+        }
+        if (!in_array($addendumType, self::ADDENDUM_TYPES, true)) {
+            throw new \InvalidArgumentException('Invalid addendum type.', 422);
+        }
+        $cleanNote = trim($note);
+        if ($cleanNote === '' || mb_strlen($cleanNote) > 5000) {
+            throw new \InvalidArgumentException('Addendum note must be between 1 and 5000 characters.', 422);
+        }
+        return $this->transaction(function () use ($encounterId, $authorUserId, $addendumType, $cleanNote, $labResultId): array {
+            $db = $this->db;
+            $tenant = CurrentTenant::id();
+            $encounter = $db->query('SELECT * FROM ' . $db->protectIdentifiers($db->prefixTable('clinic_encounters'))
+                . ' WHERE tenant_id=? AND id=? AND deleted_at IS NULL FOR UPDATE', [$tenant, $encounterId])->getRowArray();
+            if ($encounter === null) {
+                throw new \InvalidArgumentException('Encounter not found.', 404);
+            }
+            if (!in_array($encounter['status'], ['completed', 'referred'], true)) {
+                throw new \RuntimeException('Addenda are only needed after an encounter is sealed.', 409);
+            }
+            $model = new ClinicEncounterAddendumModel($db);
+            $id = $model->insert([
+                'tenant_id'      => $tenant,
+                'encounter_id'   => $encounterId,
+                'addendum_type'  => $addendumType,
+                'note'           => $cleanNote,
+                'lab_result_id'  => $labResultId,
+                'author_user_id' => $authorUserId,
+            ]);
+            if ($id === false) {
+                throw new \RuntimeException('Could not save encounter addendum.');
+            }
+            return $model->scoped()->find((int) $id);
+        });
+    }
+
+    public static function parseVisitedAt(string $value): string
+    {
+        $raw = trim($value);
+        $manilaTz = \App\Services\Scheduling\SchedulingClock::timezone();
+        $utcTz = new \DateTimeZone('UTC');
+        foreach (['Y-m-d\TH:i', 'Y-m-d H:i', 'Y-m-d H:i:s'] as $format) {
+            $dt = \DateTimeImmutable::createFromFormat('!' . $format, $raw, $manilaTz);
+            if ($dt !== false && $dt->format($format) === $raw) {
+                $now = new \DateTimeImmutable('now', $manilaTz);
+                if ($dt > $now->modify('+5 minutes')) {
+                    throw new \InvalidArgumentException('Visit time cannot be in the future.', 422);
+                }
+                return $dt->setTimezone($utcTz)->format('Y-m-d H:i:s');
+            }
+        }
+        throw new \InvalidArgumentException('Visit time must be a valid Asia/Manila date/time.', 422);
+    }
+
+    private static function normalizeStructuredComplaint(array $data): array
+    {
+        $category = $data['complaint_category'] ?? null;
+        $qualifier = $data['complaint_qualifier'] ?? null;
+        $chief = $data['chief_complaint'] ?? null;
+
+        if ($category !== null && trim((string) $category) !== '') {
+            $category = trim((string) $category);
+            if (!isset(self::COMPLAINT_CATALOG[$category])) {
+                throw new \InvalidArgumentException('Invalid chief complaint category.', 422);
+            }
+            $data['complaint_category'] = $category;
+            $label = self::COMPLAINT_CATALOG[$category]['label'];
+            $cleanQualifier = $qualifier !== null && trim((string) $qualifier) !== '' ? trim((string) $qualifier) : null;
+            $data['complaint_qualifier'] = $cleanQualifier;
+            $cleanChief = $chief !== null ? trim((string) $chief) : '';
+            if ($category === 'other') {
+                if ($cleanChief !== '') {
+                    $data['chief_complaint'] = $cleanChief;
+                }
+            } else {
+                $prefix = $cleanQualifier !== null ? "{$label} ({$cleanQualifier})" : $label;
+                if ($cleanChief === '' || strcasecmp($cleanChief, $label) === 0 || strcasecmp($cleanChief, $prefix) === 0) {
+                    $data['chief_complaint'] = mb_substr($prefix, 0, 255);
+                } elseif (!str_starts_with(strtolower($cleanChief), strtolower($label))) {
+                    $data['chief_complaint'] = mb_substr($prefix . ' — ' . $cleanChief, 0, 255);
+                } else {
+                    $data['chief_complaint'] = $cleanChief;
+                }
+            }
+        } elseif ($chief !== null) {
+            $data['chief_complaint'] = trim((string) $chief) === '' ? null : trim((string) $chief);
+        }
+
+        return $data;
+    }
+
     /**
-     * Retrieve complete encounter package: encounter, patient, vitals, treatment, dispensations.
+     * Retrieve complete encounter package: encounter, patient, vitals, treatment, dispensations, addenda, labs.
      *
      * @return array<string, mixed>
      */
@@ -579,12 +726,43 @@ final class EncounterService
         $treatment = $this->treatmentModel->findByEncounterId($encounterId);
         $dispensations = $this->dispensationModel->getForEncounter($encounterId);
 
+        $tenant = CurrentTenant::id();
+        $addenda = $this->db->table('clinic_encounter_addenda a')
+            ->select('a.*, u.username AS author_name')
+            ->join('users u', 'u.id = a.author_user_id AND u.tenant_id = a.tenant_id', 'left')
+            ->where('a.tenant_id', $tenant)->where('a.encounter_id', $encounterId)
+            ->orderBy('a.id', 'ASC')->get()->getResultArray();
+        $labResults = $this->db->table('clinic_lab_results l')
+            ->select('l.*, u.username AS recorded_by_name')
+            ->join('users u', 'u.id = l.recorded_by_user_id AND u.tenant_id = l.tenant_id', 'left')
+            ->where('l.tenant_id', $tenant)->where('l.encounter_id', $encounterId)->where('l.deleted_at', null)
+            ->orderBy('l.id', 'DESC')->get()->getResultArray();
+
+        $userIds = array_values(array_unique(array_filter([
+            (int) ($encounter['attending_user_id'] ?? 0),
+            (int) ($encounter['encoded_by_user_id'] ?? 0),
+        ])));
+        $userMap = [];
+        if ($userIds !== []) {
+            foreach ($this->db->table('users')->select('id, username')->whereIn('id', $userIds)->get()->getResultArray() as $uRow) {
+                $userMap[(int) $uRow['id']] = $uRow['username'];
+            }
+        }
+        $visitCount = $this->db->table('clinic_encounters')
+            ->where('tenant_id', $tenant)->where('person_id', (int) $encounter['person_id'])
+            ->where('deleted_at', null)->countAllResults();
+
         return [
-            'encounter'     => $encounter,
-            'patient'       => $patient,
-            'vitals'        => $vitals,
-            'treatment'     => $treatment,
-            'dispensations' => $dispensations,
+            'encounter'           => $encounter,
+            'patient'             => $patient,
+            'vitals'              => $vitals,
+            'treatment'           => $treatment,
+            'dispensations'       => $dispensations,
+            'addenda'             => $addenda,
+            'lab_results'         => $labResults,
+            'attending_user_name' => $userMap[(int) ($encounter['attending_user_id'] ?? 0)] ?? null,
+            'encoder_user_name'   => $userMap[(int) ($encounter['encoded_by_user_id'] ?? 0)] ?? null,
+            'patient_visit_count' => $visitCount,
         ];
     }
 }

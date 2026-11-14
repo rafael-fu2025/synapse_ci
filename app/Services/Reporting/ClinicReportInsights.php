@@ -16,6 +16,7 @@ final class ClinicReportInsights
         'abdominal pain' => 'Abdominal Pain', 'cough' => 'Cough', 'colds' => 'Colds',
         'toothache' => 'Toothache', 'injury' => 'Injury', 'nausea' => 'Nausea',
         'vomiting' => 'Vomiting', 'menstrual cramps' => 'Menstrual Cramps', 'checkup' => 'Checkup',
+        'communicable' => 'Communicable / Rash',
     ];
     public const DISPOSITIONS = [
         'discharged' => 'Discharged', 'admitted' => 'Admitted',
@@ -27,10 +28,13 @@ final class ClinicReportInsights
     {
         [$from, $until] = $range->bounds($storageTimezone);
         // Deliberately no deleted_at predicate: this is also the daily metric's denominator.
+        $hasVisitedAt = $db->fieldExists('visited_at', 'clinic_encounters');
+        $timeExpr = $hasVisitedAt ? 'COALESCE(e.visited_at, e.started_at)' : 'e.started_at';
         $cohort = static fn (): BaseBuilder => $db->table('clinic_encounters e')
             ->where('e.tenant_id', $tenantId)->where('e.status', 'completed')
-            ->where('e.started_at >=', $from)->where('e.started_at <', $until);
-        $complaints = self::buckets($cohort(), $db, 'chief_complaint', self::COMPLAINTS);
+            ->where($timeExpr . ' >= ' . $db->escape($from), null, false)
+            ->where($timeExpr . ' < ' . $db->escape($until), null, false);
+        $complaints = self::complaintBuckets($cohort(), $db);
         $dispositions = self::buckets($cohort(), $db, 'disposition', self::DISPOSITIONS);
         $known = [];
         $other = $complaints['Other recorded'] ?? 0;
@@ -92,6 +96,31 @@ final class ClinicReportInsights
             ->select('COUNT(DISTINCT e.id) AS count', false)->get()->getRowArray()['count'];
         $result['medicine_status'] = 'ready';
         return $result;
+    }
+
+    /** Canonical complaint_category first, falling back cleanly for legacy/structured chief_complaint strings. */
+    private static function complaintBuckets(BaseBuilder $cohort, BaseConnection $db): array
+    {
+        $hasCategory = $db->fieldExists('complaint_category', 'clinic_encounters');
+        $rawChief = 'LOWER(TRIM(e.chief_complaint))';
+        $catExpr = $hasCategory ? "NULLIF(LOWER(TRIM(e.complaint_category)), '')" : 'NULL';
+        $case = 'CASE WHEN (e.chief_complaint IS NULL OR ' . $rawChief . " = '') AND " . ($hasCategory ? $catExpr . ' IS NULL' : '1=1') . " THEN 'Not recorded'";
+        foreach (self::COMPLAINTS as $key => $label) {
+            $eqKey = $db->escape($key);
+            if ($hasCategory) {
+                $case .= ' WHEN LOWER(TRIM(e.complaint_category)) = ' . $eqKey . ' OR ' . $rawChief . ' = ' . $eqKey . ' THEN ' . $db->escape($label);
+            } else {
+                $case .= ' WHEN ' . $rawChief . ' = ' . $eqKey . ' THEN ' . $db->escape($label);
+            }
+        }
+        $case .= " ELSE 'Other recorded' END";
+        $rows = $cohort->select($case . ' AS label, COUNT(*) AS count', false)
+            ->groupBy($case, false)->get()->getResultArray();
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$row['label']] = (int) $row['count'];
+        }
+        return $counts;
     }
 
     /** The CASE emits only constants: neither narratives nor person-level rows reach PHP. */

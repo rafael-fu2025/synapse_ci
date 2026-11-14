@@ -32,7 +32,7 @@ final class PatientDirectoryService
         if ($actor['role'] === 'superadmin') {
             return true;
         }
-        if (!in_array($actor['role'], ['clinic_admin', 'clinic_staff'], true)) {
+        if (!in_array($actor['role'], ['clinic_admin', 'clinic_physician', 'clinic_staff', 'clinic_intern'], true)) {
             throw new RuntimeException('Clinic directory role not permitted.', 403);
         }
         $grants = $this->db->table('role_permissions rp')->select('p.code')
@@ -77,6 +77,22 @@ final class PatientDirectoryService
             ->join('health_profiles hp', 'hp.person_id=p.id AND hp.tenant_id=p.tenant_id', 'left')
             ->orderBy('p.last_name')->orderBy('p.first_name')->orderBy('p.id')
             ->get($page->perPage, ($pagination['page'] - 1) * $page->perPage)->getResultArray();
+        $visitStats = [];
+        $patientIds = array_map('intval', array_column($patients, 'id'));
+        if ($patientIds !== []) {
+            foreach ($this->db->table('clinic_encounters')
+                ->select('person_id, COUNT(*) AS visit_count, MAX(COALESCE(visited_at, started_at)) AS last_visit_at', false)
+                ->where('tenant_id', CurrentTenant::id())
+                ->where('deleted_at', null)
+                ->whereIn('person_id', $patientIds)
+                ->groupBy('person_id')
+                ->get()->getResultArray() as $stat) {
+                $visitStats[(int) $stat['person_id']] = [
+                    'visit_count'   => (int) $stat['visit_count'],
+                    'last_visit_at' => $stat['last_visit_at'],
+                ];
+            }
+        }
         foreach ($patients as &$patient) {
             if (empty($patient['email']) && !empty($patient['first_name']) && !empty($patient['last_name'])) {
                 $patient['email'] = \App\Services\UniversityEmail::derive(
@@ -86,6 +102,9 @@ final class PatientDirectoryService
             }
             $patient['program_or_dept'] = !empty($patient['program'])
                 ? $patient['program'] . '-' . $patient['year_level'] : ($patient['emp_dept'] ?? '—');
+            $stat = $visitStats[(int) $patient['id']] ?? null;
+            $patient['visit_count'] = $stat['visit_count'] ?? 0;
+            $patient['last_visit_at'] = $stat['last_visit_at'] ?? null;
         }
         unset($patient);
         return [

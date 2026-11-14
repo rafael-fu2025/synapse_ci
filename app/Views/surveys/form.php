@@ -1,8 +1,18 @@
 <?= $this->extend('layouts/modal_form') ?>
 <?= $this->section('content') ?>
-<?php $questions = $survey['questions'] ?? [['type' => 'text', 'label' => '', 'required' => true, 'options' => []]]; ?>
-<div x-data="SynapseSurveyBuilder(<?= esc(json_encode($questions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>, <?= esc(json_encode($survey['audience'] ?? 'all'), 'attr') ?>, <?= esc(json_encode(site_url('guidance/question-bank/catalog')), 'attr') ?>)">
-  <div class="alert alert-info small">Identified responses are visible only to authorized Guidance administrators and supervisors. Publishing permanently freezes the questions, audience and availability window.</div>
+<?php
+$externalUrl = trim((string) ($survey['external_url'] ?? ''));
+$surveyMode = $externalUrl !== '' ? 'external' : 'internal';
+$rawQuestions = $survey['questions'] ?? [];
+$questions = is_array($rawQuestions) && $rawQuestions !== []
+    ? $rawQuestions
+    : [['type' => 'text', 'label' => '', 'required' => true, 'options' => []]];
+$aiStatus = is_array($aiPrefillStatus ?? null) ? $aiPrefillStatus : ['available' => false, 'reason' => 'AI assistance is currently unavailable for Guidance.'];
+$aiAvailable = !empty($aiStatus['available']);
+$aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPrefillUrl : site_url('guidance/surveys/ai-prefill');
+?>
+<div x-data="SynapseSurveyBuilder(<?= esc(json_encode($questions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>, <?= esc(json_encode($survey['audience'] ?? 'all'), 'attr') ?>, <?= esc(json_encode(site_url('guidance/question-bank/catalog')), 'attr') ?>, <?= esc(json_encode($surveyMode), 'attr') ?>, <?= esc(json_encode($externalUrl), 'attr') ?>, <?= esc(json_encode($aiEndpoint), 'attr') ?>)">
+  <div class="alert alert-info small">In-app surveys collect encrypted identified responses visible only to authorized Guidance administrators and supervisors. External links (such as Google Forms) open on the external form provider. Publishing permanently freezes the configuration, audience, and availability window.</div>
   <noscript><div class="alert alert-warning">Enable JavaScript to use the question builder.</div></noscript>
   <form action="<?= esc($formAction) ?>" method="post" data-modal-submit>
     <?= csrf_field() ?>
@@ -47,7 +57,158 @@
         <div class="form-text">Leave empty for no scheduled end.</div>
       </div>
     </div>
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><h6 class="mb-0">Questions <span class="text-muted small" x-text="questions.length + ' / 20'"></span></h6><button type="button" class="btn btn-outline-primary btn-sm" @click="openBank()" :aria-expanded="bankOpen">Add from question bank</button></div>
+    <div class="mb-3">
+      <div class="form-label fw-semibold">Survey Delivery Mode</div>
+      <div class="row g-2">
+        <div class="col-md-6">
+          <label class="d-flex align-items-start gap-2 p-2 rounded border bg-body-tertiary h-100" style="cursor: pointer;">
+            <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="survey_mode" value="internal" x-model="surveyMode" @change="setMode('internal')">
+            <span class="small">
+              <strong class="d-block">In-App Questions (Encrypted)</strong>
+              <span class="text-muted">Collect identified responses directly inside Synapse.</span>
+            </span>
+          </label>
+        </div>
+        <div class="col-md-6">
+          <label class="d-flex align-items-start gap-2 p-2 rounded border bg-body-tertiary h-100" style="cursor: pointer;">
+            <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="survey_mode" value="external" x-model="surveyMode" @change="setMode('external')">
+            <span class="small">
+              <strong class="d-block">Google Form / External Link</strong>
+              <span class="text-muted">Direct respondents to an external Google Form or web questionnaire URL.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="border rounded p-3 mb-3 bg-body-tertiary" x-show="surveyMode === 'external'" x-cloak>
+      <label for="surveyExternalUrl" class="form-label fw-semibold">Google Form / External Survey URL</label>
+      <input id="surveyExternalUrl"
+             name="external_url"
+             type="url"
+             class="form-control"
+             maxlength="2048"
+             x-model="externalUrl"
+             :required="surveyMode === 'external'"
+             :disabled="surveyMode !== 'external'"
+             placeholder="https://docs.google.com/forms/d/e/.../viewform or https://forms.gle/..."
+             autocomplete="off">
+      <div class="form-text">
+        Paste a full <code>https://</code> Google Form link (or other institutional form URL). Targeted respondents will be able to launch it in a new tab.
+      </div>
+    </div>
+
+    <div x-show="surveyMode === 'internal'" x-cloak>
+    <fieldset class="border-0 p-0 m-0" :disabled="surveyMode !== 'internal'">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <h6 class="mb-0">Questions <span class="text-muted small" x-text="questions.length + ' / 20'"></span></h6>
+      <div class="d-flex flex-wrap gap-2">
+        <?php if ($aiAvailable): ?>
+          <button type="button" class="btn btn-outline-primary btn-sm" @click="toggleAi()" :aria-expanded="aiOpen">
+            <i class="bi bi-stars me-1" aria-hidden="true"></i>Prefill with AI (Paste / Upload)
+          </button>
+        <?php endif; ?>
+        <button type="button" class="btn btn-outline-primary btn-sm" @click="openBank()" :aria-expanded="bankOpen">Add from question bank</button>
+      </div>
+    </div>
+    <?php if (!$aiAvailable && !empty($aiStatus['reason'])): ?>
+      <p class="small text-muted mb-3"><i class="bi bi-stars me-1" aria-hidden="true"></i><?= esc((string) $aiStatus['reason']) ?></p>
+    <?php endif; ?>
+    <?php if ($aiAvailable): ?>
+      <section class="border rounded p-3 mb-3 bg-body-tertiary" x-show="aiOpen" x-cloak aria-label="AI survey prefill">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+          <div>
+            <strong class="d-block small">Prefill Questions from Text or File (AI)</strong>
+            <p class="small text-muted mb-0">Paste survey items or upload <code>.txt</code>, <code>.md</code>, <code>.csv</code>, <code>.docx</code>, or <code>.pdf</code> (max 2 MB). Do not upload student records or counselling notes—AI runs strictly on this input with no access to system data.</p>
+          </div>
+          <button type="button" class="btn-close btn-sm" aria-label="Close AI prefill panel" @click="toggleAi()"></button>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label small fw-semibold mb-1" for="surveyAiSourceText">Paste survey text</label>
+          <textarea id="surveyAiSourceText" class="form-control form-control-sm" rows="4" maxlength="24000" x-model="aiText" :disabled="aiBusy" placeholder="Example:&#10;1. How satisfied are you with Guidance orientation? (1-5)&#10;2. Which topics do you need support with? [Time management, Stress, Career]"></textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label small fw-semibold mb-1" for="surveyAiSourceFile">Or upload questionnaire file</label>
+          <div class="input-group input-group-sm">
+            <input id="surveyAiSourceFile" type="file" class="form-control" x-ref="aiFileInput" accept=".txt,.md,.csv,.docx,.pdf" @change="onAiFileChange($event)" :disabled="aiBusy">
+            <button type="button" class="btn btn-outline-secondary" x-show="aiFileName !== ''" @click="clearAiFile($refs.aiFileInput)" :disabled="aiBusy">Clear file</button>
+          </div>
+          <div class="form-text" x-show="aiFileName !== ''" x-text="'Selected file: ' + aiFileName"></div>
+        </div>
+
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+          <div class="d-flex flex-wrap align-items-center gap-3 small">
+            <div class="btn-group btn-group-sm" role="radiogroup" aria-label="AI question merge mode">
+              <button type="button" class="btn" :class="aiMergeMode === 'replace' ? 'btn-primary' : 'btn-outline-secondary'" role="radio" :aria-checked="aiMergeMode === 'replace'" @click="aiMergeMode = 'replace'" :disabled="aiBusy">Replace draft questions</button>
+              <button type="button" class="btn" :class="aiMergeMode === 'append' ? 'btn-primary' : 'btn-outline-secondary'" role="radio" :aria-checked="aiMergeMode === 'append'" @click="aiMergeMode = 'append'" :disabled="aiBusy">Append (up to 20 total)</button>
+            </div>
+            <label class="form-check form-check-inline m-0">
+              <input class="form-check-input" type="checkbox" x-model="aiFillMeta" :disabled="aiBusy">
+              <span class="form-check-label">Fill blank title &amp; description</span>
+            </label>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" x-show="aiBusy" @click="cancelAiPrefill()">Cancel</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" x-show="aiRawLog.length > 0 || aiBusy" @click="aiShowRawSse = !aiShowRawSse" :aria-expanded="aiShowRawSse">
+              <i class="bi bi-terminal me-1" aria-hidden="true"></i><span x-text="aiShowRawSse ? 'Hide Raw SSE' : 'Raw SSE (' + aiRawLog.length + ')'"></span>
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" @click="runAiPrefill($refs.aiFileInput, document.getElementById('surveyTitle'), document.getElementById('surveyDescription'), false)" :disabled="aiBusy">
+              <span x-show="!aiBusy">Extract Questions</span>
+              <span x-show="aiBusy" x-cloak x-text="'Working (' + aiElapsedSec + 's)…'">Extracting…</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="border rounded p-2 mb-2 bg-body" x-show="aiBusy || (aiPercent > 0 && aiPercent < 100) || (aiStage === 'done' && aiMessage)" aria-live="polite">
+          <div class="d-flex justify-content-between align-items-center small mb-1">
+            <span class="fw-semibold" x-text="aiStageLabel || 'Processing…'"></span>
+            <span class="text-muted">
+              <span x-show="aiTotalSteps > 0" x-text="'Step ' + aiStep + '/' + aiTotalSteps + ' · '"></span>
+              <span x-text="aiPercent + '%'"></span>
+              <span x-show="aiElapsedSec > 0" x-text="' · ' + aiElapsedSec + 's'"></span>
+            </span>
+          </div>
+          <div class="progress" style="height: 8px;" role="progressbar" :aria-valuenow="aiPercent" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar" :class="aiBusy ? 'progress-bar-striped progress-bar-animated' : 'bg-success'" :style="'width: ' + aiPercent + '%'"></div>
+          </div>
+        </div>
+
+        <div class="border rounded p-2 mb-2 bg-body" x-show="aiShowRawSse" x-cloak>
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small fw-semibold">Raw AI SSE Stream (sanitized completion frames)</span>
+            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" x-show="!aiBusy && aiRawLog.length > 0" @click="aiRawLog = []">Clear log</button>
+          </div>
+          <pre class="small mb-0 p-2 rounded border bg-body-tertiary font-monospace" style="max-height: 170px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;" x-text="aiRawLog.length > 0 ? aiRawLog.join('\n') : 'Waiting for AI SSE frames…'"></pre>
+        </div>
+
+        <div class="border border-warning-subtle rounded p-2 mb-2 bg-body" x-show="aiClarifications.length > 0" x-cloak>
+          <div class="small fw-semibold mb-1"><i class="bi bi-question-circle me-1" aria-hidden="true"></i>AI Clarifications (optional)</div>
+          <p class="small text-muted mb-2">Answer any ambiguous scale/question items below and re-extract to refine the prefilled questions.</p>
+          <template x-for="(clar, cIdx) in aiClarifications" :key="clar.id || cIdx">
+            <div class="mb-2 pb-2 border-bottom">
+              <label class="form-label small fw-semibold mb-1 d-block" :for="'aiClar-' + cIdx" x-text="clar.question"></label>
+              <div class="d-flex flex-wrap gap-1 mb-1" x-show="clar.suggested_options.length > 0">
+                <template x-for="(opt, oIdx) in clar.suggested_options" :key="oIdx">
+                  <button type="button" class="btn btn-sm py-0 px-2" :class="clar.answer === opt ? 'btn-primary' : 'btn-outline-secondary'" @click="pickClarificationOption(clar, opt)" :disabled="aiBusy" x-text="opt"></button>
+                </template>
+              </div>
+              <input :id="'aiClar-' + cIdx" type="text" class="form-control form-control-sm" maxlength="400" x-model="clar.answer" :disabled="aiBusy" placeholder="Type clarification answer (optional)…">
+            </div>
+          </template>
+          <button type="button" class="btn btn-outline-primary btn-sm" @click="runAiPrefill($refs.aiFileInput, document.getElementById('surveyTitle'), document.getElementById('surveyDescription'), true)" :disabled="aiBusy">Apply Clarifications &amp; Re-extract</button>
+        </div>
+
+        <div class="alert alert-danger small py-2 mb-2" role="alert" x-show="aiError" x-text="aiError"></div>
+        <div class="alert alert-success small py-2 mb-2" role="status" x-show="aiMessage" x-text="aiMessage"></div>
+        <ul class="alert alert-warning small py-2 ps-4 mb-0" role="status" x-show="aiWarnings.length > 0">
+          <template x-for="(warning, idx) in aiWarnings" :key="idx">
+            <li x-text="warning"></li>
+          </template>
+        </ul>
+      </section>
+    <?php endif; ?>
     <section class="border rounded p-3 mb-3" x-show="bankOpen" x-cloak aria-label="Question bank picker">
       <p class="small text-muted">Select several questions and add them together, or add one copy at a time. Selections stay checked across pages and searches until added or cleared. Editing a copied question detaches its bank reference. Bank revisions and archiving never alter saved survey copies.</p>
       <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -80,9 +241,27 @@
         <p class="small text-muted" x-show="question.bank_id" x-text="'Bank #' + question.bank_id + ' · revision ' + question.bank_revision + ' · independent survey copy'"></p>
         <template x-if="question.bank_id"><div><input type="hidden" :name="'questions[' + index + '][bank_id]'" :value="question.bank_id"><input type="hidden" :name="'questions[' + index + '][bank_revision]'" :value="question.bank_revision"></div></template>
         <label class="form-label d-block">Question text<input class="form-control" :name="'questions[' + index + '][label]'" x-model="question.label" @input="detach(question)" maxlength="500" required></label>
-        <label class="form-label d-block">Answer type<select class="form-select" :name="'questions[' + index + '][type]'" x-model="question.type" @change="detach(question); question.options = ['single','multiple'].includes(question.type) ? ['', ''] : []"><option value="text">Text (up to 2,000 characters)</option><option value="single">Single choice</option><option value="multiple">Multiple choice</option><option value="rating">Rating (1–5)</option></select></label>
+        <label class="form-label d-block">Answer type<select class="form-select" :name="'questions[' + index + '][type]'" x-model="question.type" @change="detach(question); question.options = ['single','multiple'].includes(question.type) ? ['', ''] : []; if (!['single','multiple'].includes(question.type)) { delete question.allow_other; } if (question.type === 'rating') { question.scale_min_label = question.scale_min_label || ''; question.scale_max_label = question.scale_max_label || ''; } else { delete question.scale_min_label; delete question.scale_max_label; }"><option value="text">Text (up to 2,000 characters)</option><option value="single">Single choice</option><option value="multiple">Multiple choice</option><option value="rating">Rating (1–5)</option></select></label>
+        <template x-if="question.type === 'rating'">
+          <div class="row g-2 mb-2">
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" :for="'qMinLabel-' + index">Label for 1 (optional)</label>
+              <input class="form-control form-control-sm" :id="'qMinLabel-' + index" :name="'questions[' + index + '][scale_min_label]'" x-model="question.scale_min_label" @input="detach(question)" maxlength="100" placeholder="e.g. Lowest / Strongly disagree">
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small mb-1" :for="'qMaxLabel-' + index">Label for 5 (optional)</label>
+              <input class="form-control form-control-sm" :id="'qMaxLabel-' + index" :name="'questions[' + index + '][scale_max_label]'" x-model="question.scale_max_label" @input="detach(question)" maxlength="100" placeholder="e.g. Highest / Strongly agree">
+            </div>
+          </div>
+        </template>
         <input type="hidden" :name="'questions[' + index + '][required]'" :value="question.required ? '1' : '0'">
         <label class="form-check mb-2"><input class="form-check-input" type="checkbox" x-model="question.required" @change="detach(question)"><span class="form-check-label">Required</span></label>
+        <template x-if="['single','multiple'].includes(question.type)">
+          <div class="mb-2">
+            <input type="hidden" :name="'questions[' + index + '][allow_other]'" :value="question.allow_other ? '1' : '0'">
+            <label class="form-check"><input class="form-check-input" type="checkbox" x-model="question.allow_other" @change="detach(question)"><span class="form-check-label">Allow &ldquo;Other (please specify)&rdquo; custom answer</span></label>
+          </div>
+        </template>
         <template x-for="(option, optionIndex) in question.options" :key="optionIndex">
           <div class="input-group mb-2"><input class="form-control" :aria-label="'Option ' + (optionIndex + 1)" :name="'questions[' + index + '][options][' + optionIndex + ']'" x-model="question.options[optionIndex]" @input="detach(question)" maxlength="200" required><button class="btn btn-outline-secondary" type="button" :disabled="question.options.length <= 2" @click="detach(question); question.options.splice(optionIndex, 1)" aria-label="Remove option">Remove</button></div>
         </template>
@@ -90,7 +269,9 @@
         <button class="btn btn-outline-danger btn-sm" type="button" :disabled="questions.length <= 1" @click="questions.splice(index, 1)">Remove question</button>
       </fieldset>
     </template>
-    <button class="btn btn-outline-primary btn-sm mb-3" type="button" :disabled="questions.length >= 20" @click="questions.push({type:'text',label:'',required:true,options:[]})">Add question</button>
+    <button class="btn btn-outline-primary btn-sm mb-3" type="button" :disabled="questions.length >= 20" @click="questions.push({type:'text',label:'',required:true,options:[],scale_min_label:'',scale_max_label:''})">Add question</button>
+    </fieldset>
+    </div>
     <div class="form-actions"><a class="btn btn-outline-secondary" href="<?= esc($cancelUrl) ?>" data-app-modal-close>Cancel</a><button class="btn btn-primary" type="submit">Save draft</button></div>
   </form>
 </div>

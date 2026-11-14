@@ -343,12 +343,30 @@ fieldset:disabled .btn {
   color: #f0f0f0 !important;
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-light:not(.btn):not(.badge) {
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-light:not(.btn):not(.badge),
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-light-subtle:not(.btn):not(.badge),
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-body-secondary:not(.btn):not(.badge) {
   background-color: #222222 !important;
   color: #f0f0f0 !important;
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-white:not(.btn):not(.badge) {
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-body-tertiary:not(.btn):not(.badge) {
+  background-color: #282828 !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-secondary-subtle:not(.btn):not(.badge) {
+  background-color: #242424 !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-dark-subtle:not(.btn):not(.badge) {
+  background-color: #181818 !important;
+  color: #f0f0f0 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-white:not(.btn):not(.badge),
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bg-body:not(.btn):not(.badge) {
   background-color: #1c1c1c !important;
   color: #f0f0f0 !important;
 }

@@ -94,5 +94,33 @@
       </form>
     </div></div>
   </section>
+
+  <section class="col-12" aria-labelledby="profileCurrentContactTitle">
+    <div class="card mb-0"><div class="card-body p-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
+        <h2 class="h5 mb-0" id="profileCurrentContactTitle">Contact number &amp; current residence</h2>
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">Clinic &amp; Guidance directory</span>
+      </div>
+      <p class="small text-muted mb-3">
+        Your official name, ID number, program, and enrollment status remain synchronized from MIS. Use this section only to keep your current contact phone and boarding house / current address up to date for Clinic and Guidance follow-ups.
+      </p>
+      <form action="<?= esc(site_url('portal/settings/contact-info')) ?>" method="POST" data-background-submit>
+        <?= csrf_field() ?>
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold" for="contactPhone">Current contact number</label>
+            <input class="form-control form-control-sm" id="contactPhone" name="phone" type="text" maxlength="30"
+                   value="<?= esc((string) ($person['phone'] ?? ''), 'attr') ?>" placeholder="e.g. 0917 123 4567" autocomplete="tel">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label small fw-semibold" for="contactAddress">Current / boarding house address</label>
+            <input class="form-control form-control-sm" id="contactAddress" name="address" type="text" maxlength="500"
+                   value="<?= esc((string) ($person['address'] ?? ''), 'attr') ?>" placeholder="House / Boarding House / Street / Barangay / City" autocomplete="street-address">
+          </div>
+        </div>
+        <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Update current contact &amp; residence</button>
+      </form>
+    </div></div>
+  </section>
 </div>
 <?= $this->endSection() ?>

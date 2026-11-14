@@ -15,8 +15,10 @@ final class EmployeeAccessService
 {
     public const ROLES = [
         'employee' => 'Employee — personal portal only',
-        'clinic_staff' => 'Clinic staff — clinical records and operations',
-        'clinic_admin' => 'Clinic administrator — Clinic publishing and access management',
+        'clinic_intern' => 'Student Nurse / Intern — intake drafts, vitals and chart view (no seal/dispense)',
+        'clinic_staff' => 'Clinic Nurse / Staff — clinical records, dispensing and operations',
+        'clinic_physician' => 'Clinic Physician — full clinical authority, clearances and reports',
+        'clinic_admin' => 'Clinic administrator — Clinic publishing, oversight and access management',
         'counsellor' => 'Counsellor — assigned cases and Guidance operations',
         'guidance_supervisor' => 'Guidance supervisor — all cases, publishing and surveys',
         'guidance_admin' => 'Guidance administrator — all cases, publishing, surveys and access management',
@@ -51,7 +53,7 @@ final class EmployeeAccessService
     {
         $keys = match ($role) {
             'superadmin' => array_keys(self::ROLES),
-            'clinic_admin' => ['employee', 'clinic_staff'],
+            'clinic_admin' => ['employee', 'clinic_intern', 'clinic_staff', 'clinic_physician'],
             'guidance_admin' => ['employee', 'counsellor'],
             default => [],
         };

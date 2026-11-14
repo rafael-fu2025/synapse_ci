@@ -830,3 +830,49 @@ for (const theme of ['light', 'dark']) {
     for (const sample of samples) assert.ok(sample.contrast >= 4.5, `${theme} text contrast below 4.5:1: ${JSON.stringify(sample)}`);
   });
 }
+
+check('searchable dropdown filters >=10 options, shows empty state, clears on first Escape and supports closed type-ahead', async t => {
+  const { page } = await open(t);
+  await page.evaluate(() => {
+    const sel = document.querySelector('#choice');
+    const extra = ['Counseling', 'Crisis', 'Career', 'Academic', 'Psychosocial', 'Family', 'Wellness', 'Behavioral', 'Testing', 'Intake'];
+    sel.innerHTML = '<option value="">Choose...</option>' + extra.map((label, idx) => `<option value="v${idx}">${label}</option>`).join('');
+  });
+  await settle(page);
+
+  const button = toggle(page);
+  await button.focus();
+  await page.keyboard.type('psych');
+  assert.equal(await page.locator('#choice').inputValue(), 'v4');
+  assert.equal(await button.locator('.bd-select-label').textContent(), 'Psychosocial');
+
+  await button.click();
+  await settle(page);
+  const search = menu(page).locator('.bd-select-search');
+  assert.equal(await search.isVisible(), true);
+  await search.fill('acad');
+  await settle(page);
+  assert.equal(await menu(page).locator('.dropdown-item:not([hidden])').count(), 1);
+  assert.equal(await menu(page).locator('.bd-select-empty').isVisible(), false);
+
+  await search.fill('nonexistent');
+  await settle(page);
+  assert.equal(await menu(page).locator('.dropdown-item:not([hidden])').count(), 0);
+  assert.equal(await menu(page).locator('.bd-select-empty').isVisible(), true);
+
+  // First Escape clears active query without closing the menu; second Escape closes it.
+  await search.press('Escape');
+  await settle(page);
+  assert.equal(await search.inputValue(), '');
+  assert.equal(await menu(page).evaluate(el => el.classList.contains('show')), true);
+  assert.equal(await menu(page).locator('.dropdown-item:not([hidden])').count(), 10);
+
+  await search.press('Escape');
+  await settle(page);
+  assert.equal(await menu(page).evaluate(el => el.classList.contains('show')), false);
+
+  await toggle(page).click();
+  await settle(page);
+  await menu(page).locator('.dropdown-item:not([hidden])', { hasText: 'Career' }).click();
+  assert.equal(await page.locator('#choice').inputValue(), 'v2');
+});

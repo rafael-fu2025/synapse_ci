@@ -33,8 +33,8 @@ final class PortalSurveyController extends BaseController
         try {
             $post = $this->request->getPost();
             unset($post[csrf_token()]);
-            if (array_diff(array_keys($post), ['answers']) !== []) { throw new RuntimeException('Unexpected submission fields.', 422); }
-            (new SurveyService())->submit($id, $post['answers'] ?? []);
+            if (array_diff(array_keys($post), ['answers', 'answers_other']) !== []) { throw new RuntimeException('Unexpected submission fields.', 422); }
+            (new SurveyService())->submit($id, $post['answers'] ?? [], $post['answers_other'] ?? []);
             // No withInput(): answers must never enter session old-input or flash storage.
             $message = 'Your identified survey response has been submitted.';
             session()->setFlashdata('success', $message);

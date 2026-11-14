@@ -88,6 +88,7 @@
     const box = root.querySelector('[data-modal-error]');
     box.textContent = message;
     box.classList.remove('d-none');
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   function separateActions(root) {
     const content = root.querySelector('.modal-content');
@@ -269,8 +270,9 @@
     form.inert = true;
     controls.forEach(control => { control.disabled = true; });
     record.root.querySelector('[data-modal-error]').classList.add('d-none');
+    const actionUrl = form.getAttribute('action') || window.location.href;
     try {
-      const response = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin',
+      const response = await fetch(actionUrl, { method: 'POST', body: data, credentials: 'same-origin',
         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}),
           ...(record.sourceOwner ? { 'X-Synapse-Refresh-Owner': record.sourceOwner } : {}) } });
       window.SynapseCsrf?.fromResponse(response);

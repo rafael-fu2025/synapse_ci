@@ -91,7 +91,7 @@ final class HttpMisClient implements MisClientInterface
             foreach (['message', 'error'] as $key) {
                 $message = $decoded[$key] ?? null;
                 if (is_string($message)
-                    && preg_match('/^(?:account not recognized|invalid credentials)[.!]?$/iD', trim($message))) {
+                    && preg_match('/^(?:account not recognized|invalid credentials)(?:[.!]?(?:\s+please try again[.!]?)?)?$/iD', trim($message))) {
                     return null;
                 }
             }

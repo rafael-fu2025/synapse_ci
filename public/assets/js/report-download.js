@@ -92,8 +92,9 @@
       } else ui.root.remove();
     });
     try {
-      const action = new URL(submitter?.getAttribute('formaction') || form.action, window.location.href);
-      if (action.origin !== window.location.origin || form.method.toLowerCase() !== 'post') throw new Error('Report downloads must use a secure form on this site.');
+      const action = new URL(submitter?.getAttribute('formaction') || form.getAttribute('action') || window.location.href, window.location.href);
+      const method = (form.getAttribute('method') || 'GET').toLowerCase();
+      if (action.origin !== window.location.origin || method !== 'post') throw new Error('Report downloads must use a secure form on this site.');
       // Serialize before disabling either format button, preserving its name/value and CSRF token.
       const body = submitter ? new FormData(form, submitter) : new FormData(form);
       const format = body.get('format') || 'csv';

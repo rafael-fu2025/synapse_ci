@@ -90,6 +90,23 @@ $routes->group('api/v1', static function (RouteCollection $routes): void {
 
         // Staff monitoring only; no staff action endpoint exists on the mobile API.
         $routes->get('staff/queue-summary', 'Api\V1\StaffQueueApiController::index');
+
+        // Student Guidance Mobile Self-Service V1 Contracts
+        $routes->get('guidance/dashboard', 'Api\V1\GuidanceMobileController::dashboard');
+        $routes->post('guidance/call-slips/(:num)/acknowledge', 'Api\V1\GuidanceMobileController::acknowledgeCallSlip/$1');
+        $routes->post('guidance/self-referral', 'Api\V1\GuidanceMobileController::submitSelfReferral');
+        $routes->get('guidance/mi', 'Api\V1\GuidanceMobileController::miIndex');
+        $routes->post('guidance/mi/(:num)/draft', 'Api\V1\GuidanceMobileController::miDraft/$1');
+        $routes->post('guidance/mi/(:num)/finalize', 'Api\V1\GuidanceMobileController::miFinalize/$1');
+        $routes->get('guidance/mi/results/(:num)', 'Api\V1\GuidanceMobileController::miResults/$1');
+        $routes->post('guidance/evaluations/submit', 'Api\V1\GuidanceMobileController::submitEvaluation');
+
+        // Explicit 403 boundary enforcement on workstation-only Guidance actions
+        $routes->match(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], 'guidance/clinical/(:any)', 'Api\V1\GuidanceMobileController::rejectWorkstationAction/clinical_author');
+        $routes->match(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], 'guidance/safety/(:any)', 'Api\V1\GuidanceMobileController::rejectWorkstationAction/safety_triage');
+        $routes->match(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], 'guidance/cosign/(:any)', 'Api\V1\GuidanceMobileController::rejectWorkstationAction/clinical_cosign');
+        $routes->match(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], 'guidance/cases/(:any)', 'Api\V1\GuidanceMobileController::rejectWorkstationAction/case_transfer');
+        $routes->get('guidance/cases', 'Api\V1\GuidanceMobileController::rejectWorkstationAction/case_transfer');
     });
 });
 
@@ -160,6 +177,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->post('portal/settings/photo', 'ProfileSettingsController::upload');
     $routes->post('portal/settings/photo/remove', 'ProfileSettingsController::remove');
     $routes->post('portal/settings/emergency-contact', 'ProfileSettingsController::updateEmergencyContact');
+    $routes->post('portal/settings/contact-info', 'ProfileSettingsController::updateContactInfo');
 
     // Operational Teams tasks use department membership, not clinical record grants.
     foreach (['clinic', 'guidance', 'facilities'] as $unit) {
@@ -218,6 +236,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->group('guidance/surveys', ['filter' => 'portal_access:guidance'], static function (RouteCollection $routes): void {
         $routes->get('', 'SurveyController::index');
         $routes->get('create', 'SurveyController::create');
+        $routes->post('ai-prefill', 'SurveyController::aiPrefill');
         $routes->post('store', 'SurveyController::store');
         $routes->get('(:num)/edit', 'SurveyController::edit/$1');
         $routes->post('(:num)/update', 'SurveyController::update/$1');
@@ -225,6 +244,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('(:num)/close', 'SurveyController::close/$1');
         $routes->get('(:num)/responses', 'SurveyController::responses/$1');
         $routes->get('(:num)/responses/(:num)', 'SurveyController::responseDetail/$1/$2');
+        $routes->post('(:num)/responses/(:num)/interview', 'SurveyController::recordInterview/$1/$2');
         $routes->post('(:num)/responses/export', 'SurveyController::exportResponses/$1');
     });
 
@@ -289,6 +309,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('guidance', 'GuidanceController::dashboard');
         $routes->get('guidance/dashboard', 'GuidanceController::dashboard');
         $routes->get('guidance/cases', 'GuidanceController::cases');
+        $routes->get('guidance/students/(:num)/cumulative', 'GuidanceController::cumulativeRecord/$1');
+        $routes->get('guidance/reports/summary', 'GuidanceController::periodicSummary');
         $routes->get('guidance/cases/create', 'GuidanceController::newCase');
         $routes->post('guidance/cases/store', 'GuidanceController::storeCase');
         $routes->get('guidance/cases/(:num)', 'GuidanceController::caseView/$1');
@@ -309,6 +331,17 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('guidance/followups/(:num)/complete', 'GuidanceController::completeFollowup/$1');
         $routes->post('guidance/followups/(:num)/missed', 'GuidanceController::missFollowup/$1');
 
+        // Controlled Guidance Forms Kernel
+        $routes->get('guidance/forms/definitions', 'GuidanceFormsController::definitions');
+        $routes->post('guidance/forms/sync-manifest', 'GuidanceFormsController::syncManifest');
+        $routes->post('guidance/forms/create', 'GuidanceFormsController::createInstance');
+        $routes->post('guidance/forms/(:num)/draft', 'GuidanceFormsController::saveDraft/$1');
+        $routes->get('guidance/forms/(:num)/draft', 'GuidanceFormsController::getDraft/$1');
+        $routes->post('guidance/forms/(:num)/finalize', 'GuidanceFormsController::finalize/$1');
+        $routes->get('guidance/forms/(:num)/revision/(:num)', 'GuidanceFormsController::getRevision/$1/$2');
+        $routes->get('guidance/forms/(:num)/preview', 'GuidanceFormsController::preview/$1');
+        $routes->post('guidance/forms/(:num)/issue', 'GuidanceFormsController::issue/$1');
+
         $routes->get('guidance/queue', 'QueueController::index/guidance');
         $routes->get('guidance/queue/board', 'QueueController::board/guidance');
         $routes->post('guidance/queue/call-next', 'QueueController::callNext/guidance');
@@ -319,7 +352,89 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('guidance/queue/recall/(:num)', 'QueueController::recall/guidance/$1');
         $routes->post('guidance/queue/no-show/(:num)', 'QueueController::noShow/guidance/$1');
         $routes->post('guidance/queue/walkin', 'QueueController::walkin/guidance');
+
+        // Guidance Governance & Practitioner Eligibility
+        $routes->get('guidance/governance/gates', 'GuidanceGovernanceController::gates');
+        $routes->post('guidance/governance/gates/(:segment)/signoff', 'GuidanceGovernanceController::signOffGate/$1');
+        $routes->get('guidance/governance/practitioners', 'GuidanceGovernanceController::practitioners');
+        $routes->post('guidance/governance/practitioners/register', 'GuidanceGovernanceController::registerPractitioner');
+        $routes->post('guidance/governance/practitioners/supervision', 'GuidanceGovernanceController::assignSupervisor');
+
+        // Guidance Intake & Safety Triage
+        $routes->get('guidance/intake', 'GuidanceIntakeController::index');
+        $routes->post('guidance/intake/staff-create', 'GuidanceIntakeController::staffCreate');
+        $routes->get('guidance/intake/(:num)', 'GuidanceIntakeController::show/$1');
+        $routes->post('guidance/intake/(:num)/receive', 'GuidanceIntakeController::receive/$1');
+        $routes->post('guidance/intake/(:num)/triage', 'GuidanceIntakeController::triage/$1');
+        $routes->post('guidance/intake/(:num)/accept', 'GuidanceIntakeController::accept/$1');
+        $routes->post('guidance/intake/(:num)/decline', 'GuidanceIntakeController::decline/$1');
+        $routes->post('guidance/intake/(:num)/link-case', 'GuidanceIntakeController::linkCase/$1');
+        $routes->post('guidance/intake/(:num)/external-handoff', 'GuidanceIntakeController::externalHandoff/$1');
+        $routes->post('guidance/intake/bridge-clinic/(:num)', 'GuidanceIntakeController::bridgeClinic/$1');
+        $routes->post('guidance/safety/assess', 'GuidanceIntakeController::recordSafetyAssessment');
+        $routes->post('guidance/safety/escalate', 'GuidanceIntakeController::recordEscalation');
+        $routes->post('guidance/safety/escalations/(:num)/ack', 'GuidanceIntakeController::acknowledgeEscalation/$1');
+
+        // Guidance Episodes & Call Slips
+        $routes->get('guidance/episodes', 'GuidanceEpisodeController::index');
+        $routes->post('guidance/episodes/open', 'GuidanceEpisodeController::open');
+        $routes->get('guidance/episodes/(:num)', 'GuidanceEpisodeController::show/$1');
+        $routes->post('guidance/episodes/(:num)/close', 'GuidanceEpisodeController::close/$1');
+        $routes->post('guidance/episodes/(:num)/transfer', 'GuidanceEpisodeController::transfer/$1');
+
+        $routes->get('guidance/call-slips', 'GuidanceCallSlipController::index');
+        $routes->post('guidance/call-slips/issue', 'GuidanceCallSlipController::issue');
+        $routes->post('guidance/call-slips/(:num)/status', 'GuidanceCallSlipController::updateStatus/$1');
+        $routes->get('guidance/call-slips/(:num)/pdf', 'GuidanceCallSlipController::pdf/$1');
+        $routes->get('guidance/appointments/(:num)/pdf', 'GuidanceCallSlipController::appointmentPdf/$1');
+
+        // Controlled Clinical Forms, Co-Sign Queue & Case Transfers
+        $routes->get('guidance/clinical/cosign-queue', 'GuidanceClinicalController::cosignQueue');
+        $routes->get('guidance/clinical/forms/new/(:segment)', 'GuidanceClinicalController::newForm/$1');
+        $routes->post('guidance/clinical/forms/create', 'GuidanceClinicalController::createForm');
+        $routes->get('guidance/clinical/forms/(:num)', 'GuidanceClinicalController::editForm/$1');
+        $routes->post('guidance/clinical/forms/(:num)/save', 'GuidanceClinicalController::saveDraft/$1');
+        $routes->post('guidance/clinical/forms/(:num)/submit-cosign', 'GuidanceClinicalController::submitForCoSign/$1');
+        $routes->post('guidance/clinical/forms/(:num)/cosign', 'GuidanceClinicalController::coSignFinalize/$1');
+        $routes->post('guidance/clinical/forms/(:num)/finalize', 'GuidanceClinicalController::finalizeDirect/$1');
+        $routes->get('guidance/clinical/forms/(:num)/pdf', 'GuidanceClinicalController::pdf/$1');
+        $routes->post('guidance/clinical/cases/(:num)/transfer/request', 'GuidanceClinicalController::requestTransfer/$1');
+        $routes->post('guidance/clinical/transfers/(:num)/respond', 'GuidanceClinicalController::respondTransfer/$1');
+        $routes->post('guidance/clinical/cases/(:num)/reassign', 'GuidanceClinicalController::reassignCase/$1');
+
+        // Multiple Intelligence (Counselor Console)
+        $routes->get('guidance/assessments/mi', 'GuidanceMultipleIntelligenceController::index');
+        $routes->post('guidance/assessments/mi/assign', 'GuidanceMultipleIntelligenceController::assign');
+        $routes->get('guidance/assessments/mi/results/(:num)', 'GuidanceMultipleIntelligenceController::counselorResults/$1');
+        $routes->get('guidance/assessments/mi/results/(:num)/pdf', 'GuidanceMultipleIntelligenceController::counselorPdf/$1');
+
+        // Pseudonymous Service Evaluations (Supervisor / Admin Console)
+        $routes->get('guidance/evaluations/dashboard', 'GuidanceEvaluationController::dashboard');
+        $routes->get('guidance/evaluations/moderate', 'GuidanceEvaluationController::moderate');
+        $routes->post('guidance/evaluations/moderate/(:num)', 'GuidanceEvaluationController::moderateAction/$1');
+        $routes->get('guidance/evaluations/aggregate-pdf', 'GuidanceEvaluationController::aggregatePdf');
     });
+
+    // Guidance Portal Self-Service & General Referrals (authenticated students/employees/referrers)
+    $routes->get('portal/referrals/create', 'GuidanceIntakeController::portalCreate');
+    $routes->post('portal/referrals/resolve-subject', 'GuidanceIntakeController::resolveSubject');
+    $routes->post('portal/referrals/store', 'GuidanceIntakeController::portalStore');
+    $routes->post('guidance/intake/(:num)/withdraw', 'GuidanceIntakeController::withdraw/$1');
+    $routes->post('portal/guidance/call-slips/(:num)/acknowledge', 'GuidanceCallSlipController::portalAcknowledgeCallSlip/$1');
+
+    $routes->get('portal/assessments/mi', 'GuidanceMultipleIntelligenceController::portalList');
+    $routes->get('portal/assessments/mi/(:num)', 'GuidanceMultipleIntelligenceController::portalTake/$1');
+    $routes->post('portal/assessments/mi/(:num)/draft', 'GuidanceMultipleIntelligenceController::portalSaveDraft/$1');
+    $routes->post('portal/assessments/mi/(:num)/finalize', 'GuidanceMultipleIntelligenceController::portalFinalize/$1');
+    $routes->get('portal/assessments/mi/results/(:num)', 'GuidanceMultipleIntelligenceController::portalResults/$1');
+    $routes->get('portal/assessments/mi/results/(:num)/pdf', 'GuidanceMultipleIntelligenceController::portalPdf/$1');
+
+    $routes->get('portal/evaluations/redeem', 'GuidanceEvaluationController::redeem');
+    $routes->get('portal/evaluations/redeem/(:segment)', 'GuidanceEvaluationController::redeem/$1');
+    $routes->post('portal/evaluations/submit', 'GuidanceEvaluationController::submit');
+
+    // Public non-PII controlled document verification
+    $routes->get('guidance/verify/(:segment)', 'GuidanceFormsController::verify/$1');
 
     foreach (['clinic', 'guidance'] as $unit) {
         $routes->group($unit . '/referrals', ['filter' => 'portal_access:' . $unit], static function (RouteCollection $routes) use ($unit): void {
@@ -354,6 +469,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('clinic/encounters/(:num)/draft', 'ClinicController::saveDraft/$1', ['filter' => 'inventory_csrf']);
         $routes->post('clinic/encounters/(:num)/dispense', 'ClinicController::dispense/$1', ['filter' => 'inventory_csrf']);
         $routes->post('clinic/encounters/(:num)/complete', 'ClinicController::complete/$1', ['filter' => 'inventory_csrf']);
+        $routes->post('clinic/encounters/(:num)/addendum', 'ClinicController::saveAddendum/$1');
+        $routes->get('clinic/encounters/(:num)/certificate', 'ClinicController::encounterCertificate/$1');
         $routes->post('clinic/encounters/start-for-ticket/(:num)', 'ClinicController::startForTicket/$1', ['filter' => 'inventory_csrf']);
         $routes->get('clinic/encounters/start-for-ticket/(:num)', static function () {
             return service('response')->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Method not allowed.');
@@ -380,6 +497,16 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('clinic/patients', 'ClinicController::patients');
         $routes->get('clinic/patients/(:num)', 'ClinicController::patientChart/$1');
         $routes->post('clinic/patients/(:num)/health', 'ClinicController::updateHealth/$1');
+        $routes->post('clinic/patients/(:num)/labs', 'ClinicController::saveLabResult/$1');
+        $routes->post('clinic/patients/(:num)/clearances', 'ClinicController::saveEnrollmentClearance/$1');
+        $routes->get('clinic/clearances/(:num)/certificate', 'ClinicController::clearanceCertificate/$1');
+
+        $routes->get('clinic/isolation', 'ClinicIsolationController::index');
+        $routes->post('clinic/isolation/store', 'ClinicIsolationController::store');
+        $routes->post('clinic/isolation/(:num)/clear', 'ClinicIsolationController::clear/$1');
+
+        $routes->get('clinic/reports', 'ClinicController::summaryReport');
+        $routes->get('clinic/reports/pdf', 'ClinicController::summaryReportPdf');
 
         $routes->get('clinic/queue', 'QueueController::index/clinic');
         $routes->get('clinic/queue/board', 'QueueController::board/clinic');

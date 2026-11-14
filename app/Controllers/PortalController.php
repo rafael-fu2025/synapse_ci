@@ -56,6 +56,45 @@ final class PortalController extends BaseController
         $filters['page'] = $appointmentPage['pagination']['page'];
         $filters['per_page'] = $appointmentPage['pagination']['per_page'];
 
+        $pendingCallSlips = [];
+        $activeMiAssignments = [];
+        $tenantId = (int) ($user['tenant_id'] ?? \App\Services\CurrentTenant::id());
+        $db = \Config\Database::connect();
+        try {
+            if ($db->tableExists('guidance_call_slips')) {
+                $pendingCallSlips = $db->table('guidance_call_slips')
+                    ->where('tenant_id', $tenantId)
+                    ->where('person_id', $personId)
+                    ->where('deleted_at', null)
+                    ->whereIn('attendance_status', ['pending', 'acknowledged'])
+                    ->orderBy('call_date', 'ASC')
+                    ->orderBy('id', 'DESC')
+                    ->limit(10)
+                    ->get()
+                    ->getResultArray();
+            }
+            if ($db->tableExists('guidance_mi_assignments')) {
+                $activeMiAssignments = $db->table('guidance_mi_assignments')
+                    ->where('tenant_id', $tenantId)
+                    ->where('person_id', $personId)
+                    ->where('deleted_at', null)
+                    ->whereIn('status', ['assigned', 'in_progress'])
+                    ->orderBy('id', 'DESC')
+                    ->limit(5)
+                    ->get()
+                    ->getResultArray();
+            }
+        } catch (\Throwable) {
+            // Optional Guidance self-service tables may be absent in minimal schema runs.
+        }
+
+        $pinnedAdvisories = [];
+        try {
+            $pinnedAdvisories = (new \App\Services\AnnouncementService())->pinnedAdvisories(3);
+        } catch (\Throwable) {
+            // Optional announcements schema guard.
+        }
+
         return view('portal/index', [
             'title'        => 'My Health Portal',
             'pageTitle'    => match ($user['role']) {
@@ -68,6 +107,9 @@ final class PortalController extends BaseController
             'pagination'   => $appointmentPage['pagination'],
             'filters'      => $filters,
             'activeTickets' => $activeTickets,
+            'pendingCallSlips' => $pendingCallSlips,
+            'activeMiAssignments' => $activeMiAssignments,
+            'pinnedAdvisories' => $pinnedAdvisories,
             'breadcrumbs'  => [
                 ['label' => 'Campus Portal', 'url' => site_url('/portal')],
                 ['label' => 'Personal Workspace', 'url' => ''],

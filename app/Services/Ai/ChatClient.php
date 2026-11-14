@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Ai;
 
 use Closure;
+use Config\Ai as AiConfig;
 use JsonException;
 use Throwable;
 
@@ -32,6 +33,101 @@ final class ChatClient
         return $this->request($messages, false, $beforeDispatch);
     }
 
+    /**
+     * Streams a completion with real-time raw SSE lines and content deltas.
+     * Falls back seamlessly if a provider ignores `stream: true` and returns standard JSON.
+     *
+     * @param callable(string): void|null $onRawSse Receives sanitized SSE lines (`data: ...`).
+     * @param callable(string): void|null $onDelta  Receives incremental assistant content deltas.
+     */
+    public function completeStream(
+        #[\SensitiveParameter] array $messages,
+        ?callable $onRawSse = null,
+        ?callable $onDelta = null,
+        ?callable $beforeDispatch = null
+    ): string {
+        [$c, $endpoint, $headers, $body] = $this->prepareRequest($messages, false, true);
+
+        $lineBuffer = '';
+        $sawSse = false;
+        $streamedContent = '';
+        $streamFailure = null;
+
+        $handleSseLine = static function (#[\SensitiveParameter] string $line) use (
+            &$sawSse,
+            &$streamedContent,
+            &$streamFailure,
+            $onRawSse,
+            $onDelta
+        ): void {
+            $trimmed = trim($line);
+            if ($trimmed === '' || str_starts_with($trimmed, ':')) {
+                return;
+            }
+            if (! str_starts_with($trimmed, 'data:')) {
+                return;
+            }
+            $sawSse = true;
+            $payload = trim(substr($trimmed, 5));
+            if ($onRawSse !== null && mb_check_encoding($trimmed, 'UTF-8')) {
+                $onRawSse($trimmed);
+            }
+            if ($payload === '[DONE]' || $payload === '') {
+                return;
+            }
+            try {
+                $event = json_decode($payload, true, 32, JSON_THROW_ON_ERROR);
+            } catch (JsonException) {
+                return;
+            }
+            if (! is_array($event)) {
+                return;
+            }
+            if (isset($event['error'])) {
+                $streamFailure = 'provider_unavailable';
+                return;
+            }
+            $delta = $event['choices'][0]['delta']['content'] ?? null;
+            if (is_string($delta) && $delta !== '' && ! str_contains($delta, "\0")) {
+                $streamedContent .= $delta;
+                if ($onDelta !== null) {
+                    $onDelta($delta);
+                }
+            }
+        };
+
+        $response = $this->dispatch($c, $endpoint, $headers, $body, $beforeDispatch, static function (string $chunk) use (&$lineBuffer, $handleSseLine): void {
+            $lineBuffer .= $chunk;
+            while (($nlPos = strpos($lineBuffer, "\n")) !== false) {
+                $line = substr($lineBuffer, 0, $nlPos);
+                $lineBuffer = substr($lineBuffer, $nlPos + 1);
+                $handleSseLine($line);
+            }
+        });
+
+        if ($streamFailure !== null) {
+            throw new AiFailure($streamFailure);
+        }
+        if ($lineBuffer !== '') {
+            $handleSseLine($lineBuffer);
+        }
+
+        if ($sawSse) {
+            return $this->validateTextContent($streamedContent, $c);
+        }
+
+        // Provider ignored `stream: true` and returned standard JSON completion body.
+        $content = $this->extractStandardCompletion($response, $c);
+        if ($onRawSse !== null && mb_check_encoding($response, 'UTF-8')) {
+            $onRawSse('data: ' . $response);
+        }
+        if ($onDelta !== null) {
+            $onDelta($content);
+        }
+
+        return $content;
+    }
+
     /** Harmless fixture only. Success is compatibility evidence, never dispatch authorization. */
     public function probe(): array
     {
@@ -52,6 +148,17 @@ final class ChatClient
     }
 
     private function request(#[\SensitiveParameter] array $messages, bool $synthetic, ?callable $beforeDispatch = null): string
+    {
+        [$c, $endpoint, $headers, $body] = $this->prepareRequest($messages, $synthetic, false);
+        $response = $this->dispatch($c, $endpoint, $headers, $body, $beforeDispatch);
+
+        return $this->extractStandardCompletion($response, $c);
+    }
+
+    /**
+     * @return array{0: AiConfig, 1: array, 2: list<string>, 3: string}
+     */
+    private function prepareRequest(#[\SensitiveParameter] array $messages, bool $synthetic, bool $stream): array
     {
         $this->profile->assertCompletionConfigured($synthetic);
         $c = $this->profile->config;
@@ -82,7 +189,7 @@ final class ChatClient
             'model' => $c->model,
             'messages' => $messages,
             $c->maxOutputTokensField => $c->maxOutputTokens,
-            'stream' => false,
+            'stream' => $stream,
         ];
         if ($c->reasoningEffort !== '') {
             $payload['reasoning_effort'] = $c->reasoningEffort;
@@ -101,21 +208,39 @@ final class ChatClient
         if (strlen($body) > $c->maxRequestBytes) {
             throw new AiFailure('request_too_large');
         }
-        $headers = ['Content-Type: application/json', 'Accept: application/json', 'Expect:'];
+        $headers = [
+            'Content-Type: application/json',
+            'Accept: ' . ($stream ? 'text/event-stream, application/json' : 'application/json'),
+            'Expect:',
+        ];
         if ($c->authMode === 'bearer') {
             $headers[] = 'Authorization: Bearer ' . $c->apiKey;
         } elseif ($c->authMode === 'api_key_header') {
             $headers[] = $c->apiKeyHeader . ': ' . $c->apiKey;
         }
-        $endpoint = $this->policy->validate();
+
+        return [$c, $this->policy->validate(), $headers, $body];
+    }
+
+    private function dispatch(
+        AiConfig $c,
+        array $endpoint,
+        #[\SensitiveParameter] array $headers,
+        #[\SensitiveParameter] string $body,
+        ?callable $beforeDispatch = null,
+        ?callable $onChunk = null
+    ): string {
         $response = '';
         $overflow = false;
-        $receive = static function (#[\SensitiveParameter] string $chunk) use (&$response, &$overflow, $c): void {
+        $receive = static function (#[\SensitiveParameter] string $chunk) use (&$response, &$overflow, $c, $onChunk): void {
             if ($overflow || strlen($chunk) > $c->maxResponseBytes - strlen($response)) {
                 $overflow = true;
                 throw new AiFailure('response_too_large');
             }
             $response .= $chunk;
+            if ($onChunk !== null) {
+                $onChunk($chunk);
+            }
         };
         if ($beforeDispatch !== null) {
             try {
@@ -148,6 +273,12 @@ final class ChatClient
         if ($status !== 200) {
             throw new AiFailure('provider_rejected');
         }
+
+        return $response;
+    }
+
+    private function extractStandardCompletion(string $response, AiConfig $c): string
+    {
         try {
             $json = json_decode($response, true, 32, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
@@ -167,7 +298,12 @@ final class ChatClient
             || (array_key_exists('audio', $message) && $message['audio'] !== null)) {
             throw new AiFailure('completion_rejected');
         }
-        $content = $message['content'] ?? null;
+
+        return $this->validateTextContent($message['content'] ?? null, $c);
+    }
+
+    private function validateTextContent(mixed $content, AiConfig $c): string
+    {
         if (! is_string($content) || trim($content) === '' || str_contains($content, "\0")) {
             throw new AiFailure('invalid_response');
         }

@@ -48,9 +48,27 @@ final class CreateSurveys extends Migration
             [$this->db->prefixTable($table)])->getResultArray();
         $fields = array_column($fields, null, 'COLUMN_NAME');
         if ($table === 'surveys') {
-            // A later additive migration owns these fields; validate them if already present.
+            // Later additive migrations own these fields; validate them if already present.
             foreach (['target_year_levels', 'target_student_categories'] as $name) {
                 if (isset($fields[$name])) { $columns[$name] = ['text', true, null]; }
+            }
+            if (isset($fields['external_url'])) {
+                $columns['external_url'] = ['varchar(2048)', true, null];
+            }
+        } elseif ($table === 'survey_responses') {
+            // Later additive migration owns staff interview attribution and encrypted remarks columns.
+            $additiveResponseColumns = [
+                'interviewed_by_user_id'    => ['bigint unsigned', true, null],
+                'interviewed_at'            => ['datetime', true, null],
+                'staff_remarks_cipher'      => ['mediumblob', true, null],
+                'staff_remarks_nonce'       => ['binary(12)', true, null],
+                'staff_remarks_tag'         => ['binary(16)', true, null],
+                'staff_remarks_key_version' => ['smallint unsigned', true, null],
+            ];
+            foreach ($additiveResponseColumns as $name => $spec) {
+                if (isset($fields[$name])) {
+                    $columns[$name] = $spec;
+                }
             }
         }
         if (array_diff(array_keys($fields), array_keys($columns)) !== []) {

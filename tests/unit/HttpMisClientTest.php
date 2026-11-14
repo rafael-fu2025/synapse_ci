@@ -65,7 +65,9 @@ final class HttpMisClientTest extends TestCase
         yield '401 non JSON' => [401, 'Unauthorized'];
         yield 'unknown account' => [403, '{"message":"Account not recognized"}'];
         yield 'unknown account with punctuation' => [403, '{"message":"Account not recognized."}'];
+        yield 'unknown account with retry hint' => [403, '{"status":"error","message":"Account not recognized. Please try again."}'];
         yield 'invalid credentials' => [403, '{"message":"invalid credentials"}'];
+        yield 'invalid credentials with retry hint' => [403, '{"status":"error","message":"Invalid credentials. Please try again."}'];
         yield 'error key' => [403, '{"error":"Invalid credentials"}'];
     }
 

@@ -72,8 +72,12 @@ final class WebAccessFilter implements FilterInterface
                 } elseif ($area !== null) {
                     $permission = match ($area) {
                         'queue' => $unit . '.queue.' . ($write ? 'manage' : 'read'),
-                        'patients' => 'clinic.patients.' . ($write ? 'write' : 'read'),
-                        'encounters' => 'clinic.encounters.' . (str_contains($path, '/start-') ? 'create' : ($write ? 'write' : 'read')),
+                        'patients' => str_ends_with($path, '/clearances')
+                            ? 'clinic.clearances.write'
+                            : (str_ends_with($path, '/labs') ? 'clinic.encounters.addendum' : 'clinic.patients.' . ($write ? 'write' : 'read')),
+                        'encounters' => str_ends_with($path, '/addendum')
+                            ? 'clinic.encounters.addendum'
+                            : 'clinic.encounters.' . (str_contains($path, '/start-') ? 'create' : (str_ends_with($path, '/complete') ? 'seal' : ($write ? 'write' : 'read'))),
                         'inventory' => 'clinic.inventory.' . ($write ? 'write' : 'read'),
                         'appointments' => $unit === 'clinic' ? 'clinic.appointments.' . ($write || str_ends_with($path, '/create') ? 'write' : 'read') : 'guidance.schedule.' . ($write || str_ends_with($path, '/create') ? 'manage' : 'read'),
                         default => 'guidance.cases.' . (str_ends_with($path, '/create') || str_ends_with($path, '/store') || str_ends_with($path, '/session') || str_contains($path, '/start-for-ticket/') || str_contains($path, '/choose-for-ticket/') ? 'create' : ($write ? 'write' : 'read')),
@@ -119,13 +123,18 @@ final class WebAccessFilter implements FilterInterface
         return $row;
     }
 
-    private function caseAccess(int $id): array
+    private function caseAccess(int $id, bool $write = false): array
     {
         $case = $this->record('counselling_cases', $id, true);
         $this->record('people', (int) $case['person_id'], true);
-        if ($this->actor['role'] !== 'superadmin' && (int) $case['counsellor_user_id'] !== $this->actor['id']
-            && !in_array('guidance.cases.read_any', $this->actor['permissions'], true)) {
-            throw new RuntimeException('This case is assigned to another counselor.', 403);
+        $isOwner = (int) $case['counsellor_user_id'] === $this->actor['id'];
+        if (!$isOwner) {
+            if ($write) {
+                throw new RuntimeException('This case is assigned to another counselor.', 403);
+            }
+            if ($this->actor['role'] !== 'superadmin' && !in_array('guidance.cases.read_any', $this->actor['permissions'], true)) {
+                throw new RuntimeException('This case is assigned to another counselor.', 403);
+            }
         }
         return $case;
     }
@@ -149,7 +158,7 @@ final class WebAccessFilter implements FilterInterface
             }
             $case = Database::connect()->table('counselling_cases')->where('tenant_id', $this->actor['tenant_id'])
                 ->where('person_id', $ticket['person_id'])->where('deleted_at', null)->whereIn('status', ['open','active','monitoring'])->get()->getRowArray();
-            if ($case !== null) $this->caseAccess((int) $case['id']);
+            if ($case !== null) $this->caseAccess((int) $case['id'], $write);
         }
         if (preg_match('~^(clinic|guidance)/(?:encounters|cases)/start-for-ticket/(\d+)$~', $path, $m)) {
             $ticket = $this->ticket((int) $m[2], $m[1]);
@@ -159,24 +168,26 @@ final class WebAccessFilter implements FilterInterface
             if ($m[1] === 'guidance') {
                 $case = Database::connect()->table('counselling_cases')->where('tenant_id', $this->actor['tenant_id'])
                     ->where('person_id', $ticket['person_id'])->where('deleted_at', null)->whereIn('status', ['open','active','monitoring'])->get()->getRowArray();
-                if ($case !== null) $this->caseAccess((int) $case['id']);
+                if ($case !== null) $this->caseAccess((int) $case['id'], $write);
             }
         }
-        if (preg_match('~^clinic/(?:patients|encounters/start-direct)/(\d+)(?:/health)?$~', $path, $m)) $this->record('people', (int) $m[1], true);
+        if (preg_match('~^clinic/(?:patients|encounters/start-direct)/(\d+)(?:/(?:health|labs|clearances))?$~', $path, $m)) $this->record('people', (int) $m[1], true);
         if (preg_match('~^clinic/encounters/(\d+)(?:/|$)~', $path, $m)) {
             $encounter = $this->record('clinic_encounters', (int) $m[1], true);
             $this->record('people', (int) $encounter['person_id'], true);
-            if ($write && $encounter['status'] !== 'in_progress') throw new RuntimeException('Encounter is no longer open.', 409);
+            if ($write && !str_ends_with($path, '/addendum') && $encounter['status'] !== 'in_progress') {
+                throw new RuntimeException('Encounter is no longer open.', 409);
+            }
         }
-        if (preg_match('~^guidance/cases/(\d+)(?:/|$)~', $path, $m)) $this->caseAccess((int) $m[1]);
+        if (preg_match('~^guidance/cases/(\d+)(?:/|$)~', $path, $m)) $this->caseAccess((int) $m[1], $write);
         if (preg_match('~^guidance/sessions/(\d+)(?:/|$)~', $path, $m)) {
             $session = $this->record('counselling_sessions', (int) $m[1], true);
-            $this->caseAccess((int) $session['case_id']);
+            $this->caseAccess((int) $session['case_id'], $write);
             if ($write && $session['status'] !== 'in_progress') throw new RuntimeException('Counseling session is no longer open.', 409);
         }
         if (preg_match('~^guidance/followups/(\d+)(?:/|$)~', $path, $m)) {
             $followup = $this->record('guidance_followups', (int) $m[1]);
-            $this->caseAccess((int) $followup['case_id']);
+            $this->caseAccess((int) $followup['case_id'], $write);
         }
         if (preg_match('~^facilities/(unit|batch)/(\d+)(?:/|$)~', $path, $m)) {
             if ($m[1] === 'unit') $this->record('bmg_units', (int) $m[2]);

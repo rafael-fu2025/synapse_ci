@@ -109,7 +109,8 @@ final class InventoryService
         if ($actor['role'] === 'superadmin') {
             return;
         }
-        if (!in_array($actor['role'], ['clinic_admin', 'clinic_staff'], true) || ($manager && $actor['role'] !== 'clinic_admin')) {
+        if (!in_array($actor['role'], ['clinic_admin', 'clinic_physician', 'clinic_staff', 'clinic_intern'], true)
+            || ($manager && $actor['role'] !== 'clinic_admin')) {
             throw new RuntimeException('Inventory role not permitted.', 403);
         }
         $required = ['clinic.inventory.read'];
@@ -230,7 +231,7 @@ final class InventoryService
             'from' => $total === 0 ? 0 : ($movementPage - 1) * $movementPageSize + 1,
             'to' => min($movementPage * $movementPageSize, $total),
         ];
-        $operations = $this->db->query('SELECT o.*, r.id AS reversed_by_operation_id, r.reversal_mode AS correction_mode FROM ' . $this->t('inventory_operations') . ' o LEFT JOIN ' . $this->t('inventory_operations') . ' r ON r.reversal_of=o.id AND r.tenant_id=o.tenant_id WHERE o.tenant_id=? AND o.medicine_id=? ORDER BY o.id DESC LIMIT 100', [CurrentTenant::id(), $medicineId])->getResultArray();
+        $operations = $this->db->query('SELECT o.*, actor.username AS actor_name, r.id AS reversed_by_operation_id, r.reversal_mode AS correction_mode FROM ' . $this->t('inventory_operations') . ' o LEFT JOIN ' . $this->t('users') . ' actor ON actor.id=o.actor_id AND actor.tenant_id=o.tenant_id LEFT JOIN ' . $this->t('inventory_operations') . ' r ON r.reversal_of=o.id AND r.tenant_id=o.tenant_id WHERE o.tenant_id=? AND o.medicine_id=? ORDER BY o.id DESC LIMIT 100', [CurrentTenant::id(), $medicineId])->getResultArray();
         return ['medicine' => $medicine, 'batches' => $batches, 'movements' => $movements, 'operations' => $operations, 'movement_page' => $movementPage, 'movement_page_size' => $movementPageSize, 'movementPagination' => $pagination];
     }
 

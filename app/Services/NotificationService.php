@@ -172,7 +172,7 @@ final class NotificationService
 
     private static function departmentRoles(string $module): array
     {
-        return $module === 'clinic' ? ['clinic_admin', 'clinic_staff']
+        return $module === 'clinic' ? ['clinic_admin', 'clinic_staff', 'clinic_physician']
             : ['guidance_admin', 'guidance_supervisor', 'counsellor'];
     }
 

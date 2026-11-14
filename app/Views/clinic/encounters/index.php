@@ -12,28 +12,56 @@
 <div class="card border-0 shadow-sm">
   <div class="card-header bg-transparent d-flex flex-wrap align-items-center py-3 gap-2">
     <!-- Filter form -->
-    <form method="GET" action="<?= esc(site_url('/clinic/encounters'), 'attr') ?>" class="d-flex align-items-center gap-2" data-filter-form>
-      <select name="status" class="form-select form-select-sm">
+    <form method="GET" action="<?= esc(site_url('/clinic/encounters'), 'attr') ?>" class="d-flex flex-wrap align-items-center gap-2" data-filter-form>
+      <input type="search" name="q" value="<?= esc($filters['q'] ?? '') ?>" class="form-control form-control-sm" style="width: 190px;" placeholder="Patient, MIS ID, complaint">
+      <select name="status" class="form-select form-select-sm" style="width: auto;">
         <option value="">All Statuses</option>
         <option value="in_progress" <?= ($status === 'in_progress') ? 'selected' : '' ?>>In Progress</option>
         <option value="completed" <?= ($status === 'completed') ? 'selected' : '' ?>>Completed</option>
         <option value="referred" <?= ($status === 'referred') ? 'selected' : '' ?>>Referred</option>
       </select>
-      <!-- Custom date picker: visible trigger + ISO hidden value -->
+      <select name="complaint" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Complaints</option>
+        <?php foreach (($complaintCatalog ?? []) as $cKey => $cMeta): ?>
+          <option value="<?= esc($cKey) ?>" <?= (($filters['complaint'] ?? '') === $cKey) ? 'selected' : '' ?>><?= esc($cMeta['label']) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <select name="disposition" class="form-select form-select-sm" style="width: auto;">
+        <option value="">All Dispositions</option>
+        <?php foreach (($dispositions ?? []) as $dKey => $dLabel): ?>
+          <option value="<?= esc($dKey) ?>" <?= (($filters['disposition'] ?? '') === $dKey) ? 'selected' : '' ?>><?= esc($dLabel) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <?php
+        $fromVal = ($filters['from'] ?? '') !== '' ? (string) $filters['from'] : (string) ($date ?? '');
+        $toVal = ($filters['to'] ?? '') !== '' ? (string) $filters['to'] : (string) ($date ?? '');
+      ?>
       <input type="text"
              class="form-control form-control-sm"
-             id="encounterDateFilter"
+             id="encounterFromFilter"
+             style="width: 120px;"
+             placeholder="From date"
              data-datepicker
-             data-target="#encounterDateFilter_iso"
+             data-target="#encounterFromFilter_iso"
              value="">
-      <input type="hidden" name="date" id="encounterDateFilter_iso" value="<?= esc($date) ?>">
+      <input type="hidden" name="from" id="encounterFromFilter_iso" value="<?= esc($fromVal) ?>">
+      <input type="text"
+             class="form-control form-control-sm"
+             id="encounterToFilter"
+             style="width: 120px;"
+             placeholder="To date"
+             data-datepicker
+             data-target="#encounterToFilter_iso"
+             value="">
+      <input type="hidden" name="to" id="encounterToFilter_iso" value="<?= esc($toVal) ?>">
       <label for="encounterPerPage" class="visually-hidden">Encounters per page</label>
-      <select name="per_page" id="encounterPerPage" class="form-select form-select-sm">
+      <select name="per_page" id="encounterPerPage" class="form-select form-select-sm" style="width: auto;">
         <?php foreach ([20, 25, 50, 100] as $size): ?>
-          <option value="<?= $size ?>" <?= $pagination['per_page'] === $size ? 'selected' : '' ?>><?= $size ?> per page</option>
+          <option value="<?= $size ?>" <?= $pagination['per_page'] === $size ? 'selected' : '' ?>><?= $size ?> / page</option>
         <?php endforeach; ?>
       </select>
       <button type="submit" class="btn btn-outline-primary btn-sm">Filter</button>
+      <a href="<?= site_url('/clinic/encounters') ?>" class="btn btn-outline-secondary btn-sm">Reset</a>
     </form>
   </div>
 </div>
@@ -64,11 +92,19 @@
               </td>
             </tr>
           <?php else: ?>
+            <?php
+              $manila = new \DateTimeZone('Asia/Manila');
+              $utc = new \DateTimeZone('UTC');
+            ?>
             <?php foreach ($encounters as $enc): ?>
+              <?php
+                $rawAt = (string) ($enc['visited_at'] ?? $enc['started_at']);
+                $dtManila = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $rawAt, $utc)?->setTimezone($manila);
+              ?>
               <tr>
                 <td class="ps-3 fw-semibold">
-                  <div><?= date('M j, Y', strtotime($enc['started_at'])) ?></div>
-                  <small class="text-muted"><?= date('h:i A', strtotime($enc['started_at'])) ?></small>
+                  <div><?= $dtManila ? $dtManila->format('M j, Y') : date('M j, Y', strtotime($rawAt)) ?></div>
+                  <small class="text-muted"><?= $dtManila ? $dtManila->format('g:i A') : date('h:i A', strtotime($rawAt)) ?></small>
                 </td>
                 <td>
                   <a href="<?= site_url('/clinic/patients/' . $enc['person_id']) ?>" class="fw-bold text-decoration-none">
@@ -118,9 +154,21 @@
     </div>
     <div class="p-3 pt-0">
       <?= view('partials/table_pagination', [
-          'pagination' => $pagination, 'baseUrl' => site_url('/clinic/encounters'),
-          'filters' => ['status' => $status], 'paginationExtraQuery' => ['date' => $date],
-          'paginationLabel' => 'Clinic encounter pages', 'paginationLiveFilters' => true,
+          'pagination' => $pagination,
+          'baseUrl' => site_url('/clinic/encounters'),
+          'filters' => [
+              'status' => $status,
+              'q' => $filters['q'] ?? '',
+              'complaint' => $filters['complaint'] ?? '',
+              'disposition' => $filters['disposition'] ?? '',
+          ],
+          'paginationExtraQuery' => [
+              'date' => $date,
+              'from' => $filters['from'] ?? '',
+              'to' => $filters['to'] ?? '',
+          ],
+          'paginationLabel' => 'Clinic encounter pages',
+          'paginationLiveFilters' => true,
       ], ['saveData' => false]) ?>
     </div>
   </div>

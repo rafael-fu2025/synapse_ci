@@ -151,14 +151,20 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                   <i class="bi bi-play-circle me-1"></i> Start Visit
                 </button>
                 <?php endif; ?>
-                <button type="button"
-                        class="btn btn-outline-secondary btn-sm"
-                        title="Patient not answering - Recall allowed within 60 mins"
-                        hx-post="<?= site_url($unit . '/queue/skip/' . $item['id']) ?>"
-                        hx-target="#queue-board-container"
-                        hx-swap="innerHTML">
-                  <i class="bi bi-skip-forward"></i> Skip
-                </button>
+                <form action="<?= site_url($unit . '/queue/skip/' . $item['id']) ?>" method="POST"
+                      hx-post="<?= site_url($unit . '/queue/skip/' . $item['id']) ?>"
+                      hx-target="#queue-board-container"
+                      hx-swap="innerHTML"
+                      hx-disabled-elt="find button"
+                      data-confirm="Move this ticket to Skipped? You can recall the patient within 60 minutes."
+                      data-confirm-title="Skip patient ticket"
+                      data-confirm-label="Skip ticket"
+                      data-confirm-tone="warning">
+                  <?= csrf_field() ?>
+                  <button type="submit" class="btn btn-outline-secondary btn-sm" title="Patient not answering - Recall allowed within 60 mins">
+                    <i class="bi bi-skip-forward"></i> Skip
+                  </button>
+                </form>
               </div>
               <?= view('queue/no_show_action', ['item' => $item, 'unit' => $unit]) ?>
             </div>

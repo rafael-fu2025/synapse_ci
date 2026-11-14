@@ -19,13 +19,14 @@ $patientFiltered = (int) ($pagination['filtered'] ?? count($patientRows));
             <th scope="col">Program / Department</th>
             <th scope="col">Gender</th>
             <th scope="col">Blood Type</th>
+            <th scope="col">Clinic Visits</th>
             <th scope="col" class="text-end pe-3">Actions</th>
           </tr>
         </thead>
         <tbody>
           <?php if ($patientRows === []): ?>
             <tr>
-              <td colspan="7" class="text-center py-5 text-muted">
+              <td colspan="8" class="text-center py-5 text-muted">
                 <i class="bi bi-people fs-1 d-block mb-2 text-muted opacity-50"></i>
                 No patients found matching your search.
               </td>
@@ -60,6 +61,15 @@ $patientFiltered = (int) ($pagination['filtered'] ?? count($patientRows));
                   <span class="badge bg-danger-subtle text-danger">
                     <?= esc($p['blood_type'] ?? 'Unknown') ?>
                   </span>
+                </td>
+                <td>
+                  <?php $vCount = (int) ($p['visit_count'] ?? 0); ?>
+                  <span class="badge <?= $vCount >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-light text-dark border' ?>">
+                    <?= $vCount ?> <?= $vCount === 1 ? 'visit' : 'visits' ?>
+                  </span>
+                  <?php if (!empty($p['last_visit_at'])): ?>
+                    <div class="text-muted small" style="font-size: 0.75rem;">Last: <?= esc(date('M j, Y', strtotime((string) $p['last_visit_at'] . ' UTC'))) ?></div>
+                  <?php endif; ?>
                 </td>
                 <td class="text-end pe-3">
                   <div class="btn-group">

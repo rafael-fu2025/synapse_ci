@@ -6,10 +6,14 @@ namespace App\Controllers;
 
 use App\Models\CounsellingCaseModel;
 use App\Models\CounsellingSessionModel;
-
+use App\Models\GuidanceEpisodeModel;
 use App\Models\UserModel;
 use App\Services\DashboardCache;
 use App\Services\Guidance\GuidanceCaseService;
+use App\Services\Guidance\GuidanceClinicalFormService;
+use App\Services\Guidance\GuidancePractitionerService;
+use App\Services\Guidance\GuidanceSafetyService;
+use App\Services\Guidance\GuidanceTransferService;
 use App\Services\Scheduling\SchedulingClock;
 
 final class GuidanceController extends BaseController
@@ -17,6 +21,7 @@ final class GuidanceController extends BaseController
     private GuidanceCaseService $caseService;
     private CounsellingCaseModel $caseModel;
     private CounsellingSessionModel $sessionModel;
+    private ?\Closure $actorResolver = null;
 
     public function __construct()
     {
@@ -142,20 +147,51 @@ final class GuidanceController extends BaseController
         $category = (string) $this->request->getGet('category');
 
         $actor = \App\Services\EngagementAccess::actor('guidance.cases.read', 'guidance');
+        $db = \Config\Database::connect();
+        $actorId = (int) ($actor['id'] ?? 0);
+        $tenantId = (int) ($actor['tenant_id'] ?? \App\Services\CurrentTenant::id());
+        $practitionerDirectory = [];
+        try {
+            $practitionerDirectory = (new GuidancePractitionerService(db: $db))->getPractitionerDirectory($tenantId);
+        } catch (\Throwable) {
+            $practitionerDirectory = [];
+        }
+
         if (($actor['role'] ?? '') !== 'superadmin' && !in_array('guidance.cases.read_any', $actor['permissions'] ?? [], true)) {
-            $this->caseModel->where('counselling_cases.counsellor_user_id', (int) ($actor['id'] ?? 0));
+            $consultCaseIds = [];
+            if ($db->tableExists('guidance_case_transfers')) {
+                $consultCaseIds = array_column(
+                    $db->table('guidance_case_transfers')
+                        ->select('case_id')
+                        ->where('tenant_id', $tenantId)
+                        ->where('to_counsellor_user_id', $actorId)
+                        ->where('transfer_type', 'consultation')
+                        ->where('status', 'accepted')
+                        ->get()->getResultArray(),
+                    'case_id'
+                );
+            }
+
+            $this->caseModel->groupStart()
+                ->where('counselling_cases.counsellor_user_id', $actorId);
+            if ($consultCaseIds !== []) {
+                $this->caseModel->orWhereIn('counselling_cases.id', array_map('intval', $consultCaseIds));
+            }
+            $this->caseModel->groupEnd();
         }
         $page = filter_var($this->request->getGet('page'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 1;
         $cases = $this->caseModel->getListWithPatients($status, $category, 25, $page);
 
         return view('guidance/cases/index', [
-            'title'       => 'Counseling Cases',
-            'pageTitle'   => 'Counseling Cases',
-            'cases'       => $cases,
-            'pager'       => $this->caseModel->pager,
-            'status'      => $status,
-            'category'    => $category,
-            'breadcrumbs' => [
+            'title'                 => 'Counseling Cases',
+            'pageTitle'             => 'Counseling Cases',
+            'cases'                 => $cases,
+            'actor'                 => $actor,
+            'practitionerDirectory' => $practitionerDirectory,
+            'pager'                 => $this->caseModel->pager,
+            'status'                => $status,
+            'category'              => $category,
+            'breadcrumbs'           => [
                 ['label' => 'Guidance', 'url' => site_url('/guidance/cases')],
                 ['label' => 'Cases', 'url' => ''],
             ],
@@ -169,7 +205,9 @@ final class GuidanceController extends BaseController
     {
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try {
+            $actor = $this->freshActor('guidance.cases.read');
             $package = $this->caseService->getCaseDetails($id);
+            $tenantId = (int) $package['case']['tenant_id'];
 
             // Find if there is an in_progress active session
             $activeSession = $this->sessionModel->scoped()
@@ -186,17 +224,136 @@ final class GuidanceController extends BaseController
             // Outcome plaintext is fetched only through its fresh, audited read path.
             $outcomes = $this->caseService->getDecryptedCaseOutcomes($id);
 
+            $clinicalHistory = [
+                'controlled_forms'     => [],
+                'interviews'           => [],
+                'contact_forms'        => [],
+                'contact_sheets'       => [],
+                'legacy_session_notes' => [],
+                'timeline'             => [],
+            ];
+            try {
+                $clinicalHistory = (new GuidanceClinicalFormService())->getClinicalHistoryForCase($id, $tenantId, $actor);
+            } catch (\Throwable) {
+                // Keep case workspace accessible even if clinical forms history is unavailable
+            }
+
+            $db = \Config\Database::connect();
+
+            $episode = null;
+            if ($db->tableExists('guidance_episodes')) {
+                try {
+                    $episode = (new GuidanceEpisodeModel($db))->scoped($tenantId)
+                        ->where('case_id', $id)
+                        ->orderBy('id', 'DESC')
+                        ->first();
+                } catch (\Throwable) {
+                    $episode = null;
+                }
+            }
+
+            $assignments = [];
+            $transfers = [];
+            if ($db->tableExists('guidance_case_assignments')) {
+                try {
+                    $transferService = new GuidanceTransferService();
+                    $assignments = $transferService->getAssignmentHistory($id, $tenantId);
+                    if ($db->tableExists('guidance_case_transfers')) {
+                        $transfers = $transferService->getCaseTransfers($id, $tenantId);
+                    }
+                } catch (\Throwable) {
+                    $assignments = [];
+                    $transfers = [];
+                }
+            }
+
+            $safetyHistory = null;
+            if ($db->tableExists('guidance_safety_assessments')) {
+                try {
+                    $safetyHistory = (new GuidanceSafetyService())->getSafetyHistory((int) $package['case']['person_id'], $actor);
+                } catch (\Throwable) {
+                    $safetyHistory = null;
+                }
+            }
+
+            $practitionerProfile = null;
+            $canFinalizeDirectly = false;
+            if ($db->tableExists('guidance_practitioner_profiles')) {
+                try {
+                    $practitionerService = new GuidancePractitionerService();
+                    $practitionerProfile = $practitionerService->getPractitionerProfile((int) $actor['id'], $tenantId);
+                    $canFinalizeDirectly = $practitionerService->canFinalizeDirectly((int) $actor['id'], $tenantId);
+                } catch (\Throwable) {
+                    $practitionerProfile = null;
+                    $canFinalizeDirectly = false;
+                }
+            }
+
+            $counselorRows = [];
+            $userDirectory = [];
+            try {
+                $counselorRows = $db->table('users u')
+                    ->select('u.id, u.username, u.role, p.first_name, p.last_name')
+                    ->join('people p', 'p.id = u.person_id AND p.tenant_id = u.tenant_id AND p.deleted_at IS NULL', 'left')
+                    ->where('u.tenant_id', $tenantId)
+                    ->where('u.deleted_at', null)
+                    ->where('u.status', 'active')
+                    ->whereIn('u.role', ['counsellor', 'guidance_supervisor', 'guidance_admin'])
+                    ->orderBy('p.last_name', 'ASC')
+                    ->orderBy('u.username', 'ASC')
+                    ->get()->getResultArray();
+
+                foreach ($db->table('users u')
+                    ->select('u.id, u.username, p.first_name, p.last_name')
+                    ->join('people p', 'p.id = u.person_id AND p.tenant_id = u.tenant_id', 'left')
+                    ->where('u.tenant_id', $tenantId)
+                    ->get()->getResultArray() as $uRow) {
+                    $full = trim(($uRow['first_name'] ?? '') . ' ' . ($uRow['last_name'] ?? ''));
+                    $userDirectory[(int) $uRow['id']] = $full !== '' ? $full : (string) ($uRow['username'] ?? 'Staff #' . $uRow['id']);
+                }
+            } catch (\Throwable) {
+                $counselorRows = [];
+                $userDirectory = [];
+            }
+
+            $practitionerDirectory = [];
+            try {
+                $practitionerDirectory = (new GuidancePractitionerService(db: $db))->getPractitionerDirectory($tenantId);
+            } catch (\Throwable) {
+                $practitionerDirectory = [];
+            }
+
+            $isConsultationPartner = false;
+            try {
+                $isConsultationPartner = (new \App\Services\Guidance\GuidanceAccessPolicy(db: $db))
+                    ->isConsultationPartner($package['case'], $actor);
+            } catch (\Throwable) {
+                $isConsultationPartner = false;
+            }
+
             return view('guidance/cases/view', [
-                'title'         => 'Case: ' . $package['case']['case_number'],
-                'pageTitle'     => $package['case']['title'],
-                'case'          => $package['case'],
-                'package'       => $package,
-                'activeSession' => $activeSession,
-                'decryptedNote' => $decryptedNote,
-                'noteReadAudited' => $decryptedNote !== null,
-                'outcomes' => $outcomes,
-                'oversightMode' => $package['oversight_mode'],
-                'breadcrumbs'   => [
+                'title'                 => 'Case: ' . $package['case']['case_number'],
+                'pageTitle'             => $package['case']['title'],
+                'case'                  => $package['case'],
+                'package'               => $package,
+                'actor'                 => $actor,
+                'activeSession'         => $activeSession,
+                'decryptedNote'         => $decryptedNote,
+                'noteReadAudited'       => $decryptedNote !== null,
+                'outcomes'              => $outcomes,
+                'clinicalHistory'       => $clinicalHistory,
+                'episode'               => $episode,
+                'assignments'           => $assignments,
+                'transfers'             => $transfers,
+                'safetyHistory'         => $safetyHistory,
+                'practitionerProfile'   => $practitionerProfile,
+                'practitionerDirectory' => $practitionerDirectory,
+                'canFinalizeDirectly'   => $canFinalizeDirectly,
+                'isConsultationPartner' => $isConsultationPartner,
+                'counselors'            => $counselorRows,
+                'userDirectory'         => $userDirectory,
+                'oversightMode'         => $package['oversight_mode'],
+                'breadcrumbs'           => [
                     ['label' => 'Guidance', 'url' => site_url('/guidance/cases')],
                     ['label' => $package['case']['case_number'], 'url' => ''],
                 ],
@@ -249,12 +406,12 @@ final class GuidanceController extends BaseController
      */
     public function storeCase()
     {
-        return $this->mutate(function (int $userId): array {
-            return $this->createCaseResponse($userId);
-        });
+        return $this->mutate(function (array $actor): array {
+            return $this->createCaseResponse($actor);
+        }, permission: 'guidance.cases.create');
     }
 
-    private function createCaseResponse(int $userId): array
+    private function createCaseResponse(array $actor): array
     {
         $personId = (int) $this->request->getPost('person_id');
         $title = (string) $this->request->getPost('title');
@@ -265,7 +422,7 @@ final class GuidanceController extends BaseController
             throw new \InvalidArgumentException('Case title and person are required.', 422);
         }
 
-        $case = $this->caseService->createCase($personId, $userId, $title, $category, $summaryNotes);
+        $case = $this->caseService->createCase($personId, (int) $actor['id'], $title, $category, $summaryNotes, $actor);
         $redirect = '/guidance/cases/' . $case['case']['id'];
         $successMsg = "Case {$case['case']['case_number']} opened successfully.";
 
@@ -279,7 +436,7 @@ final class GuidanceController extends BaseController
     {
         try {
             $this->response->setHeader('Cache-Control', 'private, no-store');
-            $this->actorId();
+            $this->freshActor('guidance.cases.read');
             $session = $this->caseService->getSession($sessionId);
 
             $package = $this->caseService->getCaseDetails((int) $session['case_id']);
@@ -315,27 +472,27 @@ final class GuidanceController extends BaseController
      */
     public function startSession(int $caseId)
     {
-        return $this->mutate(function (int $userId) use ($caseId): array {
-            $this->caseService->openSession($caseId, $userId, $this->postedSessionType());
+        return $this->mutate(function (array $actor) use ($caseId): array {
+            $this->caseService->openSession($caseId, (int) $actor['id'], $this->postedSessionType(), actor: $actor);
             return ['/guidance/cases/' . $caseId, 'Counseling session opened.', $this->caseRefresh($caseId)];
-        });
+        }, permission: 'guidance.cases.create');
     }
 
     public function closeCase(int $caseId)
     {
-        return $this->mutate(function (int $userId) use ($caseId): array {
+        return $this->mutate(function (array $actor) use ($caseId): array {
             $this->requireConfirmation();
             $this->caseService->closeCase($caseId, confirmed: true,
-                closureDisposition: $this->postedOutcome('closure_disposition'));
+                closureDisposition: $this->postedOutcome('closure_disposition'), actor: $actor);
             return ['/guidance/cases/' . $caseId, 'Case closed.', $this->caseRefresh($caseId)];
         });
     }
 
     public function monitorCase(int $caseId)
     {
-        return $this->mutate(function (int $userId) use ($caseId): array {
+        return $this->mutate(function (array $actor) use ($caseId): array {
             $this->requireConfirmation();
-            $this->caseService->monitorCase($caseId);
+            $this->caseService->monitorCase($caseId, $actor);
             return ['/guidance/cases/' . $caseId, 'Case moved to monitoring.', $this->caseRefresh($caseId)];
         });
     }
@@ -344,14 +501,14 @@ final class GuidanceController extends BaseController
     {
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try {
-            $this->actorId();
+            $actor = $this->freshActor('guidance.cases.read');
             $history = $this->caseService->getDecryptedSessionNoteHistory($sessionId);
             $session = $this->caseService->getSession($sessionId);
             $case = $this->caseModel->scoped()->find((int) $session['case_id']);
             return view('guidance/sessions/history', [
                 'title' => 'Finalized Note Version History', 'history' => $history,
                 'historyReadAudited' => true,
-                'oversightMode' => (int) $case['counsellor_user_id'] !== $this->actorId(),
+                'oversightMode' => (int) $case['counsellor_user_id'] !== (int) $actor['id'],
                 'cancelUrl' => site_url('/guidance/sessions/' . $sessionId . '/read'),
                 'formModalPage' => true,
             ]);
@@ -400,16 +557,16 @@ final class GuidanceController extends BaseController
      */
     public function saveSessionNotes(int $sessionId)
     {
-        return $this->mutate(function (int $userId) use ($sessionId): array {
+        return $this->mutate(function (array $actor) use ($sessionId): array {
             $session = $this->caseService->getSession($sessionId);
             $notes = (string) $this->request->getPost('notes');
             $action = (string) $this->request->getPost('action');
 
             if ($action === 'finalize') {
-                $this->caseService->finalizeSessionNotes($sessionId, $notes, $userId);
+                $this->caseService->finalizeSessionNotes($sessionId, $notes, (int) $actor['id'], $actor);
                 $msg = 'Session notes finalized and encrypted into version history.';
             } else {
-                $this->caseService->saveDraftNotes($sessionId, $notes, $userId);
+                $this->caseService->saveDraftNotes($sessionId, $notes, (int) $actor['id'], $actor);
                 $msg = 'Draft notes autosaved.';
             }
 
@@ -418,14 +575,72 @@ final class GuidanceController extends BaseController
     }
 
     /**
-     * Close a session.
+     * Close a session, optionally attaching a Counseling Contact Sheet (F-OGC-GCS-CCF-009-00).
      */
     public function closeSession(int $sessionId)
     {
-        return $this->mutate(function (int $userId) use ($sessionId): array {
+        return $this->mutate(function (array $actor) use ($sessionId): array {
             $session = $this->caseService->getSession($sessionId);
-            $this->caseService->closeSession($sessionId);
-            return ['/guidance/cases/' . $session['case_id'], 'Session closed successfully.', $this->caseRefresh((int) $session['case_id'])];
+            $attachSheet = $this->request->getPost('attach_contact_sheet') === '1';
+            $tenantId = (int) $actor['tenant_id'];
+
+            if ($attachSheet) {
+                $perms = $actor['permissions'] ?? [];
+                if (!in_array('guidance.clinical.author', $perms, true)
+                    && !in_array('guidance.counseling.author', $perms, true)
+                    && !in_array('guidance.psychosocial.author', $perms, true)) {
+                    throw new \DomainException('Actor lacks clinical author permission.', 403);
+                }
+                $profile = (new GuidancePractitionerService())->getPractitionerProfile((int) $actor['id'], $tenantId);
+                if ($profile === null || (int) ($profile['is_active'] ?? 0) !== 1 || ($profile['professional_standing'] ?? '') !== 'active') {
+                    throw new \DomainException('Attaching a controlled contact sheet requires an active practitioner profile.', 403);
+                }
+            }
+
+            $this->caseService->closeSession($sessionId, $actor);
+            $message = 'Session closed successfully.';
+
+            if ($attachSheet) {
+                $ccfPayload = [];
+                foreach ([
+                    'time_start',
+                    'time_end',
+                    'session_type',
+                    'concerns_discussed',
+                    'counseling_goals',
+                    'interventions_and_responses',
+                    'homework_and_commitments',
+                    'next_schedule',
+                    'submission_notes',
+                    'attestation_statement',
+                ] as $field) {
+                    $val = $this->request->getPost($field);
+                    if (is_string($val) && trim($val) !== '') {
+                        $ccfPayload[$field] = trim($val);
+                    }
+                }
+                if ($this->request->getPost('finalize') === '1') {
+                    $ccfPayload['finalize'] = true;
+                    if (empty($ccfPayload['attestation_statement'])) {
+                        $ccfPayload['attestation_statement'] = 'Counseling contact sheet verified and digitally attested upon session closure.';
+                    }
+                }
+
+                $attached = (new GuidanceClinicalFormService())->attachContactSheetToSession(
+                    $sessionId,
+                    $ccfPayload,
+                    $tenantId,
+                    $actor
+                );
+                $statusLabel = (string) ($attached['status'] ?? 'draft');
+                $message = match ($statusLabel) {
+                    'finalized'      => 'Session closed and Counseling Contact Sheet (CCF-009) finalized.',
+                    'pending_cosign' => 'Session closed and Counseling Contact Sheet (CCF-009) submitted for supervisor co-sign.',
+                    default          => 'Session closed and Counseling Contact Sheet (CCF-009) draft attached.',
+                };
+            }
+
+            return ['/guidance/cases/' . $session['case_id'], $message, $this->caseRefresh((int) $session['case_id'])];
         });
     }
 
@@ -434,16 +649,13 @@ final class GuidanceController extends BaseController
      */
     public function addFollowup(int $caseId)
     {
-        return $this->mutate(function (int $userId) use ($caseId): array {
+        return $this->mutate(function (array $actor) use ($caseId): array {
             $dueDate = (string) $this->request->getPost('due_date');
             $actionPlan = (string) $this->request->getPost('action_plan');
             if ($dueDate === '' || trim($actionPlan) === '') {
                 throw new \InvalidArgumentException('Due date and action plan are required.', 422);
             }
-            // Restore the case-read authorization removed with the public read;
-            // this check intentionally emits no oversight-read audit event.
-            $this->caseService->assertCaseReadable($caseId);
-            $this->caseService->addFollowup($caseId, null, $dueDate, $actionPlan);
+            $this->caseService->addFollowup($caseId, null, $dueDate, $actionPlan, $actor);
             return ['/guidance/cases/' . $caseId, 'Action item assigned.', $this->caseRefresh($caseId)];
         });
     }
@@ -453,21 +665,21 @@ final class GuidanceController extends BaseController
      */
     public function completeFollowup(int $followupId)
     {
-        return $this->mutate(function (int $userId) use ($followupId): array {
+        return $this->mutate(function (array $actor) use ($followupId): array {
             $followup = (new \App\Models\GuidanceFollowupModel())->scoped()->find($followupId);
             if ($followup === null) {
                 throw new \RuntimeException('Action item not found.', 404);
             }
-            $this->caseService->completeFollowup($followupId, $this->postedOutcome('completion_notes'));
+            $this->caseService->completeFollowup($followupId, $this->postedOutcome('completion_notes'), $actor);
             return ['/guidance/cases/' . $followup['case_id'], 'Commitment marked as completed.', $this->caseRefresh((int) $followup['case_id'])];
         });
     }
 
     public function missFollowup(int $followupId)
     {
-        return $this->mutate(function (int $userId) use ($followupId): array {
+        return $this->mutate(function (array $actor) use ($followupId): array {
             $this->requireConfirmation();
-            $followup = $this->caseService->missFollowup($followupId);
+            $followup = $this->caseService->missFollowup($followupId, $actor);
             return ['/guidance/cases/' . $followup['case_id'], 'Commitment explicitly marked missed.', $this->caseRefresh((int) $followup['case_id'])];
         });
     }
@@ -477,26 +689,28 @@ final class GuidanceController extends BaseController
      */
     public function startForTicket(int $queueEntryId)
     {
-        return $this->mutate(function (int $userId) use ($queueEntryId): array {
+        return $this->mutate(function (array $actor) use ($queueEntryId): array {
             // Keep existing queue forms and JSON redirect handling: the first POST
             // only opens a picker, without changing the ticket, case or session.
             if ($this->request->getPost('session_type') === null) {
-                $this->caseService->getTicketForSessionSelection($queueEntryId);
+                $this->caseService->getTicketForSessionSelection($queueEntryId, $actor);
                 return ['/guidance/cases/choose-for-ticket/' . $queueEntryId, 'Choose a session type to start or resume.',
                     $this->navigationRefresh('/guidance/cases/choose-for-ticket/' . $queueEntryId, 'guidance.case-list')];
             }
             // The service scopes the guidance ticket and selects an owned case atomically.
-            $session = $this->caseService->openSessionForTicket($queueEntryId, $userId, $this->canReadAnyCase(), $this->postedSessionType());
+            $session = $this->caseService->openSessionForTicket($queueEntryId, (int) $actor['id'],
+                $this->postedSessionType(), $actor);
             return ['/guidance/cases/' . $session['case_id'], 'Counseling session opened.',
                 $this->navigationRefresh('/guidance/cases/' . $session['case_id'], 'guidance.case.' . $session['case_id'])];
-        }, '/guidance/queue');
+        }, '/guidance/queue', 'guidance.cases.create');
     }
 
     public function chooseSessionForTicket(int $queueEntryId)
     {
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try {
-            $this->caseService->getTicketForSessionSelection($queueEntryId);
+            $actor = $this->freshActor('guidance.cases.create');
+            $this->caseService->getTicketForSessionSelection($queueEntryId, $actor);
             return view('guidance/sessions/start', [
                 'title' => 'Choose Counseling Session Type', 'queueEntryId' => $queueEntryId,
                 'formAction' => site_url('/guidance/cases/start-for-ticket/' . $queueEntryId),
@@ -510,21 +724,11 @@ final class GuidanceController extends BaseController
         }
     }
 
-    private function actorId(): int
+    private function freshActor(?string $permission = null): array
     {
-        $user = session()->get('user');
-        $id = is_array($user) ? ($user['id'] ?? null) : null;
-        if ((!is_int($id) && !is_string($id)) || !ctype_digit((string) $id) || (int) $id <= 0) {
-            throw new \DomainException('An authenticated staff account is required.', 403);
-        }
-        return (int) $id;
-    }
-
-    private function canReadAnyCase(): bool
-    {
-        $user = session()->get('user');
-        return is_array($user) && (($user['role'] ?? '') === 'superadmin'
-            || in_array('guidance.cases.read_any', $user['permissions'] ?? [], true));
+        return $this->actorResolver === null
+            ? $this->caseService->currentActor($permission)
+            : ($this->actorResolver)($permission);
     }
 
     private function wantsJson(): bool
@@ -576,10 +780,13 @@ final class GuidanceController extends BaseController
         return $this->refreshNavigation(site_url($url));
     }
 
-    private function mutate(callable $operation, string $fallback = '/guidance/cases')
-    {
+    private function mutate(
+        callable $operation,
+        string $fallback = '/guidance/cases',
+        string $permission = 'guidance.cases.write'
+    ) {
         try {
-            [$url, $message, $refresh] = array_pad($operation($this->actorId()), 3, null);
+            [$url, $message, $refresh] = array_pad($operation($this->freshActor($permission)), 3, null);
         } catch (\Throwable $error) {
             [$status, $message] = $this->safeFailure($error, 'mutation');
             if ($this->wantsJson()) {
@@ -604,6 +811,210 @@ final class GuidanceController extends BaseController
                 ->setJSON($payload);
         }
         return redirect()->to($url)->with('success', $message);
+    }
+
+    /**
+     * GET guidance/students/(:num)/cumulative
+     * Consolidated read-only Guidance cumulative profile (demographics, MI history, survey interview status, visits).
+     */
+    public function cumulativeRecord(int $personId)
+    {
+        $this->response->setHeader('Cache-Control', 'private, no-store');
+        try {
+            $actor = $this->freshActor('guidance.cases.read');
+            $service = new \App\Services\Guidance\GuidanceCumulativeService();
+            $record = $service->getStudentCumulativeRecord($personId, $actor);
+            $person = $record['person'];
+            $fullName = trim((string) ($person['last_name'] ?? '') . ', ' . (string) ($person['first_name'] ?? ''));
+
+            return view('guidance/students/cumulative', $record + [
+                'title'       => 'Cumulative Guidance Record — ' . $fullName,
+                'pageTitle'   => 'Cumulative Guidance Record',
+                'actor'       => $actor,
+                'breadcrumbs' => [
+                    ['label' => 'Guidance', 'url' => site_url('/guidance')],
+                    ['label' => 'Cumulative Record', 'url' => ''],
+                ],
+            ]);
+        } catch (\Throwable $error) {
+            [$status, $message] = $this->safeFailure($error, 'cumulativeRecord', $personId);
+            return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'private, no-store')
+                ->setContentType('text/html')->setBody('<div class="alert alert-danger">' . esc($message) . '</div>');
+        }
+    }
+
+    /**
+     * GET guidance/reports/summary
+     * Non-PII periodic Guidance aggregate counts for monthly, semester, school-year, and CHED reporting.
+     */
+    public function periodicSummary()
+    {
+        $this->response->setHeader('Cache-Control', 'private, no-store');
+        try {
+            $actor    = $this->freshActor('guidance.cases.read');
+            $tenantId = (int) $actor['tenant_id'];
+            $db       = \Config\Database::connect();
+
+            $defaultFrom = date('Y-m-01');
+            $defaultTo   = date('Y-m-d');
+            $from = trim((string) ($this->request->getGet('from') ?? $defaultFrom));
+            $to   = trim((string) ($this->request->getGet('to') ?? $defaultTo));
+
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => 'Use valid YYYY-MM-DD start and end dates.',
+                ]);
+            }
+
+            $startLocal = new \DateTimeImmutable($from . ' 00:00:00', new \DateTimeZone('Asia/Manila'));
+            $endLocal   = new \DateTimeImmutable($to . ' 23:59:59', new \DateTimeZone('Asia/Manila'));
+            if ($endLocal < $startLocal) {
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => 'End date cannot precede start date.',
+                ]);
+            }
+            if ($startLocal->diff($endLocal)->days > 366) {
+                return $this->response->setStatusCode(422)->setJSON([
+                    'success' => false,
+                    'message' => 'Periodic summary supports ranges up to 366 days per query.',
+                ]);
+            }
+
+            $fromUtc = $startLocal->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+            $toUtc   = $endLocal->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+
+            $casesOpened = (int) $db->table('counselling_cases')
+                ->where('tenant_id', $tenantId)
+                ->where('deleted_at IS NULL')
+                ->where('opened_at >=', $fromUtc)
+                ->where('opened_at <=', $toUtc)
+                ->countAllResults();
+
+            $casesClosed = (int) $db->table('counselling_cases')
+                ->where('tenant_id', $tenantId)
+                ->where('deleted_at IS NULL')
+                ->where('status', 'closed')
+                ->where('closed_at >=', $fromUtc)
+                ->where('closed_at <=', $toUtc)
+                ->countAllResults();
+
+            $sessionsCompleted = (int) $db->table('counselling_sessions s')
+                ->join('counselling_cases c', 'c.id = s.case_id AND c.tenant_id = s.tenant_id', 'inner')
+                ->where('s.tenant_id', $tenantId)
+                ->where('c.deleted_at IS NULL')
+                ->where('s.deleted_at IS NULL')
+                ->where('s.status', 'completed')
+                ->where('s.started_at >=', $fromUtc)
+                ->where('s.started_at <=', $toUtc)
+                ->countAllResults();
+
+            $pspSessionsCompleted = 0;
+            $counselingSessionsCompleted = $sessionsCompleted;
+            if ($db->tableExists('guidance_practitioner_profiles')) {
+                $pspSessionsCompleted = (int) $db->table('counselling_sessions s')
+                    ->join('counselling_cases c', 'c.id = s.case_id AND c.tenant_id = s.tenant_id', 'inner')
+                    ->join('guidance_practitioner_profiles gp', 'gp.user_id = s.counsellor_user_id AND gp.tenant_id = s.tenant_id AND gp.is_active = 1', 'inner')
+                    ->where('s.tenant_id', $tenantId)
+                    ->where('c.deleted_at IS NULL')
+                    ->where('s.deleted_at IS NULL')
+                    ->where('s.status', 'completed')
+                    ->where('gp.credential_tier', 'counselor_associate')
+                    ->where('s.started_at >=', $fromUtc)
+                    ->where('s.started_at <=', $toUtc)
+                    ->countAllResults();
+                $counselingSessionsCompleted = max(0, $sessionsCompleted - $pspSessionsCompleted);
+            }
+
+            $intakesSubmitted = $db->tableExists('guidance_intake_referrals')
+                ? (int) $db->table('guidance_intake_referrals')
+                    ->where('tenant_id', $tenantId)
+                    ->where('status !=', 'draft')
+                    ->where('submitted_at >=', $fromUtc)
+                    ->where('submitted_at <=', $toUtc)
+                    ->countAllResults()
+                : 0;
+
+            $callSlipsIssued = $db->tableExists('guidance_call_slips')
+                ? (int) $db->table('guidance_call_slips')
+                    ->where('tenant_id', $tenantId)
+                    ->where('deleted_at IS NULL')
+                    ->where('call_date >=', $from)
+                    ->where('call_date <=', $to)
+                    ->countAllResults()
+                : 0;
+
+            $miCompleted = $db->tableExists('guidance_mi_submissions')
+                ? (int) $db->table('guidance_mi_submissions')
+                    ->where('tenant_id', $tenantId)
+                    ->where('deleted_at IS NULL')
+                    ->where('status', 'finalized')
+                    ->where('created_at >=', $fromUtc)
+                    ->where('created_at <=', $toUtc)
+                    ->countAllResults()
+                : 0;
+
+            $surveysSubmitted = $db->tableExists('survey_responses')
+                ? (int) $db->table('survey_responses')
+                    ->where('tenant_id', $tenantId)
+                    ->where('submitted_at >=', $fromUtc)
+                    ->where('submitted_at <=', $toUtc)
+                    ->countAllResults()
+                : 0;
+
+            $summary = [
+                'from'                          => $from,
+                'to'                            => $to,
+                'cases_opened'                  => $casesOpened,
+                'cases_closed'                  => $casesClosed,
+                'sessions_completed'            => $sessionsCompleted,
+                'psp_sessions_completed'        => $pspSessionsCompleted,
+                'counseling_sessions_completed' => $counselingSessionsCompleted,
+                'intakes_submitted'             => $intakesSubmitted,
+                'call_slips_issued'             => $callSlipsIssued,
+                'mi_assessments_completed'      => $miCompleted,
+                'surveys_submitted'             => $surveysSubmitted,
+            ];
+
+            if ($this->request->getGet('format') === 'csv') {
+                $csvLines = [
+                    ['period_from_manila', 'period_to_manila', 'metric', 'count'],
+                    [$from, $to, 'cases_opened', (string) $casesOpened],
+                    [$from, $to, 'cases_closed', (string) $casesClosed],
+                    [$from, $to, 'sessions_completed_total', (string) $sessionsCompleted],
+                    [$from, $to, 'psp_sessions_completed', (string) $pspSessionsCompleted],
+                    [$from, $to, 'counseling_sessions_completed', (string) $counselingSessionsCompleted],
+                    [$from, $to, 'intakes_submitted', (string) $intakesSubmitted],
+                    [$from, $to, 'call_slips_issued', (string) $callSlipsIssued],
+                    [$from, $to, 'mi_assessments_completed', (string) $miCompleted],
+                    [$from, $to, 'surveys_submitted', (string) $surveysSubmitted],
+                ];
+                $fh = fopen('php://temp', 'r+');
+                foreach ($csvLines as $line) {
+                    fputcsv($fh, $line);
+                }
+                rewind($fh);
+                $csv = (string) stream_get_contents($fh);
+                fclose($fh);
+                return \App\Services\Reporting\ExportCsv::response(
+                    $this->response,
+                    $csv,
+                    'guidance_periodic_summary_' . $from . '_to_' . $to . '.csv'
+                );
+            }
+
+            return $this->response->setJSON([
+                'success' => true,
+                'summary' => $summary,
+            ]);
+        } catch (\Throwable $error) {
+            [$status, $message] = $this->safeFailure($error, 'periodicSummary');
+            return $this->response->setStatusCode($status)->setJSON([
+                'success' => false,
+                'message' => $message,
+            ]);
+        }
     }
 
     private function noteFailure(\Throwable $error, int $sessionId)

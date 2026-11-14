@@ -99,8 +99,20 @@
                   </span>
                 </td>
                 <td>
+                  <?php
+                    $cOwnerId = (int) ($c['counsellor_user_id'] ?? 0);
+                    $cPract = $practitionerDirectory[$cOwnerId] ?? null;
+                    $cDisplay = $cPract ? ($cPract['name'] . ' (' . $cPract['tier_label'] . ')') : (string) $c['counsellor_name'];
+                    $isConsultShare = isset($actor['id'])
+                        && $cOwnerId !== (int) $actor['id']
+                        && ($actor['role'] ?? '') !== 'superadmin'
+                        && !in_array('guidance.cases.read_any', $actor['permissions'] ?? [], true);
+                  ?>
                   <i class="bi bi-person text-muted me-1"></i>
-                  <?= esc($c['counsellor_name']) ?>
+                  <?= esc($cDisplay) ?>
+                  <?php if ($isConsultShare): ?>
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1">Consultation</span>
+                  <?php endif; ?>
                 </td>
                 <td>
                   <?php if ($c['status'] === 'open'): ?>
@@ -117,9 +129,16 @@
                   <?= date('M j, Y', strtotime($c['opened_at'])) ?>
                 </td>
                 <td class="text-end pe-3">
-                  <a href="<?= site_url('/guidance/cases/' . $c['id']) ?>" class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-folder2-open me-1"></i> Workspace
-                  </a>
+                  <div class="d-inline-flex gap-1">
+                    <?php if (!empty($c['person_id'])): ?>
+                      <a href="<?= site_url('/guidance/students/' . (int) $c['person_id'] . '/cumulative') ?>" class="btn btn-outline-secondary btn-sm" title="View Student Cumulative Guidance Record">
+                        <i class="bi bi-person-lines-fill"></i>
+                      </a>
+                    <?php endif; ?>
+                    <a href="<?= site_url('/guidance/cases/' . $c['id']) ?>" class="btn btn-outline-primary btn-sm">
+                      <i class="bi bi-folder2-open me-1"></i> Workspace
+                    </a>
+                  </div>
                 </td>
               </tr>
             <?php endforeach; ?>

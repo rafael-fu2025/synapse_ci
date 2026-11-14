@@ -68,7 +68,7 @@ final class PortalContext
     public static function preferredPortal(string $role): string
     {
         return match ($role) {
-            'clinic_admin', 'clinic_staff' => self::PORTAL_CLINIC,
+            'clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern' => self::PORTAL_CLINIC,
             'guidance_admin', 'guidance_supervisor', 'counsellor' => self::PORTAL_GUIDANCE,
             'bmg_admin', 'facilities_op' => self::PORTAL_BMG,
             default => self::PORTAL_MAIN,
@@ -141,7 +141,9 @@ final class PortalContext
             self::PORTAL_CLINIC => [
                 'superadmin',
                 'clinic_admin',
+                'clinic_physician',
                 'clinic_staff',
+                'clinic_intern',
             ],
             self::PORTAL_GUIDANCE => [
                 'superadmin',
@@ -158,7 +160,9 @@ final class PortalContext
             default => [
                 'superadmin',
                 'clinic_admin',
+                'clinic_physician',
                 'clinic_staff',
+                'clinic_intern',
                 'guidance_admin',
                 'guidance_supervisor',
                 'counsellor',

@@ -457,7 +457,7 @@
       }
       state.sending = true; controls(); warn(''); sendStatus.textContent = 'Sending…';
       try {
-        await write(form.action, state.pending);
+        await write(form.getAttribute('action') || location.href, state.pending);
         if (!live()) return;
         state.pending = null; form.reset(); body.value = ''; previousBody = ''; selectedTasks.clear(); mentions = []; replyTo = null; closeMentions(); closeTasks(); resizeBody();
         sendStatus.textContent = 'Sent. Updates will show the message in chronological order.';

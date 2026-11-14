@@ -47,10 +47,10 @@
     // Only explicit facilities-owned forms participate. Registration is deliberately
     // unmarked: its direct POST is the sole delivery path for the one-time token.
     return form instanceof HTMLFormElement && form.matches('[data-bmg-submit]') &&
-      form.method.toUpperCase() === 'POST';
+      (form.getAttribute('method') || 'GET').toUpperCase() === 'POST';
   }
   async function save(form, submitter) {
-    const url = facilitiesUrl(form.action);
+    const url = facilitiesUrl(form.getAttribute('action') || location.href);
     if (!url) { errorBox(form, 'The form action must stay within this site’s facilities area.'); return; }
     const mutations = window.SynapseMutations;
     if (committed.has(form)) return;

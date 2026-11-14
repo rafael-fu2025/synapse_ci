@@ -66,6 +66,8 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <?= $sidebarLink('clinic', 'clinic/patients', 'Patients & Charts', 'ph-light ph-users', ['clinic.patients.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/appointments', 'Appointments', 'ph-light ph-calendar', ['clinic.appointments.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/inventory', 'Medicine Inventory', 'bi bi-capsule', ['clinic.inventory.read']) ?>
+          <?= $sidebarLink('clinic', 'clinic/isolation', 'Isolation & Outbreaks', 'bi bi-shield-exclamation', ['clinic.isolation.read']) ?>
+          <?= $sidebarLink('clinic', 'clinic/reports', 'Periodic & CHED Reports', 'bi bi-file-earmark-bar-graph', ['clinic.reports.export', 'reports.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/referrals', 'Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>
           <?= $sidebarLink('clinic', 'clinic/teams', 'Clinic Teams', 'bi bi-people') ?>
           <?php if ($canAiInsights('clinic')): ?>
@@ -82,7 +84,15 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <?= $sidebarLink('guidance', 'guidance/queue', 'Guidance Queue', 'ph-light ph-clock-countdown', ['guidance.queue.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/cases', 'Counseling Cases (Encrypted)', 'ph-light ph-folder-notch-open', ['guidance.cases.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/appointments', 'Appointments', 'ph-light ph-calendar-check', ['guidance.schedule.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/referrals', 'Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>
+          <?= $sidebarLink('guidance', 'guidance/referrals', 'Clinic-Guidance Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>
+          <?= $sidebarLink('guidance', 'guidance/intake', 'Intake & Safety Triage', 'bi bi-inbox', ['guidance.intake.process']) ?>
+          <?= $sidebarLink('guidance', 'guidance/episodes', 'Guidance Episodes', 'bi bi-journal-medical', ['guidance.cases.read']) ?>
+          <?= $sidebarLink('guidance', 'guidance/call-slips', 'Call Slips', 'bi bi-ticket-perforated', ['guidance.call_slips.issue']) ?>
+          <?= $sidebarLink('guidance', 'guidance/clinical/cosign-queue', 'Co-Sign Queue', 'bi bi-pen', ['guidance.clinical.cosign']) ?>
+          <?= $sidebarLink('guidance', 'guidance/assessments/mi', 'MI Assessments', 'bi bi-stars', ['guidance.assessments.view']) ?>
+          <?= $sidebarLink('guidance', 'guidance/evaluations/dashboard', 'Service Evaluations', 'bi bi-bar-chart-line', ['guidance.evaluations.view_aggregates']) ?>
+          <?= $sidebarLink('guidance', 'guidance/governance/practitioners', 'Practitioners & Supervision', 'bi bi-person-badge', ['guidance.cases.read']) ?>
+          <?= $sidebarLink('guidance', 'guidance/governance/gates', 'Rollout Gates', 'bi bi-shield-check', ['guidance.cases.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/teams', 'Guidance Teams', 'bi bi-people') ?>
           <?php if ($canAiInsights('guidance')): ?>
             <?= $sidebarLink('guidance', 'guidance/insights', 'Insights & Program Planning', 'bi bi-lightbulb') ?>
@@ -110,13 +120,22 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
         <?php if ($showPersonalHeading): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Personal Health</li>
         <?php endif; ?>
-        <li class="nav-item<?= $isSelfServiceRole ? ' personal-portal-entry' : '' ?>"><a class="nav-link <?= $isActive('portal') && !$isActive('portal/announcements') && !$isActive('portal/surveys') && !$isActive('portal/settings') && !$isActive('portal/visits') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal')) ?>"><span class="nav-icon"><i class="ph-light ph-user-circle"></i></span><span class="nav-text">My Health Portal</span></a></li>
+        <li class="nav-item<?= $isSelfServiceRole ? ' personal-portal-entry' : '' ?>"><a class="nav-link <?= $isActive('portal') && !$isActive('portal/announcements') && !$isActive('portal/surveys') && !$isActive('portal/settings') && !$isActive('portal/visits') && !$isActive('portal/referrals') && !$isActive('portal/assessments') && !$isActive('portal/evaluations') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal')) ?>"><span class="nav-icon"><i class="ph-light ph-user-circle"></i></span><span class="nav-text">My Health Portal</span></a></li>
         <?php if (!empty($currentUser['person_id']) && in_array('portal.records.read', $currentUser['permissions'] ?? [], true)): ?>
           <li class="nav-item"><a class="nav-link <?= $isActive('portal/visits') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/visits')) ?>"><span class="nav-icon"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="nav-text">My Visit History</span></a></li>
         <?php endif; ?>
         <li class="nav-item"><a class="nav-link <?= $isActive('portal/announcements') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/announcements')) ?>"><span class="nav-icon"><i class="bi bi-megaphone"></i></span><span class="nav-text">Announcements</span></a></li>
         <?php if (!empty($currentUser['person_id'])): ?>
           <li class="nav-item"><a class="nav-link <?= $isActive('portal/surveys') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/surveys')) ?>"><span class="nav-icon"><i class="bi bi-clipboard-check"></i></span><span class="nav-text">My Surveys</span></a></li>
+          <?php if ($role !== 'guest'): ?>
+            <li class="nav-item"><a class="nav-link <?= $isActive('portal/referrals') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/referrals/create')) ?>"><span class="nav-icon"><i class="bi bi-envelope-paper"></i></span><span class="nav-text">Guidance Referral</span></a></li>
+          <?php endif; ?>
+          <?php if ($canContent('guidance.assessments.take')): ?>
+            <li class="nav-item"><a class="nav-link <?= $isActive('portal/assessments/mi') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/assessments/mi')) ?>"><span class="nav-icon"><i class="bi bi-stars"></i></span><span class="nav-text">Multiple Intelligence</span></a></li>
+          <?php endif; ?>
+          <?php if ($canContent('guidance.evaluations.submit')): ?>
+            <li class="nav-item"><a class="nav-link <?= $isActive('portal/evaluations') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/evaluations/redeem')) ?>"><span class="nav-icon"><i class="bi bi-chat-square-heart"></i></span><span class="nav-text">Service Evaluation</span></a></li>
+          <?php endif; ?>
         <?php endif; ?>
         <?php if (!empty($currentUser['person_id']) && $role !== 'guest'): ?>
           <li class="nav-item"><a class="nav-link <?= $isActive('portal/settings') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/settings')) ?>"><span class="nav-icon"><i class="bi bi-person-gear" aria-hidden="true"></i></span><span class="nav-text">Profile &amp; Settings</span></a></li>

@@ -120,6 +120,60 @@ final class ProfileSettingsController extends BaseController
         }
     }
 
+    /**
+     * Allows students and employees to selectively update their current phone and boarding/residence address
+     * without touching MIS-synced enrollment fields.
+     */
+    public function updateContactInfo()
+    {
+        try {
+            [$actor, $person] = $this->owner();
+            $phone = $this->validateContactField('phone', 30);
+            $address = $this->validateContactField('address', 500);
+
+            if ($phone !== null && !preg_match('/^[0-9+\-\s().]{5,30}$/', $phone)) {
+                throw new RuntimeException('Enter a valid phone number (digits, spaces, +, -, or parentheses).', 422);
+            }
+
+            $db = Database::connect();
+            $db->table('people')
+                ->where('tenant_id', (int) $actor['tenant_id'])
+                ->where('id', (int) $actor['person_id'])
+                ->where('deleted_at', null)
+                ->update([
+                    'phone'      => $phone,
+                    'address'    => $address,
+                    'updated_at' => date('Y-m-d H:i:s'),
+                ]);
+
+            (new \App\Services\Audit\AuditService(null, $db))->log(
+                'person.contact_updated',
+                'people',
+                (string) $actor['person_id'],
+                'updated',
+                ['has_phone' => $phone !== null, 'has_address' => $address !== null],
+                (int) $actor['id'],
+                (string) ($actor['role'] ?? 'student')
+            );
+
+            $contactInfo = ['phone' => $phone, 'address' => $address];
+            if (!$this->request->isAJAX()) {
+                return redirect()->to(site_url('portal/settings'))->with('success', 'Current contact number and residence address updated.');
+            }
+            return $this->response->setJSON([
+                'success'      => true,
+                'message'      => 'Current contact number and residence address updated.',
+                'contact_info' => $contactInfo,
+                'csrf'         => ['name' => csrf_token(), 'hash' => csrf_hash()],
+            ]);
+        } catch (RuntimeException $error) {
+            return $this->failure($error);
+        } catch (Throwable $error) {
+            log_message('error', 'Contact info update failed: {exception}', ['exception' => $error]);
+            return $this->failure(new RuntimeException('Unable to update contact details. Please try again.', 503));
+        }
+    }
+
     private function validateContactField(string $field, int $maxLength): ?string
     {
         $value = $this->request->getPost($field);

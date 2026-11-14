@@ -15,6 +15,7 @@ use App\Models\ReferralModel;
 use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\Guidance\GuidanceCaseService;
+use CodeIgniter\Database\BaseConnection;
 use Config\Database;
 use InvalidArgumentException;
 use RuntimeException;
@@ -42,15 +43,24 @@ final class ReferralService
     private ReferralModel $referralModel;
     private PersonModel $personModel;
     private GuidanceCaseService $caseService;
+    private BaseConnection $db;
 
     public function __construct(
         ?ReferralModel $referralModel = null,
         ?PersonModel $personModel = null,
-        ?GuidanceCaseService $caseService = null
+        ?GuidanceCaseService $caseService = null,
+        ?BaseConnection $db = null
     ) {
-        $this->referralModel = $referralModel ?? new ReferralModel();
-        $this->personModel = $personModel ?? new PersonModel();
-        $this->caseService = $caseService ?? new GuidanceCaseService();
+        $models = array_filter([$referralModel, $personModel]);
+        $this->db = $db ?? ($models !== [] ? reset($models)->db : Database::connect());
+        foreach ($models as $model) {
+            if ($model->db !== $this->db) {
+                throw new InvalidArgumentException('Referral models must share their transaction connection.');
+            }
+        }
+        $this->referralModel = $referralModel ?? new ReferralModel($this->db);
+        $this->personModel = $personModel ?? new PersonModel($this->db);
+        $this->caseService = $caseService ?? new GuidanceCaseService(db: $this->db);
     }
 
     public static function positiveId(mixed $value): int
@@ -96,10 +106,11 @@ final class ReferralService
     private function actor(int $userId, ?array $context, string $permission, ?string $module = null): array
     {
         self::positiveId($userId);
-        if ($context !== null && self::positiveId($context['id'] ?? null) !== $userId) {
+        if ($context === null || self::positiveId($context['id'] ?? null) !== $userId) {
             throw new RuntimeException('Referral actor impersonation forbidden.', 403);
         }
-        return $this->authorize($context ?? ['id' => $userId, 'tenant_id' => CurrentTenant::id()], $permission, $module);
+
+        return $this->authorize($context, $permission, $module);
     }
 
     public function context(array $actor, ?string $requestedUnit = null): string
@@ -138,7 +149,7 @@ final class ReferralService
         };
     }
 
-    public function createReferral(array $data, ?array $actor = null): array
+    public function createReferral(array $data, array $actor): array
     {
         $issuer = self::positiveId($data['issuer_user_id'] ?? null);
         $fresh = $this->actor($issuer, $actor, 'referrals.create');
@@ -190,7 +201,6 @@ final class ReferralService
         }
         $description = trim($description);
         return $this->transaction(function (array &$notifications) use ($actor, $issuer, $source, $target, $patient, $encounter, $reason, $description, $priority, $key): array {
-            $this->referralModel->lockTenant();
             // The mutex may have waited while the issuer's role or grants changed.
             $fresh = $this->actor($issuer, $actor, 'referrals.create', $source);
             if ($encounter !== null) {
@@ -202,7 +212,7 @@ final class ReferralService
                 'reason_description' => $description, 'priority' => $priority,
             ];
             if ($key !== null) {
-                $db = Database::connect();
+                $db = $this->db;
                 $table = $db->protectIdentifiers($db->prefixTable('referrals'));
                 $existing = $db->query("SELECT * FROM {$table} WHERE tenant_id = ? AND issuer_user_id = ? AND request_key = ? FOR UPDATE",
                     [CurrentTenant::id(), $issuer, $key])->getRowArray();
@@ -217,7 +227,7 @@ final class ReferralService
                 }
             }
             $this->patient($patient);
-            if ($encounter !== null && Database::connect()->table('clinic_encounters')
+            if ($encounter !== null && $this->db->table('clinic_encounters')
                 ->where('id', $encounter)->where('tenant_id', CurrentTenant::id())
                 ->where('person_id', $patient)->where('deleted_at', null)->get()->getRowArray() === null) {
                 throw new RuntimeException('Source encounter not found for this patient.', 422);
@@ -259,8 +269,13 @@ final class ReferralService
         ]);
     }
 
-    public function convertToCase(int $referralId, int $counsellorUserId, string $caseTitle, string $category, ?array $actor = null): array
-    {
+    public function convertToCase(
+        int $referralId,
+        int $counsellorUserId,
+        string $caseTitle,
+        string $category,
+        array $actor
+    ): array {
         $ref = $this->record($referralId);
         $fresh = $this->actor($counsellorUserId, $actor, 'referrals.review', 'guidance');
         if ($ref['target_module'] !== 'guidance') {
@@ -373,7 +388,7 @@ final class ReferralService
             || !in_array($module === 'clinic' ? 'clinic.encounters.read' : 'guidance.cases.read', $actor['permissions'], true))) {
             return false;
         }
-        $builder = Database::connect()->table($module === 'clinic' ? 'clinic_encounters' : 'counselling_cases')
+        $builder = $this->db->table($module === 'clinic' ? 'clinic_encounters' : 'counselling_cases')
             ->select('id')->where('tenant_id', CurrentTenant::id())->where('person_id', $ref['patient_person_id'])
             ->where('id', $id)->where('deleted_at', null);
         if ($module === 'guidance' && !$superadmin && !in_array('guidance.cases.read_any', $actor['permissions'], true)) {
@@ -384,7 +399,7 @@ final class ReferralService
 
     private function listBuilder(string $unit, string $tab): \CodeIgniter\Database\BaseBuilder
     {
-        $builder = Database::connect()->table('referrals r')->where('r.tenant_id', CurrentTenant::id())
+        $builder = $this->db->table('referrals r')->where('r.tenant_id', CurrentTenant::id())
             ->join('people p', 'p.id = r.patient_person_id AND p.tenant_id = r.tenant_id AND p.deleted_at IS NULL')
             ->join('users u', 'u.id = r.issuer_user_id AND u.tenant_id = r.tenant_id')
             ->join('people ip', 'ip.id = u.person_id AND ip.tenant_id = r.tenant_id AND ip.deleted_at IS NULL', 'left');
@@ -402,7 +417,7 @@ final class ReferralService
         $ref = $this->record($id);
         $fresh = $this->handoffActor($ref, $actor);
         $this->validateLinks($ref);
-        $patient = Database::connect()->table('people')->select('id,first_name,last_name,mis_id,kind')
+        $patient = $this->db->table('people')->select('id,first_name,last_name,mis_id,kind')
             ->where('tenant_id', CurrentTenant::id())->where('id', $ref['patient_person_id'])
             ->where('deleted_at', null)->get()->getRowArray();
         $targets = $this->targetBuilder($ref, $fresh)->orderBy('id', 'DESC')->get()->getResultArray();
@@ -436,11 +451,10 @@ final class ReferralService
                 $targetId = (int) $target['id'];
             } else {
                 // Keep new downstream work within this referral transaction.
-                $this->referralModel->lockTenant();
                 $summary = 'Referral ' . $ref['referral_code'] . ' from ' . ucfirst($ref['source_module']) . ': '
                     . mb_substr(trim((string) ($ref['reason_description'] ?? $ref['reason_code'])), 0, 2000);
                 if ($clinic) {
-                    $package = (new EncounterService())->startReferralEncounter((int) $ref['patient_person_id'], (int) $fresh['id'],
+                    $package = (new EncounterService(db: $this->db))->startReferralEncounter((int) $ref['patient_person_id'], (int) $fresh['id'],
                         mb_substr($summary, 0, EncounterService::TEXT_LIMITS['chief_complaint']));
                     $targetId = self::positiveId($package['encounter']['id'] ?? null);
                     $created = $package['created'];
@@ -451,7 +465,8 @@ final class ReferralService
                         || !in_array($category, ['personal', 'academic', 'career', 'family', 'behavioral', 'crisis'], true)) {
                         throw new RuntimeException('Invalid case title or category.', 422);
                     }
-                    $package = $this->caseService->createCase((int) $ref['patient_person_id'], (int) $fresh['id'], trim($title), $category, $summary);
+                    $package = $this->caseService->createCase((int) $ref['patient_person_id'], (int) $fresh['id'],
+                        trim($title), $category, $summary, $fresh);
                     $targetId = self::positiveId($package['case']['id'] ?? null);
                     $created = true;
                 }
@@ -461,7 +476,7 @@ final class ReferralService
                 $field => $targetId, 'status' => $clinic ? 'under_review' : 'converted_to_case',
                 'assigned_user_id' => $fresh['id'],
             ]);
-            WorkflowNotifications::record(Database::connect(), 'referral_handoff', $ref['source_module'], $id,
+            WorkflowNotifications::record($this->db, 'referral_handoff', $ref['source_module'], $id,
                 ($clinic ? 'encounter_' : 'case_') . $targetId, (int) $fresh['id']);
             return $this->handoffResult($this->record($id), $targetId, $created, $fresh);
         });
@@ -482,11 +497,11 @@ final class ReferralService
     private function targetBuilder(array $ref, array $actor): \CodeIgniter\Database\BaseBuilder
     {
         $clinic = $ref['target_module'] === 'clinic';
-        $builder = Database::connect()->table($clinic ? 'clinic_encounters' : 'counselling_cases')
+        $builder = $this->db->table($clinic ? 'clinic_encounters' : 'counselling_cases')
             ->select($clinic ? 'id,person_id,status,started_at,attending_user_id' : 'id,person_id,status,case_number,title,category,counsellor_user_id')
             ->where('tenant_id', CurrentTenant::id())->where('person_id', $ref['patient_person_id'])
             ->where('deleted_at', null)->whereIn('status', $clinic ? ['in_progress'] : ['open', 'active', 'monitoring']);
-        if (!$clinic && $actor['role'] !== 'superadmin' && !in_array('guidance.cases.read_any', $actor['permissions'], true)) {
+        if (!$clinic) {
             $builder->where('counsellor_user_id', $actor['id']);
         }
         return $builder;
@@ -496,7 +511,7 @@ final class ReferralService
     {
         $builder = $this->targetBuilder($ref, $actor)->where('id', $id);
         if ($lock) {
-            $row = Database::connect()->query($builder->getCompiledSelect() . ' FOR UPDATE')->getRowArray();
+            $row = $this->db->query($builder->getCompiledSelect() . ' FOR UPDATE')->getRowArray();
         } else {
             $row = $builder->get()->getRowArray();
         }
@@ -516,6 +531,7 @@ final class ReferralService
     private function mutate(int $id, ?int $userId, ?array $actor, string $permission, array $from, array $changes): array
     {
         return $this->transaction(function () use ($id, $userId, $actor, $permission, $from, $changes): array {
+            $this->referralModel->lockTenant();
             $ref = $this->record($id, true);
             if ($userId === null) {
                 throw new RuntimeException('Target staff identity required.', 403);
@@ -530,7 +546,7 @@ final class ReferralService
                 'under_review' => 'referral_reviewed',
                 'closed' => 'referral_closed',
             };
-            WorkflowNotifications::record(Database::connect(), $kind, $ref['source_module'], $id,
+            WorkflowNotifications::record($this->db, $kind, $ref['source_module'], $id,
                 $changes['status'], (int) $fresh['id']);
             return $this->visibleReferral($this->record($id), $fresh);
         });
@@ -540,7 +556,7 @@ final class ReferralService
     {
         $this->patient((int) $ref['patient_person_id']);
         if ($ref['source_encounter_id'] !== null) {
-            if ($ref['source_module'] !== 'clinic' || Database::connect()->table('clinic_encounters')
+            if ($ref['source_module'] !== 'clinic' || $this->db->table('clinic_encounters')
                 ->where('id', $ref['source_encounter_id'])->where('tenant_id', CurrentTenant::id())
                 ->where('person_id', $ref['patient_person_id'])->where('deleted_at', null)->get()->getRowArray() === null) {
                 throw new RuntimeException('Invalid source encounter relationship.', 422);
@@ -559,7 +575,7 @@ final class ReferralService
     {
         self::positiveId($id);
         if ($lock) {
-            $db = Database::connect();
+            $db = $this->db;
             $table = $db->protectIdentifiers($db->prefixTable('referrals'));
             $ref = $db->query("SELECT * FROM {$table} WHERE tenant_id = ? AND id = ? FOR UPDATE", [CurrentTenant::id(), $id])->getRowArray();
         } else {
@@ -582,7 +598,7 @@ final class ReferralService
             throw new RuntimeException('Referral status does not allow this action.', 409);
         }
         // Compare-and-swap serializes competing actions without a driver-specific row lock.
-        $db = Database::connect();
+        $db = $this->db;
         $ok = $db->table('referrals')->where('tenant_id', CurrentTenant::id())->where('id', $ref['id'])
             ->where('status', $ref['status'])->update($changes + ['updated_at' => date('Y-m-d H:i:s')]);
         if (!$ok || $db->affectedRows() !== 1) {
@@ -592,7 +608,7 @@ final class ReferralService
 
     private function transaction(callable $operation, ?NotificationInvalidation $invalidation = null): array
     {
-        $db = Database::connect();
+        $db = $this->db;
         if ($db->transDepth !== 0) {
             throw new RuntimeException('Referral operations require an independent transaction.', 409);
         }
@@ -602,6 +618,7 @@ final class ReferralService
         }
         $notifications = [];
         try {
+            $this->referralModel->lockTenant();
             $result = $operation($notifications);
             if ($db->transStatus() === false) {
                 throw new RuntimeException('Referral transaction failed.', 409);
