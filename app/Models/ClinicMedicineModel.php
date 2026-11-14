@@ -48,4 +48,19 @@ final class ClinicMedicineModel extends TenantModel
             ->orderBy('name', 'ASC')
             ->findAll();
     }
+
+    /** Active medicines with usable stock count and earliest non-expired active batch expiration date. */
+    public function getDispenseCatalogList(): array
+    {
+        $medicineTable = $this->db->protectIdentifiers($this->db->prefixTable($this->table));
+        $batchTable = $this->db->protectIdentifiers($this->db->prefixTable('clinic_medicine_batches'));
+        $todayEsc = $this->db->escape(\App\Services\Scheduling\SchedulingClock::today());
+        $usable = "(SELECT COALESCE(SUM(b.remaining_quantity),0) FROM {$batchTable} b WHERE b.medicine_id={$medicineTable}.id AND b.tenant_id={$medicineTable}.tenant_id AND b.status='active' AND b.expiration_date>={$todayEsc})";
+        $nextExp = "(SELECT MIN(b2.expiration_date) FROM {$batchTable} b2 WHERE b2.medicine_id={$medicineTable}.id AND b2.tenant_id={$medicineTable}.tenant_id AND b2.status='active' AND b2.remaining_quantity>0 AND b2.expiration_date>={$todayEsc})";
+        return $this->scoped()
+            ->select("{$medicineTable}.*, {$usable} AS usable_stock, {$nextExp} AS next_expiration_date", false)
+            ->where('is_active', 1)
+            ->orderBy('name', 'ASC')
+            ->findAll();
+    }
 }

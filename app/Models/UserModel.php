@@ -71,7 +71,7 @@ final class UserModel extends TenantModel
 
         $codes = array_column($rows, 'code');
         // Staff retain employee self-service, not employee departmental/referral authority.
-        if (in_array($role, ['clinic_admin', 'clinic_staff', 'guidance_admin', 'guidance_supervisor', 'counsellor',
+        if (in_array($role, ['clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern', 'guidance_admin', 'guidance_supervisor', 'counsellor',
             'bmg_admin', 'facilities_op', 'audit_reader', 'report_viewer'], true)) {
             $baseline = $db->table('role_permissions rp')->select('p.code')
                 ->join('permissions p', 'p.id = rp.permission_id')->where('rp.role', 'employee')

@@ -88,6 +88,45 @@
       <?= esc(\App\Services\Clinic\InventoryService::SETUP_PENDING_MESSAGE) ?>
       Queue, appointments and consultation statistics remain available below.
     </div>
+  <?php else: ?>
+    <?php
+      $lowStock = (int) ($inventoryAlerts['low_stock'] ?? 0);
+      $expiredBatches = (int) ($inventoryAlerts['expired_batches'] ?? 0);
+      $nearExpiryBatches = (int) ($inventoryAlerts['near_expiry_batches'] ?? 0);
+    ?>
+    <?php if ($lowStock > 0 || $expiredBatches > 0 || $nearExpiryBatches > 0 || ($activeIsolationCount ?? 0) > 0 || !empty($isolationAlerts)): ?>
+      <div class="row g-3 mb-4">
+        <?php if ($lowStock > 0 || $expiredBatches > 0 || $nearExpiryBatches > 0): ?>
+          <div class="col-lg-6">
+            <div class="alert alert-warning border-0 shadow-sm h-100 mb-0 d-flex justify-content-between align-items-center gap-3">
+              <div class="small">
+                <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> Inventory Attention Required</div>
+                <span>Low-stock items: <strong><?= $lowStock ?></strong> · Near-expiry (&le;90d): <strong><?= $nearExpiryBatches ?></strong> · Expired w/ stock: <strong><?= $expiredBatches ?></strong></span>
+              </div>
+              <a href="<?= site_url('/clinic/inventory?status=low') ?>" class="btn btn-outline-dark btn-sm text-nowrap">Review Stock</a>
+            </div>
+          </div>
+        <?php endif; ?>
+        <?php if (($activeIsolationCount ?? 0) > 0 || !empty($isolationAlerts)): ?>
+          <div class="col-lg-6">
+            <div class="alert alert-danger border-0 shadow-sm h-100 mb-0 d-flex justify-content-between align-items-center gap-3">
+              <div class="small">
+                <div class="fw-bold mb-1"><i class="bi bi-shield-exclamation me-1"></i> Communicable Isolation Watch</div>
+                <span>Active campus isolations: <strong><?= (int) ($activeIsolationCount ?? 0) ?></strong></span>
+                <?php if (!empty($isolationAlerts)): ?>
+                  <div class="mt-1">
+                    <?php foreach ($isolationAlerts as $alert): ?>
+                      <span class="badge bg-white text-danger border me-1"><?= esc($alert['condition_label']) ?>: <?= (int) ($alert['case_count'] ?? 0) ?></span>
+                    <?php endforeach; ?>
+                  </div>
+                <?php endif; ?>
+              </div>
+              <a href="<?= site_url('/clinic/isolation') ?>" class="btn btn-outline-danger btn-sm text-nowrap">Isolation Calendar</a>
+            </div>
+          </div>
+        <?php endif; ?>
+      </div>
+    <?php endif; ?>
   <?php endif; ?>
 
   <!-- Visualizations & Analytics -->
@@ -96,9 +135,14 @@
     <div class="col-xl-8">
       <!-- Performance Curve Card -->
       <div class="card mb-3 border-0 shadow-sm">
-        <div class="card-header nd-chart-header bg-transparent py-3">
-          <h5 class="card-title mb-0 fw-bold">Clinical Patient Intake & Consultations</h5>
-          <div class="badge bg-light text-muted border">Last 7 Days</div>
+        <div class="card-header nd-chart-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <h5 class="card-title mb-0 fw-bold">Clinical Patient Intake &amp; Consultations</h5>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Chart timeframe">
+            <?php $curRange = $rangeKey ?? '7d'; ?>
+            <a href="<?= site_url('/clinic?range=7d') ?>" class="btn <?= $curRange === '7d' ? 'btn-primary' : 'btn-outline-secondary' ?>">7 Days</a>
+            <a href="<?= site_url('/clinic?range=30d') ?>" class="btn <?= $curRange === '30d' ? 'btn-primary' : 'btn-outline-secondary' ?>">30 Days</a>
+            <a href="<?= site_url('/clinic?range=sy') ?>" class="btn <?= $curRange === 'sy' ? 'btn-primary' : 'btn-outline-secondary' ?>">School Year</a>
+          </div>
         </div>
         <div class="card-body">
           <div class="nd-chart-summary">
@@ -198,6 +242,12 @@
             </a>
             <a href="<?= site_url('/clinic/inventory') ?>" class="btn btn-outline-secondary text-start p-2">
               <i class="bi bi-capsule me-2"></i> FEFO Medicine Inventory
+            </a>
+            <a href="<?= site_url('/clinic/isolation') ?>" class="btn btn-outline-secondary text-start p-2">
+              <i class="bi bi-shield-exclamation me-2"></i> Isolation &amp; Outbreak Calendar
+            </a>
+            <a href="<?= site_url('/clinic/reports') ?>" class="btn btn-outline-secondary text-start p-2">
+              <i class="bi bi-file-earmark-bar-graph me-2"></i> Periodic &amp; CHED Summary Reports
             </a>
             <a href="<?= site_url('/clinic/referrals') ?>" class="btn btn-outline-secondary text-start p-2">
               <i class="bi bi-arrows-left-right me-2"></i> Outgoing Referrals to Guidance

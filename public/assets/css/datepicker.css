@@ -29,6 +29,23 @@
   cursor: pointer;
 }
 
+.dp-wrap .form-control-sm {
+  padding-right: 2.05rem;
+}
+
+.dp-wrap .form-control-sm ~ .dp-icon {
+  right: 10px;
+  font-size: 0.85rem;
+}
+
+.dp-wrap .form-control:is(:disabled, [readonly]) {
+  cursor: default;
+}
+
+.dp-wrap .form-control:disabled {
+  cursor: not-allowed;
+}
+
 .dp-wrap .form-control:focus ~ .dp-icon,
 .dp-wrap.dp-open .dp-icon {
   color: var(--accent-color);

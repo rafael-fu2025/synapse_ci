@@ -98,8 +98,8 @@
       this.defaultH24 = Number(input.dataset.defaultHours) || 0;
       this.defaultMin = Number(input.dataset.defaultMinutes) || 0;
 
-      const initialValue = (this.target ? this.target.value : input.value) || '';
-      const parsed = this.parseValue(initialValue);
+      this.initialISO = (this.target ? this.target.value : input.value) || '';
+      const parsed = this.parseValue(this.initialISO);
       if (parsed) {
         this.selectedDate = parsed.date;
         this.selectedH12 = parsed.h12;
@@ -431,13 +431,83 @@
         this.closePopup(true);
       });
 
+      const stepWheel = (wheel, direction, itemsList, getSelectedVal, onSelectVal) => {
+        const items = Array.from(itemsList);
+        if (!items.length) return;
+        const currentIdx = Math.max(0, items.findIndex((el) => el.dataset.val === String(getSelectedVal())));
+        const nextIdx = direction === 'home'
+          ? 0
+          : direction === 'end'
+            ? items.length - 1
+            : (currentIdx + direction + items.length) % items.length;
+        const targetItem = items[nextIdx];
+        if (!targetItem) return;
+        onSelectVal(targetItem.dataset.val);
+        if (!this.selectedDate) this.selectedDate = startOfDay(new Date());
+        this.commit();
+        this.updateWheelHighlights();
+        targetItem.scrollIntoView({ block: 'nearest' });
+      };
+
+      const bindWheelKeyboard = (wheel, getSelectedVal, onSelectVal) => {
+        on(wheel, 'keydown', (e) => {
+          const dir = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : e.key === 'Home' ? 'home' : e.key === 'End' ? 'end' : null;
+          if (dir === null) return;
+          e.preventDefault();
+          stepWheel(wheel, dir, wheel.querySelectorAll('.dtp-wheel-item'), getSelectedVal, onSelectVal);
+        });
+      };
+
+      bindWheelKeyboard(this.hoursWheel, () => this.selectedH12, (v) => { this.selectedH12 = Number(v); });
+      bindWheelKeyboard(this.minutesWheel, () => this.selectedMin, (v) => { this.selectedMin = Number(v); });
+      bindWheelKeyboard(this.ampmWheel, () => this.selectedAmpm, (v) => { this.selectedAmpm = v === 'PM' ? 'PM' : 'AM'; });
+
+      on(this.popup, 'keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const openToggle = this.popup.querySelector('.bd-select-toggle[aria-expanded="true"]');
+        if (openToggle) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.bootstrap?.Dropdown.getInstance(openToggle)?.hide();
+          openToggle.focus();
+          return;
+        }
+        e.preventDefault();
+        this.closePopup(true);
+      });
+
+      on(this.input, 'invalid', () => {
+        this.input.classList.add('is-invalid');
+        this.input.setAttribute('aria-invalid', 'true');
+      });
+
+      if (this.input.form) {
+        on(this.input.form, 'reset', (e) => setTimeout(() => {
+          if (e.defaultPrevented || !this.input.isConnected) return;
+          if (this.target) this.target.value = this.initialISO;
+          this.syncFromTarget();
+          this.input.classList.remove('is-invalid');
+          this.input.setAttribute('aria-invalid', 'false');
+          if (this.target) {
+            this.notifying = true;
+            try { this.target.dispatchEvent(new Event('input', { bubbles: true })); }
+            finally { this.notifying = false; }
+          }
+          this.closePopup(false);
+        }, 0));
+      }
+
       on(document, 'pointerdown', (e) => {
         if (this.isOpen && !this.popup.contains(e.target) && !this.wrap.contains(e.target)) {
           this.closePopup(false);
         }
       });
 
-      on(window, 'scroll', () => this.isOpen && this.position(), { capture: true });
+      on(window, 'scroll', (e) => {
+        if (!this.isOpen) return;
+        if (e.target instanceof Node && this.popup.contains(e.target)) return;
+        this.position();
+      }, { capture: true, passive: true });
       on(window, 'resize', () => this.isOpen && this.position());
 
       if (this.target) {
@@ -491,11 +561,14 @@
         }
         this.commitTarget(parsed ? pad(parsed.h24) + ':' + pad(parsed.min) : '');
         this.updateWheelHighlights();
+        this.syncValidityClass();
         return;
       }
+      this.input.setCustomValidity('');
       if (!text) {
         this.selectedDate = null;
         this.commitTarget('');
+        this.syncValidityClass();
         return;
       }
 
@@ -516,6 +589,7 @@
           this.selectedAmpm = ampm;
           const h24 = to24Hour(this.selectedH12, this.selectedAmpm);
           this.commitTarget(toISODateTime(this.selectedDate, h24, this.selectedMin));
+          this.syncValidityClass();
           return;
         }
       }
@@ -528,6 +602,7 @@
         this.selectedMin = parsed.min;
         this.selectedAmpm = parsed.ampm;
         this.commitTarget(toISODateTime(this.selectedDate, parsed.h24, this.selectedMin));
+        this.syncValidityClass();
       }
     }
 
@@ -539,13 +614,19 @@
 
     updateWheelHighlights() {
       this.hoursWheel.querySelectorAll('.dtp-wheel-item').forEach(item => {
-        item.classList.toggle('is-selected', Number(item.dataset.val) === this.selectedH12);
+        const selected = Number(item.dataset.val) === this.selectedH12;
+        item.classList.toggle('is-selected', selected);
+        item.setAttribute('aria-selected', String(selected));
       });
       this.minutesWheel.querySelectorAll('.dtp-wheel-item').forEach(item => {
-        item.classList.toggle('is-selected', Number(item.dataset.val) === this.selectedMin);
+        const selected = Number(item.dataset.val) === this.selectedMin;
+        item.classList.toggle('is-selected', selected);
+        item.setAttribute('aria-selected', String(selected));
       });
       this.ampmWheel.querySelectorAll('.dtp-wheel-item').forEach(item => {
-        item.classList.toggle('is-selected', item.dataset.val === this.selectedAmpm);
+        const selected = item.dataset.val === this.selectedAmpm;
+        item.classList.toggle('is-selected', selected);
+        item.setAttribute('aria-selected', String(selected));
       });
 
       const formattedTime = pad(this.selectedH12) + ':' + pad(this.selectedMin) + ' ' + this.selectedAmpm;
@@ -563,6 +644,17 @@
       });
     }
 
+    syncValidityClass() {
+      const invalid = Boolean(this.input.validationMessage && (this.input.classList.contains('is-invalid') || this.input.validity.customError));
+      if (!this.input.validationMessage) {
+        this.input.classList.remove('is-invalid');
+        this.input.setAttribute('aria-invalid', 'false');
+      } else if (invalid) {
+        this.input.classList.add('is-invalid');
+        this.input.setAttribute('aria-invalid', 'true');
+      }
+    }
+
     commit() {
       if (this.timeOnly) this.input.setCustomValidity('');
       this.updateWheelHighlights();
@@ -570,6 +662,7 @@
         this.input.value = '';
         if (this.preview) this.preview.textContent = '';
         this.commitTarget('');
+        this.syncValidityClass();
         return;
       }
 
@@ -577,6 +670,7 @@
       const iso = this.timeOnly ? pad(h24) + ':' + pad(this.selectedMin) : toISODateTime(this.selectedDate, h24, this.selectedMin);
       this.refreshDisplay();
       this.commitTarget(iso);
+      this.syncValidityClass();
     }
 
     commitTarget(iso) {

@@ -80,7 +80,7 @@ foreach ($batches as $batch) {
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <caption class="visually-hidden">Latest 100 inventory operations and correction references</caption>
-      <thead><tr><th scope="col" class="ps-3">Operation / date</th><th scope="col">Source / reference</th><th scope="col">Reason</th><th scope="col">Actor user ID</th><th scope="col" class="pe-3">Correction</th></tr></thead>
+      <thead><tr><th scope="col" class="ps-3">Operation / date</th><th scope="col">Source / reference</th><th scope="col">Reason</th><th scope="col">Recorded by</th><th scope="col" class="pe-3">Correction</th></tr></thead>
       <tbody>
         <?php if ($operations === []): ?><tr><td colspan="5" class="text-center py-4 text-muted">No ledger operations recorded. Legacy balances may still appear in movements.</td></tr><?php endif; ?>
         <?php foreach ($operations as $operation): ?>
@@ -95,7 +95,7 @@ foreach ($batches as $batch) {
               <?php else: ?><span class="text-muted">Inventory ledger</span><?php endif; ?>
             </td>
             <td class="text-break"><?= esc($operation['reason']) ?></td>
-            <td>#<?= (int) $operation['actor_id'] ?></td>
+            <td><?= esc($operation['actor_name'] ?? ('#' . (int) $operation['actor_id'])) ?></td>
             <td class="pe-3">
               <?php if ($operation['type'] === 'reversal'): ?>
                 <div><?= $operation['reversal_mode'] === 'restore_unissued' ? 'Restored all unissued units' : 'Record only — stock unchanged' ?></div>

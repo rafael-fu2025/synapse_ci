@@ -81,6 +81,8 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
             'first_name' => 'Carla',
             'last_name'  => 'Mendoza',
         ]);
+
+        $this->signInCounsellor();
     }
 
     protected function tearDown(): void
@@ -93,6 +95,7 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
     {
         // Fresh migrations do not seed counsellor grants; install only these contracts' grants.
         $permissions = [
+            'guidance.cases.create' => 'Create counseling cases',
             'guidance.cases.read' => 'View assigned counseling cases',
             'guidance.cases.write' => 'Write encrypted session notes and plans',
         ];
@@ -115,6 +118,7 @@ final class GuidanceCaseServiceTest extends FreshDatabaseTestCase
         $this->assertNotNull($identity);
         $this->assertSame('counsellor', $identity['role']);
         $this->assertNotNull($identity['person_id']);
+        $this->assertContains('guidance.cases.create', $identity['permissions']);
         $this->assertContains('guidance.cases.read', $identity['permissions']);
         $this->assertContains('guidance.cases.write', $identity['permissions']);
         $now = time();

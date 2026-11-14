@@ -5,6 +5,18 @@
   <p class="text-muted mb-0">Choose a department and date range, then download a report or spreadsheet.</p>
 </div>
 
+<?php if (in_array('clinic', $units ?? [], true)): ?>
+  <div class="alert alert-primary border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div class="small">
+      <strong>Need &gt;31-day Clinic Monthly, Semester, or CHED School-Year (June–Present) Reports?</strong>
+      <div class="text-muted">Use the extended Clinic Periodic &amp; CHED Summary Report workspace for multi-month trends, FEFO dispensing totals, isolation cases, and health clearances up to 366 days.</div>
+    </div>
+    <a href="<?= site_url('/clinic/reports') ?>" class="btn btn-primary btn-sm text-nowrap">
+      <i class="bi bi-file-earmark-bar-graph me-1"></i> Open Clinic Periodic Reports
+    </a>
+  </div>
+<?php endif; ?>
+
 <form method="post" action="<?= esc(site_url('reports/export/operational')) ?>" data-operational-export data-report-download>
   <?= csrf_field() ?>
   <div class="card border-0 shadow-sm mb-4" aria-labelledby="export-filters-title">

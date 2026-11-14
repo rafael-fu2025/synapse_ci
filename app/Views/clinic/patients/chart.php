@@ -34,6 +34,22 @@ $student = $chart['student_profile'] ?? null;
 $employee = $chart['employee_profile'] ?? null;
 $encounters = $chart['encounters'] ?? [];
 $vitalsHistory = $chart['vitals_history'] ?? [];
+$visitSummary = $chart['visit_summary'] ?? ['total_visits' => count($encounters), 'current_sy_visits' => 0, 'current_school_year' => ($currentSchoolYear ?? ''), 'last_visit_at' => null, 'top_complaints' => []];
+$labResults = $chart['lab_results'] ?? [];
+$enrollmentClearances = $chart['enrollment_clearances'] ?? [];
+$isolationCases = $chart['isolation_cases'] ?? [];
+$manila = new \DateTimeZone('Asia/Manila');
+$utc = new \DateTimeZone('UTC');
+$formatManila = static function (?string $ts) use ($manila, $utc): string {
+    if ($ts === null || trim($ts) === '') {
+        return '—';
+    }
+    try {
+        return (new \DateTimeImmutable($ts, $utc))->setTimezone($manila)->format('M j, Y · g:i A');
+    } catch (\Throwable) {
+        return $ts;
+    }
+};
 $treatmentsByEncounter = [];
 foreach ($chart['treatment_history'] ?? [] as $item) {
     $treatmentsByEncounter[$item['encounter_id']][] = $item;
@@ -83,7 +99,12 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
       </div>
 
       <!-- Quick Health Pill Tags -->
-      <div class="d-flex flex-wrap gap-2">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <?php $totalVisits = (int) ($visitSummary['total_visits'] ?? count($encounters)); ?>
+        <?php $syVisits = (int) ($visitSummary['current_sy_visits'] ?? 0); ?>
+        <span class="badge <?= $totalVisits >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-info-subtle text-info-emphasis border border-info-subtle' ?> px-3 py-2" title="Total visits on record (SY <?= esc((string) ($visitSummary['current_school_year'] ?? '')) ?>: <?= $syVisits ?>)">
+          <i class="bi bi-calendar2-check me-1"></i> Visits: <strong><?= $totalVisits ?></strong> (<?= $syVisits ?> this SY)
+        </span>
         <span class="badge bg-light text-dark border px-3 py-2">
           <i class="bi bi-droplet-half text-danger me-1"></i> Blood: <strong><?= esc($health['blood_type'] ?? 'Unknown') ?></strong>
         </span>
@@ -92,6 +113,9 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
             <i class="bi bi-exclamation-triangle-fill me-1"></i> Allergies: <?= esc($health['allergies']) ?>
           </span>
         <?php endif; ?>
+        <button type="button" class="btn btn-outline-secondary btn-sm d-print-none" data-print-chart>
+          <i class="bi bi-printer me-1"></i> Print Chart
+        </button>
       </div>
     </div>
   </div>
@@ -121,12 +145,62 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
             <span class="text-muted">No allergies recorded.</span>
           <?php endif; ?>
         </div>
-        <div>
+        <div class="mb-2">
           <span class="text-muted d-block">Chronic Conditions:</span>
           <span class="fw-semibold text-dark"><?= esc($health['chronic_conditions'] ?? 'None on file') ?></span>
         </div>
+        <?php if (!empty($health['medical_history_notes'])): ?>
+          <div class="mb-2"><span class="text-muted d-block">Medical History:</span><span class="small"><?= nl2br(esc($health['medical_history_notes'])) ?></span></div>
+        <?php endif; ?>
+        <?php if (!empty($health['immunization_notes'])): ?>
+          <div class="mb-2"><span class="text-muted d-block">Immunizations:</span><span class="small"><?= nl2br(esc($health['immunization_notes'])) ?></span></div>
+        <?php endif; ?>
       </div>
     </div>
+
+    <!-- Visit Frequency & Recurring Complaints Card -->
+    <div class="card border-0 shadow-sm p-3 mb-4">
+      <h6 class="fw-bold mb-3"><i class="bi bi-activity text-primary me-1"></i> Visit Frequency Summary</h6>
+      <div class="small">
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span class="text-muted">All-Time Visits:</span>
+          <strong><?= (int) ($visitSummary['total_visits'] ?? 0) ?></strong>
+        </div>
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span class="text-muted">SY <?= esc((string) ($visitSummary['current_school_year'] ?? '')) ?>:</span>
+          <strong><?= $syVisits ?> <?= $syVisits === 1 ? 'visit' : 'visits' ?></strong>
+        </div>
+        <div class="d-flex justify-content-between py-1 border-bottom">
+          <span class="text-muted">Last Visit:</span>
+          <strong><?= esc($formatManila($visitSummary['last_visit_at'] ?? null)) ?></strong>
+        </div>
+        <?php if (!empty($visitSummary['top_complaints'])): ?>
+          <div class="mt-2">
+            <span class="text-muted d-block mb-1">Frequent Complaints:</span>
+            <div class="d-flex flex-wrap gap-1">
+              <?php foreach ($visitSummary['top_complaints'] as $tc): ?>
+                <span class="badge bg-light text-dark border"><?= esc($tc['label']) ?> (<?= (int) $tc['count'] ?>)</span>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        <?php endif; ?>
+      </div>
+    </div>
+
+    <?php if (!empty($isolationCases)): ?>
+      <div class="card border-0 shadow-sm p-3 mb-4 border-start border-warning border-4">
+        <h6 class="fw-bold mb-2"><i class="bi bi-shield-exclamation text-warning me-1"></i> Isolation / Communicable History</h6>
+        <ul class="list-unstyled small mb-0">
+          <?php foreach ($isolationCases as $iso): ?>
+            <li class="py-1 border-bottom">
+              <strong><?= esc(\App\Services\Clinic\IsolationTrackingService::CONDITIONS[$iso['condition_code']] ?? $iso['condition_code']) ?></strong>
+              <span class="badge bg-secondary-subtle text-dark ms-1"><?= esc(str_replace('_', ' ', (string) $iso['clearance_status'])) ?></span>
+              <div class="text-muted"><?= esc($iso['isolation_start_date']) ?> to <?= esc($iso['isolation_end_date']) ?></div>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+    <?php endif; ?>
 
     <!-- Emergency Contacts Card -->
     <div class="card border-0 shadow-sm p-3">
@@ -152,20 +226,30 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
   <div class="col-lg-8">
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-transparent border-bottom p-0">
-        <ul class="nav nav-tabs nav-tabs-bordered" role="tablist">
+        <ul class="nav nav-tabs nav-tabs-bordered flex-wrap" role="tablist">
           <li class="nav-item">
-            <button class="nav-link active py-3 px-4 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-visits">
+            <button class="nav-link active py-3 px-3 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-visits" type="button">
               <i class="bi bi-clock-history me-1"></i> Visit History (<?= count($encounters) ?>)
             </button>
           </li>
           <li class="nav-item">
-            <button class="nav-link py-3 px-4 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-vitals">
+            <button class="nav-link py-3 px-3 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-vitals" type="button">
               <i class="bi bi-graph-up me-1"></i> Vital Trends (<?= count($vitalsHistory) ?>)
             </button>
           </li>
           <li class="nav-item">
-            <button class="nav-link py-3 px-4 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-edit-health">
-              <i class="bi bi-pencil-square me-1"></i> Update Health Profile
+            <button class="nav-link py-3 px-3 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-labs" type="button">
+              <i class="bi bi-flask me-1"></i> Lab Results (<?= count($labResults) ?>)
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link py-3 px-3 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-clearances" type="button">
+              <i class="bi bi-patch-check me-1"></i> Annual Clearances (<?= count($enrollmentClearances) ?>)
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link py-3 px-3 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-edit-health" type="button">
+              <i class="bi bi-pencil-square me-1"></i> Health Profile
             </button>
           </li>
         </ul>
@@ -188,7 +272,10 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
                     <div>
                       <h6 class="fw-bold mb-0 text-dark"><?= esc($e['chief_complaint'] ?? 'General Consult') ?></h6>
                       <small class="text-muted">
-                        <?= date('F j, Y · h:i A', strtotime($e['started_at'])) ?> · Attending: <?= esc($e['attending_name'] ?? 'Unavailable') ?>
+                        <?= esc($formatManila($e['visited_at'] ?? $e['started_at'])) ?> · Attending: <?= esc($e['attending_name'] ?? 'Unavailable') ?>
+                        <?php if (!empty($e['encoder_name']) && $e['encoder_name'] !== ($e['attending_name'] ?? null)): ?>
+                          · Encoded by: <?= esc($e['encoder_name']) ?>
+                        <?php endif; ?>
                       </small>
                     </div>
                     <div>
@@ -277,11 +364,20 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
           <?php endif; ?>
         </div>
 
-        <!-- Tab 3: Update Health Profile Form -->
+        <?= view('clinic/patients/_labs_tab', get_defined_vars(), ['saveData' => false]) ?>
+
+        <?= view('clinic/patients/_clearances_tab', get_defined_vars(), ['saveData' => false]) ?>
+
+        <!-- Tab 5: Update Health Profile Form -->
         <div class="tab-pane fade" id="tab-edit-health">
+          <?php if (empty($canWriteHealth)): ?>
+            <div class="alert alert-info small mb-3">
+              <i class="bi bi-lock me-1"></i> Editing baseline Health Profile records requires full Clinic Staff or Physician permissions.
+            </div>
+          <?php endif; ?>
           <form action="<?= site_url('/clinic/patients/' . $person['id'] . '/health') ?>" method="POST" data-background-submit>
             <?= csrf_field() ?>
-
+            <fieldset <?= empty($canWriteHealth) ? 'disabled' : '' ?>>
             <div class="row g-3 mb-4">
               <div class="col-md-4">
                 <label for="blood_type" class="form-label fw-semibold">Blood Type</label>
@@ -294,7 +390,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
               </div>
 
               <div class="col-md-8">
-                <label for="allergies" class="form-label fw-semibold">Drug & Food Allergies</label>
+                <label for="allergies" class="form-label fw-semibold">Drug &amp; Food Allergies</label>
                 <input type="text"
                        name="allergies"
                        id="allergies"
@@ -304,12 +400,32 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
               </div>
 
               <div class="col-12">
-                <label for="chronic_conditions" class="form-label fw-semibold">Chronic Conditions & Medical History</label>
+                <label for="chronic_conditions" class="form-label fw-semibold">Chronic Conditions &amp; Baseline Alerts</label>
                 <textarea name="chronic_conditions"
                           id="chronic_conditions"
                           rows="2"
                           class="form-control"
                           placeholder="e.g. Asthma, Type 2 Diabetes, Hypertension"><?= esc($health['chronic_conditions'] ?? '') ?></textarea>
+              </div>
+
+              <div class="col-md-6">
+                <label for="medical_history_notes" class="form-label fw-semibold">Past Medical History</label>
+                <textarea name="medical_history_notes" id="medical_history_notes" rows="2" class="form-control" placeholder="Hospitalizations, childhood illnesses..."><?= esc($health['medical_history_notes'] ?? '') ?></textarea>
+              </div>
+
+              <div class="col-md-6">
+                <label for="surgical_history" class="form-label fw-semibold">Surgical History</label>
+                <textarea name="surgical_history" id="surgical_history" rows="2" class="form-control" placeholder="Prior surgeries & year"><?= esc($health['surgical_history'] ?? '') ?></textarea>
+              </div>
+
+              <div class="col-md-6">
+                <label for="immunization_notes" class="form-label fw-semibold">Immunization History</label>
+                <textarea name="immunization_notes" id="immunization_notes" rows="2" class="form-control" placeholder="e.g. COVID-19, Hep B, Tetanus booster"><?= esc($health['immunization_notes'] ?? '') ?></textarea>
+              </div>
+
+              <div class="col-md-6">
+                <label for="family_history" class="form-label fw-semibold">Family Medical History</label>
+                <textarea name="family_history" id="family_history" rows="2" class="form-control" placeholder="e.g. Hypertension, Diabetes in family"><?= esc($health['family_history'] ?? '') ?></textarea>
               </div>
 
               <div class="col-md-5">
@@ -341,11 +457,14 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
               </div>
             </div>
 
-            <div class="d-flex justify-content-end">
-              <button type="submit" class="btn btn-primary">
-                <i class="bi bi-save me-1"></i> Update Health Profile
-              </button>
-            </div>
+            <?php if (!empty($canWriteHealth)): ?>
+              <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">
+                  <i class="bi bi-save me-1"></i> Update Health Profile
+                </button>
+              </div>
+            <?php endif; ?>
+            </fieldset>
           </form>
         </div>
 
@@ -377,6 +496,22 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
       pane?.classList.toggle('active', active);
       pane?.classList.toggle('show', active);
     });
+  });
+
+  function activateHashTab() {
+    const hash = window.location.hash;
+    if (!hash) return;
+    const btn = document.querySelector(`[data-patient-chart] [data-bs-toggle="tab"][data-bs-target="${hash}"]`);
+    if (btn && window.bootstrap?.Tab) {
+      window.bootstrap.Tab.getOrCreateInstance(btn).show();
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', activateHashTab);
+  else activateHashTab();
+  document.addEventListener('click', event => {
+    if (event.target.closest('[data-print-chart]')) {
+      window.print();
+    }
   });
 })();
 </script>

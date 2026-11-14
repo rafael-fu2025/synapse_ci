@@ -7,7 +7,8 @@
   const tones = {
     danger: ['btn-danger', 'bi-exclamation-triangle-fill text-danger'],
     warning: ['btn-warning', 'bi-exclamation-triangle-fill text-warning'],
-    primary: ['btn-primary', 'bi-question-circle-fill text-primary']
+    primary: ['btn-primary', 'bi-question-circle-fill text-primary'],
+    success: ['btn-success', 'bi-shield-check text-success']
   };
   let element, modal, parts;
   let phase = 'idle'; // idle -> opening -> open -> closing -> idle

@@ -183,6 +183,7 @@ async function select(page, person, deployment) {
   await page.waitForFunction(id => document.querySelector('#appFormModal [name="person_id"]').value === String(id), person.id);
   assert.equal(await page.locator('#appFormModal [name="person_id"]').getAttribute('type'), 'hidden');
   assert.equal(await page.locator('#appFormModal button[type="submit"]').isEnabled(), true);
+  await page.locator('#appFormModal .list-group').waitFor({ state: 'hidden', timeout: 2000 });
   assert.equal(await page.locator('#appFormModal .list-group').isVisible(), false);
   assert.match(await page.locator('#appFormModal .card').innerText(), new RegExp(`MIS ID: ${person.mis_id}`));
 }

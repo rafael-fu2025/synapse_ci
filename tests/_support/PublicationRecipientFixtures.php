@@ -97,7 +97,7 @@ trait PublicationRecipientFixtures
             if ($eligible) {
                 $open();
                 $item = $inbox['items'][0];
-                $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'url'], array_keys($item));
+                $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'target', 'url'], array_keys($item));
                 $this->assertSame($kind === 'survey' ? 'New survey' : 'New announcement', $item['title']);
                 $this->assertSame(NotificationService::destinationUrls()[$kind === 'survey' ? 'surveys' : 'announcements'], $item['url']);
                 $this->assertNull($item['read_at']);

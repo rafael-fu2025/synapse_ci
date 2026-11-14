@@ -44,14 +44,73 @@
     const on = (element, type, handler, capture = false) => element.addEventListener(type, handler, { signal: events.signal, capture });
     let forms = Array.from(root.querySelectorAll('[data-clinical-form]'));
     let fields = forms.flatMap(form => Array.from(form.querySelectorAll('[name]')))
-      .filter(field => field.type !== 'hidden' || field.name === 'follow_up_date');
+      .filter(field => field.type !== 'hidden' || ['follow_up_date', 'visited_at'].includes(field.name));
     const status = root.querySelector('[data-encounter-save-status]');
     const retry = root.querySelector('[data-save-draft]');
     const review = root.querySelector('[data-review-completion]');
+    const backupBanner = root.querySelector('[data-local-backup-banner]');
+    const discardBackupBtn = root.querySelector('[data-discard-local-backup]');
+    const saveDraftManualBtn = root.querySelector('[data-save-draft-manual]');
+    const encounterId = root.dataset.encounterId || '';
+    const storageKey = encounterId ? 'synapse.encounter.draft.' + encounterId : null;
+    let complaintCatalog = {};
+    try {
+      complaintCatalog = JSON.parse(root.dataset.complaintCatalog || '{}');
+    } catch { complaintCatalog = {}; }
     let medicine = root.querySelector('#step-dispense form');
     let medicineFields = medicine ? ['medicine_id', 'quantity', 'instructions'].map(name => medicine.elements.namedItem(name)) : [];
     let medicineDefaults = medicineFields.map(field => field.value);
     let saved = snapshot(), busy = false, leaving = false, allowedTab = null, dispensed = false;
+    let autosaveTimer = null;
+
+    function persistLocalBackup() {
+      if (!storageKey) return;
+      try {
+        const diff = patch();
+        if (Object.keys(diff).length) window.localStorage.setItem(storageKey, JSON.stringify(diff));
+        else window.localStorage.removeItem(storageKey);
+      } catch {}
+    }
+
+    function clearLocalBackup() {
+      if (!storageKey) return;
+      try { window.localStorage.removeItem(storageKey); } catch {}
+      if (backupBanner) backupBanner.hidden = true;
+    }
+
+    function syncQualifierOptions(preserveExisting = true) {
+      const catEl = root.querySelector('[data-complaint-category]');
+      const qualEl = root.querySelector('[data-complaint-qualifier]');
+      const chiefEl = root.querySelector('[data-chief-complaint-input]');
+      if (!catEl || !qualEl) return;
+      const meta = complaintCatalog[catEl.value] || null;
+      const prevValue = preserveExisting ? (qualEl.value || qualEl.dataset.initialValue || '') : '';
+      const options = Array.isArray(meta?.qualifiers) ? meta.qualifiers : [];
+      qualEl.innerHTML = '';
+      const emptyOpt = document.createElement('option');
+      emptyOpt.value = '';
+      emptyOpt.textContent = '-- Optional qualifier --';
+      qualEl.appendChild(emptyOpt);
+      for (const label of options) {
+        const opt = document.createElement('option');
+        opt.value = label;
+        opt.textContent = label;
+        if (label === prevValue) opt.selected = true;
+        qualEl.appendChild(opt);
+      }
+      if (prevValue && !options.includes(prevValue) && preserveExisting) {
+        const extra = document.createElement('option');
+        extra.value = prevValue;
+        extra.textContent = prevValue;
+        extra.selected = true;
+        qualEl.appendChild(extra);
+      }
+      qualEl.dataset.initialValue = '';
+      if (chiefEl && meta && (!chiefEl.value.trim() || chiefEl.dataset.autoComposed === '1')) {
+        chiefEl.value = qualEl.value ? `${meta.label} (${qualEl.value})` : meta.label;
+        chiefEl.dataset.autoComposed = '1';
+      }
+    }
 
     const alpineData = window.Alpine?.$data?.(root);
     if (alpineData) {
@@ -62,6 +121,26 @@
         if (field && field.value !== '') alpineData[property] = Number(field.value);
       }
     }
+
+    // Recover unsaved draft after sudden brownout/reload if localStorage holds fresher edits.
+    if (storageKey) {
+      try {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw) {
+          const cached = JSON.parse(raw);
+          let restored = false;
+          for (const [name, value] of Object.entries(cached || {})) {
+            const field = fields.find(f => f.name === name);
+            if (field && typeof value === 'string' && field.value !== value) {
+              field.value = value;
+              restored = true;
+            }
+          }
+          if (restored && backupBanner) backupBanner.hidden = false;
+        }
+      } catch {}
+    }
+    syncQualifierOptions(true);
 
     function snapshot() { return Object.fromEntries(fields.map(field => [field.name, field.value])); }
     function patch() {
@@ -145,6 +224,7 @@
       }
       const values = complete ? snapshot() : patch();
       if (!complete && !Object.keys(values).length) return true;
+      clearTimeout(autosaveTimer);
       busy = true;
       root.inert = true;
       root.setAttribute('aria-busy', 'true');
@@ -152,6 +232,7 @@
       try {
         const result = await post(complete ? root.querySelector('[data-complete-encounter]').action : root.dataset.draftUrl, values);
         Object.assign(saved, values);
+        clearLocalBackup();
         forms.forEach(form => {
           const owned = fields.filter(field => field.form === form);
           if (owned.some(field => Object.hasOwn(values, field.name)) && owned.every(field => field.value === saved[field.name])) {
@@ -178,8 +259,45 @@
       }
     }
 
-    on(root, 'input', () => announce(dirty() ? 'Unsaved changes' : 'Saved'));
-    on(root, 'change', () => announce(dirty() ? 'Unsaved changes' : 'Saved'));
+    function scheduleAutosave() {
+      persistLocalBackup();
+      clearTimeout(autosaveTimer);
+      if (!dirty()) {
+        announce('Saved');
+        return;
+      }
+      announce('Unsaved changes (auto-saving…)');
+      autosaveTimer = setTimeout(() => {
+        if (!busy && dirty()) void save(false);
+      }, 3500);
+    }
+
+    on(root, 'input', event => {
+      if (event.target.matches?.('[data-chief-complaint-input]')) {
+        event.target.dataset.autoComposed = '0';
+      }
+      scheduleAutosave();
+    });
+    on(root, 'change', event => {
+      if (event.target.matches?.('[data-complaint-category]')) {
+        syncQualifierOptions(false);
+      } else if (event.target.matches?.('[data-complaint-qualifier]')) {
+        const catEl = root.querySelector('[data-complaint-category]');
+        const chiefEl = root.querySelector('[data-chief-complaint-input]');
+        const meta = catEl ? complaintCatalog[catEl.value] : null;
+        if (chiefEl && meta && (!chiefEl.value.trim() || chiefEl.dataset.autoComposed === '1')) {
+          chiefEl.value = event.target.value ? `${meta.label} (${event.target.value})` : meta.label;
+          chiefEl.dataset.autoComposed = '1';
+        }
+      }
+      scheduleAutosave();
+    });
+    if (discardBackupBtn && backupBanner) {
+      on(discardBackupBtn, 'click', () => { clearLocalBackup(); });
+    }
+    if (saveDraftManualBtn) {
+      on(saveDraftManualBtn, 'click', () => { void save(false); });
+    }
     on(root, 'show.bs.tab', event => {
       if (event.target === allowedTab) return;
       if (busy) { event.preventDefault(); return; }
@@ -295,7 +413,10 @@
     on(window, 'beforeunload', event => {
       if (!leaving && (dirty() || pendingMedicine() || busy)) { event.preventDefault(); event.returnValue = ''; }
     });
-    return () => events.abort();
+    return () => {
+      clearTimeout(autosaveTimer);
+      events.abort();
+    };
   }
   window.SynapseEncounterStepper = { init };
 })();

@@ -1,4 +1,4 @@
-﻿/* tokens.css
+/* tokens.css
  * Design tokens, theme variables, and Bootstrap variable overrides.
  * Extracted from assets/css/style.css without changing selector order.
  */
@@ -73,6 +73,7 @@
   --bs-link-color-rgb: 128, 0, 0;
   --bs-link-hover-color: #6b0000;
   --bs-link-hover-color-rgb: 107, 0, 0;
+  --bs-code-color: #a61e5c;
   --na-success: #2eca6a;
   --na-success-rgb: 46, 202, 106;
   --na-info: #3b8af2;
@@ -287,11 +288,49 @@ html:not([data-theme="light"]) body.dark-mode {
   --na-header-bg: var(--header-bg);
   --na-header-border: var(--header-border);
   --bs-body-color: var(--default-color);
+  --bs-body-color-rgb: 240, 240, 240;
   --bs-body-bg: var(--background-color);
+  --bs-body-bg-rgb: 18, 18, 18;
+  --bs-emphasis-color: #ffffff;
+  --bs-emphasis-color-rgb: 255, 255, 255;
   --bs-secondary-color: var(--muted-color);
+  --bs-secondary-color-rgb: 163, 163, 163;
   --bs-secondary-bg: #222222;
+  --bs-secondary-bg-rgb: 34, 34, 34;
+  --bs-tertiary-color: #9e9e9e;
+  --bs-tertiary-color-rgb: 158, 158, 158;
   --bs-tertiary-bg: #282828;
+  --bs-tertiary-bg-rgb: 40, 40, 40;
+  --bs-secondary-bg-subtle: #242424;
+  --bs-secondary-border-subtle: rgba(255, 255, 255, 0.14);
+  --bs-secondary-text-emphasis: #d0d0d0;
+  --bs-light-bg-subtle: #222222;
+  --bs-light-border-subtle: rgba(255, 255, 255, 0.12);
+  --bs-light-text-emphasis: #f0f0f0;
+  --bs-dark-bg-subtle: #181818;
+  --bs-dark-border-subtle: rgba(255, 255, 255, 0.14);
+  --bs-dark-text-emphasis: #f0f0f0;
+  --bs-success-bg-subtle: rgba(46, 202, 106, 0.15);
+  --bs-success-border-subtle: rgba(46, 202, 106, 0.35);
+  --bs-success-text-emphasis: #8bebb0;
+  --bs-info-bg-subtle: rgba(59, 138, 242, 0.15);
+  --bs-info-border-subtle: rgba(59, 138, 242, 0.35);
+  --bs-info-text-emphasis: #9eccff;
+  --bs-warning-bg-subtle: rgba(255, 119, 29, 0.15);
+  --bs-warning-border-subtle: rgba(255, 119, 29, 0.35);
+  --bs-warning-text-emphasis: #ffc085;
+  --bs-danger-bg-subtle: rgba(255, 77, 77, 0.15);
+  --bs-danger-border-subtle: rgba(255, 77, 77, 0.35);
+  --bs-danger-text-emphasis: #ff9999;
+  --bs-code-color: #f0a3c4;
+  --bs-highlight-color: #f0f0f0;
+  --bs-highlight-bg: #664d03;
   --bs-border-color: var(--border-color);
+  --bs-border-color-translucent: rgba(255, 255, 255, 0.14);
+  --bs-form-valid-color: #75d6a4;
+  --bs-form-valid-border-color: #75d6a4;
+  --bs-form-invalid-color: #ff9999;
+  --bs-form-invalid-border-color: #ff9999;
   --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.55);
 
   /* Charts (dark). Series step down to greys that stay distinguishable on

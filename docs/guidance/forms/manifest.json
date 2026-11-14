@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "generated_at": "2026-11-13T16:24:00+08:00",
+  "policy": {
+    "default_mode": "paperless",
+    "authoritative_source": "synapse_database",
+    "word_sources_role": "reference_only",
+    "request_time_parsing": false,
+    "runtime_form_designer": false,
+    "lock_file_pattern": ".~lock.*"
+  },
+  "forms": [
+    {
+      "internal_key": "guidance_general_referral",
+      "form_code": "F-OGC-GRE-GGR-005-00",
+      "canonical_title": "Guidance General Referral Form",
+      "revision": "00",
+      "footer_revision": "01",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "5. F-OGC-GRE-GGR-005-00 GUIDANCE GENERAL REFERRAL.docx",
+      "source_sha256": "9251f807e599928ed6972a6d47856934b94ea4efbbc4720203683e018eb43e1e",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review",
+        "dpo_privacy_signoff"
+      ],
+      "fields": {
+        "student_name": {"type": "string", "required": true, "max_length": 255},
+        "student_id": {"type": "string", "required": true, "max_length": 64},
+        "course_year": {"type": "string", "required": true, "max_length": 128},
+        "contact_number": {"type": "string", "required": false, "max_length": 32},
+        "referring_name": {"type": "string", "required": true, "max_length": 255},
+        "referring_designation": {"type": "string", "required": true, "max_length": 128},
+        "referring_department": {"type": "string", "required": true, "max_length": 128},
+        "referral_date": {"type": "date", "required": true},
+        "reasons": {
+          "type": "array",
+          "items": "string",
+          "allowed": [
+            "academic_deficiency",
+            "frequent_absences_tardiness",
+            "behavioral_misconduct",
+            "emotional_distress",
+            "family_problems",
+            "financial_difficulty",
+            "peer_relationship_conflict",
+            "substance_use_suspicion",
+            "bullying_harassment",
+            "grief_loss",
+            "career_indecision",
+            "others"
+          ]
+        },
+        "reasons_other_specify": {"type": "string", "required": false, "max_length": 500},
+        "reasons_narrative": {"type": "string", "required": true, "encrypted": true, "max_length": 4096},
+        "prior_actions_taken": {"type": "string", "required": false, "encrypted": true, "max_length": 4096},
+        "priority_hint": {"type": "enum", "values": ["routine", "urgent", "crisis"], "default": "routine"}
+      }
+    },
+    {
+      "internal_key": "guidance_appointment_form",
+      "form_code": "F-OGC-GAP-006-00",
+      "in_document_code": "F-OGC-GRE-GAP-006-00",
+      "canonical_title": "Guidance Appointment Form",
+      "revision": "00",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "6. F-OGC-GAP-006-00  GUIDANCE APPOINTMENT FORM.docx",
+      "source_sha256": "a9328f4a1c363cee75b7d0fe963cd3c5bbb8b9f0e45b974fa2c0965a8cf20bcb",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "multi_copy_paper_layout": 4,
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review"
+      ],
+      "fields": {
+        "appointment_number": {"type": "string", "required": true, "max_length": 64},
+        "student_name": {"type": "string", "required": true, "max_length": 255},
+        "student_id": {"type": "string", "required": true, "max_length": 64},
+        "course_year": {"type": "string", "required": true, "max_length": 128},
+        "scheduled_date": {"type": "date", "required": true},
+        "scheduled_time": {"type": "time", "required": true},
+        "counselor_name": {"type": "string", "required": true, "max_length": 255},
+        "purpose": {
+          "type": "enum",
+          "values": ["routine_interview", "counseling", "follow_up", "intake", "inquiry", "others"],
+          "required": true
+        },
+        "purpose_other": {"type": "string", "required": false, "max_length": 255}
+      }
+    },
+    {
+      "internal_key": "guidance_call_slip",
+      "form_code": "F-OGC-GSP-CSP-007-00",
+      "canonical_title": "Guidance Call Slip",
+      "revision": "00",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "7.1. F-OGC-GSP-CSP-007-00  GUIDANCE CALL SLIP.docx",
+      "source_sha256": "d9430e3e3a85b9d8d7564fa9fb3cce7f5b27809ca474474f570d5c325aa67a93",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "multi_copy_paper_layout": 4,
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review"
+      ],
+      "fields": {
+        "call_slip_number": {"type": "string", "required": true, "max_length": 64},
+        "student_name": {"type": "string", "required": true, "max_length": 255},
+        "student_id": {"type": "string", "required": true, "max_length": 64},
+        "course_year": {"type": "string", "required": true, "max_length": 128},
+        "call_date": {"type": "date", "required": true},
+        "call_time": {"type": "time", "required": true},
+        "purpose": {
+          "type": "enum",
+          "values": ["personal_counseling", "career_counseling", "routine_interview", "follow_up", "academic_counseling", "others"],
+          "required": true
+        },
+        "purpose_other": {"type": "string", "required": false, "max_length": 255},
+        "issuing_counselor_name": {"type": "string", "required": true, "max_length": 255}
+      }
+    },
+    {
+      "internal_key": "psychosocial_support_interview",
+      "form_code": "F-OGC-GPS-PIF-008-00",
+      "canonical_title": "Psychosocial Support Interview Form",
+      "revision": "00",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "8.1. F-OGC-GPS-PIF-008-00  Psychosocial Support Interview Form.docx",
+      "source_sha256": "9c27169d7d9172ce80c67037524fb9b0434e617fef12d1cee8e6e0eb06d90af5",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review",
+        "dpo_privacy_signoff"
+      ],
+      "fields": {
+        "student_name": {"type": "string", "required": true, "max_length": 255},
+        "student_id": {"type": "string", "required": true, "max_length": 64},
+        "course_year": {"type": "string", "required": true, "max_length": 128},
+        "interview_date": {"type": "date", "required": true},
+        "demographics": {"type": "object", "encrypted": true, "required": true},
+        "presenting_concerns": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "mental_health_screening": {"type": "object", "encrypted": true, "required": false},
+        "family_social_support": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "counselor_assessment": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "intervention_plan": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "privacy_consent_acknowledged": {"type": "boolean", "required": true}
+      }
+    },
+    {
+      "internal_key": "psychosocial_support_contact",
+      "form_code": "F-OGC-GPS-PCF-008-00",
+      "canonical_title": "Psychosocial Support Contact Form",
+      "revision": "00",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "8.2. F-OGC-GPS-PCF-008-00 PSYCHOSOCIAL SUPPORT CONTACT FORM.docx",
+      "source_sha256": "7e6b77ff463f62020b13d36c30a9ceea960036ffdfea3b53001c4b3cf39c23dc",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review",
+        "dpo_privacy_signoff"
+      ],
+      "fields": {
+        "session_date": {"type": "date", "required": true},
+        "session_number": {"type": "integer", "required": true},
+        "modality": {"type": "enum", "values": ["in_person", "telehealth", "phone"], "required": true},
+        "client_state": {"type": "string", "encrypted": true, "required": true, "max_length": 2048},
+        "interventions_used": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "client_response": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "action_items": {"type": "string", "encrypted": true, "required": false, "max_length": 2048},
+        "next_session_date": {"type": "date", "required": false}
+      }
+    },
+    {
+      "internal_key": "psychosocial_support_evaluation",
+      "form_code": "F-OGC-GPS-PEF-008-00",
+      "canonical_title": "Psychosocial Support Evaluation Form",
+      "revision": "00",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "8.3. F-OGC-GPS-PEF-008-00  PSYCHOSOCIAL SUPPORT EVALUATION FORM.docx",
+      "source_sha256": "11f469ac920abea512cdd7ee4ec3bbe4eaab23f922b4490855b55da9d88dbcbb",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "pseudonymous": true,
+      "min_aggregate_cohort": 5,
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review",
+        "dpo_privacy_signoff"
+      ],
+      "fields": {
+        "visit_type": {
+          "type": "enum",
+          "values": ["walk_in", "called", "referred", "follow_up"],
+          "required": true
+        },
+        "rating_welcoming": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_empathy": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_clarity": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_helpfulness": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_environment": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "future_visit_willingness": {"type": "boolean", "required": true},
+        "qualitative_comments": {"type": "string", "encrypted": true, "required": false, "max_length": 2048}
+      }
+    },
+    {
+      "internal_key": "counseling_contact_sheet",
+      "form_code": "F-OGC-GCS-CCF-009-00",
+      "canonical_title": "Counseling Contact Sheet",
+      "alternate_title": "Counseling Contact Form",
+      "revision": "00",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "9.1. F-OGC-GCS-CCF-009-00 COUNSELING CONTACT SHEET.docx",
+      "source_sha256": "ef15cec77b197eb02f0e4fe0bf27d265493bc45823958a65fbe00ff7cc3f2314",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review",
+        "dpo_privacy_signoff"
+      ],
+      "fields": {
+        "session_date": {"type": "date", "required": true},
+        "session_number": {"type": "integer", "required": true},
+        "time_start": {"type": "time", "required": true},
+        "time_end": {"type": "time", "required": true},
+        "session_type": {"type": "enum", "values": ["intake", "regular", "crisis", "follow_up", "closure"], "required": true},
+        "concerns_discussed": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "counseling_goals": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "interventions_and_responses": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "homework_and_commitments": {"type": "string", "encrypted": true, "required": false, "max_length": 2048},
+        "next_schedule": {"type": "datetime", "required": false}
+      }
+    },
+    {
+      "internal_key": "counseling_evaluation",
+      "form_code": "F-OGC-GCS-CEF-009-00",
+      "canonical_title": "Counseling Evaluation Form",
+      "revision": "00",
+      "effectivity_date": "2025-09-01",
+      "owner": "Office of the Guidance Center (OGC)",
+      "original_filename": "9.2. F-OGC-GCS-CEF-009-00  COUNSELING EVALUATION FORM.docx",
+      "source_sha256": "20d30616e1c5ac3753feef4e4b3c18f29b80cadcc56cae7e860b235d8dc58e70",
+      "schema_version": "1.0.0",
+      "renderer_version": "1.0.0",
+      "approval_state": "provisional_gated",
+      "pseudonymous": true,
+      "min_aggregate_cohort": 5,
+      "gate_requirements": [
+        "guidance_head_approval",
+        "qa_staff_review",
+        "dpo_privacy_signoff"
+      ],
+      "fields": {
+        "rating_rapport": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_understanding": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_goal_progress": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_confidentiality_comfort": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_overall_service": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "recommend_service": {"type": "boolean", "required": true},
+        "qualitative_feedback": {"type": "string", "encrypted": true, "required": false, "max_length": 2048}
+      }
+    }
+  ],
+  "assessments": [
+    {
+      "internal_key": "multiple_intelligence_survey",
+      "form_code": "PROVISIONAL-MI-REPORT",
+      "canonical_title": "Multiple Intelligences Report",
+      "survey_title": "Multiple Intelligences Survey (McKenzie 1999)",
+      "provisional_code_note": "Provisional code only; no official OGC/QA form code is assigned yet pending QA sign-off.",
+      "owner": "Office of the Guidance Center (OGC)",
+      "approval_state": "provisional_gated",
+      "source_files": [
+        {
+          "original_filename": "MULTIPLE-INTELLEGENCE-SURVEY.doc",
+          "sha256": "de482438532c30f2a95cafa04bdef94f92a952a39314c590612add689beb2208"
+        },
+        {
+          "original_filename": "MULTIPLE-INTELLIGENCE.description.doc",
+          "sha256": "0ab098771406251bc7667fabff0fdb31a944fee006787ba5f74cbb10508ce4f1"
+        },
+        {
+          "original_filename": "scoring-of-M.I.-Test.doc",
+          "sha256": "33b44e596ef6d7c549c3cc95d82b82a5a5eafbc984cb7c1f65c093e5766f3d2e"
+        }
+      ],
+      "item_count": 80,
+      "response_scale": {
+        "min": 0,
+        "max": 4,
+        "labels": {
+          "0": "Never / Almost Never",
+          "1": "Seldom",
+          "2": "Sometimes",
+          "3": "Often",
+          "4": "Always / Almost Always"
+        }
+      },
+      "domains": [
+        {"key": "linguistic", "label": "Linguistic Intelligence", "max_score": 40},
+        {"key": "logical_mathematical", "label": "Logical-Mathematical Intelligence", "max_score": 40},
+        {"key": "spatial", "label": "Spatial Intelligence", "max_score": 40},
+        {"key": "musical", "label": "Musical Intelligence", "max_score": 40},
+        {"key": "bodily_kinesthetic", "label": "Bodily-Kinesthetic Intelligence", "max_score": 40},
+        {"key": "interpersonal", "label": "Interpersonal Intelligence", "max_score": 40},
+        {"key": "intrapersonal", "label": "Intrapersonal Intelligence", "max_score": 40},
+        {"key": "naturalist", "label": "Naturalist Intelligence", "max_score": 40}
+      ]
+    }
+  ]
+}
+

@@ -8,6 +8,12 @@
   <div class="mb-3"><label for="announcementTitle" class="form-label">Title</label><input id="announcementTitle" name="title" class="form-control" maxlength="160" required value="<?= esc($announcement['title'] ?? '') ?>"></div>
   <div class="mb-3"><label for="announcementBody" class="form-label">Announcement text</label><textarea id="announcementBody" name="body" class="form-control" rows="8" maxlength="10000" required><?= esc($announcement['body'] ?? '') ?></textarea><div class="form-text">Plain text only, up to 10,000 characters. No HTML or rich-text formatting.</div></div>
   <div class="mb-3"><label for="announcementAudience" class="form-label">Audience</label><select id="announcementAudience" name="audience" class="form-select" x-model="audience" required><?php foreach (['all' => 'All students and employees', 'students' => 'Students', 'employees' => 'Employees (including staff self-service)'] as $value => $label): ?><option value="<?= esc($value) ?>" <?= ($announcement['audience'] ?? 'all') === $value ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?></select></div>
+  <div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" name="is_pinned_advisory" value="1" id="announcementPinned" <?= !empty($announcement['is_pinned_advisory']) ? 'checked' : '' ?>>
+    <label class="form-check-label fw-semibold" for="announcementPinned">
+      Pin as prominent portal banner advisory <span class="text-muted fw-normal small">(e.g. Clinic medical exam schedule, outbreak prevention, service advisories)</span>
+    </label>
+  </div>
   <?= view('announcements/_targeting', ['targetRecord' => $announcement ?? [], 'targetPrefix' => 'announcement'], ['saveData' => false]) ?>
   <p class="form-text">Optional visibility window, in Asia/Manila time (UTC+08:00). Publishing with a future start keeps the notice hidden until then; expiry removes it from the portal.</p>
   <div class="row g-3 mb-4">

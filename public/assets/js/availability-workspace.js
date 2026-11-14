@@ -56,9 +56,10 @@
     const timeout = setTimeout(() => { job.timedOut = true; job.controller.abort(); }, 90000);
     try {
       const base = workspaceUrl(root);
-      const action = new URL(form.action, location.href);
+      const action = new URL(form.getAttribute('action') || location.href, location.href);
       const paths = ['', '/template', '/enroll', '/exceptions', '/exceptions/remove'].map(suffix => base.pathname + suffix);
-      if (form.method.toUpperCase() !== 'POST' || action.origin !== base.origin || !paths.includes(action.pathname) || action.search || action.hash) throw new Error('The action must stay in this department’s availability workspace.');
+      const method = (form.getAttribute('method') || 'GET').toUpperCase();
+      if (method !== 'POST' || action.origin !== base.origin || !paths.includes(action.pathname) || action.search || action.hash) throw new Error('The action must stay in this department’s availability workspace.');
       const body = event.submitter
         ? new FormData(form, event.submitter)
         : new FormData(form);

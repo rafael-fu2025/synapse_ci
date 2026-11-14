@@ -9,8 +9,9 @@
   <div data-refresh-region="surveys.list">
   <div class="card"><div class="card-body pt-3">
   <div class="table-responsive"><table class="table table-hover align-middle"><thead><tr><th>Survey</th><th>Audience</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-  <?php foreach ($items as $survey): $base = site_url('guidance/surveys/' . $survey['id']); ?>
-    <tr><td><?= esc($survey['title']) ?></td><td><?= esc(ucfirst($survey['audience'])) ?><?= view('announcements/_targeting_summary', ['targetRecord' => $survey], ['saveData' => false]) ?></td><td><span class="badge bg-secondary"><?= esc(ucfirst($survey['status'])) ?></span></td><td><div class="d-flex gap-2 flex-wrap">
+  <?php foreach ($items as $survey): $base = site_url('guidance/surveys/' . $survey['id']); $externalUrl = trim((string) ($survey['external_url'] ?? '')); ?>
+    <tr><td><?= esc($survey['title']) ?><?php if ($externalUrl !== ''): ?> <span class="badge bg-info-subtle text-info border ms-1"><i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>External Link</span><?php endif; ?></td><td><?= esc(ucfirst($survey['audience'])) ?><?= view('announcements/_targeting_summary', ['targetRecord' => $survey], ['saveData' => false]) ?></td><td><span class="badge bg-secondary"><?= esc(ucfirst($survey['status'])) ?></span></td><td><div class="d-flex gap-2 flex-wrap">
+      <?php if ($externalUrl !== ''): ?><a href="<?= esc($externalUrl, 'attr') ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm"><i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open link</a><?php endif; ?>
       <?php if ($survey['status'] === 'draft'): ?>
         <a href="<?= esc($base . '/edit') ?>" class="btn btn-outline-primary btn-sm" data-app-modal-open>Edit draft</a>
         <form method="post" action="<?= esc($base . '/publish') ?>" data-background-submit data-confirm="Publish this identified survey? Questions, audience and dates will become immutable." data-confirm-title="Publish survey" data-confirm-label="Publish" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= esc($survey['version']) ?>"><button class="btn btn-primary btn-sm" type="submit">Publish</button></form>

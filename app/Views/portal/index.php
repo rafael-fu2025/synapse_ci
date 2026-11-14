@@ -84,6 +84,23 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
   </div>
 <?php endif; ?>
 
+<?php if (!empty($pinnedAdvisories)): ?>
+  <div class="mb-4" data-pinned-advisories>
+    <?php foreach ($pinnedAdvisories as $adv): ?>
+      <div class="alert <?= $adv['unit'] === 'clinic' ? 'alert-warning border-warning' : 'alert-info border-info' ?> border-start border-4 shadow-sm mb-2">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+          <div>
+            <span class="badge <?= $adv['unit'] === 'clinic' ? 'bg-danger' : 'bg-primary' ?> text-uppercase me-2"><?= esc(ucfirst($adv['unit'])) ?> Advisory</span>
+            <strong><?= esc($adv['title']) ?></strong>
+          </div>
+          <a href="<?= esc(site_url('/portal/announcements')) ?>" class="btn btn-outline-dark btn-sm py-0">Read Full Notice</a>
+        </div>
+        <p class="small mb-0 mt-2 text-break" style="white-space: pre-line;"><?= esc(mb_strimwidth((string) $adv['body'], 0, 280, '…')) ?></p>
+      </div>
+    <?php endforeach; ?>
+  </div>
+<?php endif; ?>
+
 <div class="row g-3 mb-4">
   <div class="col-md-6"><div class="card h-100 mb-0"><div class="card-body pt-3">
     <h5 class="card-title"><i class="bi bi-megaphone me-2" aria-hidden="true"></i>Campus announcements</h5>
@@ -95,7 +112,72 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
     <p class="text-muted small">View eligible Guidance surveys and your submission status. Responses are identified, not anonymous.</p>
     <a href="<?= esc(site_url('/portal/surveys')) ?>" class="btn btn-outline-primary btn-sm">View surveys</a>
   </div></div></div>
+  <div class="col-md-4"><div class="card h-100 mb-0"><div class="card-body pt-3">
+    <h5 class="card-title"><i class="bi bi-envelope-paper me-2" aria-hidden="true"></i>Guidance referral</h5>
+    <p class="text-muted small">Submit a confidential Guidance referral or self-referral without leaving the portal.</p>
+    <a href="<?= esc(site_url('/portal/referrals/create')) ?>" class="btn btn-outline-primary btn-sm">Submit referral</a>
+  </div></div></div>
+  <div class="col-md-4"><div class="card h-100 mb-0"><div class="card-body pt-3">
+    <h5 class="card-title"><i class="bi bi-stars me-2" aria-hidden="true"></i>Multiple Intelligence</h5>
+    <p class="text-muted small">
+      <?php $miOpenCount = is_array($activeMiAssignments ?? null) ? count($activeMiAssignments) : 0; ?>
+      <?= $miOpenCount > 0
+          ? esc((string) $miOpenCount) . ' active Multiple Intelligence survey(s) assigned.'
+          : 'Complete assigned Multiple Intelligence inventories and view your domain scores.' ?>
+    </p>
+    <a href="<?= esc(site_url('/portal/assessments/mi')) ?>" class="btn btn-outline-primary btn-sm">Open MI surveys</a>
+  </div></div></div>
+  <div class="col-md-4"><div class="card h-100 mb-0"><div class="card-body pt-3">
+    <h5 class="card-title"><i class="bi bi-chat-square-heart me-2" aria-hidden="true"></i>Service evaluation</h5>
+    <p class="text-muted small">Redeem a pseudonymous Guidance evaluation token to share confidential feedback.</p>
+    <a href="<?= esc(site_url('/portal/evaluations/redeem')) ?>" class="btn btn-outline-primary btn-sm">Redeem evaluation token</a>
+  </div></div></div>
 </div>
+
+<?php if (!empty($pendingCallSlips)): ?>
+<div class="card mb-4 border-warning-subtle">
+  <div class="card-body pt-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="card-title mb-0"><i class="bi bi-ticket-perforated me-2 text-warning" aria-hidden="true"></i>Guidance Call Slips</h5>
+      <span class="badge text-bg-warning"><?= count($pendingCallSlips) ?> active</span>
+    </div>
+    <p class="text-muted small mb-3">Acknowledge active Guidance Call Slips to confirm receipt of your scheduled appointment notice.</p>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Slip #</th>
+            <th>Date &amp; Time</th>
+            <th>Purpose</th>
+            <th>Status</th>
+            <th class="text-end">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($pendingCallSlips as $cs): ?>
+            <tr>
+              <td class="fw-semibold"><?= esc((string) ($cs['call_slip_number'] ?? '#' . (int) $cs['id'])) ?></td>
+              <td><?= esc(trim((string) ($cs['call_date'] ?? '') . ' ' . (string) ($cs['call_time'] ?? ''))) ?></td>
+              <td><?= esc(ucwords(str_replace('_', ' ', (string) ($cs['purpose'] ?? 'counseling')))) ?></td>
+              <td><span class="badge text-bg-<?= ($cs['attendance_status'] ?? '') === 'acknowledged' ? 'info' : 'warning' ?>"><?= esc((string) ($cs['attendance_status'] ?? 'pending')) ?></span></td>
+              <td class="text-end">
+                <?php if (($cs['attendance_status'] ?? '') === 'pending'): ?>
+                  <form method="post" action="<?= esc(site_url('/portal/guidance/call-slips/' . (int) $cs['id'] . '/acknowledge'), 'attr') ?>" class="d-inline" data-background-submit>
+                    <?= csrf_field() ?>
+                    <button type="submit" class="btn btn-sm btn-primary">Acknowledge receipt</button>
+                  </form>
+                <?php else: ?>
+                  <span class="text-muted small">Acknowledged<?= !empty($cs['acknowledged_at']) ? ' on ' . esc((string) $cs['acknowledged_at']) : '' ?></span>
+                <?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 <?= view('portal/_queue_tickets', ['activeTickets' => $activeTickets ?? (!empty($activeTicket) ? [$activeTicket] : [])]) ?>
 

@@ -31,6 +31,23 @@
   cursor: pointer;
 }
 
+.dtp-wrap .form-control-sm {
+  padding-right: 2.05rem;
+}
+
+.dtp-wrap .form-control-sm ~ .dtp-icon {
+  right: 10px;
+  font-size: 0.85rem;
+}
+
+.dtp-wrap .form-control:is(:disabled, [readonly]) {
+  cursor: default;
+}
+
+.dtp-wrap .form-control:disabled {
+  cursor: not-allowed;
+}
+
 .dtp-wrap .form-control:focus ~ .dtp-icon,
 .dtp-wrap.dtp-open .dtp-icon {
   color: var(--accent-color);

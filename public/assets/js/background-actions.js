@@ -23,10 +23,11 @@
     if (pending || saved.has(form) || document.body.classList.contains('is-navigating')) return;
 
     const submitter = event.submitter;
-    const method = submitter?.getAttribute('formmethod') || form.method;
-    const target = submitter?.getAttribute('formtarget') || form.target;
+    const method = submitter?.getAttribute('formmethod') || form.getAttribute('method') || form.method;
+    const target = submitter?.getAttribute('formtarget') || form.getAttribute('target') || form.target;
+    const rawAction = submitter?.getAttribute('formaction') || form.getAttribute('action') || location.href;
     let url;
-    try { url = new URL(submitter?.getAttribute('formaction') || form.action, location.href); } catch (_) { return; }
+    try { url = new URL(rawAction, location.href); } catch (_) { return; }
     if (method.toUpperCase() !== 'POST' || (target && target !== '_self') || url.origin !== location.origin || url.username || url.password) {
       tell('This action must be submitted to a valid page on this site.');
       return;
@@ -68,9 +69,12 @@
       confirmed = true;
       saved.add(form);
       unlock();
-      // Row actions stay in the current folder/date/filter/page. Never replay a POST
-      // if the following read fails: the shared helper offers only a GET retry.
-      await window.SynapseMutations.refresh(location.href, payload.message, { form, descriptor: payload.refresh });
+      // Row actions stay in the current folder/date/filter/page unless the server explicitly
+      // returns a navigate descriptor (e.g. creating a new record whose next step is its edit view).
+      const nextUrl = payload.refresh?.mode === 'navigate' && typeof payload.refresh.url === 'string'
+        ? payload.refresh.url
+        : location.href;
+      await window.SynapseMutations.refresh(nextUrl, payload.message, { form, descriptor: payload.refresh });
     } catch (error) {
       tell(confirmed ? 'Saved, but refreshing the page failed. Do not submit again; reload to review the result.'
         : job.timedOut ? 'The request timed out; its outcome is unknown. Review the record before retrying.'

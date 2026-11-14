@@ -31,19 +31,21 @@ $tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query
     <?php foreach ($items as $survey):
       $submitted = (bool) $survey['submitted'];
       $closed = (bool) ($survey['closed'] ?? false);
+      $externalUrl = trim((string) ($survey['external_url'] ?? ''));
       $deadline = empty($survey['ends_at']) ? null : new \DateTimeImmutable($survey['ends_at'], new \DateTimeZone('UTC'));
       $closingSoon = !$closed && !$submitted && $deadline !== null && $deadline > $now && $deadline <= $now->modify('+48 hours');
       $description = mb_strimwidth(trim(preg_replace('/\s+/u', ' ', $survey['description'] ?? '') ?? ''), 0, 260, '…', 'UTF-8');
     ?>
     <article class="card pe-content-card pe-survey-card" aria-labelledby="survey-title-<?= (int) $survey['id'] ?>">
       <div class="card-body p-4">
-        <div class="pe-card-top"><span class="pe-department"><i class="bi bi-chat-heart" aria-hidden="true"></i>Guidance Office</span><span class="pe-state <?= $submitted ? 'pe-state-success' : ($closed ? '' : 'pe-state-pending') ?>"><?= $submitted ? 'Submitted' : ($closed ? 'Closed' : 'Not yet answered') ?></span></div>
+        <div class="pe-card-top"><span class="pe-department"><i class="bi bi-chat-heart" aria-hidden="true"></i>Guidance Office<?php if ($externalUrl !== ''): ?> <span class="badge bg-info-subtle text-info border ms-1"><i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>External Link</span><?php endif; ?></span><span class="pe-state <?= $submitted ? 'pe-state-success' : ($closed ? '' : 'pe-state-pending') ?>"><?= $submitted ? 'Submitted' : ($closed ? 'Closed' : 'Not yet answered') ?></span></div>
         <h3 class="pe-card-title" id="survey-title-<?= (int) $survey['id'] ?>"><?= esc($survey['title']) ?></h3>
         <?php if ($description !== ''): ?><p class="pe-excerpt"><?= esc($description) ?></p><?php endif; ?>
         <div class="pe-survey-deadline"><i class="bi <?= $closed ? 'bi-lock' : 'bi-clock' ?>" aria-hidden="true"></i><div><span class="pe-date-label"><?= $closed ? 'Participation closed' : ($closingSoon ? 'Closing soon' : 'Closing date') ?></span><?php if ($deadline !== null): ?><time datetime="<?= esc($deadline->format('c')) ?>"><?= $closed ? 'Scheduled deadline: ' : '' ?><?= esc($deadline->setTimezone(new \DateTimeZone('Asia/Manila'))->format('d M Y, g:i A')) ?> <small>(Manila)</small></time><?php else: ?><span><?= $closed ? 'Closed by Guidance' : 'No closing date set' ?></span><?php endif; ?></div></div>
         <div class="pe-survey-action">
-          <?php if ($submitted): ?><p class="pe-completion"><i class="bi bi-check-circle" aria-hidden="true"></i>Your submission is recorded<?= $closed ? '; this survey is now closed' : '' ?>.</p><?php if (!$closed): ?><a class="btn btn-outline-primary w-100 mt-2" href="<?= esc(site_url('portal/surveys/' . (int) $survey['id'])) ?>" aria-describedby="survey-title-<?= (int) $survey['id'] ?>">View status</a><?php endif; ?>
+          <?php if ($submitted): ?><p class="pe-completion"><i class="bi bi-check-circle" aria-hidden="true"></i>Your submission is recorded<?= $closed ? '; this survey is now closed' : '' ?>.</p><?php if (!$closed): ?><a class="btn btn-outline-primary w-100 mt-2" href="<?= esc(site_url('portal/surveys/' . (int) $survey['id'])) ?>" aria-describedby="survey-title-<?= (int) $survey['id'] ?>"><?= $externalUrl !== '' ? 'View status' : 'View submitted answers' ?></a><?php endif; ?>
           <?php elseif ($closed): ?><button class="btn btn-outline-secondary w-100" type="button" disabled>Survey closed</button><p class="pe-action-note">This survey no longer accepts responses.</p>
+          <?php elseif ($externalUrl !== ''): ?><a class="btn btn-primary w-100" href="<?= esc($externalUrl, 'attr') ?>" target="_blank" rel="noopener noreferrer" aria-describedby="survey-title-<?= (int) $survey['id'] ?>">Open external survey<i class="bi bi-box-arrow-up-right ms-2" aria-hidden="true"></i></a><a class="btn btn-outline-secondary btn-sm w-100 mt-2" href="<?= esc(site_url('portal/surveys/' . (int) $survey['id'])) ?>" aria-describedby="survey-title-<?= (int) $survey['id'] ?>">Details / Mark completed</a>
           <?php else: ?><a class="btn btn-primary w-100" href="<?= esc(site_url('portal/surveys/' . (int) $survey['id'])) ?>" aria-describedby="survey-title-<?= (int) $survey['id'] ?>">Answer survey<i class="bi bi-arrow-right ms-2" aria-hidden="true"></i></a><?php endif; ?>
         </div>
       </div>

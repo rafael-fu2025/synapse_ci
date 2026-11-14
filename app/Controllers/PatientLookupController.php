@@ -18,7 +18,7 @@ final class PatientLookupController extends BaseController
         $role = $actor['role'] ?? null;
         $permissions = $actor['permissions'] ?? [];
         $allowed = $role === 'superadmin'
-            || (in_array($role, ['clinic_admin', 'clinic_staff'], true)
+            || (in_array($role, ['clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern'], true)
                 && in_array('clinic.patients.read', $permissions, true))
             || (in_array($role, ['guidance_admin', 'guidance_supervisor', 'counsellor'], true)
                 && (in_array('guidance.cases.create', $permissions, true)

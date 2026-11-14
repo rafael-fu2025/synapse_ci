@@ -36,6 +36,13 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
         <?php if (!empty($survey['description'])): ?>
           <p class="text-muted small mb-0"><?= esc($survey['description']) ?></p>
         <?php endif; ?>
+        <?php if (!empty($survey['external_url'])): ?>
+          <div class="mt-2">
+            <a href="<?= esc((string) $survey['external_url'], 'attr') ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open External Survey Link
+            </a>
+          </div>
+        <?php endif; ?>
       </div>
       <div class="text-end">
         <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
@@ -101,10 +108,17 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
     <article class="nd-kpi-card nd-kpi-retention">
       <span class="nd-kpi-icon"><i class="bi bi-shield-check"></i></span>
       <span class="nd-kpi-label">Survey Instrument</span>
-      <strong class="nd-kpi-value"><?= count($questions) ?> Questions</strong>
-      <span class="nd-kpi-trend up">
-        <i class="bi bi-lock-fill"></i> AES-256-GCM encrypted
-      </span>
+      <?php if (!empty($survey['external_url'])): ?>
+        <strong class="nd-kpi-value">External Link</strong>
+        <span class="nd-kpi-trend up">
+          <i class="bi bi-box-arrow-up-right"></i> Hosted form URL
+        </span>
+      <?php else: ?>
+        <strong class="nd-kpi-value"><?= count($questions) ?> Questions</strong>
+        <span class="nd-kpi-trend up">
+          <i class="bi bi-lock-fill"></i> AES-256-GCM encrypted
+        </span>
+      <?php endif; ?>
     </article>
   </div>
 
@@ -164,6 +178,11 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
           </div>
         <?php endif; ?>
 
+        <?php if (!empty($survey['external_url']) && $analytics['questions'] === []): ?>
+          <div class="alert alert-info small mb-0">
+            <strong>External Link Survey:</strong> Respondent submissions are collected on the external form provider. Only completion confirmations and staff interview attribution notes are recorded in Synapse.
+          </div>
+        <?php else: ?>
         <!-- Per-Question Analytics Visualizations -->
         <h6 class="fw-bold text-dark mb-3">Question Breakdowns & Visualizations</h6>
 
@@ -190,6 +209,18 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
 
               <?php elseif ($qStat['type'] === 'rating'): ?>
                 <!-- Rating Question Visual Distribution (1 to 5 Stars) -->
+                <?php
+                  $minAnchor = trim((string) ($qStat['scale_min_label'] ?? ''));
+                  $maxAnchor = trim((string) ($qStat['scale_max_label'] ?? ''));
+                ?>
+                <?php if ($minAnchor !== '' || $maxAnchor !== ''): ?>
+                  <div class="small text-muted mb-2">
+                    Scale:
+                    <?php if ($minAnchor !== ''): ?><strong>1</strong> = <?= esc($minAnchor) ?><?php endif; ?>
+                    <?php if ($minAnchor !== '' && $maxAnchor !== ''): ?> · <?php endif; ?>
+                    <?php if ($maxAnchor !== ''): ?><strong>5</strong> = <?= esc($maxAnchor) ?><?php endif; ?>
+                  </div>
+                <?php endif; ?>
                 <div class="row align-items-center mb-3">
                   <div class="col-sm-4 text-center border-end">
                     <div class="display-5 fw-bold text-warning"><?= esc(number_format((float) ($qStat['avg_rating'] ?? 0), 1)) ?></div>
@@ -203,11 +234,13 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
                       <?php 
                         $cnt = (int) ($qStat['counts'][$star] ?? 0);
                         $pct = $qStat['total_answers'] > 0 ? round(($cnt / $qStat['total_answers']) * 100, 1) : 0;
+                        $anchorSuffix = ($star === 1 && $minAnchor !== '') ? (' · ' . $minAnchor) : (($star === 5 && $maxAnchor !== '') ? (' · ' . $maxAnchor) : '');
                       ?>
                       <div class="survey-bar-row">
                         <div class="survey-bar-label">
                           <?= $star ?> Star<?= $star === 1 ? '' : 's' ?>
                           <span class="text-warning">★</span>
+                          <?php if ($anchorSuffix !== ''): ?><small class="text-muted d-block"><?= esc(ltrim($anchorSuffix, ' ·')) ?></small><?php endif; ?>
                         </div>
                         <div class="survey-bar-track">
                           <div class="survey-bar-fill bar-rating-<?= $star ?>" style="width: <?= max(5, $pct) ?>%;">
@@ -244,6 +277,21 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
                       </div>
                     </div>
                   <?php endforeach; ?>
+                  <?php if (!empty($qStat['other_samples'])): ?>
+                    <div class="mt-3 pt-2 border-top">
+                      <div class="small fw-bold text-muted text-uppercase mb-2">
+                        &ldquo;Other&rdquo; Specified Responses (<?= count($qStat['other_samples']) ?>)
+                      </div>
+                      <div style="max-height: 200px; overflow-y: auto;">
+                        <?php foreach ($qStat['other_samples'] as $sample): ?>
+                          <div class="survey-quote-card">
+                            <p class="mb-1"><?= esc($sample['text']) ?></p>
+                            <small class="text-muted" style="font-size: 0.7rem;"><i class="bi bi-clock me-1"></i><?= esc($sample['date']) ?></small>
+                          </div>
+                        <?php endforeach; ?>
+                      </div>
+                    </div>
+                  <?php endif; ?>
                 </div>
 
               <?php elseif ($qStat['type'] === 'text'): ?>
@@ -270,6 +318,7 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
             </div>
           </div>
         <?php endforeach; ?>
+      <?php endif; ?>
 
       <?php endif; ?>
     </div>
@@ -289,13 +338,14 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
             <tr>
               <th scope="col" class="ps-3">Respondent</th>
               <th scope="col">Submitted (UTC)</th>
+              <th scope="col">Interview Status</th>
               <th scope="col" class="text-end pe-3">Action</th>
             </tr>
           </thead>
           <tbody>
             <?php if ($items === []): ?>
               <tr>
-                <td colspan="3" class="text-center text-muted py-5">
+                <td colspan="4" class="text-center text-muted py-5">
                   <i class="bi bi-inbox fs-1 d-block mb-2 opacity-50"></i>
                   No responses recorded yet.
                 </td>
@@ -308,6 +358,16 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
                   </td>
                   <td class="text-muted small">
                     <?= esc($response['submitted_at']) ?>
+                  </td>
+                  <td class="small">
+                    <?php if (!empty($response['interviewed_by_user_id'])): ?>
+                      <span class="badge bg-success-subtle text-success border border-success-subtle">
+                        Interviewed by <?= esc((string) ($response['interviewer_name'] ?? 'Staff')) ?>
+                        · <?= esc(date('M j, Y', strtotime((string) $response['interviewed_at']))) ?>
+                      </span>
+                    <?php else: ?>
+                      <span class="badge bg-light text-secondary border">Pending Interview</span>
+                    <?php endif; ?>
                   </td>
                   <td class="text-end pe-3">
                     <a href="<?= esc(site_url('guidance/surveys/' . $survey['id'] . '/responses/' . $response['id'])) ?>" class="btn btn-outline-primary btn-sm">

@@ -11,7 +11,7 @@
 <div class="card"><div class="card-body pt-3"><div class="table-responsive"><table class="table align-middle">
 <thead><tr><th>Announcement</th><th>Audience</th><th>Status / visibility (Asia/Manila)</th><th>Actions</th></tr></thead><tbody>
 <?php foreach ($announcements as $notice): $url = $baseUrl . '/' . (int) $notice['id']; ?>
-<tr><td><strong><?= esc($notice['title']) ?></strong><details class="mt-2"><summary class="small">Preview text</summary><div class="mt-2" style="white-space:pre-wrap;overflow-wrap:anywhere"><?= esc($notice['body']) ?></div></details></td>
+<tr><td><strong><?= esc($notice['title']) ?></strong><?php if (!empty($notice['is_pinned_advisory'])): ?> <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">Pinned Advisory</span><?php endif; ?><details class="mt-2"><summary class="small">Preview text</summary><div class="mt-2" style="white-space:pre-wrap;overflow-wrap:anywhere"><?= esc($notice['body']) ?></div></details></td>
 <td><?= esc(ucfirst($notice['audience'])) ?><?= view('announcements/_targeting_summary', ['targetRecord' => $notice], ['saveData' => false]) ?></td><td><span class="badge bg-secondary"><?= esc(ucfirst($notice['status'])) ?></span><small class="d-block mt-1">From: <?= esc($notice['starts_at'] === null ? 'On publication' : $announcementDate($notice['starts_at'])) ?><br>Until: <?= esc($notice['ends_at'] === null ? 'No expiry' : $announcementDate($notice['ends_at'])) ?></small></td>
 <td><div class="d-flex flex-wrap gap-2">
 <?php if ($notice['status'] === 'draft'): ?>

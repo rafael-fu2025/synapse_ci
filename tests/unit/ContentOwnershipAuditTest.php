@@ -141,7 +141,7 @@ final class ContentOwnershipAuditTest extends CIUnitTestCase
             'student' => [false, false, false, false, false, false],
             'employee' => [false, false, false, false, false, false],
         ];
-        self::assertCount(12, $this->db->table('role_permissions')->select('role')->distinct()->get()->getResultArray());
+        self::assertCount(14, $this->db->table('role_permissions')->select('role')->distinct()->get()->getResultArray());
         foreach ($matrix as $role => $expected) {
             $this->signIn($role);
             $checks = [fn () => (new AnnouncementService())->manager('clinic'),

@@ -205,6 +205,41 @@
       </div>
     </div>
   </section>
+
+  <!-- Periodic Non-PII CHED / Monthly / School-Year Summary -->
+  <section class="card border-0 shadow-sm mt-4" aria-labelledby="guidance-periodic-summary-title">
+    <div class="card-body p-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+          <h3 id="guidance-periodic-summary-title" class="h6 fw-bold mb-0"><i class="bi bi-calendar-range text-primary me-2" aria-hidden="true"></i>Periodic Guidance Service Summary (CHED / Monthly / School Year)</h3>
+          <small class="text-muted">Aggregate, non-PII counts across Manila calendar dates (up to 366 days per report).</small>
+        </div>
+        <a id="gd-summary-csv" href="<?= esc(site_url('/guidance/reports/summary?from=' . date('Y-m-01') . '&to=' . date('Y-m-d') . '&format=csv'), 'attr') ?>" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-download me-1" aria-hidden="true"></i>Download CSV Summary
+        </a>
+      </div>
+      <div class="row g-2 align-items-end mb-3">
+        <div class="col-md-3">
+          <label for="gd-summary-from-display" class="form-label small fw-semibold mb-1">Period Start</label>
+          <input id="gd-summary-from-display" type="text" class="form-control form-control-sm" data-datepicker data-target="#gd-summary-from" value="<?= esc(date('d/m/Y', strtotime(date('Y-m-01'))), 'attr') ?>" autocomplete="off">
+          <input id="gd-summary-from" type="hidden" value="<?= esc(date('Y-m-01'), 'attr') ?>">
+        </div>
+        <div class="col-md-3">
+          <label for="gd-summary-to-display" class="form-label small fw-semibold mb-1">Period End</label>
+          <input id="gd-summary-to-display" type="text" class="form-control form-control-sm" data-datepicker data-target="#gd-summary-to" value="<?= esc(date('d/m/Y'), 'attr') ?>" autocomplete="off">
+          <input id="gd-summary-to" type="hidden" value="<?= esc(date('Y-m-d'), 'attr') ?>">
+        </div>
+        <div class="col-md-3">
+          <button type="button" id="gd-summary-load" class="btn btn-primary btn-sm">
+            <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Compute Period Counts
+          </button>
+        </div>
+      </div>
+      <div id="gd-summary-grid" class="row g-2 small text-muted">
+        <div class="col-12">Click "Compute Period Counts" or download CSV for custom school-year / monthly reporting totals.</div>
+      </div>
+    </div>
+  </section>
 </div>
 <?= $this->endSection() ?>
 
@@ -275,6 +310,62 @@
       initGuidanceDashboard();
     }
     document.addEventListener('synapse:page-load', initGuidanceDashboard);
+
+    function initPeriodicSummary() {
+      var loadBtn = document.getElementById('gd-summary-load');
+      var fromEl = document.getElementById('gd-summary-from');
+      var toEl = document.getElementById('gd-summary-to');
+      var csvEl = document.getElementById('gd-summary-csv');
+      var gridEl = document.getElementById('gd-summary-grid');
+      if (!loadBtn || !fromEl || !toEl || !gridEl || loadBtn.dataset.bound === '1') return;
+      loadBtn.dataset.bound = '1';
+
+      function updateCsvLink() {
+        if (!csvEl) return;
+        csvEl.href = <?= json_encode(site_url('/guidance/reports/summary')) ?>
+          + '?from=' + encodeURIComponent(fromEl.value)
+          + '&to=' + encodeURIComponent(toEl.value)
+          + '&format=csv';
+      }
+
+      loadBtn.addEventListener('click', function () {
+        updateCsvLink();
+        gridEl.innerHTML = '<div class="col-12 text-muted">Computing aggregate counts...</div>';
+        fetch(<?= json_encode(site_url('/guidance/reports/summary')) ?> + '?from=' + encodeURIComponent(fromEl.value) + '&to=' + encodeURIComponent(toEl.value), {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.success || !data.summary) {
+            gridEl.innerHTML = '<div class="col-12 text-danger">' + (data.message || 'Unable to load summary.') + '</div>';
+            return;
+          }
+          var s = data.summary;
+          var cards = [
+            ['Cases Opened', s.cases_opened],
+            ['Cases Closed', s.cases_closed],
+            ['PSP Sessions (Associates)', s.psp_sessions_completed],
+            ['Counseling Sessions', s.counseling_sessions_completed],
+            ['Intakes Submitted', s.intakes_submitted],
+            ['Call Slips Issued', s.call_slips_issued],
+            ['MI Assessments Completed', s.mi_assessments_completed],
+            ['Surveys Submitted', s.surveys_submitted]
+          ];
+          gridEl.innerHTML = cards.map(function (c) {
+            return '<div class="col-6 col-md-3"><div class="border rounded p-2"><div class="text-muted">' + c[0] + '</div><div class="h5 fw-bold text-dark mb-0">' + Number(c[1] || 0) + '</div></div></div>';
+          }).join('');
+        })
+        .catch(function () {
+          gridEl.innerHTML = '<div class="col-12 text-danger">Unable to fetch periodic summary right now.</div>';
+        });
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPeriodicSummary);
+    } else {
+      initPeriodicSummary();
+    }
+    document.addEventListener('synapse:page-load', initPeriodicSummary);
   })();
 </script>
 <?= $this->endSection() ?>

@@ -31,6 +31,11 @@ final class SurveyQuestionTest extends CIUnitTestCase
         yield 'too many choices' => [array_replace($base, ['type' => 'multiple', 'options' => range(1, 11)])];
         yield 'non-list choices' => [array_replace($base, ['type' => 'single', 'options' => [1 => 'A', 3 => 'B']])];
         yield 'long choice' => [array_replace($base, ['type' => 'single', 'options' => ['A', str_repeat('x', 201)]])];
+        yield 'scale label on text' => [array_replace($base, ['type' => 'text', 'scale_min_label' => 'Lowest'])];
+        yield 'scale max too long' => [array_replace($base, ['type' => 'rating', 'scale_max_label' => str_repeat('z', 101)])];
+        yield 'invalid allow_other' => [array_replace($base, ['type' => 'single', 'options' => ['A', 'B'], 'allow_other' => 'yes'])];
+        yield 'allow_other on text' => [array_replace($base, ['type' => 'text', 'allow_other' => true])];
+        yield 'allow_other on rating' => [array_replace($base, ['type' => 'rating', 'allow_other' => '1'])];
     }
 
     #[DataProvider('invalidQuestions')]
@@ -51,5 +56,51 @@ final class SurveyQuestionTest extends CIUnitTestCase
         $this->assertSame(3, $normalized['bank_revision']);
         $this->expectException(RuntimeException::class);
         SurveyQuestion::normalize($input, false);
+    }
+
+    public function testRatingQuestionAllowsOptionalScaleAnchorLabels(): void
+    {
+        $unlabeled = SurveyQuestion::normalize(['type' => 'rating', 'label' => 'Rate service', 'required' => true, 'options' => []], false);
+        $this->assertSame(['type' => 'rating', 'label' => 'Rate service', 'required' => true, 'options' => []], $unlabeled);
+
+        $labeled = SurveyQuestion::normalize([
+            'type'            => 'rating',
+            'label'           => 'Rate stress level',
+            'required'        => '1',
+            'options'         => [],
+            'scale_min_label' => ' Lowest (No stress) ',
+            'scale_max_label' => ' Highest (Severe) ',
+        ], false);
+        $this->assertSame('Lowest (No stress)', $labeled['scale_min_label']);
+        $this->assertSame('Highest (Severe)', $labeled['scale_max_label']);
+    }
+
+    public function testChoiceQuestionsSupportOptionalAllowOtherFlagAndHelpers(): void
+    {
+        $single = SurveyQuestion::normalize([
+            'type'        => 'single',
+            'label'       => 'Preferred contact',
+            'required'    => '1',
+            'options'     => ['Email', 'SMS'],
+            'allow_other' => '1',
+        ], false);
+        $this->assertTrue($single['allow_other']);
+
+        $withoutOther = SurveyQuestion::normalize([
+            'type'        => 'multiple',
+            'label'       => 'Topics',
+            'required'    => '0',
+            'options'     => ['Study', 'Sleep'],
+            'allow_other' => '0',
+        ], false);
+        $this->assertArrayNotHasKey('allow_other', $withoutOther);
+
+        $this->assertTrue(SurveyQuestion::isOtherOptionLabel('Other'));
+        $this->assertTrue(SurveyQuestion::isOtherOptionLabel('Others (please specify)'));
+        $this->assertFalse(SurveyQuestion::isOtherOptionLabel('Other students in class'));
+        $this->assertSame(1, SurveyQuestion::otherOptionIndex([
+            'type'    => 'single',
+            'options' => ['Email', 'Other (please specify)'],
+        ]));
     }
 }

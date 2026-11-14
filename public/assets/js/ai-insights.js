@@ -314,8 +314,9 @@
       // A review may be dismissed with Escape or either Close control while its mutation is pending.
       modalElement?.querySelectorAll('[data-bs-dismiss="modal"]').forEach(button => { button.disabled = false; });
 
+      const rawAction = form.getAttribute('action') || location.href;
       let action = 'action';
-      try { action = new URL(form.action, location.href).pathname.split('/').pop(); } catch (_) { /* request() reports invalid endpoints. */ }
+      try { action = new URL(rawAction, location.href).pathname.split('/').pop(); } catch (_) { /* request() reports invalid endpoints. */ }
       const progress = {
         prepare: 'Checking the data and preparing your local preview…',
         generate: 'Checking the data and requesting an AI draft…',
@@ -333,7 +334,7 @@
 
       try {
         const body = new URLSearchParams(new FormData(form));
-        const payload = await request(form.action, owner, body);
+        const payload = await request(rawAction, owner, body);
         if (typeof payload.baseline === 'string') replace(baseline, payload.baseline, 'baseline');
         const message = typeof payload.message === 'string' ? payload.message.slice(0, 1500) : 'Your action was saved.';
         say(message, payload.reused || action === 'generate' ? 'info' : 'success', true);

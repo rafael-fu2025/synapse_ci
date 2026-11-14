@@ -18,7 +18,7 @@
     const submitter = event.submitter;
     if (!(form instanceof HTMLFormElement) || event.defaultPrevented ||
         form.dataset.loading === 'false' || submitter?.dataset.loading === 'false') return;
-    const method = submitter?.getAttribute('formmethod') ?? form.method;
+    const method = submitter?.getAttribute('formmethod') || form.getAttribute('method') || 'get';
     if (method.toLowerCase() === 'dialog' || !navigatesHere(form, submitter)) return;
 
     if (pending.has(form)) {

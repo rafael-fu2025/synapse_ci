@@ -30,7 +30,7 @@
     if (!form || !button || button.hasAttribute('data-sync-unavailable') || !panel || !bar || !percent || !message || !result || !refresh
         || !window.fetch || !window.crypto?.randomUUID || !window.FormData) return;
     let action, statusUrl;
-    try { action = endpoint(form.action); statusUrl = endpoint(root.dataset.statusUrl); }
+    try { action = endpoint(form.getAttribute('action') || location.href); statusUrl = endpoint(root.dataset.statusUrl); }
     catch (_) { return; }
     const owner = { root, dispose: null };
     owners.set(root, owner);

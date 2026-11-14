@@ -178,7 +178,7 @@ final class SurveyWorkflowTest extends SurveyTestCase
         $this->assertSame(1, $inbox['unread_count']);
         $this->assertCount(1, $inbox['items']);
         $item = $inbox['items'][0];
-        $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'url'], array_keys($item));
+        $this->assertSame(['id', 'title', 'message', 'created_at', 'read_at', 'target', 'url'], array_keys($item));
         $this->assertSame('New survey', $item['title']);
         $this->assertSame('An identified Guidance survey is available in your portal.', $item['message']);
         $this->assertSame(site_url('/portal/surveys'), $item['url']);

@@ -181,6 +181,8 @@ __pycache__/
 /docs/*
 !/docs/MOBILE_TEAM_WORKSPACE_IMPLEMENTATION.md
 !/docs/MOBILE_LAN_TEST.md
+!/docs/guidance/
+!/docs/guidance/**
 /tests/
 # AI CI fixtures must be available to clean checkouts; keep unrelated local tests ignored.
 !/tests/
@@ -213,6 +215,35 @@ __pycache__/
 !/tests/unit/RefreshRegionsConfigTest.php
 !/tests/unit/RefreshRegionDescriptorTest.php
 !/tests/unit/ClinicalRefreshRegionsTest.php
+!/tests/unit/ClinicTranscriptEnhancementsTest.php
+# Guidance paperless transformation authorization and controlled forms foundations.
+!/tests/unit/GuidanceWriteAuthorizationTest.php
+!/tests/unit/GuidanceFormCipherTest.php
+!/tests/unit/GuidanceFormServiceTest.php
+!/tests/unit/GuidanceFormsControllerTest.php
+!/tests/unit/GuidancePractitionerEligibilityTest.php
+!/tests/unit/GuidanceCaseTransferTest.php
+!/tests/unit/GuidanceIntakeServiceTest.php
+!/tests/unit/GuidanceSafetyTriageTest.php
+!/tests/unit/GuidanceIntakeAndSafetyMigrationTest.php
+!/tests/unit/GuidanceEpisodesAppointmentsAndCallSlipsMigrationTest.php
+!/tests/unit/GuidanceEpisodeServiceTest.php
+!/tests/unit/GuidanceAppointmentCallSlipTest.php
+!/tests/unit/GuidanceSlipPdfTest.php
+!/tests/unit/GuidanceClinicalFormServiceTest.php
+!/tests/unit/GuidanceClinicalPdfTest.php
+!/tests/unit/GuidanceMultipleIntelligenceTest.php
+!/tests/unit/GuidanceMultipleIntelligencePdfTest.php
+!/tests/unit/GuidanceServiceEvaluationTest.php
+!/tests/unit/GuidanceServiceEvaluationPdfTest.php
+!/tests/unit/GuidanceRolloutAcceptanceTest.php
+!/tests/unit/GuidanceGovernanceIntakeControllerTest.php
+!/tests/unit/GuidanceClinicalWebWorkflowTest.php
+!/tests/unit/GuidanceMiAndEvalWebWorkflowTest.php
+!/tests/unit/GuidanceMobileApiV1Test.php
+!/tests/unit/SurveyDraftAiExtractorTest.php
+!/tests/unit/SurveyExternalUrlTest.php
+!/tests/unit/SurveyOtherOptionTest.php
 !/tests/_support/
 /tests/_support/*
 !/tests/_support/api-token-race-worker.php
@@ -232,7 +263,10 @@ __pycache__/
 !/tests/browser/refresh-regions.test.cjs
 !/tests/browser/announcement-refresh-regions.test.cjs
 !/tests/browser/clinical-refresh-regions.test.cjs
+!/tests/browser/clinic-e2e-live.test.cjs
+!/tests/browser/guidance-e2e-live.test.cjs
 /papers/
+/fwdforguidancecumulative/
 
 #-------------------------
 # Composer
@@ -353,3 +387,10 @@ node_modules/
 *service-account*.json
 *service_account*.json
 firebase-service-account*.json
+
+# Office and document lock files
+.~lock.*
+.~lock.*#
+~$*.docx
+~$*.doc
+

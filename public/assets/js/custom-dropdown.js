@@ -61,15 +61,38 @@
     menu.id = id + '-list';
     menu.className = 'dropdown-menu bd-select-menu';
     menu.setAttribute('role', 'listbox');
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'bd-select-search-wrap';
+    searchWrap.hidden = true;
+    const searchInput = document.createElement('input');
+    searchInput.type = 'search';
+    searchInput.className = 'form-control form-control-sm bd-select-search';
+    searchInput.placeholder = 'Filter options...';
+    searchInput.setAttribute('aria-label', 'Filter options');
+    searchInput.autocomplete = 'off';
+    const searchClear = document.createElement('button');
+    searchClear.type = 'button';
+    searchClear.className = 'bd-select-search-clear';
+    searchClear.setAttribute('aria-label', 'Clear filter');
+    searchClear.innerHTML = '&times;';
+    searchClear.hidden = true;
+    searchWrap.append(searchInput, searchClear);
+    const emptyState = document.createElement('div');
+    emptyState.className = 'bd-select-empty';
+    emptyState.textContent = 'No matching options';
+    emptyState.hidden = true;
     const error = document.createElement('div');
     error.id = id + '-error';
     error.className = 'invalid-feedback';
     error.setAttribute('role', 'alert');
     error.style.display = 'none';
     let items = [];
+    let groups = [];
     let validationShown = false;
     let disposed = false;
     let dropdown = null;
+    let typeAheadBuffer = '';
+    let typeAheadTimer = 0;
     // Page/main-content scrolling moves the trigger but not an open menu. Scrolls
     // inside the menu or any scrollable content within the same picker/modal must
     // not dismiss it, or wheel-list auto-scrolling would close the menu on open.
@@ -96,16 +119,40 @@
         /^[\s\-\u2013\u2014]*(?:choose|select|pick)\b/i.test(option.label));
     }
 
+    function isSearchable() {
+      if (select.hasAttribute('data-no-search') || select.closest('.dp-popup, .dtp-popup')) return false;
+      return select.hasAttribute('data-searchable') || items.length >= 10;
+    }
+
+    function applyFilter(queryText) {
+      const normalized = (queryText || '').trim().toLowerCase();
+      searchClear.hidden = normalized === '';
+      let visibleCount = 0;
+      items.forEach((item) => {
+        const optionHidden = Boolean(item.option.hidden || (item.option.parentElement && item.option.parentElement.hidden));
+        const matches = !optionHidden && (!normalized || item.option.label.toLowerCase().includes(normalized));
+        item.el.hidden = !matches;
+        if (matches) visibleCount += 1;
+      });
+      groups.forEach(({ el, optionGroup }) => {
+        const hasVisible = items.some((entry) => entry.groupEl === el && !entry.el.hidden);
+        el.hidden = Boolean(optionGroup.hidden) || !hasVisible;
+      });
+      emptyState.hidden = !(isSearchable() && visibleCount === 0);
+      if (dropdown && menu.classList.contains('show')) dropdown.update();
+    }
+
     function rebuild() {
       const focused = items.find((item) => item.el === document.activeElement);
       items = [];
-      menu.replaceChildren();
-      function addOption(option, parent, grouped) {
+      groups = [];
+      menu.replaceChildren(searchWrap);
+      function addOption(option, parent, groupEl) {
         if (isPlaceholder(option)) return;
         const item = document.createElement('button');
         item.type = 'button';
         item.tabIndex = -1;
-        item.className = 'dropdown-item' + (grouped ? ' bd-item-grouped' : '');
+        item.className = 'dropdown-item' + (groupEl ? ' bd-item-grouped' : '');
         item.setAttribute('role', 'option');
         item.textContent = option.label;
         item.disabled = optionDisabled(option);
@@ -114,10 +161,10 @@
         item.setAttribute('aria-disabled', String(item.disabled));
         item.hidden = option.hidden;
         parent.appendChild(item);
-        items.push({ option, el: item });
+        items.push({ option, el: item, groupEl: groupEl || null });
       }
       Array.from(select.children).forEach((node) => {
-        if (node.tagName === 'OPTION') addOption(node, menu, false);
+        if (node.tagName === 'OPTION') addOption(node, menu, null);
         if (node.tagName !== 'OPTGROUP') return;
         const group = document.createElement('div');
         group.setAttribute('role', 'group');
@@ -130,10 +177,17 @@
         header.textContent = node.label;
         group.appendChild(header);
         Array.from(node.children).forEach((option) => {
-          if (option.tagName === 'OPTION') addOption(option, group, true);
+          if (option.tagName === 'OPTION') addOption(option, group, group);
         });
+        groups.push({ el: group, optionGroup: node });
         menu.appendChild(group);
       });
+      menu.appendChild(emptyState);
+      const searchable = isSearchable();
+      searchWrap.hidden = !searchable;
+      menu.classList.toggle('bd-select-searchable', searchable);
+      if (!searchable) searchInput.value = '';
+      applyFilter(searchInput.value);
       if (focused) {
         const replacement = items.find((item) => item.option === focused.option);
         if (replacement && !replacement.el.disabled && replacement.el.getClientRects().length) {
@@ -238,6 +292,7 @@
       }
     }
     function onShow(event) {
+      searchInput.value = '';
       sync(true);
       if (button.disabled) {
         event.preventDefault();
@@ -248,13 +303,81 @@
       menu.style.width = wrap.closest('.dp-popup') ? 'max-content' : width + 'px';
     }
     function onShown() {
-      const active = menu.querySelector('.dropdown-item.active');
-      if (!active) return;
-      // Scroll only the menu, not a surrounding modal/page/date picker.
-      const itemRect = active.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-      if (itemRect.top < menuRect.top) menu.scrollTop -= menuRect.top - itemRect.top;
-      else if (itemRect.bottom > menuRect.bottom) menu.scrollTop += itemRect.bottom - menuRect.bottom;
+      const active = menu.querySelector('.dropdown-item.active:not([hidden])');
+      if (active) {
+        // Scroll only the menu, not a surrounding modal/page/date picker.
+        const itemRect = active.getBoundingClientRect();
+        const menuRect = menu.getBoundingClientRect();
+        const searchHeight = !searchWrap.hidden ? searchWrap.getBoundingClientRect().height : 0;
+        if (itemRect.top < menuRect.top + searchHeight) menu.scrollTop -= (menuRect.top + searchHeight) - itemRect.top;
+        else if (itemRect.bottom > menuRect.bottom) menu.scrollTop += itemRect.bottom - menuRect.bottom;
+      }
+      if (!searchWrap.hidden && !window.matchMedia('(pointer: coarse)').matches) {
+        searchInput.focus({ preventScroll: true });
+      }
+    }
+
+    function firstVisibleEnabledItem() {
+      return items.find((entry) => !entry.el.hidden && !entry.el.disabled && entry.el.getClientRects().length);
+    }
+
+    function onSearchWrapClick(event) {
+      // Prevent Bootstrap Dropdown autoClose from dismissing when interacting with filter input/clear.
+      event.stopPropagation();
+    }
+
+    function onSearchInput() {
+      applyFilter(searchInput.value);
+    }
+
+    function onSearchClear() {
+      searchInput.value = '';
+      applyFilter('');
+      searchInput.focus({ preventScroll: true });
+    }
+
+    function onSearchKeyDown(event) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        const first = firstVisibleEnabledItem();
+        if (first) first.el.focus();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        const visible = items.filter((entry) => !entry.el.hidden && !entry.el.disabled && entry.el.getClientRects().length);
+        if (visible.length === 1) visible[0].el.click();
+      } else if (event.key === 'Escape') {
+        event.stopPropagation();
+        if (searchInput.value !== '') {
+          searchInput.value = '';
+          applyFilter('');
+        } else if (dropdown) {
+          dropdown.hide();
+          button.focus({ preventScroll: true });
+        }
+      }
+    }
+
+    function onButtonKeyDown(event) {
+      if (button.disabled || menu.classList.contains('show')) return;
+      if (event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        clearTimeout(typeAheadTimer);
+        typeAheadBuffer += event.key.toLowerCase();
+        typeAheadTimer = window.setTimeout(() => { typeAheadBuffer = ''; }, 650);
+        const match = items.find((entry) =>
+          !entry.el.disabled && !entry.option.hidden &&
+          entry.option.label.trim().toLowerCase().startsWith(typeAheadBuffer)
+        );
+        if (match) {
+          const index = Array.from(select.options).indexOf(match.option);
+          if (index >= 0 && index !== select.selectedIndex) {
+            select.selectedIndex = index;
+            sync(false);
+            select.dispatchEvent(new Event('input', { bubbles: true }));
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            sync(true);
+          }
+        }
+      }
     }
 
     select.insertAdjacentElement('afterend', wrap);
@@ -264,11 +387,16 @@
     select.setAttribute('tabindex', '-1');
     select.setAttribute('aria-hidden', 'true');
     menu.addEventListener('click', onClick);
+    searchWrap.addEventListener('click', onSearchWrapClick);
+    searchInput.addEventListener('input', onSearchInput);
+    searchInput.addEventListener('keydown', onSearchKeyDown);
+    searchClear.addEventListener('click', onSearchClear);
     select.addEventListener('input', onSync);
     select.addEventListener('change', onSync);
     select.addEventListener('bd-select:sync', onSync);
     select.addEventListener('focus', onFocus);
     select.addEventListener('invalid', onInvalid);
+    button.addEventListener('keydown', onButtonKeyDown);
     button.addEventListener('show.bs.dropdown', onShow);
     button.addEventListener('shown.bs.dropdown', onShown);
 
@@ -306,6 +434,20 @@
       wrap, button,
       sync: onSync,
       reset() { validationShown = false; sync(true); },
+      handleSearchEscape() {
+        if (disposed || !menu.classList.contains('show')) return false;
+        if (searchInput.value !== '') {
+          searchInput.value = '';
+          applyFilter('');
+          return true;
+        }
+        if (dropdown) {
+          dropdown.hide();
+          button.focus({ preventScroll: true });
+          return true;
+        }
+        return false;
+      },
       destroy() {
         if (disposed) return;
         disposed = true;
@@ -314,12 +456,18 @@
           dropdown.hide();
           dropdown.dispose();
         }
+        clearTimeout(typeAheadTimer);
         menu.removeEventListener('click', onClick);
+        searchWrap.removeEventListener('click', onSearchWrapClick);
+        searchInput.removeEventListener('input', onSearchInput);
+        searchInput.removeEventListener('keydown', onSearchKeyDown);
+        searchClear.removeEventListener('click', onSearchClear);
         select.removeEventListener('input', onSync);
         select.removeEventListener('change', onSync);
         select.removeEventListener('bd-select:sync', onSync);
         select.removeEventListener('focus', onFocus);
         select.removeEventListener('invalid', onInvalid);
+        button.removeEventListener('keydown', onButtonKeyDown);
         button.removeEventListener('show.bs.dropdown', onShow);
         button.removeEventListener('shown.bs.dropdown', onShown);
         button.removeEventListener('pointerdown', configureDropdown);
@@ -370,6 +518,20 @@
   }, true);
   document.addEventListener('htmx:load', (event) => init((event.detail && event.detail.elt) || event.target));
   document.addEventListener('htmx:beforeCleanupElement', (event) => destroy(event.target));
+  // Bootstrap registers delegated dropdown keydown listeners in capture phase on document,
+  // so intercept search-input Escape at window capture before Bootstrap closes the menu.
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const target = event.target;
+    if (!(target instanceof Element) || !target.classList.contains('bd-select-search')) return;
+    const wrap = target.closest('.bd-select');
+    const select = wrap && wrap.querySelector(':scope > select.form-select');
+    const state = select && instances.get(select);
+    if (!state || !state.handleSearchEscape()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  }, true);
   const lifecycle = new MutationObserver((records) => {
     const removed = records.some((record) => record.removedNodes.length);
     if (removed) {
