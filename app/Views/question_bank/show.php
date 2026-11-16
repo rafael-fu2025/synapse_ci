@@ -1,9 +1,9 @@
 <?= $this->extend('layouts/app') ?>
 <?= $this->section('content') ?>
 <?php $refreshOwner = 'question-bank.history.' . (int) $entry['id']; ?>
-<section data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<section class="guidance-ui" data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <a class="btn btn-outline-secondary btn-sm mb-3" href="<?= esc($baseUrl) ?>">Back to question bank</a>
-<div data-refresh-region="selected-revision">
+<div data-refresh-region="selected-revision" class="mb-3">
 <div class="card"><div class="card-body pt-3"><h2 class="h5"><?= esc($selected['question']['label']) ?></h2>
 <p class="text-muted">Bank #<?= (int) $entry['id'] ?> · Revision <?= (int) $selected['revision'] ?> · <?= esc(ucfirst($entry['status'])) ?> · <?= esc($selected['category']) ?> · <?= esc($selected['audience']) ?></p>
 <p class="small">Earlier revisions are read-only. Survey copies remain independent of the bank. <?= $selected['question']['required'] ? 'Required' : 'Optional' ?> by default.</p>

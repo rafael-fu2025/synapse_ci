@@ -7,6 +7,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php $pendingComments = $pendingComments ?? []; ?>
 
 <div class="alert alert-info border-0 shadow-sm mb-4">
@@ -44,7 +45,7 @@
             <p class="mb-0"><?= nl2br(esc($item['comment_text'])) ?></p>
           </blockquote>
 
-          <div class="d-flex flex-wrap justify-content-end gap-2">
+          <div class="d-flex flex-wrap justify-content-md-end gap-2 gc-card-actions">
             <form method="POST" action="<?= esc(site_url('/guidance/evaluations/moderate/' . (int) $item['id']), 'attr') ?>">
               <?= csrf_field() ?>
               <input type="hidden" name="status" value="redacted">
@@ -65,4 +66,5 @@
     <?php endforeach; ?>
   </div>
 <?php endif; ?>
+</div>
 <?= $this->endSection() ?>

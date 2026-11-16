@@ -95,10 +95,10 @@ final class PatientHistoryService
             ->join('clinic_medicine_batches b', 'b.id = d.batch_id AND b.medicine_id = d.medicine_id AND b.tenant_id = d.tenant_id')
             ->where('d.tenant_id', $tenant)->where('e.person_id', $personId);
         if ((new InventoryService($db))->isInstalled()) {
-            $dispensations->select('COALESCE(d.snapshot_name, m.name) AS medicine_name, COALESCE(d.snapshot_strength, m.strength) AS strength, COALESCE(d.snapshot_unit, m.unit_of_measure) AS unit_of_measure, COALESCE(d.snapshot_batch_number, b.batch_number) AS batch_number, correction.id AS reversed_by_operation_id, correction.reversal_mode AS correction_mode', false)
+            $dispensations->select('COALESCE(d.snapshot_name, m.name) AS medicine_name, COALESCE(d.snapshot_strength, m.strength) AS strength, COALESCE(d.snapshot_unit, m.unit_of_measure) AS unit_of_measure, COALESCE(d.snapshot_batch_number, b.batch_number) AS batch_number, COALESCE(d.snapshot_expiration_date, b.expiration_date) AS expiration_date, correction.id AS reversed_by_operation_id, correction.reversal_mode AS correction_mode', false)
                 ->join('inventory_operations correction', 'correction.reversal_of = d.operation_id AND correction.tenant_id = d.tenant_id', 'left');
         } else {
-            $dispensations->select('m.name AS medicine_name, m.strength, m.unit_of_measure, b.batch_number');
+            $dispensations->select('m.name AS medicine_name, m.strength, m.unit_of_measure, b.batch_number, b.expiration_date');
         }
         $dispensations = $dispensations->orderBy('d.created_at', 'DESC')->orderBy('d.id', 'DESC')->get()->getResultArray();
 

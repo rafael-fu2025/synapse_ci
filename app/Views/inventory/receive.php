@@ -1,10 +1,10 @@
 <?= $this->extend('layouts/modal_form') ?>
 <?= $this->section('content') ?>
 <?php require __DIR__ . '/_form_values.php'; ?>
-<p class="mb-1 fw-semibold"><?= esc($medicine['name']) ?></p>
+<p class="mb-1 fw-semibold text-break"><?= esc($medicine['name']) ?></p>
 <p class="text-muted">Receive whole stock units of <strong><?= esc($medicine['unit_of_measure']) ?></strong>, not fractional doses.</p>
 <div class="alert alert-info" role="note">For an existing lot, the expiry date must match exactly and the batch must be active. Its received and remaining quantities will increase. Expired lots and archived medicines cannot be received.</div>
-<form action="<?= esc($formAction) ?>" method="POST" data-modal-submit>
+<form action="<?= esc($formAction) ?>" method="POST" class="inventory-modal-form" data-modal-submit>
   <?= csrf_field() ?>
   <input type="hidden" name="idempotency_key" value="<?= esc($value('idempotency_key', $idempotencyKey)) ?>">
   <div class="row g-3">

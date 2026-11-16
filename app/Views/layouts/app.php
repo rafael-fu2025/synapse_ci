@@ -77,8 +77,64 @@
       filter: none !important;
     }
 
+    html.portal-shell-hydrating #main {
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
 
   </style>
+
+  <?php
+  $portalShellHref = \App\Services\PortalContext::urlFor('main', 'portal');
+  $portalShellUser = session()->get('user');
+  $hasPortalPerson = is_array($portalShellUser) && !empty($portalShellUser['person_id']);
+  $canPrefetchPortalShell = $hasPortalPerson
+      && in_array('portal.records.read', $portalShellUser['permissions'] ?? [], true)
+      && in_array('portal.appointments.read', $portalShellUser['permissions'] ?? [], true);
+  ?>
+  <!-- Pre-paint suppression + early shell prefetch to prevent flashing legacy single-page sub-views on reload -->
+  <script>
+    (function() {
+      var shellHref = <?= json_encode($portalShellHref, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+      var shellUrl;
+      try {
+        shellUrl = new URL(shellHref, window.location.href);
+      } catch (_) {
+        return;
+      }
+      if (shellUrl.origin !== window.location.origin) return;
+      var norm = function(p) { return p.replace(/^\/index\.php(?=\/)/, '').replace(/\/+$/, '') || '/'; };
+      var base = norm(shellUrl.pathname);
+      var cur = norm(window.location.pathname);
+      if (!cur.startsWith(base + '/')) return;
+      var sub = cur.slice(base.length + 1);
+      if (/\/pdf$/i.test(sub)) return;
+      if (/^(?:(?:announcements|surveys|referrals|assessments\/mi|evaluations|visits|call-slips)(?:\/|$)|settings$)/.test(sub)) {
+        document.documentElement.classList.add('portal-shell-hydrating');
+        window.__portalHydrationFallbackTimer = window.setTimeout(function() {
+          document.documentElement.classList.remove('portal-shell-hydrating');
+        }, 4000);
+        <?php if ($canPrefetchPortalShell): ?>
+        if (window.fetch) {
+          window.__portalShellPrefetch = {
+            href: shellUrl.href,
+            promise: window.fetch(shellUrl.href, {
+              method: 'GET',
+              credentials: 'same-origin',
+              cache: 'no-store',
+              redirect: 'follow',
+              headers: {
+                Accept: 'text/html',
+                'X-Synapse-Navigation': '1',
+                'X-Synapse-Portal-Badge-Sync': '1'
+              }
+            }).catch(function() { return null; })
+          };
+        }
+        <?php endif; ?>
+      }
+    })();
+  </script>
 
 </head>
 
@@ -212,11 +268,12 @@
   <?= $this->include('admin/carousel/_form_scripts') ?>
   <script src="<?= base_url('assets/js/survey-builder.js') ?>"></script>
   <script src="<?= base_url('assets/js/profile-settings.js') ?>"></script>
-  <script src="<?= base_url('assets/js/form-modal.js') ?>"></script>
+  <script src="<?= base_url('assets/js/form-modal.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/form-modal.js') ?: '2' ?>"></script>
   <script src="<?= base_url('assets/js/responsive-tables.js') ?>"></script>
   <script src="<?= base_url('assets/js/core/main.js') ?>"></script>
   <script src="<?= base_url('assets/js/page-lifecycle.js') ?>"></script>
   <script src="<?= base_url('assets/js/navigation.js') ?>"></script>
+  <script src="<?= base_url('assets/js/portal-workspace.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/portal-workspace.js') ?: '1' ?>"></script>
   <script src="<?= base_url('assets/js/refresh-regions.js') ?>"></script>
   <script src="<?= base_url('assets/js/team-chat.js') ?>"></script>
   <script src="<?= base_url('assets/js/background-actions.js') ?>"></script>

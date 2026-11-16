@@ -95,9 +95,11 @@ final class ClinicInventoryController extends BaseController
         try {
             $this->authorize(true, true);
             $medicine = $id === null ? null : $this->inventory->details($id)['medicine'];
+            $suggestions = $this->inventory->catalogSuggestions();
             return $this->form('catalog', $id === null ? 'Add Medicine' : 'Edit Medicine',
                 $id === null ? self::BASE . '/store' : self::BASE . '/' . $id . '/update',
-                $id === null ? self::BASE : self::BASE . '/' . $id, ['medicine' => $medicine]);
+                $id === null ? self::BASE : self::BASE . '/' . $id,
+                ['medicine' => $medicine, 'catalogSuggestions' => $suggestions]);
         } catch (Throwable $e) {
             return $this->readError($e);
         }
@@ -119,10 +121,14 @@ final class ClinicInventoryController extends BaseController
         try {
             $actor = $this->authorize(true, true);
             $key = $this->catalogKey($id === null);
-            $medicine = $this->inventory->saveMedicine($id, $this->postFields([
+            $allowed = [
                 'name', 'generic_name', 'category', 'dosage_form', 'strength', 'unit_of_measure',
                 'minimum_stock_level', 'is_active', 'version',
-            ]), $actor, $key);
+            ];
+            if ($id === null) {
+                array_push($allowed, 'initial_batch_number', 'initial_expiration_date', 'initial_quantity', 'initial_supplier', 'initial_reference');
+            }
+            $medicine = $this->inventory->saveMedicine($id, $this->postFields($allowed), $actor, $key);
             return $this->respond(true, 'Medicine saved.', self::BASE . '/' . $medicine['id'], ['medicine' => $medicine], 422,
                 $id === null ? $this->navigationRefresh((int) $medicine['id']) : $this->detailRefresh((int) $medicine['id']));
         } catch (Throwable $e) {

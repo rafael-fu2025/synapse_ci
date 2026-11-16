@@ -17,7 +17,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
 ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex gap-2">
+<div class="d-flex flex-wrap gap-2">
   <?php if ($canReadAudit): ?>
   <a href="<?= esc(PortalContext::urlFor('main', 'admin/audit')) ?>" class="btn btn-primary btn-sm">
     <i class="bi bi-shield-check me-1"></i> Verify Audit Chain
@@ -38,7 +38,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="page-dashboard nd-dashboard">
+<div class="page-dashboard nd-dashboard exec-dashboard-page">
   <!-- Welcome Banner -->
   <div class="card border-0 shadow-sm text-white p-4 mb-4 nd-welcome-banner nd-welcome-banner--admin">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -58,7 +58,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
 
   <!-- NiceAdmin v3 KPI Rail -->
   <section class="row g-3 mb-4 nd-kpi-rail">
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-leads">
         <span class="nd-kpi-icon"><i class="bi bi-people"></i></span>
         <span class="nd-kpi-label">Campus Directory Population</span>
@@ -69,7 +69,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-revenue">
         <span class="nd-kpi-icon"><i class="bi bi-activity"></i></span>
         <span class="nd-kpi-label">Care Operations Volume</span>
@@ -81,7 +81,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
     </div>
 
     <?php if ($canReadAudit): ?>
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-retention">
         <span class="nd-kpi-icon"><i class="bi bi-shield-lock-fill"></i></span>
         <span class="nd-kpi-label">Cryptographic Audit Ledger</span>
@@ -94,7 +94,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
 
     <?php endif; ?>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-cycle">
         <span class="nd-kpi-icon"><i class="bi bi-person-badge"></i></span>
         <span class="nd-kpi-label">Active System Accounts</span>
@@ -137,7 +137,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
       <?php if ($canReadAudit): ?>
       <!-- Recent Audit Events Table -->
       <div class="card border-0 shadow-sm mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center bg-transparent py-3">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 bg-transparent py-3">
           <h5 class="card-title mb-0 fw-bold">Recent Cryptographic Audit Trail</h5>
           <a href="<?= esc(PortalContext::urlFor('main', 'admin/audit')) ?>" class="nd-inline-link">Open ledger chain <i class="bi bi-arrow-right"></i></a>
         </div>
@@ -199,7 +199,7 @@ $canAccessConsoles = $canDashboardLink('clinic.queue.read', 'clinic')
           <h5 class="card-title mb-0 fw-bold">Workstation Consoles</h5>
         </div>
         <div class="card-body p-3">
-          <div class="d-grid gap-2">
+          <div class="d-grid gap-2 exec-ops-hub">
 
             <?php if ($canDashboardLink('clinic.queue.read', 'clinic')): ?>
             <a href="<?= esc(PortalContext::urlFor('clinic', 'clinic/queue')) ?>" class="btn btn-outline-secondary text-start p-2">

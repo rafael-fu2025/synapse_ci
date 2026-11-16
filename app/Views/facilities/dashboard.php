@@ -16,7 +16,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="page-dashboard nd-dashboard">
+<div class="page-dashboard nd-dashboard bmg-dashboard-page">
   <!-- Welcome Banner -->
   <div class="card border-0 shadow-sm text-white p-4 mb-4 nd-welcome-banner nd-welcome-banner--facilities">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -36,7 +36,7 @@
 
   <!-- NiceAdmin v3 KPI Rail -->
   <section class="row g-3 mb-4 nd-kpi-rail">
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-revenue">
         <span class="nd-kpi-icon"><i class="bi bi-arrow-repeat"></i></span>
         <span class="nd-kpi-label">Active Drum Units</span>
@@ -47,7 +47,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-leads">
         <span class="nd-kpi-icon"><i class="bi bi-recycle"></i></span>
         <span class="nd-kpi-label">Batches Processed</span>
@@ -58,7 +58,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-retention">
         <span class="nd-kpi-icon"><i class="bi bi-cpu"></i></span>
         <span class="nd-kpi-label">Bound IoT Controllers</span>
@@ -69,7 +69,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-cycle">
         <span class="nd-kpi-icon"><i class="bi bi-box-seam"></i></span>
         <span class="nd-kpi-label">Organic Waste Treated</span>
@@ -111,7 +111,7 @@
 
       <!-- Drum Units Table -->
       <div class="card border-0 shadow-sm mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center bg-transparent py-3">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 bg-transparent py-3">
           <h5 class="card-title mb-0 fw-bold">Drum Units Status & Telemetry</h5>
           <a href="<?= site_url('/facilities') ?>" class="nd-inline-link">Manage drum rotation <i class="bi bi-arrow-right"></i></a>
         </div>
@@ -193,7 +193,7 @@
           <h5 class="card-title mb-0 fw-bold">Facilities Operations Hub</h5>
         </div>
         <div class="card-body p-3">
-          <div class="d-grid gap-2">
+          <div class="d-grid gap-2 bmg-ops-hub">
             <a href="<?= site_url('/facilities') ?>" class="btn btn-outline-success text-start p-2">
               <i class="bi bi-arrow-repeat me-2"></i> Drum Rotation Workspace
             </a>

@@ -49,9 +49,11 @@ final class InventorySummaryTest extends CIUnitTestCase
 
     private function totals(): array
     {
+        $nearDate = date('Y-m-d', strtotime('+20 days'));
+        $expiredDate = date('Y-m-d', strtotime('-10 days'));
         return [
-            ['medicine_id'=>'1', 'total_stock'=>'21', 'usable_stock'=>'10', 'near_expiry_stock'=>'10', 'expired_stock'=>'11', 'quarantined_stock'=>'7'],
-            ['medicine_id'=>'2', 'total_stock'=>'21', 'usable_stock'=>'10', 'near_expiry_stock'=>'10', 'expired_stock'=>'11', 'quarantined_stock'=>'7'],
+            ['medicine_id'=>'1', 'total_stock'=>'21', 'usable_stock'=>'10', 'near_expiry_stock'=>'10', 'expired_stock'=>'11', 'quarantined_stock'=>'7', 'next_expiration_date'=>$nearDate, 'earliest_expired_date'=>$expiredDate],
+            ['medicine_id'=>'2', 'total_stock'=>'21', 'usable_stock'=>'10', 'near_expiry_stock'=>'10', 'expired_stock'=>'11', 'quarantined_stock'=>'7', 'next_expiration_date'=>$nearDate, 'earliest_expired_date'=>$expiredDate],
         ];
     }
 
@@ -62,16 +64,22 @@ final class InventorySummaryTest extends CIUnitTestCase
         $this->assertSame(21, $rows[0]['total_stock']);
         $this->assertSame(10, $rows[0]['usable_stock']);
         $this->assertSame(10, $rows[0]['near_expiry_stock']);
+        $this->assertSame(date('Y-m-d', strtotime('+20 days')), $rows[0]['next_expiration_date']);
+        $this->assertSame(date('Y-m-d', strtotime('-10 days')), $rows[0]['earliest_expired_date']);
         $this->assertFalse($rows[0]['low_stock']);
         $this->assertSame(21, $rows[1]['total_stock']);
         $this->assertSame(11, $rows[1]['expired_stock']);
         $this->assertSame(7, $rows[1]['quarantined_stock']);
         $this->assertSame(0, $rows[1]['usable_stock']);
         $this->assertSame(0, $rows[1]['near_expiry_stock']);
+        $this->assertNull($rows[1]['next_expiration_date']);
+        $this->assertSame(date('Y-m-d', strtotime('-10 days')), $rows[1]['earliest_expired_date']);
         $this->assertTrue($rows[1]['low_stock']);
         foreach (['total_stock','usable_stock','near_expiry_stock','expired_stock','quarantined_stock'] as $field) {
             $this->assertSame(0, $rows[2][$field]);
         }
+        $this->assertNull($rows[2]['next_expiration_date']);
+        $this->assertNull($rows[2]['earliest_expired_date']);
         $this->assertTrue($rows[2]['low_stock']);
     }
 
@@ -79,6 +87,14 @@ final class InventorySummaryTest extends CIUnitTestCase
     {
         $rows = $this->service($this->medicines(), $this->totals())->listMedicines('', 'low_stock');
         $this->assertSame(['2','3'], array_column($rows, 'id'));
+    }
+
+    public function testExpiryStatusFiltersWorkOnListMedicines(): void
+    {
+        $expiring = $this->service($this->medicines(), $this->totals())->listMedicines('', 'expiring_soon');
+        $this->assertSame(['1'], array_column($expiring, 'id'));
+        $expired = $this->service($this->medicines(), $this->totals())->listMedicines('', 'expired');
+        $this->assertSame(['1', '2'], array_column($expired, 'id'));
     }
 
     public function testEmptyCatalogDoesNotQueryBatches(): void

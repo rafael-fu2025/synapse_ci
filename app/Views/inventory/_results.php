@@ -15,8 +15,8 @@ if (!isset($counts) && !isset($pagination)) {
 <h2 class="h6">Current filtered results · <?= number_format($inventoryFiltered) ?> medicines</h2>
 <div class="row g-3 mb-3">
   <?php foreach (['low' => 'Medicines at / below reorder level', 'expired' => 'Medicines with expired stock', 'quarantined' => 'Medicines with quarantined stock', 'near' => 'Medicines with usable stock expiring within 90 days'] as $key => $label): ?>
-    <div class="col-sm-6 col-xl-3">
-      <div class="card h-100 mb-0"><div class="card-body pt-3">
+    <div class="col-6 col-xl-3">
+      <div class="card h-100 mb-0"><div class="card-body p-2 p-sm-3">
         <div class="text-muted small"><?= esc($label) ?></div>
         <div class="fs-3 fw-semibold"><?= number_format((int) $inventoryCounts[$key]) ?></div>
       </div></div>
@@ -27,13 +27,22 @@ if (!isset($counts) && !isset($pagination)) {
 <div class="card">
   <div class="card-header bg-transparent py-3"><h2 class="h5 mb-0">Medicines <span class="badge bg-secondary"><?= number_format($inventoryFiltered) ?></span></h2></div>
   <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
+    <table class="table table-hover align-middle mb-0 inventory-table">
       <caption class="visually-hidden">Filtered medicine catalog with usable and physical stock in each medicine's stock unit</caption>
-      <thead><tr><th scope="col" class="ps-3">Medicine</th><th scope="col">Strength / form</th><th scope="col">Stock unit</th><th scope="col" class="text-end">Usable</th><th scope="col" class="text-end">On hand</th><th scope="col">Alerts</th><th scope="col" class="text-end pe-3">Actions</th></tr></thead>
+      <thead><tr><th scope="col" class="ps-3">Medicine</th><th scope="col">Strength / form</th><th scope="col">Stock unit</th><th scope="col" class="text-end">Usable</th><th scope="col" class="text-end">On hand</th><th scope="col">Earliest expiry</th><th scope="col">Alerts</th><th scope="col" class="text-end pe-3">Actions</th></tr></thead>
       <tbody>
-        <?php if ($inventoryRows === []): ?><tr><td colspan="7" class="text-center py-5 text-muted">No medicines match these filters. Try another name or reset the filter.</td></tr><?php endif; ?>
+        <?php if ($inventoryRows === []): ?><tr><td colspan="8" class="text-center py-5 text-muted">No medicines match these filters. Try another name or reset the filter.</td></tr><?php endif; ?>
+        <?php
+          $todayIso = date('Y-m-d');
+          $nearIso = date('Y-m-d', strtotime('+90 days'));
+        ?>
         <?php foreach ($inventoryRows as $medicine): ?>
-          <?php $id = (int) $medicine['id']; ?>
+          <?php
+            $id = (int) $medicine['id'];
+            $nextExpIso = !empty($medicine['next_expiration_date']) ? (string) $medicine['next_expiration_date'] : null;
+            $expiredOnlyIso = !empty($medicine['earliest_expired_date']) ? (string) $medicine['earliest_expired_date'] : null;
+            $expIsNear = $nextExpIso !== null && $nextExpIso >= $todayIso && $nextExpIso <= $nearIso;
+          ?>
           <tr>
             <th scope="row" class="ps-3 fw-normal text-break">
               <a href="<?= esc(site_url('/clinic/inventory/' . $id)) ?>" class="fw-semibold"><?= esc($medicine['name']) ?></a>
@@ -45,13 +54,26 @@ if (!isset($counts) && !isset($pagination)) {
             <td class="text-end fw-semibold"><?= number_format((int) $medicine['usable_stock']) ?><small class="d-block text-muted">Reorder: <?= number_format((int) $medicine['minimum_stock_level']) ?></small></td>
             <td class="text-end"><?= number_format((int) $medicine['total_stock']) ?></td>
             <td>
+              <?php if ($nextExpIso !== null): ?>
+                <span><?= esc($nextExpIso) ?></span>
+                <small class="d-block text-muted"><?= esc(date('M j, Y', strtotime($nextExpIso))) ?></small>
+                <?php if ($expIsNear): ?><span class="badge bg-warning text-dark mt-1">Within 90 days</span><?php endif; ?>
+              <?php elseif ($expiredOnlyIso !== null): ?>
+                <span class="text-danger fw-semibold"><?= esc($expiredOnlyIso) ?></span>
+                <small class="d-block text-muted"><?= esc(date('M j, Y', strtotime($expiredOnlyIso))) ?></small>
+                <span class="badge bg-danger mt-1">Expired lot only</span>
+              <?php else: ?>
+                <span class="text-muted small">No active lots</span>
+              <?php endif; ?>
+            </td>
+            <td>
               <?php if (!empty($medicine['low_stock'])): ?><span class="badge bg-warning text-dark d-inline-block mb-1">Low stock</span><?php endif; ?>
               <?php if ((int) $medicine['expired_stock'] > 0): ?><span class="badge bg-danger d-inline-block mb-1">Expired: <?= number_format((int) $medicine['expired_stock']) ?></span><?php endif; ?>
               <?php if ((int) $medicine['quarantined_stock'] > 0): ?><span class="badge bg-secondary d-inline-block mb-1">Quarantined: <?= number_format((int) $medicine['quarantined_stock']) ?></span><?php endif; ?>
               <?php if ((int) $medicine['near_expiry_stock'] > 0): ?><span class="badge bg-warning text-dark d-inline-block mb-1">Within 90 days: <?= number_format((int) $medicine['near_expiry_stock']) ?></span><?php endif; ?>
               <?php if (empty($medicine['low_stock']) && (int) $medicine['expired_stock'] === 0 && (int) $medicine['quarantined_stock'] === 0 && (int) $medicine['near_expiry_stock'] === 0): ?><span class="text-muted small">No stock alerts</span><?php endif; ?>
             </td>
-            <td class="text-end pe-3"><div class="d-flex flex-wrap gap-2 justify-content-end">
+            <td class="text-end pe-3"><div class="d-flex flex-wrap gap-2 justify-content-md-end">
               <a href="<?= esc(site_url('/clinic/inventory/' . $id)) ?>" class="btn btn-outline-primary btn-sm">Details</a>
               <?php if (!empty($canManage)): ?><a href="<?= esc(site_url('/clinic/inventory/' . $id . '/edit')) ?>" class="btn btn-outline-secondary btn-sm" data-app-modal-open>Edit</a><?php endif; ?>
               <?php if (!empty($canWrite) && (int) $medicine['is_active'] === 1): ?><a href="<?= esc(site_url('/clinic/inventory/' . $id . '/receive')) ?>" class="btn btn-primary btn-sm" data-app-modal-open>Receive</a><?php endif; ?>

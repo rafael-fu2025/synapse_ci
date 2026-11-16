@@ -38,7 +38,7 @@ $strengthBand = static function (int $score): array {
   <div class="card-body">
     <div class="row g-3 align-items-center">
       <div class="col-md-8">
-        <div class="d-flex align-items-center gap-2 mb-1">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
           <span class="badge bg-primary-subtle text-primary">Walter McKenzie (1999) · 80-Item Profile</span>
           <span class="badge bg-light text-dark border"><?= $mode === 'counselor' ? 'Counselor Review' : 'Student Copy' ?></span>
         </div>
@@ -121,7 +121,7 @@ $strengthBand = static function (int $score): array {
     ?>
     <div class="col-md-6">
       <div class="card border-0 shadow-sm h-100">
-        <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
+        <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
           <h6 class="fw-bold mb-0">
             <?= (int) ($domain['order'] ?? 0) ?>. <?= esc($domain['title'] ?? '') ?>
           </h6>

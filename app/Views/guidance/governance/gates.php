@@ -12,6 +12,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $gates          = $gates ?? [];
 $authorityRoles = $authorityRoles ?? ['guidance_head', 'qa_office', 'dpo'];
@@ -35,27 +36,27 @@ $pendingCount = $totalGates - $enabledCount;
   <div data-refresh-region="workspace" data-refresh-heading tabindex="-1">
 
     <div class="row g-3 mb-4">
-      <div class="col-md-4">
+      <div class="col-6 col-md-4">
         <div class="card border-0 shadow-sm h-100">
-          <div class="card-body py-3">
+          <div class="card-body p-2 p-sm-3 py-sm-3">
             <div class="small text-muted text-uppercase fw-semibold">Configured Gates</div>
             <div class="fs-3 fw-bold mt-1"><?= $totalGates ?></div>
             <div class="small text-muted">Multi-authority rollout controls</div>
           </div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-6 col-md-4">
         <div class="card border-0 shadow-sm h-100">
-          <div class="card-body py-3">
+          <div class="card-body p-2 p-sm-3 py-sm-3">
             <div class="small text-muted text-uppercase fw-semibold">Approved &amp; Enabled</div>
             <div class="fs-3 fw-bold text-success mt-1"><?= $enabledCount ?></div>
             <div class="small text-muted">All 3 authorities signed off</div>
           </div>
         </div>
       </div>
-      <div class="col-md-4">
+      <div class="col-12 col-md-4">
         <div class="card border-0 shadow-sm h-100">
-          <div class="card-body py-3">
+          <div class="card-body p-2 p-sm-3 py-sm-3">
             <div class="small text-muted text-uppercase fw-semibold">Pending Sign-Off</div>
             <div class="fs-3 fw-bold text-warning mt-1"><?= $pendingCount ?></div>
             <div class="small text-muted">Live workflows remain gated</div>
@@ -100,7 +101,7 @@ $pendingCount = $totalGates - $enabledCount;
                     <p class="small text-muted mb-0 mt-1"><?= esc($gate['description']) ?></p>
                   <?php endif; ?>
                 </div>
-                <div class="text-end">
+                <div class="text-sm-end">
                   <?php if ($isEnabled): ?>
                     <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
                       <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i> Enabled
@@ -127,7 +128,7 @@ $pendingCount = $totalGates - $enabledCount;
                     ?>
                     <div class="col-md-4">
                       <div class="p-2 rounded border h-100 <?= $entry !== null ? 'bg-success-subtle border-success-subtle' : 'bg-body-tertiary' ?>">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
                           <span class="small fw-semibold"><?= esc($roleLabel) ?></span>
                           <?php if ($entry !== null): ?>
                             <span class="badge bg-success">Signed</span>
@@ -199,5 +200,6 @@ $pendingCount = $totalGates - $enabledCount;
     <?php endif; ?>
 
   </div>
+</div>
 </div>
 <?= $this->endSection() ?>

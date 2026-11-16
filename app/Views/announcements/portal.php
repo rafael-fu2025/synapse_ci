@@ -40,7 +40,7 @@ $tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query
     ?>
     <article class="card pe-content-card <?= $unread ? 'pe-unread' : '' ?>" aria-labelledby="notice-title-<?= (int) $notice['id'] ?>">
       <div class="card-body p-4">
-        <div class="pe-card-top"><span class="pe-department"><i class="bi <?= $notice['unit'] === 'clinic' ? 'bi-heart-pulse' : 'bi-chat-heart' ?>" aria-hidden="true"></i><?= esc(ucfirst($notice['unit'])) ?></span><span class="pe-state <?= $unread ? 'pe-state-pending' : '' ?>"><?= $unread ? 'Unread' : 'Read' ?></span></div>
+        <div class="pe-card-top"><span class="pe-department"><?= view('partials/unit_vector_icon', ['unit' => $notice['unit']]) ?><?= esc(ucfirst($notice['unit'])) ?></span><span class="pe-state <?= $unread ? 'pe-state-pending' : '' ?>"><?= $unread ? 'Unread' : 'Read' ?></span></div>
         <h3 id="notice-title-<?= (int) $notice['id'] ?>" class="pe-card-title"><?= esc($notice['title']) ?></h3>
         <?php if ($excerpt !== ''): ?><p class="pe-excerpt"><?= esc($excerpt) ?></p><?php endif; ?>
         <div class="pe-card-footer">

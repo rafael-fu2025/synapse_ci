@@ -1,13 +1,98 @@
 <?= $this->extend('layouts/app') ?>
 
+<?= $this->section('styles') ?>
+<style>
+  .clinic-wrap-badge {
+    white-space: normal;
+    text-align: start;
+    line-height: 1.35;
+    max-width: 100%;
+  }
+  .clinic-stepper-tabs .nav-link {
+    line-height: 1.25;
+  }
+  html[data-theme="dark"] .clinic-cert-btn {
+    color: var(--default-color, #f0f0f0);
+    border-color: var(--control-border, #767676);
+  }
+  html[data-theme="dark"] .clinic-cert-btn:hover,
+  html[data-theme="dark"] .clinic-cert-btn:focus-visible {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  @media (max-width: 575.98px) {
+    .clinic-mobile-full {
+      width: 100% !important;
+    }
+  }
+  @media (max-width: 767.98px) {
+    .clinic-page-actions .btn,
+    .clinic-patient-header .btn,
+    .clinic-closed-card .btn,
+    .clinic-closed-card .form-control,
+    .clinic-closed-card .form-select,
+    .clinic-closed-card .bd-select .bd-trigger,
+    .clinic-closed-card .bd-select .bd-select-toggle,
+    [data-encounter-stepper] .btn,
+    [data-encounter-stepper] .form-control,
+    [data-encounter-stepper] .form-select,
+    [data-encounter-stepper] .bd-select .bd-trigger,
+    [data-encounter-stepper] .bd-select .bd-select-toggle {
+      min-height: 40px;
+    }
+    .clinic-page-actions .btn,
+    .clinic-patient-header .btn,
+    .clinic-closed-card .btn,
+    [data-encounter-stepper] .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .clinic-closed-card .bd-select,
+    [data-encounter-stepper] .bd-select {
+      width: 100%;
+    }
+    .clinic-stepper-tabs {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.45rem;
+      padding: 0.65rem 0.75rem !important;
+      border-bottom: 1px solid var(--border-color, #dee2e6) !important;
+    }
+    .clinic-stepper-tabs .nav-item {
+      display: flex;
+    }
+    .clinic-stepper-tabs .nav-link {
+      min-height: 44px;
+      padding: 0.5rem 0.6rem !important;
+      font-size: 0.8125rem;
+      border: 1px solid var(--border-color, #dee2e6) !important;
+      border-radius: 0.5rem !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      text-align: center;
+    }
+    .clinic-stepper-tabs .nav-link.active {
+      border-color: var(--fu-brand, #800000) !important;
+      background-color: var(--bs-primary-bg-subtle, #f8eeee) !important;
+      color: var(--bs-primary-text-emphasis, #5a0000) !important;
+    }
+  }
+</style>
+<?= $this->endSection() ?>
+
 <?= $this->section('page_actions') ?>
-<a href="<?= site_url('/clinic/encounters') ?>" class="btn btn-outline-secondary btn-sm">
-  <i class="bi bi-arrow-left me-1"></i> Back to Encounters
-</a>
-<?php $referralActor = session()->get('user') ?? []; ?>
-<?php if (($referralActor['role'] ?? '') === 'superadmin' || in_array('referrals.create', $referralActor['permissions'] ?? [], true)): ?>
-<a href="<?= esc(site_url('/clinic/referrals/create?' . http_build_query(['person_id' => $encounter['patient']['id'], 'source_encounter_id' => $encounter['encounter']['id']]))) ?>" class="btn btn-outline-primary btn-sm ms-2" data-app-modal-open><i class="bi bi-send me-1" aria-hidden="true"></i> Refer to Guidance</a>
-<?php endif; ?>
+<div class="d-flex flex-wrap gap-2 clinic-page-actions">
+  <a href="<?= site_url('/clinic/encounters') ?>" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left me-1"></i> Back to Encounters
+  </a>
+  <?php $referralActor = session()->get('user') ?? []; ?>
+  <?php if (($referralActor['role'] ?? '') === 'superadmin' || in_array('referrals.create', $referralActor['permissions'] ?? [], true)): ?>
+  <a href="<?= esc(site_url('/clinic/referrals/create?' . http_build_query(['person_id' => $encounter['patient']['id'], 'source_encounter_id' => $encounter['encounter']['id']]))) ?>" class="btn btn-outline-primary btn-sm" data-app-modal-open><i class="bi bi-send me-1" aria-hidden="true"></i> Refer to Guidance</a>
+  <?php endif; ?>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
@@ -50,16 +135,16 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 ?>
 
 <!-- 1. Patient Context Strip -->
-<div class="card border-0 shadow-sm mb-4">
+<div class="card border-0 shadow-sm mb-4 clinic-patient-header">
   <div class="card-body p-3">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-      <div class="d-flex align-items-center gap-3">
-        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold fs-4" style="width: 50px; height: 50px;">
+      <div class="d-flex align-items-center gap-3" style="min-width: 0;">
+        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold fs-4 flex-shrink-0" style="width: 50px; height: 50px;">
           <?= strtoupper(substr($patient['first_name'], 0, 1) . substr($patient['last_name'], 0, 1)) ?>
         </div>
-        <div>
-          <div class="d-flex align-items-center gap-2">
-            <h4 class="h5 fw-bold mb-0 text-dark"><?= esc($patient['last_name'] . ', ' . $patient['first_name']) ?></h4>
+        <div style="min-width: 0;">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <h4 class="h5 fw-bold mb-0 text-break"><?= esc($patient['last_name'] . ', ' . $patient['first_name']) ?></h4>
             <span class="badge bg-primary text-white text-uppercase"><?= esc($patient['kind']) ?></span>
             <?php if (!empty($enc['status']) && $enc['status'] === 'in_progress'): ?>
               <span class="badge bg-warning text-dark"><i class="bi bi-circle-fill me-1 small"></i> In Visit</span>
@@ -67,36 +152,36 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
               <span class="badge bg-success">Closed</span>
             <?php endif; ?>
           </div>
-          <div class="text-muted small mt-1">
+          <div class="text-muted small mt-1 d-flex flex-wrap gap-1 column-gap-2">
             <span>MIS ID: <strong><?= esc($patient['mis_id']) ?></strong></span>
             <?php if (!empty($studentProfile)): ?>
-              <span class="ms-2">· <?= esc($studentProfile['program']) ?> (Year <?= esc($studentProfile['year_level']) ?>)</span>
+              <span>· <?= esc($studentProfile['program']) ?> (Year <?= esc($studentProfile['year_level']) ?>)</span>
             <?php elseif (!empty($employeeProfile)): ?>
-              <span class="ms-2">· <?= esc($employeeProfile['department']) ?></span>
+              <span>· <?= esc($employeeProfile['department']) ?></span>
             <?php endif; ?>
           </div>
         </div>
       </div>
 
       <!-- Quick health flags -->
-      <div class="d-flex flex-wrap align-items-center gap-2">
-        <span class="badge <?= $visitCount >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-info-subtle text-info-emphasis border border-info-subtle' ?> px-3 py-2" title="Total clinic visits on record">
+      <div class="d-flex flex-wrap align-items-center gap-2 w-100 w-lg-auto" style="min-width: 0;">
+        <span class="badge clinic-wrap-badge <?= $visitCount >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-info-subtle text-info-emphasis border border-info-subtle' ?> px-3 py-2" title="Total clinic visits on record">
           <i class="bi bi-calendar2-check me-1"></i> Visits: <strong><?= $visitCount ?></strong>
         </span>
-        <span class="badge bg-light text-dark border px-3 py-2">
+        <span class="badge clinic-wrap-badge bg-secondary-subtle text-body border px-3 py-2">
           Blood: <strong><?= esc($health['blood_type'] ?? 'Unknown') ?></strong>
         </span>
         <?php if (!empty($health['allergies'])): ?>
-          <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2" title="Known allergies">
+          <span class="badge clinic-wrap-badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2" title="Known allergies">
             <i class="bi bi-exclamation-triangle-fill me-1"></i> Allergies: <?= esc($health['allergies']) ?>
           </span>
         <?php endif; ?>
         <?php if (!empty($health['chronic_conditions'])): ?>
-          <span class="badge bg-secondary-subtle text-dark border px-3 py-2" title="Chronic conditions">
+          <span class="badge clinic-wrap-badge bg-secondary-subtle text-body border px-3 py-2" title="Chronic conditions">
             <i class="bi bi-heart-pulse me-1"></i> <?= esc($health['chronic_conditions']) ?>
           </span>
         <?php endif; ?>
-        <a href="<?= site_url('/clinic/patients/' . $patient['id']) ?>" target="_blank" class="btn btn-outline-primary btn-sm">
+        <a href="<?= site_url('/clinic/patients/' . $patient['id']) ?>" target="_blank" class="btn btn-outline-primary btn-sm clinic-mobile-full">
           <i class="bi bi-file-earmark-medical me-1"></i> Full Chart
         </a>
       </div>
@@ -114,14 +199,14 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
      data-refresh-owner="clinic.encounter.<?= (int) $enc['id'] ?>"
      data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
      data-draft-url="<?= site_url('/clinic/encounters/' . $enc['id'] . '/draft') ?>">
-  <div class="px-4 pt-3">
+  <div class="px-3 px-sm-4 pt-3">
     <?php if (empty($canSeal)): ?>
       <div class="alert alert-info py-2 small mb-2" role="status">
         <i class="bi bi-info-circle me-1"></i> <strong>Student Nurse / Intern Mode:</strong> You can record vitals, structured complaints, and clinical draft notes. An attending nurse or physician must finalize dispensing and seal the encounter.
       </div>
     <?php endif; ?>
     <div data-local-backup-banner hidden>
-      <div class="alert alert-warning py-2 small mb-2 d-flex align-items-center justify-content-between">
+      <div class="alert alert-warning py-2 small mb-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
         <span><i class="bi bi-cloud-arrow-up me-1"></i> Unsaved local draft recovered from browser backup.</span>
         <button type="button" class="btn btn-outline-dark btn-sm py-0" data-discard-local-backup>Dismiss</button>
       </div>
@@ -133,7 +218,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
   </div>
   <!-- Nav tabs -->
   <div class="card-header bg-transparent border-bottom p-0">
-    <ul class="nav nav-tabs nav-tabs-bordered d-flex text-center" role="tablist">
+    <ul class="nav nav-tabs nav-tabs-bordered d-flex text-center clinic-stepper-tabs" role="tablist">
       <li class="nav-item flex-fill">
         <button class="nav-link w-100 py-3 active fw-semibold" data-bs-toggle="tab" data-bs-target="#step-triage" type="button">
           <i class="bi bi-heart-pulse me-1"></i> 1. Triage & Vitals
@@ -157,7 +242,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
     </ul>
   </div>
 
-  <div class="card-body p-4 tab-content">
+  <div class="card-body p-3 p-sm-4 tab-content">
 
     <!-- STEP 1: TRIAGE & VITALS -->
     <div class="tab-pane fade show active" id="step-triage">
@@ -260,15 +345,15 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
 
           <div class="col-md-3">
             <label class="form-label fw-semibold">Body Mass Index (BMI)</label>
-            <div class="form-control bg-light d-flex align-items-center justify-content-between">
+            <div class="form-control bg-body-tertiary d-flex align-items-center justify-content-between">
               <strong x-text="calcBmi() || '<?= esc($vitals['bmi'] ?? '—') ?>'"></strong>
               <span class="badge" :class="bmiBadgeClass()" x-text="bmiCategory()"></span>
             </div>
           </div>
         </div>
 
-        <div class="d-flex justify-content-end">
-          <button type="submit" class="btn btn-primary">
+        <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2">
+          <button type="submit" class="btn btn-primary clinic-mobile-full">
             <i class="bi bi-save me-1"></i> Save & Continue
           </button>
         </div>
@@ -356,8 +441,8 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           </div>
         </div>
 
-        <div class="d-flex justify-content-end">
-          <button type="submit" class="btn btn-primary">
+        <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2">
+          <button type="submit" class="btn btn-primary clinic-mobile-full">
             <i class="bi bi-save me-1"></i> Save & Continue
           </button>
         </div>
@@ -391,7 +476,7 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
                   <?php foreach ($dispensations as $d): ?>
                     <tr>
                       <td class="fw-semibold">
-                        <?= esc($d['medicine_name']) ?> <span class="badge bg-light text-dark border"><?= esc($d['strength']) ?></span>
+                        <?= esc($d['medicine_name']) ?> <span class="badge bg-secondary-subtle text-body border clinic-wrap-badge"><?= esc($d['strength']) ?></span>
                       </td>
                       <td>
                         <small class="d-block text-muted">Lot: <?= esc($d['batch_number']) ?></small>
@@ -431,8 +516,9 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
                   <?php foreach ($availableMedicines as $med): ?>
                     <?php
                       $usable = (int) ($med['usable_stock'] ?? 0);
-                      $nextExp = !empty($med['next_expiry']) ? date('M j, Y', strtotime((string) $med['next_expiry'])) : null;
-                      $expDays = isset($med['next_expiry']) && $med['next_expiry'] ? (int) ((strtotime((string) $med['next_expiry']) - strtotime(date('Y-m-d'))) / 86400) : null;
+                      $rawExpiry = (string) ($med['next_expiration_date'] ?? $med['next_expiry'] ?? '');
+                      $nextExp = $rawExpiry !== '' ? date('M j, Y', strtotime($rawExpiry)) : null;
+                      $expDays = $rawExpiry !== '' ? (int) ((strtotime($rawExpiry) - strtotime(date('Y-m-d'))) / 86400) : null;
                       $stockText = $usable <= 0 ? 'OUT OF STOCK' : 'Usable: ' . $usable . ' ' . $med['unit_of_measure'];
                       $expText = $usable > 0 && $nextExp !== null ? ($expDays !== null && $expDays <= 90 ? ' · Expiring ' . $nextExp : ' · Exp ' . $nextExp) : '';
                     ?>
@@ -469,9 +555,9 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           <?php endif; ?>
         </div>
       </div>
-      <div class="d-flex justify-content-end gap-2 mt-4">
-        <button type="button" class="btn btn-outline-secondary" data-discard-medicine>Discard unfinished medicine entry</button>
-        <button type="button" class="btn btn-primary" data-continue-outcome>Continue to Outcome</button>
+      <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2 mt-4">
+        <button type="button" class="btn btn-outline-secondary clinic-mobile-full" data-discard-medicine>Discard unfinished medicine entry</button>
+        <button type="button" class="btn btn-primary clinic-mobile-full" data-continue-outcome>Continue to Outcome</button>
       </div>
     </div>
 
@@ -529,11 +615,11 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           </div>
         </div>
 
-        <div class="d-flex justify-content-end gap-2">
-          <button type="button" class="btn btn-outline-secondary" data-save-draft-manual>
+        <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2">
+          <button type="button" class="btn btn-outline-secondary clinic-mobile-full" data-save-draft-manual>
             <i class="bi bi-save me-1"></i> Save Draft Only
           </button>
-          <button type="submit" class="btn btn-success">
+          <button type="submit" class="btn btn-success clinic-mobile-full">
             <i class="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Encounter
           </button>
         </div>
@@ -547,8 +633,8 @@ $dispenseOldValue = static function (string $field, string $default = ''): strin
           </div>
         </div>
 
-        <div class="d-flex justify-content-end">
-          <button type="button" class="btn btn-primary" data-save-draft-manual>
+        <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2">
+          <button type="button" class="btn btn-primary clinic-mobile-full" data-save-draft-manual>
             <i class="bi bi-save me-1"></i> Save Clinical Draft for Attending Review
           </button>
         </div>

@@ -92,3 +92,82 @@
 @media (min-width: 1200px) and (max-width: 1450px) {
   .queue-metric > .card-body { flex-direction: column; align-items: flex-start !important; gap: .6rem !important; }
 }
+
+.queue-board-title { color: var(--heading-color); }
+.queue-date-input { width: 10rem; max-width: 100%; }
+.queue-ticket-card {
+  background-color: var(--surface-color);
+  color: var(--default-color);
+}
+.queue-timestamp-badge {
+  background-color: var(--background-color);
+  color: var(--default-color);
+  border-color: var(--border-color) !important;
+  font-weight: 500;
+}
+.queue-priority-urgent { color: #8a5300; }
+.queue-priority-emergency { color: #b42318; }
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-priority-urgent { color: #facc15; }
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-priority-emergency { color: #ff8080; }
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-ticket-card .badge.bg-secondary-subtle {
+  background-color: var(--bs-secondary-bg) !important;
+  color: var(--default-color) !important;
+}
+.queue-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: .5rem;
+}
+.queue-card-actions > form {
+  display: inline-flex;
+  margin: 0;
+}
+.queue-change-person {
+  min-height: 36px;
+  padding: .25rem .65rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 767.98px) {
+  .queue-board-toolbar {
+    align-items: stretch !important;
+  }
+  .queue-board-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .queue-date-field {
+    flex: 1 1 11rem;
+    min-width: 0;
+  }
+  .queue-date-input {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .queue-board-controls .btn {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .queue-board-controls .btn.queue-history-trigger {
+    min-height: 40px;
+    justify-content: center;
+  }
+  .queue-ticket-card :is(.queue-card-actions .btn, form .btn, .queue-card-action-btn) {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 419.98px) {
+  .queue-history-trigger,
+  .queue-date-field {
+    flex: 1 1 100%;
+  }
+}

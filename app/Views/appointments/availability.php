@@ -26,7 +26,7 @@ $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
       <input type="hidden" name="section" value="<?= esc($section) ?>"><input type="hidden" name="day" value="<?= $workspaceContext['day'] ?>">
       <div class="col-lg-5"><label for="workspaceSearch" class="form-label">Find staff</label><input type="search" id="workspaceSearch" name="q" class="form-control" maxlength="120" value="<?= esc($workspaceContext['q']) ?>" placeholder="Search by staff name"></div>
       <div class="col-lg-4"><label for="workspaceProvider" class="form-label">Provider</label><select id="workspaceProvider" name="provider" class="form-select"><option value="">All enrolled providers</option><?php foreach ($providers as $provider): ?><option value="<?= (int) $provider['id'] ?>" <?= (string) $provider['id'] === $workspaceContext['provider'] ? 'selected' : '' ?>><?= esc($provider['name']) ?></option><?php endforeach; ?></select></div>
-      <div class="col-lg-3 d-flex gap-2"><button class="btn btn-primary" type="submit" data-availability-apply>Apply filters</button><a class="btn btn-outline-secondary" href="<?= esc($base . '?section=' . $section) ?>" data-availability-reset>Reset</a></div>
+      <div class="col-lg-3 d-flex flex-wrap gap-2 av-filter-actions"><button class="btn btn-primary" type="submit" data-availability-apply>Apply filters</button><a class="btn btn-outline-secondary" href="<?= esc($base . '?section=' . $section) ?>" data-availability-reset>Reset</a></div>
     </form>
   </div></div>
   <p class="small text-muted" data-availability-filter-status role="status" aria-live="polite">Choose a staff name or provider to narrow this workspace.</p>

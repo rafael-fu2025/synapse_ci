@@ -216,11 +216,24 @@ final class GuidanceAccessPolicy
         bool $lockActor = true
     ): array {
         $actor = $this->resolve($identity, $permission, $expectedActorId, $lockActor);
+        $this->assertCanWriteCase($case, $actor);
+
+        return $actor;
+    }
+
+    /**
+     * Enforces write authorization against an already verified actor record.
+     *
+     * @param array<string, mixed> $case
+     * @param array<string, mixed> $actor
+     */
+    public function assertCanWriteCase(array $case, array $actor): void
+    {
         $this->assertCaseTenant($case, $actor);
         $counsellorId = (int) ($case['counsellor_user_id'] ?? 0);
-        $actorId = (int) $actor['id'];
+        $actorId = (int) ($actor['id'] ?? 0);
         if ($counsellorId !== $actorId) {
-            $tenantId = (int) $actor['tenant_id'];
+            $tenantId = (int) ($actor['tenant_id'] ?? 0);
             $supTable = $this->table('guidance_supervision_assignments');
             $supervision = ($counsellorId > 0 && $this->db->tableExists('guidance_supervision_assignments')) ? $this->first(
                 "SELECT * FROM {$supTable} WHERE tenant_id = ? AND associate_user_id = ? AND supervisor_user_id = ? AND status = 'active'",
@@ -234,8 +247,6 @@ final class GuidanceAccessPolicy
                 throw new DomainException('Case mutation forbidden.', 403);
             }
         }
-
-        return $actor;
     }
 
     /**

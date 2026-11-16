@@ -85,6 +85,8 @@
 
 [data-bmg-usb] .bmg-panel-heading {
   flex-wrap: wrap;
+  justify-content: flex-start !important;
+  gap: 0.75rem !important;
 }
 
 [data-bmg-usb] .bmg-panel-body {
@@ -221,6 +223,17 @@
 
 @media (min-width: 576px) and (max-width: 1199.98px) {
   [data-bmg-usb] .bmg-usb-workflow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 991.98px) {
+  [data-bmg-usb] :is(.btn:not(.btn-close), .form-select, .form-control:not(textarea), .bd-select-toggle) {
+    min-height: 40px;
+  }
+
+  [data-bmg-usb] details > summary {
+    min-height: 40px;
+    padding-block: 0.5rem;
+  }
 }
 
 @media (max-width: 575.98px) {

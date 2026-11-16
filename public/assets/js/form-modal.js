@@ -71,6 +71,219 @@
     if (active) event.preventDefault();
   });
 
+  function initCatalogComboboxes(root) {
+    const form = root.querySelector('form[data-inventory-catalog-form]');
+    if (!form || form.dataset.comboboxReady === 'true') return;
+    form.dataset.comboboxReady = 'true';
+
+    let templates = [];
+    try {
+      templates = JSON.parse(form.dataset.catalogTemplates || '[]') || [];
+    } catch (_) {
+      templates = [];
+    }
+
+      const unitByDosageForm = {
+      tablet: 'tablet',
+      'chewable tablet': 'tablet',
+      capsule: 'capsule',
+      lozenge: 'piece',
+      syrup: 'bottle',
+      suspension: 'bottle',
+      solution: 'bottle',
+      drops: 'bottle',
+      spray: 'bottle',
+      sachet: 'sachet',
+      ointment: 'tube',
+      cream: 'tube',
+      nebule: 'nebule',
+      ampoule: 'ampoule',
+      vial: 'vial'
+    };
+
+    function hideMenu(menu) {
+      const toggle = menu?.parentElement?.querySelector('[data-combobox-toggle]');
+      menu?.classList.remove('show');
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    }
+
+    function showMenu(wrap, showAll) {
+      const input = wrap.querySelector('[data-combobox-input]');
+      const toggle = wrap.querySelector('[data-combobox-toggle]');
+      const menu = wrap.querySelector('[data-combobox-menu]');
+      if (!input || !toggle || !menu) return;
+      closeAllMenus(menu);
+      filterMenu(wrap, input.value, showAll);
+      menu.classList.add('show');
+      toggle.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeAllMenus(exceptMenu) {
+      form.querySelectorAll('[data-combobox-menu].show').forEach(menu => {
+        if (menu === exceptMenu) return;
+        hideMenu(menu);
+      });
+    }
+
+    function updateExistingNotice() {
+      const notice = form.querySelector('[data-existing-medicine-notice]');
+      if (!notice) return;
+      const getVal = name => (form.querySelector(`[name="${name}"]`)?.value || '').trim().toLowerCase();
+      const nameVal = getVal('name');
+      const genVal = getVal('generic_name');
+      const formVal = getVal('dosage_form');
+      const strVal = getVal('strength');
+      const unitVal = getVal('unit_of_measure');
+      const match = templates.find(t =>
+        t.existing &&
+        String(t.name || '').trim().toLowerCase() === nameVal &&
+        String(t.generic_name || '').trim().toLowerCase() === genVal &&
+        String(t.dosage_form || '').trim().toLowerCase() === formVal &&
+        String(t.strength || '').trim().toLowerCase() === strVal &&
+        String(t.unit_of_measure || '').trim().toLowerCase() === unitVal
+      );
+      if (match) {
+        const expInfo = match.next_expiration_date ? ` · Earliest expiry: ${match.next_expiration_date}` : '';
+        notice.textContent = `Matches existing catalog item "${match.name}" (Usable: ${match.usable_stock ?? 0} ${match.unit_of_measure}${expInfo}). Enter the new batch lot, expiry date, and opening quantity below to add stock directly to this medicine without creating a duplicate row.`;
+        notice.classList.remove('d-none');
+      } else {
+        notice.textContent = '';
+        notice.classList.add('d-none');
+      }
+    }
+
+    function filterMenu(wrap, rawQuery, showAll) {
+      const menu = wrap.querySelector('[data-combobox-menu]');
+      const customBtn = menu?.querySelector('[data-combobox-custom]');
+      if (!menu) return;
+      const query = (rawQuery || '').trim();
+      const qLower = query.toLowerCase();
+      let exactMatch = false;
+      menu.querySelectorAll('[data-combobox-value]').forEach(item => {
+        const val = (item.dataset.comboboxValue || '').trim();
+        const text = (item.textContent || '').trim().toLowerCase();
+        if (val.toLowerCase() === qLower) exactMatch = true;
+        const visible = showAll || !qLower || val.toLowerCase().includes(qLower) || text.includes(qLower);
+        item.hidden = !visible;
+      });
+      if (customBtn) {
+        if (query && !exactMatch) {
+          customBtn.dataset.customValue = query;
+          customBtn.textContent = `+ Use "${query}" (auto-saved to dropdown on submit)`;
+          customBtn.hidden = false;
+        } else {
+          customBtn.hidden = true;
+        }
+      }
+    }
+
+    form.querySelectorAll('[data-catalog-combobox]').forEach(wrap => {
+      const field = wrap.dataset.catalogCombobox;
+      const input = wrap.querySelector('[data-combobox-input]');
+      const toggle = wrap.querySelector('[data-combobox-toggle]');
+      const menu = wrap.querySelector('[data-combobox-menu]');
+      if (!input || !toggle || !menu) return;
+
+      toggle.addEventListener('mousedown', event => {
+        // Prevent button from stealing focus from the text input.
+        event.preventDefault();
+      });
+
+      toggle.addEventListener('click', event => {
+        event.preventDefault();
+        if (menu.classList.contains('show')) {
+          hideMenu(menu);
+        } else {
+          input.focus();
+          showMenu(wrap, true);
+        }
+      });
+
+      input.addEventListener('click', event => {
+        if (!event.isTrusted) return;
+        showMenu(wrap, true);
+      });
+
+      input.addEventListener('input', event => {
+        updateExistingNotice();
+        if (!event.isTrusted) return;
+        showMenu(wrap, false);
+      });
+
+      input.addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown' && !menu.classList.contains('show')) {
+          showMenu(wrap, true);
+        } else if (event.key === 'Escape' || event.key === 'Tab') {
+          hideMenu(menu);
+        }
+      });
+
+      menu.addEventListener('mousedown', event => {
+        // Keep focus on the input when clicking a suggestion item so focusout doesn't close before click fires.
+        event.preventDefault();
+      });
+
+      menu.addEventListener('click', event => {
+        const option = event.target.closest('[data-combobox-value], [data-combobox-custom]');
+        if (!option) return;
+        const chosen = option.hasAttribute('data-combobox-custom')
+          ? (option.dataset.customValue || '')
+          : (option.dataset.comboboxValue || '');
+        const isEdit = Boolean(form.querySelector('[name="version"]'));
+        const setFieldValue = (target, val) => {
+          if (!target || target.disabled) return;
+          target.value = val;
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+          target.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        setFieldValue(input, chosen);
+        if (option.hasAttribute('data-template-index')) {
+          const tpl = templates[Number(option.dataset.templateIndex)];
+          if (tpl) {
+            if (!isEdit) {
+              ['generic_name', 'category', 'dosage_form', 'strength', 'unit_of_measure'].forEach(key => {
+                const target = form.querySelector(`[name="${key}"]`);
+                if (target && tpl[key] !== undefined) {
+                  setFieldValue(target, tpl[key] || '');
+                }
+              });
+              const reorder = form.querySelector('[name="minimum_stock_level"]');
+              if (reorder && (!reorder.value || reorder.value === '0') && tpl.minimum_stock_level) {
+                setFieldValue(reorder, String(tpl.minimum_stock_level));
+              }
+            } else {
+              const catTarget = form.querySelector('[name="category"]');
+              if (catTarget && !catTarget.value.trim() && tpl.category) {
+                setFieldValue(catTarget, tpl.category);
+              }
+            }
+          }
+        } else if (field === 'dosage_form' && !isEdit) {
+          const unitInput = form.querySelector('[name="unit_of_measure"]');
+          const mappedUnit = unitByDosageForm[chosen.toLowerCase()];
+          if (unitInput && !unitInput.value.trim() && mappedUnit) {
+            setFieldValue(unitInput, mappedUnit);
+          }
+        }
+        closeAllMenus();
+        updateExistingNotice();
+        input.focus();
+      });
+    });
+
+    root.addEventListener('pointerdown', event => {
+      const activeCombo = event.target.closest('[data-catalog-combobox]');
+      const activeMenu = activeCombo?.querySelector('[data-combobox-menu]');
+      closeAllMenus(activeMenu || null);
+    });
+    form.addEventListener('focusin', event => {
+      const activeCombo = event.target.closest('[data-catalog-combobox]');
+      const activeMenu = activeCombo?.querySelector('[data-combobox-menu]');
+      closeAllMenus(activeMenu || null);
+    });
+    form.addEventListener('submit', () => closeAllMenus());
+  }
+
   function initialize(root) {
     // Direct-route forms were initialized by Alpine's document startup already.
     // Reinitializing x-for templates registers duplicate destructors in Alpine.
@@ -79,6 +292,7 @@
     window.BalayDatepicker?.init(root);
     window.BalayDateTimePicker?.init(root);
     window.SynapseCarouselForm?.init(root);
+    initCatalogComboboxes(root);
   }
   function focusField(root) {
     const field = root.querySelector('.modal-body input:not([type="hidden"]):not([type="file"]):not(:disabled), .modal-body textarea, .modal-body .bd-select-toggle');
@@ -216,6 +430,7 @@
       window.BalayDatepicker?.init(record.root);
       window.BalayDateTimePicker?.init(record.root);
       window.SynapseCarouselForm?.init(record.root);
+      initCatalogComboboxes(record.root);
       if (record.root.classList.contains('show')) focusField(record.root);
     } catch (failure) {
       if (failure.name !== 'AbortError' && active === record) {

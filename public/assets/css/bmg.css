@@ -46,8 +46,67 @@
   .bmg-workspace .bmg-detail-grid { grid-template-columns: minmax(0, 1fr); }
   .bmg-workspace .bmg-aside { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--bmg-gap); align-items: start; }
 }
+@media (max-width: 991.98px) {
+  .bmg-workspace :is(.btn:not(.btn-close), .form-select, .form-control:not(textarea), .bd-select-toggle) { min-height: 40px; }
+  .bmg-workspace .btn-close { min-width: 40px; min-height: 40px; }
+  .bmg-workspace nav[aria-label="Drum sections"] .nav-link {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .bmg-dashboard-page .bmg-ops-hub .btn {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+  .bmg-dashboard-page .nd-inline-link {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    white-space: nowrap;
+  }
+  .bmg-dashboard-page .nd-matrix-table td a {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
 @media (max-width: 767.98px) {
   .bmg-workspace :is(.bmg-drum-grid, .bmg-aside) { grid-template-columns: minmax(0, 1fr); }
+  .bmg-workspace nav[aria-label="Drum sections"] .nav-link {
+    padding: .45rem .8rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md, .375rem);
+    background: var(--surface-color);
+    font-size: .875rem;
+    font-weight: 500;
+  }
+  .bmg-workspace .bmg-table-wrap .table.table-mobile-cards > tbody > tr > [data-label]:not([data-label=""]) {
+    padding-left: 8.5rem !important;
+  }
+  .bmg-workspace .bmg-table-wrap .table-mobile-cards > tbody > tr > [data-label]:not([data-label=""])::before {
+    width: 7.35rem;
+    margin-left: -7.85rem;
+    overflow-wrap: normal;
+  }
+  .bmg-dashboard-page .nd-kpi-rail .nd-kpi-card {
+    height: 100%;
+    padding: 0.85rem;
+  }
+  .bmg-dashboard-page .nd-kpi-rail .nd-kpi-icon {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 6px;
+  }
+  .bmg-dashboard-page .nd-kpi-rail .nd-kpi-value {
+    font-size: 1.3rem;
+  }
+}
+@media (max-width: 575.98px) {
+  .bmg-workspace :is([aria-label="Drums at a glance"], [aria-label="Drum at a glance"]) .card-body {
+    padding: .75rem 1rem !important;
+  }
 }
 @media (max-width: 479.98px) {
   .bmg-workspace { --bmg-gap: 1rem; }

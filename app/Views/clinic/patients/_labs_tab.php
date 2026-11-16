@@ -87,8 +87,8 @@
                     <textarea name="clinical_notes" id="labNotes" rows="2" class="form-control form-control-sm" maxlength="2000"></textarea>
                   </div>
                 </div>
-                <div class="mt-3 d-flex justify-content-end">
-                  <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i> Save Lab Result</button>
+                <div class="mt-3 d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2">
+                  <button type="submit" class="btn btn-primary btn-sm clinic-mobile-full"><i class="bi bi-check-lg me-1"></i> Save Lab Result</button>
                 </div>
               </form>
             </div>

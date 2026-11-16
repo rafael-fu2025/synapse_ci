@@ -15,7 +15,7 @@ $targetGroups = [
   <?php foreach ($targetGroups as $field => [$heading, $choices]): $selected = $selectedTargets($field); ?>
     <div class="mb-2" role="group" aria-label="<?= esc($heading) ?>">
       <span class="d-block small fw-semibold mb-1"><?= esc($heading) ?></span>
-      <div class="d-flex flex-wrap gap-3">
+      <div class="d-flex flex-wrap gap-3 announcements-targeting-choices">
       <?php foreach ($choices as $value => $label): $id = $targetPrefix . '_' . $field . '_' . $value; ?>
         <div class="form-check"><input type="checkbox" class="form-check-input" id="<?= esc($id) ?>" name="<?= esc($field) ?>[]" value="<?= esc((string) $value) ?>" <?= in_array((string) $value, $selected, true) ? 'checked' : '' ?> <?= ($targetRecord['audience'] ?? 'all') !== 'students' ? 'disabled' : '' ?> :disabled="audience !== 'students'"><label class="form-check-label" for="<?= esc($id) ?>"><?= esc($label) ?></label></div>
       <?php endforeach; ?>

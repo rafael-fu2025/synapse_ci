@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/modal_form') ?>
 
 <?= $this->section('content') ?>
-<div x-data="newCaseForm({ patientUrl: <?= esc(json_encode(site_url('/api/patients/search'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?> })">
+<div class="guidance-ui" x-data="newCaseForm({ patientUrl: <?= esc(json_encode(site_url('/api/patients/search'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?> })">
   <form action="<?= site_url('/guidance/cases/store') ?>" method="POST" data-modal-submit>
     <?= csrf_field() ?>
     <input type="hidden" name="person_id" :value="selectedPerson?.id">
@@ -27,7 +27,7 @@
       <div x-show="results.length > 0 && !selectedPerson" class="list-group mb-2 shadow-sm border" style="max-height: 180px; overflow-y: auto;">
         <template x-for="p in results" :key="p.id">
           <button type="button"
-                  class="list-group-item list-group-item-action p-2 d-flex justify-content-between align-items-center"
+                  class="list-group-item list-group-item-action p-2 d-flex flex-wrap justify-content-between align-items-center gap-2"
                   @click="selectPerson(p)">
             <div>
               <div class="fw-semibold" x-text="p.last_name + ', ' + p.first_name + (p.middle_name ? ' ' + p.middle_name : '')"></div>

@@ -468,7 +468,7 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
 
         $this->expectException(DomainException::class);
         $this->expectExceptionCode(403);
-        $this->expectExceptionMessage('Clinical record finalization requires an active practitioner profile.');
+        $this->expectExceptionMessage('Form access requires its creator or current assigned supervisor.');
 
         $this->clinicalService->finalizeDirectly(
             (int) $draft['id'],

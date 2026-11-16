@@ -90,7 +90,7 @@ $builder = $builder ?? [];
     </div>
     <div class="col-xl-6">
       <section class="card bmg-panel h-100">
-        <div class="card-header py-3">
+        <div class="card-header py-3 d-block">
           <div class="small text-muted">Step 2 · Network commissioning only</div>
           <h3 class="card-title mb-0 p-0">Wi-Fi &amp; device token</h3>
         </div>

@@ -29,7 +29,7 @@
                       <td>
                         <div class="d-flex flex-wrap gap-1">
                           <?php foreach (['physical_exam' => 'PE', 'cbc' => 'CBC', 'urinalysis' => 'UA', 'chest_xray' => 'CXR', 'fecalysis' => 'Fec', 'dental_exam' => 'Dental'] as $k => $short): ?>
-                            <span class="badge <?= !empty($items[$k]) ? 'bg-success-subtle text-success' : 'bg-light text-muted border' ?>"><?= $short ?></span>
+                            <span class="badge <?= !empty($items[$k]) ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-body border' ?>"><?= $short ?></span>
                           <?php endforeach; ?>
                         </div>
                         <?php if (!empty($clr['remarks'])): ?>
@@ -44,7 +44,7 @@
                         <?php endif; ?>
                       </td>
                       <td>
-                        <a href="<?= site_url('/clinic/clearances/' . (int) $clr['id'] . '/certificate') ?>" class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener">
+                        <a href="<?= site_url('/clinic/clearances/' . (int) $clr['id'] . '/certificate') ?>" class="btn btn-outline-secondary btn-sm clinic-cert-btn" target="_blank" rel="noopener">
                           <i class="bi bi-file-earmark-pdf me-1"></i> PDF
                         </a>
                       </td>
@@ -115,8 +115,8 @@
                   <label for="clrRemarks" class="form-label small fw-semibold">Clearance Remarks / Physician Note</label>
                   <input type="text" name="remarks" id="clrRemarks" class="form-control form-control-sm" placeholder="e.g. Fit to enroll; chest x-ray reviewed normal" maxlength="500">
                 </div>
-                <div class="d-flex justify-content-end">
-                  <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-patch-check me-1"></i> Save Enrollment Clearance</button>
+                <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2">
+                  <button type="submit" class="btn btn-success btn-sm clinic-mobile-full"><i class="bi bi-patch-check me-1"></i> Save Enrollment Clearance</button>
                 </div>
               </form>
             </div>

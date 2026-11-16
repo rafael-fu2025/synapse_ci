@@ -1,16 +1,16 @@
 <?= $this->extend('layouts/modal_form') ?>
 <?= $this->section('content') ?>
 <?php require __DIR__ . '/_form_values.php'; ?>
-<p class="mb-1 fw-semibold"><?= esc($medicine['name']) ?> · Original dispensation #<?= (int) $operation['id'] ?></p>
-<dl class="row small">
-  <dt class="col-sm-4">Recorded</dt><dd class="col-sm-8"><?= esc($operation['created_at']) ?></dd>
-  <dt class="col-sm-4">Encounter</dt><dd class="col-sm-8">#<?= (int) $operation['encounter_id'] ?></dd>
-  <dt class="col-sm-4">Actor user ID</dt><dd class="col-sm-8">#<?= (int) $operation['actor_id'] ?></dd>
-  <dt class="col-sm-4">Original reason</dt><dd class="col-sm-8 text-break"><?= esc($operation['reason']) ?></dd>
-  <dt class="col-sm-4">Stock unit</dt><dd class="col-sm-8"><?= esc($medicine['unit_of_measure']) ?> (whole units only)</dd>
+<p class="mb-2 fw-semibold text-break"><?= esc($medicine['name']) ?> · Original dispensation #<?= (int) $operation['id'] ?></p>
+<dl class="row small gy-1">
+  <dt class="col-sm-4 text-muted">Recorded</dt><dd class="col-sm-8 text-break"><?= esc($operation['created_at']) ?></dd>
+  <dt class="col-sm-4 text-muted">Encounter</dt><dd class="col-sm-8">#<?= (int) $operation['encounter_id'] ?></dd>
+  <dt class="col-sm-4 text-muted">Actor user ID</dt><dd class="col-sm-8">#<?= (int) $operation['actor_id'] ?></dd>
+  <dt class="col-sm-4 text-muted">Original reason</dt><dd class="col-sm-8 text-break"><?= esc($operation['reason']) ?></dd>
+  <dt class="col-sm-4 text-muted">Stock unit</dt><dd class="col-sm-8 text-break"><?= esc($medicine['unit_of_measure']) ?> (whole units only)</dd>
 </dl>
 <div class="alert alert-warning" role="note">Review before committing. Only one correction is allowed per complete dispensation operation. This adds a correction record; it never deletes the original history. Legacy allocations with no operation ID cannot be corrected here. Patient returns must never be restocked. Restoration to expired or quarantined batches is blocked by the server.</div>
-<form action="<?= esc($formAction) ?>" method="POST" data-modal-submit>
+<form action="<?= esc($formAction) ?>" method="POST" class="inventory-modal-form" data-modal-submit>
   <?= csrf_field() ?>
   <input type="hidden" name="idempotency_key" value="<?= esc($value('idempotency_key', $idempotencyKey)) ?>">
   <fieldset class="mb-3">

@@ -21,7 +21,7 @@ $analytics = $analytics ?? [
 $overallRating = $analytics['overall_avg_rating'] ?? null;
 $refreshOwner = 'survey-responses.' . (int) $survey['id'];
 ?>
-<section data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<section class="guidance-ui" data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 
 <!-- Survey Title & Status Header -->
 <div class="card border-0 shadow-sm mb-4">
@@ -44,7 +44,7 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
           </div>
         <?php endif; ?>
       </div>
-      <div class="text-end">
+      <div class="text-sm-end">
         <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
           <i class="bi bi-people-fill me-1"></i> <?= number_format($total) ?> Responses
         </span>
@@ -66,7 +66,7 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
       <input id="response-export-to" type="hidden" name="to" value="">
     </div>
     <div class="col-12"><p id="response-export-date-help" class="form-text mb-0">Dates use Philippine time (Asia/Manila). Both selected dates are included.</p></div>
-    <div class="col-12"><label><input type="checkbox" name="confirm_identified" value="1" required> I understand this download contains identified survey answers.</label></div>
+    <div class="col-12"><label class="d-flex align-items-start gap-2 small mb-0"><input class="form-check-input mt-1 flex-shrink-0" type="checkbox" name="confirm_identified" value="1" required> <span>I understand this download contains identified survey answers.</span></label></div>
     <div class="col-12"><button type="submit" class="btn btn-outline-primary btn-sm">Download identified response CSV</button></div>
   </form>
 </div></div>
@@ -168,7 +168,7 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
             <h6 class="fw-bold mb-2 text-dark"><i class="bi bi-graph-up text-primary me-1"></i> Submission Activity Velocity</h6>
             <div class="d-flex flex-wrap gap-2 pt-1">
               <?php foreach ($analytics['daily_trend'] as $date => $cnt): ?>
-                <div class="p-2 bg-white border rounded text-center" style="min-width: 85px;">
+                <div class="p-2 bg-white border rounded text-center flex-grow-1 flex-sm-grow-0" style="min-width: 85px;">
                   <div class="small fw-semibold text-muted" style="font-size: 0.72rem;"><?= esc($date) ?></div>
                   <div class="fw-bold fs-6 text-primary"><?= number_format($cnt) ?></div>
                   <small class="text-muted" style="font-size: 0.65rem;">submission<?= $cnt === 1 ? '' : 's' ?></small>
@@ -222,7 +222,7 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
                   </div>
                 <?php endif; ?>
                 <div class="row align-items-center mb-3">
-                  <div class="col-sm-4 text-center border-end">
+                  <div class="col-sm-4 text-center border-end gc-rating-summary-col">
                     <div class="display-5 fw-bold text-warning"><?= esc(number_format((float) ($qStat['avg_rating'] ?? 0), 1)) ?></div>
                     <div class="text-warning fs-5">
                       <?= str_repeat('★', (int) round((float) ($qStat['avg_rating'] ?? 0))) . str_repeat('☆', 5 - (int) round((float) ($qStat['avg_rating'] ?? 0))) ?>
@@ -369,7 +369,7 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
                       <span class="badge bg-light text-secondary border">Pending Interview</span>
                     <?php endif; ?>
                   </td>
-                  <td class="text-end pe-3">
+                  <td class="text-md-end pe-md-3">
                     <a href="<?= esc(site_url('guidance/surveys/' . $survey['id'] . '/responses/' . $response['id'])) ?>" class="btn btn-outline-primary btn-sm">
                       <i class="bi bi-eye me-1"></i> Read response
                     </a>

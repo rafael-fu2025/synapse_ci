@@ -12,7 +12,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="page-dashboard nd-dashboard" data-queue-dashboard="guidance" data-queue-counts-url="<?= site_url('/guidance/dashboard/queue-counts') ?>" data-queue-date="<?= esc(\App\Services\Scheduling\SchedulingClock::today(), 'attr') ?>">
+<div class="page-dashboard nd-dashboard guidance-ui" data-queue-dashboard="guidance" data-queue-counts-url="<?= site_url('/guidance/dashboard/queue-counts') ?>" data-queue-date="<?= esc(\App\Services\Scheduling\SchedulingClock::today(), 'attr') ?>">
   <!-- Welcome Banner -->
   <div class="card border-0 shadow-sm text-white p-4 mb-4 nd-welcome-banner nd-welcome-banner--admin">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -33,7 +33,7 @@
   <p class="small text-muted mb-3" data-queue-feedback role="status" hidden></p>
   <!-- NiceAdmin v3 KPI Rail -->
   <section class="row g-3 mb-4 nd-kpi-rail">
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-leads">
         <span class="nd-kpi-icon"><i class="bi bi-folder2-open"></i></span>
         <span class="nd-kpi-label">Active Counseling Cases</span>
@@ -44,7 +44,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-revenue">
         <span class="nd-kpi-icon"><i class="bi bi-chat-heart"></i></span>
         <span class="nd-kpi-label">Completed Sessions</span>
@@ -55,7 +55,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-cycle">
         <span class="nd-kpi-icon"><i class="bi bi-clock-history"></i></span>
         <span class="nd-kpi-label">Waiting Queue Today</span>
@@ -66,7 +66,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-retention">
         <span class="nd-kpi-icon"><i class="bi bi-arrow-left-right"></i></span>
         <span class="nd-kpi-label">Incoming Referrals</span>
@@ -108,7 +108,7 @@
 
       <!-- Recent Counseling Cases -->
       <div class="card border-0 shadow-sm mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center bg-transparent py-3">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 bg-transparent py-3">
           <h5 class="card-title mb-0 fw-bold">Recent Counseling Cases</h5>
           <a href="<?= site_url('/guidance/cases') ?>" class="nd-inline-link">View all cases <i class="bi bi-arrow-right"></i></a>
         </div>
@@ -184,7 +184,12 @@
           <h5 class="card-title mb-0 fw-bold">Guidance Operations Hub</h5>
         </div>
         <div class="card-body p-3">
-          <div class="d-grid gap-2">
+          <div class="d-grid gap-2 guidance-ops-hub">
+            <?php if (in_array('guidance.cases.read', $user['permissions'] ?? [], true)): ?>
+            <a href="<?= esc(site_url('/guidance/clients')) ?>" class="btn btn-outline-primary text-start p-2">
+              <i class="bi bi-person-lines-fill me-2" aria-hidden="true"></i> Clients &amp; Records
+            </a>
+            <?php endif; ?>
             <a href="<?= site_url('/guidance/cases') ?>" class="btn btn-outline-primary text-start p-2">
               <i class="bi bi-folder-check me-2"></i> Counseling Cases Registry
             </a>
@@ -219,18 +224,18 @@
         </a>
       </div>
       <div class="row g-2 align-items-end mb-3">
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label for="gd-summary-from-display" class="form-label small fw-semibold mb-1">Period Start</label>
           <input id="gd-summary-from-display" type="text" class="form-control form-control-sm" data-datepicker data-target="#gd-summary-from" value="<?= esc(date('d/m/Y', strtotime(date('Y-m-01'))), 'attr') ?>" autocomplete="off">
           <input id="gd-summary-from" type="hidden" value="<?= esc(date('Y-m-01'), 'attr') ?>">
         </div>
-        <div class="col-md-3">
+        <div class="col-6 col-md-3">
           <label for="gd-summary-to-display" class="form-label small fw-semibold mb-1">Period End</label>
           <input id="gd-summary-to-display" type="text" class="form-control form-control-sm" data-datepicker data-target="#gd-summary-to" value="<?= esc(date('d/m/Y'), 'attr') ?>" autocomplete="off">
           <input id="gd-summary-to" type="hidden" value="<?= esc(date('Y-m-d'), 'attr') ?>">
         </div>
-        <div class="col-md-3">
-          <button type="button" id="gd-summary-load" class="btn btn-primary btn-sm">
+        <div class="col-12 col-md-auto">
+          <button type="button" id="gd-summary-load" class="btn btn-primary btn-sm w-100 w-md-auto">
             <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Compute Period Counts
           </button>
         </div>

@@ -10,6 +10,8 @@ use App\Models\CounsellingSessionModel;
 use App\Models\GuidanceAppointmentModel;
 use App\Models\GuidanceEpisodeModel;
 use App\Models\GuidanceFormAttestationModel;
+use App\Models\GuidanceFormDefinitionModel;
+use App\Models\GuidanceFormDefinitionRevisionModel;
 use App\Models\GuidanceFormDraftModel;
 use App\Models\GuidanceFormInstanceModel;
 use App\Models\GuidanceFormRevisionModel;
@@ -18,6 +20,7 @@ use App\Models\GuidanceSupervisionAssignmentModel;
 use App\Models\PersonModel;
 use App\Models\StudentProfileModel;
 use App\Models\UserModel;
+use App\Services\Audit\AuditService;
 use App\Services\Crypto\EncryptionService;
 use App\Services\Crypto\GuidanceFormCipher;
 use App\Services\CurrentTenant;
@@ -71,6 +74,7 @@ class GuidanceClinicalFormService
 
     private GuidancePractitionerService $practitionerService;
     private GuidanceAccessPolicy $accessPolicy;
+    private GuidanceFormContextPolicy $contextPolicy;
     private GuidanceFormDefinitionService $definitionService;
     private FormAttestationService $attestationService;
     private GuidanceFormCipher $cipher;
@@ -141,6 +145,7 @@ class GuidanceClinicalFormService
         $this->userModel           = $userModel ?? new UserModel($this->db);
 
         $this->accessPolicy        = $accessPolicy ?? new GuidanceAccessPolicy(db: $this->db);
+        $this->contextPolicy       = new GuidanceFormContextPolicy(db: $this->db);
         $this->practitionerService = $practitionerService ?? new GuidancePractitionerService(
             profileModel: $this->profileModel,
             supervisionModel: $this->supervisionModel,
@@ -148,7 +153,9 @@ class GuidanceClinicalFormService
             accessPolicy: $this->accessPolicy,
             db: $this->db
         );
-        $this->definitionService   = $definitionService ?? new GuidanceFormDefinitionService();
+        $this->definitionService   = $definitionService ?? new GuidanceFormDefinitionService(
+            new GuidanceFormDefinitionModel($this->db), new GuidanceFormDefinitionRevisionModel($this->db)
+        );
         $this->attestationService  = $attestationService ?? new FormAttestationService($this->attestationModel);
         $this->cipher              = $cipher ?? new GuidanceFormCipher();
         $this->encryptionService   = $encryptionService ?? new EncryptionService();
@@ -194,67 +201,30 @@ class GuidanceClinicalFormService
         $tid = (int) $authority['tenant_id'];
         $actorId = (int) $authority['id'];
 
-        // Extract and resolve linkages
-        $personId      = !empty($data['person_id']) ? (int) $data['person_id'] : null;
-        $caseId        = !empty($data['case_id']) ? (int) $data['case_id'] : null;
-        $sessionId     = !empty($data['session_id']) ? (int) $data['session_id'] : null;
-        $appointmentId = !empty($data['appointment_id']) ? (int) $data['appointment_id'] : null;
-        $episodeId     = !empty($data['episode_id']) ? (int) $data['episode_id'] : null;
-        $referralId    = !empty($data['referral_id']) ? (int) $data['referral_id'] : null;
-        $intakeId      = !empty($data['intake_id']) ? (int) $data['intake_id'] : null;
-
-        // Auto-resolve cross-references if missing
-        if ($sessionId !== null) {
-            $session = $this->sessionModel->scoped($tid)->find($sessionId);
-            if ($session !== null) {
-                $caseId ??= !empty($session['case_id']) ? (int) $session['case_id'] : null;
-                $appointmentId ??= !empty($session['appointment_id']) ? (int) $session['appointment_id'] : null;
-            }
-        }
-
-        if ($caseId !== null) {
-            $case = $this->caseModel->scoped($tid)->find($caseId);
-            if ($case !== null) {
-                $personId ??= !empty($case['person_id']) ? (int) $case['person_id'] : null;
-            }
-        }
-
-        if ($episodeId !== null) {
-            $episode = $this->episodeModel->scoped($tid)->find($episodeId);
-            if ($episode !== null) {
-                $personId ??= !empty($episode['person_id']) ? (int) $episode['person_id'] : null;
-                $caseId ??= !empty($episode['case_id']) ? (int) $episode['case_id'] : null;
-            }
-        }
-
-        if ($appointmentId !== null) {
-            $appointment = $this->appointmentModel->scoped($tid)->find($appointmentId);
-            if ($appointment !== null) {
-                $personId ??= !empty($appointment['person_id']) ? (int) $appointment['person_id'] : null;
-                $episodeId ??= !empty($appointment['episode_id']) ? (int) $appointment['episode_id'] : null;
-            }
-        }
-
-        if ($personId === null) {
-            throw new InvalidArgumentException('Person ID is required for clinical form instance.', 422);
-        }
-
-        // Verify person belongs to active tenant
-        $person = $this->personModel->scoped($tid)->find($personId);
-        if ($person === null) {
-            throw new InvalidArgumentException('Person not found in active tenant.', 404);
-        }
-
-        // Resolve active form definition & revision (sync manifest if needed)
+        // Resolve the real definition, then validate every supplied and inferred link.
+        // Inference belongs to creation only; saved instance context is never repaired.
         try {
             $defBundle = $this->definitionService->getActiveDefinition($canonicalKey, $tid);
         } catch (InvalidArgumentException) {
             $this->definitionService->syncManifestToDatabase($tid);
             $defBundle = $this->definitionService->getActiveDefinition($canonicalKey, $tid);
         }
-
         $def = $defBundle['definition'];
         $rev = $defBundle['revision'];
+        $context = $this->contextPolicy->assertCreationAccess(array_intersect_key($data, array_flip([
+            'person_id', 'case_id', 'session_id', 'episode_id', 'appointment_id', 'referral_id', 'intake_id',
+        ])) + [
+            'form_definition_id' => $def['id'], 'definition_revision_id' => $rev['id'],
+        ], $authority);
+        $authority = $context['authority'];
+        $personId = $context['person_id'];
+        $caseId = $context['case_id'];
+        $sessionId = $context['session_id'];
+        $episodeId = $context['episode_id'];
+        $appointmentId = $context['appointment_id'];
+        $referralId = $context['referral_id'];
+        $intakeId = $context['intake_id'];
+        $person = $this->personModel->scoped($tid)->find($personId);
         $schemaVersion = (string) ($rev['schema_version'] ?? '1.0.0');
 
         // Populate default values for required fields if omitted
@@ -361,24 +331,23 @@ class GuidanceClinicalFormService
             throw new InvalidArgumentException('Clinical form instance not found.', 404);
         }
 
+        $context = $this->assertInstanceCaseAccess($instance, $authority, true);
+        $authority = $context['authority'];
+
         if ($instance['status'] !== 'draft') {
             throw new DomainException("Only draft instances can be submitted for co-sign.", 409);
         }
 
         $authorUserId = (int) $instance['created_by_user_id'];
-
-        // Retrieve active supervision assignment
-        $supervision = $this->supervisionModel->scoped($tid)
-            ->where('associate_user_id', $authorUserId)
-            ->where('status', 'active')
-            ->orderBy('id', 'DESC')
-            ->first();
-
+        $supervision = $context['supervision'];
         if ($supervision === null) {
             throw new DomainException('No active supervisor assignment found for associate author.', 422);
         }
 
         $supervisorUserId = (int) $supervision['supervisor_user_id'];
+        if (!$this->accessPolicy->canFinalizeDirectly($supervisorUserId, $tid)) {
+            throw new DomainException('Co-signer must have active licensed/supervisor standing.', 403);
+        }
         $now = date('Y-m-d H:i:s');
 
         $this->instanceModel->update($formInstanceId, [
@@ -421,6 +390,9 @@ class GuidanceClinicalFormService
             throw new InvalidArgumentException('Clinical form instance not found.', 404);
         }
 
+        $context = $this->assertInstanceCaseAccess($instance, $authority, true, true);
+        $authority = $context['authority'];
+
         if ($instance['status'] === 'finalized') {
             throw new DomainException('Clinical form instance is already finalized.', 409);
         }
@@ -444,17 +416,15 @@ class GuidanceClinicalFormService
             throw new DomainException('Co-signer must have active licensed/supervisor standing.', 403);
         }
 
-        // Actor must be the assigned supervisor
-        $supervision = $this->supervisionModel->scoped($tid)
-            ->where('associate_user_id', $authorUserId)
-            ->where('status', 'active')
-            ->orderBy('id', 'DESC')
-            ->first();
-
-        $assignedSupervisorId = $supervision !== null ? (int) $supervision['supervisor_user_id'] : (int) ($instance['assigned_supervisor_user_id'] ?? 0);
-
-        if ($assignedSupervisorId !== $actorId) {
+        // Stored assigned_supervisor_user_id is historical metadata, not current authority.
+        if (!$context['is_current_supervisor']) {
             throw new DomainException('Actor must be assigned supervisor with active standing.', 403);
+        }
+        $perms = $authority['permissions'] ?? [];
+        if (!in_array('guidance.clinical.cosign', $perms, true)
+            && !in_array('guidance.counseling.cosign', $perms, true)
+            && !in_array('guidance.psychosocial.cosign', $perms, true)) {
+            throw new DomainException('Actor lacks clinical co-sign permission.', 403);
         }
 
         // Retrieve and decrypt draft
@@ -594,8 +564,14 @@ class GuidanceClinicalFormService
             throw new InvalidArgumentException('Clinical form instance not found.', 404);
         }
 
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, true)['authority'];
+
         if ($instance['status'] === 'finalized') {
             throw new DomainException('Clinical form instance is already finalized.', 409);
+        }
+
+        if ($instance['status'] !== 'draft') {
+            throw new DomainException('Forms awaiting supervisor co-signature must be finalized via co-signature.', 409);
         }
 
         // Validate practitioner profile & standing
@@ -621,6 +597,15 @@ class GuidanceClinicalFormService
 
         if (!in_array($tier, ['licensed_counselor', 'guidance_supervisor'], true)) {
             throw new DomainException('Clinical record direct finalization requires licensed counselor or supervisor standing.', 403);
+        }
+
+        // Forms authored by an associate counselor must be co-signed by their assigned supervisor rather than bypassed by another case owner
+        $authorId = (int) ($instance['created_by_user_id'] ?? 0);
+        if ($authorId > 0) {
+            $authorProfile = $this->practitionerService->getPractitionerProfile($authorId, $tid);
+            if ($authorProfile !== null && ($authorProfile['credential_tier'] ?? '') === 'counselor_associate') {
+                throw new DomainException('Associate-authored clinical forms require assigned supervisor co-signature.', 403);
+            }
         }
 
         // Validate permission
@@ -753,8 +738,12 @@ class GuidanceClinicalFormService
             throw new InvalidArgumentException('Clinical form instance not found.', 404);
         }
 
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, false, true)['authority'];
+
         $draft = $this->draftModel->scoped($tid)->where('form_instance_id', $instanceId)->first();
         if ($draft === null) {
+            // The instance may still release confidential submission/supervisor notes.
+            $this->auditRead('guidance.clinical_form.draft_read', 'guidance_form_instances', $instanceId, $authority);
             return [
                 'instance' => $instance,
                 'draft'    => null,
@@ -782,6 +771,7 @@ class GuidanceClinicalFormService
         );
 
         $data = json_decode($plaintext, true, 512, JSON_THROW_ON_ERROR);
+        $this->auditRead('guidance.clinical_form.draft_read', 'guidance_form_instances', $instanceId, $authority);
 
         return [
             'instance' => $instance,
@@ -809,6 +799,8 @@ class GuidanceClinicalFormService
             throw new InvalidArgumentException('Clinical form instance not found.', 404);
         }
 
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, false, true)['authority'];
+
         $revNum = $revisionNumber ?? 1;
         $revRow = $this->revisionModel->scoped($tid)
             ->where('form_instance_id', $instanceId)
@@ -834,6 +826,7 @@ class GuidanceClinicalFormService
         );
 
         $data = json_decode($plaintext, true, 512, JSON_THROW_ON_ERROR);
+        $this->auditRead('guidance.clinical_form.finalized_read', 'guidance_form_instances', $instanceId, $authority);
 
         // Fetch attestations
         $attestations = $this->attestationModel->scoped($tid)
@@ -871,9 +864,15 @@ class GuidanceClinicalFormService
             throw new InvalidArgumentException('Counseling case not found.', 404);
         }
 
-        if (!empty($authority['permissions'])) {
-            $this->accessPolicy->assertCanReadCase($case, $authority);
+        $person = $this->personModel->scoped($tid)->find((int) $case['person_id']);
+        if ($person === null) {
+            throw new InvalidArgumentException('Person not found in active tenant.', 404);
         }
+        if (!in_array('guidance.cases.read', $authority['permissions'] ?? [], true)
+            && !in_array('guidance.cases.read_any', $authority['permissions'] ?? [], true)) {
+            throw new DomainException('Guidance permission forbidden.', 403);
+        }
+        $this->accessPolicy->assertCanReadCase($case, $authority);
 
         // Fetch controlled form instances linked to this case
         $instances = $this->instanceModel->scoped($tid)
@@ -887,10 +886,14 @@ class GuidanceClinicalFormService
         $allForms = [];
 
         foreach ($instances as $inst) {
+            try {
+                $context = $this->assertInstanceCaseAccess($inst, $authority, false, true);
+            } catch (DomainException | InvalidArgumentException $exception) {
+                if (!in_array($exception->getCode(), [403, 404, 422], true)) throw $exception;
+                continue;
+            }
             $instId = (int) $inst['id'];
-            $def = $this->db->table('guidance_form_definitions')
-                ->where('id', (int) $inst['form_definition_id'])
-                ->get()->getRowArray();
+            $def = $context['definition'];
 
             $formKey = (string) ($def['internal_key'] ?? '');
             $formCode = (string) ($def['form_code'] ?? '');
@@ -899,20 +902,12 @@ class GuidanceClinicalFormService
             $attestations = [];
 
             if ($inst['status'] === 'finalized') {
-                try {
-                    $finalized = $this->getFinalizedClinicalForm($instId, 1, $tid, $authority);
-                    $formData = $finalized['data'];
-                    $attestations = $finalized['attestations'];
-                } catch (\Throwable) {
-                    $formData = [];
-                }
+                $finalized = $this->getFinalizedClinicalForm($instId, 1, $tid, $authority);
+                $formData = $finalized['data'];
+                $attestations = $finalized['attestations'];
             } else {
-                try {
-                    $draftBundle = $this->getClinicalDraft($instId, $tid, $authority);
-                    $formData = $draftBundle['data'];
-                } catch (\Throwable) {
-                    $formData = [];
-                }
+                $draftBundle = $this->getClinicalDraft($instId, $tid, $authority);
+                $formData = $draftBundle['data'];
             }
 
             $formEntry = array_merge($inst, [
@@ -948,6 +943,7 @@ class GuidanceClinicalFormService
                 ->orderBy('version', 'ASC')
                 ->findAll();
 
+            $sessionHasPlaintext = false;
             foreach ($notes as $note) {
                 $decryptedText = null;
                 if (!empty($note['notes_cipher'])) {
@@ -958,6 +954,7 @@ class GuidanceClinicalFormService
                             $note['notes_tag'],
                             (int) $note['notes_key_version']
                         );
+                        $sessionHasPlaintext = true;
                     } catch (\Throwable) {
                         $decryptedText = '[Encrypted note unavailable]';
                     }
@@ -967,6 +964,9 @@ class GuidanceClinicalFormService
                     'session'        => $session,
                     'decrypted_text' => $decryptedText,
                 ]);
+            }
+            if ($sessionHasPlaintext) {
+                $this->auditRead('guidance.session.note_history_read', 'counselling_sessions', $sessId, $authority);
             }
         }
 
@@ -1036,6 +1036,21 @@ class GuidanceClinicalFormService
             throw new InvalidArgumentException("Counseling case for session {$sessionId} not found.", 404);
         }
 
+        // Authorize the supplied session graph before reading a legacy note. Session
+        // appointments live in the shared scheduler; do not copy their ID into a form's
+        // guidance_appointments link.
+        $authority = $this->resolveClinicalAuthorAuthority($authority, $tid);
+        $this->accessPolicy->assertCanWriteCase($case, $authority);
+        $person = $this->personModel->scoped($tid)->find((int) $case['person_id']);
+        if ($person === null) {
+            throw new InvalidArgumentException('Person not found in active tenant.', 404);
+        }
+        foreach (['session_id' => $sessionId, 'case_id' => (int) $case['id'], 'person_id' => (int) $case['person_id']] as $field => $id) {
+            if (isset($formData[$field]) && (int) $formData[$field] !== $id) {
+                throw new InvalidArgumentException('Contact sheet context is inconsistent.', 422);
+            }
+        }
+        $legacyNoteRead = false;
         // If concerns_discussed is missing, check if legacy note exists to avoid duplicate data entry
         if (empty($formData['concerns_discussed'])) {
             $existingNote = $this->noteModel->scoped($tid)
@@ -1051,10 +1066,15 @@ class GuidanceClinicalFormService
                         $existingNote['notes_tag'],
                         (int) $existingNote['notes_key_version']
                     );
+                    $legacyNoteRead = true;
                 } catch (\Throwable) {
                     // Fallback to default
                 }
             }
+        }
+
+        if ($legacyNoteRead) {
+            $this->auditRead('guidance.session.note_read', 'counselling_sessions', $sessionId, $authority);
         }
 
         // Populate contact sheet attributes
@@ -1071,7 +1091,7 @@ class GuidanceClinicalFormService
         $formData['session_id']     = $sessionId;
         $formData['case_id']        = (int) $case['id'];
         $formData['person_id']       = (int) $case['person_id'];
-        $formData['appointment_id'] = !empty($session['appointment_id']) ? (int) $session['appointment_id'] : null;
+        $formData['appointment_id'] ??= null;
 
         // Check if existing contact sheet draft is already attached to this session
         $existingInstance = $this->instanceModel->scoped($tid)
@@ -1141,6 +1161,8 @@ class GuidanceClinicalFormService
         if ($instance === null) {
             throw new InvalidArgumentException('Clinical form instance not found.', 404);
         }
+
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, true)['authority'];
 
         if ($instance['status'] !== 'draft') {
             throw new DomainException('Cannot modify non-draft clinical form instance.', 409);
@@ -1328,5 +1350,28 @@ class GuidanceClinicalFormService
         }
 
         return $clean;
+    }
+
+    /** Validate the full stored graph before a form read, write, or supervisor exception. */
+    private function assertInstanceCaseAccess(
+        array $instance,
+        array $authority,
+        bool $write,
+        bool $allowAssignedSupervisor = false
+    ): array {
+        return $this->contextPolicy->assertInstanceAccess($instance, $authority, $write, $allowAssignedSupervisor);
+    }
+
+    /** Same-connection metadata-only append; audit failure cannot become an empty success. */
+    private function auditRead(string $event, string $entity, int $id, array $authority): void
+    {
+        try {
+            (new AuditService(null, $this->db))->log(
+                $event, $entity, (string) $id, 'read', [],
+                (int) $authority['id'], (string) $authority['role']
+            );
+        } catch (\Throwable $exception) {
+            throw new RuntimeException('Unable to audit guidance clinical read.', 503, $exception);
+        }
     }
 }

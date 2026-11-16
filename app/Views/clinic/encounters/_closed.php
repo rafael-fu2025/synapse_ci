@@ -16,13 +16,14 @@ $labResults = $encounter['lab_results'] ?? [];
 $attendingName = $encounter['attending_user_name'] ?? null;
 $encoderName = $encounter['encoder_user_name'] ?? null;
 ?>
-<div class="alert alert-secondary d-flex flex-wrap justify-content-between align-items-center gap-2" role="status">
+<div class="clinic-closed-card">
+<div class="alert alert-secondary d-flex flex-column flex-sm-row justify-content-between align-items-stretch align-items-sm-center gap-2" role="status">
   <span><i class="bi bi-lock-fill me-1"></i> This encounter is closed and read-only. Use Addenda / Lab Follow-up below for delayed updates.</span>
-  <a href="<?= site_url('/clinic/encounters/' . (int) $enc['id'] . '/certificate') ?>" class="btn btn-outline-dark btn-sm" target="_blank" rel="noopener">
+  <a href="<?= site_url('/clinic/encounters/' . (int) $enc['id'] . '/certificate') ?>" class="btn btn-outline-secondary btn-sm clinic-cert-btn clinic-mobile-full text-nowrap" target="_blank" rel="noopener">
     <i class="bi bi-file-earmark-pdf me-1"></i> Print Medical Certificate PDF
   </a>
 </div>
-<div class="card border-0 shadow-sm p-4 mb-4">
+<div class="card border-0 shadow-sm p-3 p-sm-4 mb-4">
   <div class="row g-3 mb-4 pb-3 border-bottom small">
     <div class="col-md-4">
       <div class="text-muted">Actual Visit Time (Asia/Manila)</div>
@@ -112,8 +113,8 @@ $encoderName = $encounter['encoder_user_name'] ?? null;
           <?php endforeach; ?>
           <?php foreach ($addenda as $add): ?>
             <div class="border rounded p-2 mb-2 small">
-              <div class="d-flex justify-content-between align-items-center">
-                <span class="badge bg-secondary-subtle text-dark text-uppercase"><?= esc(str_replace('_', ' ', (string) $add['addendum_type'])) ?></span>
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-1">
+                <span class="badge bg-secondary-subtle text-body text-uppercase"><?= esc(str_replace('_', ' ', (string) $add['addendum_type'])) ?></span>
                 <span class="text-muted" style="font-size: 0.78rem;"><?= esc($formatManila($add['created_at'] ?? null)) ?></span>
               </div>
               <div class="mt-1"><?= nl2br(esc($add['note'])) ?></div>
@@ -171,7 +172,7 @@ $encoderName = $encounter['encoder_user_name'] ?? null;
               <label for="addendum_note" class="form-label small fw-semibold">Clinical Addendum Note</label>
               <textarea name="note" id="addendum_note" rows="3" class="form-control form-control-sm" placeholder="Enter physician / nurse follow-up note..." maxlength="5000" required></textarea>
             </div>
-            <button type="submit" class="btn btn-primary btn-sm">
+            <button type="submit" class="btn btn-primary btn-sm clinic-mobile-full">
               <i class="bi bi-check2-square me-1"></i> Save Signed Addendum
             </button>
           </form>
@@ -179,4 +180,5 @@ $encoderName = $encounter['encoder_user_name'] ?? null;
       </div>
     </div>
   <?php endif; ?>
+</div>
 </div>

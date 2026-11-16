@@ -5,6 +5,7 @@
 
   const stateKey = '__synapseNavigation';
   const owner = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const initialConfirm = window.confirm;
   const cleanups = new Set();
   const dirty = new Set();
   const scripts = new Map();
@@ -46,6 +47,7 @@
     history.replaceState(stateWith(currentEntry), '', location.href);
   }
   function restorePop(entry) {
+    if (restoring) return;
     const distance = currentEntry && entry ? currentEntry.index - entry.index : 0;
     if (!distance) {
       fullNavigation(currentUrl);
@@ -53,6 +55,14 @@
     }
     restoring = true;
     history.go(distance);
+  }
+  function adoptHistory(entry, value) {
+    const url = urlFor(value);
+    if (!url || restoring || entry?.owner !== owner || !Number.isInteger(entry.index)) return false;
+    currentEntry = { ...entry, url: url.href };
+    history.replaceState(stateWith(currentEntry), '', url.href);
+    currentUrl = url.href;
+    return true;
   }
   function seedScripts() {
     document.querySelectorAll('script[src]').forEach(script => {
@@ -175,12 +185,14 @@
     const name = content('csrf-name'), hash = content('csrf-token');
     return name && hash ? { name, hash, header: content('csrf-header') } : null;
   }
-  function dispose(root) {
-    const callbacks = Array.from(cleanups);
-    cleanups.clear();
-    callbacks.forEach(callback => {
-      try { callback(); } catch (error) { console.error('Navigation cleanup failed.', error); }
-    });
+  function dispose(root, includeGlobalCleanups = true) {
+    if (includeGlobalCleanups) {
+      const callbacks = Array.from(cleanups);
+      cleanups.clear();
+      callbacks.forEach(callback => {
+        try { callback(); } catch (error) { console.error('Navigation cleanup failed.', error); }
+      });
+    }
     // Only dispose page-owned instances; the shell's live dropdowns/listeners stay intact.
     const types = ['Alert', 'Button', 'Carousel', 'Collapse', 'Dropdown', 'Modal', 'Offcanvas', 'Popover', 'ScrollSpy', 'Tab', 'Toast', 'Tooltip'];
     [root, ...root.querySelectorAll('*')].forEach(element => {
@@ -242,21 +254,77 @@
     return form && form.method.toUpperCase() !== 'GET' &&
       !form.closest('[data-navigation-dirty="false"], [hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [data-table-filters]');
   }
-  function mayLeave(detail) {
-    // A parent dirty-form controller can cancel here, before the basic fallback prompt.
+  async function confirmLeave() {
+    const message = 'You have unsaved changes. Leave this page?';
+    if (window.SynapseConfirm?.confirm && window.confirm === initialConfirm) {
+      return await window.SynapseConfirm.confirm({
+        title: 'Unsaved changes',
+        message,
+        confirmLabel: 'Leave page',
+        cancelLabel: 'Stay on page',
+        tone: 'warning'
+      });
+    }
+    return Boolean(window.confirm(message));
+  }
+  function hasUnsavedChanges(exceptForm, options = {}) {
+    const roots = Array.isArray(options.within) ? options.within.filter(root => root instanceof Element) : null;
+    return Array.from(dirty).some(form => {
+      if (form === exceptForm || !form.isConnected || !isDirtyForm(form)) return false;
+      if (!roots) return true;
+      return roots.some(root => root === form || root.contains(form) || form.contains(root) ||
+        Array.from(form.elements).some(control => root.contains(control)));
+    });
+  }
+  async function mayLeave(detail, options = {}) {
+    // Pending saves and modal owners veto every navigation, including saved-form refreshes.
     if (!emit('synapse:before-navigate', detail, true)) return false;
-    const changed = Array.from(dirty).some(form => form.isConnected && isDirtyForm(form));
-    return !changed || window.confirm('You have unsaved changes. Leave this page?');
+    if (options.bypassDirtyCheck) return true;
+    const changed = typeof options.isDirty === 'function' ? options.isDirty() :
+      Boolean(detail?.dirty) || hasUnsavedChanges(options.exceptForm, options);
+    return !changed || await confirmLeave();
+  }
+
+  // Pane owners share the existing request, consent and history owner. They never
+  // invent a second index or drain the document navigator's global cleanups.
+  function beginWorkspaceNavigation(popEntry) {
+    if (restoring || committing || !currentEntry) return null;
+    if (!popEntry) rememberScroll();
+    pending?.abort();
+    const controller = new AbortController();
+    pending = controller;
+    const token = ++sequence;
+    failed = null;
+    // Pane owners show their own loading status; keep the shared pending lock
+    // without covering the still-live editor with the document loading overlay.
+    document.body.classList.add('is-navigating');
+    document.getElementById('main')?.setAttribute('aria-busy', 'true');
+    const isCurrent = () => pending === controller && token === sequence && !controller.signal.aborted && !restoring;
+    const finish = () => {
+      if (pending !== controller) return;
+      pending = null;
+      busy(false);
+    };
+    return {
+      controller, isCurrent, finish,
+      commitHistory(value, mode = 'push') {
+        if (!isCurrent()) return false;
+        finish();
+        if (popEntry) return adoptHistory(popEntry, value);
+        return mode === 'none' || window.SynapseNavigation.updateHistory(value, mode);
+      }
+    };
   }
 
   /** options: { history: 'push'|'replace', scroll: [x,y] }. Resolves true only on a completed swap. */
   async function navigate(value, options = {}) {
+    if (restoring) return false;
     let url;
     try { url = urlFor(value); } catch (_) { return false; }
     if (!url) return false;
     const popEntry = options.popEntry || null;
     const detail = { url: url.href, from: currentUrl, root: document.getElementById('main'), popstate: Boolean(popEntry) };
-    if (!mayLeave(detail)) {
+    if (!await mayLeave(detail)) {
       if (popEntry) restorePop(popEntry);
       return false;
     }
@@ -328,10 +396,11 @@
       const csrf = csrfFromDocument(incomingDocument);
       // The outgoing page stays usable during a request. Do not discard edits
       // made after the user originally approved leaving it.
-      if (editVersion !== approvedEdits && !mayLeave(detail)) {
+      if (editVersion !== approvedEdits && !await mayLeave(detail)) {
         if (popEntry) restorePop(popEntry);
         return false;
       }
+      if (token !== sequence || controller.signal.aborted) throw new Error('Navigation was interrupted.');
       const swapDetail = { ...detail, url: finalUrl.href, root: old.main, incoming: main };
       committing = true;
       destructive = true;
@@ -359,8 +428,7 @@
       window.SynapseCsrf?.fromResponse(response);
       dirty.clear();
       if (popEntry) {
-        currentEntry = { ...popEntry, url: finalUrl.href };
-        history.replaceState(stateWith(currentEntry), '', finalUrl.href);
+        adoptHistory(popEntry, finalUrl.href);
       } else {
         const replace = options.history === 'replace';
         currentEntry = { owner, id: `${owner}:${token}`, index: (ownState(history.state)?.index ?? currentEntry?.index ?? 0) + (replace ? 0 : 1),
@@ -435,15 +503,17 @@
 
   window.SynapseNavigation = {
     navigate,
-    hasUnsavedChanges(exceptForm, options = {}) {
-      const roots = Array.isArray(options.within) ? options.within.filter(root => root instanceof Element) : null;
-      return Array.from(dirty).some(form => {
-        if (form === exceptForm || !form.isConnected || !isDirtyForm(form)) return false;
-        if (!roots) return true;
-        return roots.some(root => root === form || root.contains(form) || form.contains(root) ||
-          Array.from(form.elements).some(control => root.contains(control)));
-      });
-    },
+    hasUnsavedChanges,
+    // A fragment owner uses the same cancelable guard and the document's owned history.
+    workspace: Object.freeze({
+      mayLeave,
+      begin: beginWorkspaceNavigation,
+      restoreHistory: restorePop,
+      get editVersion() { return editVersion; },
+      get restoring() { return restoring; },
+      get currentUrl() { return currentUrl; },
+      dispose: root => dispose(root, false)
+    }),
     markSaved(form) {
       dirty.delete(form);
     },
@@ -576,6 +646,10 @@
         return;
       }
       if (!entry || entry.url !== location.href) { location.reload(); return; }
+      if (window.SynapsePortalWorkspace?.isActive?.() && window.SynapsePortalWorkspace.owns?.(location.href)) {
+        void window.SynapsePortalWorkspace.navigate(location.href, { history: 'none', popEntry: entry, preserveScroll: true });
+        return;
+      }
       void navigate(location.href, { popEntry: entry });
     });
     emit('synapse:page-load', { root: document.getElementById('main'), url: currentUrl, initial: true, popstate: false });

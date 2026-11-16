@@ -11,15 +11,52 @@ foreach ($batches as $batch) {
     $batchNumbers[(int) $batch['id']] = $batch['batch_number'];
 }
 ?>
+<?= $this->section('styles') ?>
+<style>
+  @media (max-width: 575.98px) {
+    .clinic-mobile-full {
+      width: 100% !important;
+    }
+  }
+  @media (max-width: 767.98px) {
+    .clinic-page-actions .btn,
+    .inventory-show-section .table-mobile-cards .btn,
+    .inventory-movement-perpage .form-select,
+    .inventory-movement-perpage .bd-select .bd-trigger,
+    .inventory-movement-perpage .bd-select .bd-select-toggle,
+    .inventory-movement-perpage .btn {
+      min-height: 40px;
+    }
+    .clinic-page-actions .btn,
+    .inventory-show-section .table-mobile-cards .btn,
+    .inventory-movement-perpage .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #inventory-movements .pagination {
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+    #inventory-movements .page-link {
+      min-height: 40px;
+      min-width: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+</style>
+<?= $this->endSection() ?>
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2">
+<div class="d-flex flex-wrap gap-2 clinic-page-actions">
   <a href="<?= esc(site_url('/clinic/inventory')) ?>" class="btn btn-outline-secondary">All Medicines</a>
   <?php if ($canManage): ?><a href="<?= esc(site_url('/clinic/inventory/' . $id . '/edit')) ?>" class="btn btn-outline-primary" data-app-modal-open>Edit Medicine</a><?php endif; ?>
   <?php if ($canWrite && (int) $medicine['is_active'] === 1): ?><a href="<?= esc(site_url('/clinic/inventory/' . $id . '/receive')) ?>" class="btn btn-primary" data-app-modal-open>Receive Stock</a><?php endif; ?>
 </div>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
-<section data-refresh-owner="inventory.detail.<?= $id ?>"
+<section class="inventory-show-section" data-refresh-owner="inventory.detail.<?= $id ?>"
          data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <div data-refresh-region="summary" data-refresh-heading tabindex="-1">
 <div class="card mb-4"><div class="card-body pt-3">
@@ -36,9 +73,9 @@ foreach ($batches as $batch) {
   </dl>
   <p class="small text-muted mb-0">Every quantity below is a whole stock unit (<?= esc($medicine['unit_of_measure']) ?>), not a fractional dose. Archived medicines cannot be received or dispensed.</p>
 </div></div>
-<div class="row g-3 mb-3">
+<div class="row g-2 g-sm-3 mb-3">
   <?php foreach (['usable_stock' => 'Usable stock', 'total_stock' => 'Physical on hand', 'expired_stock' => 'Expired stock', 'quarantined_stock' => 'Quarantined stock'] as $field => $label): ?>
-    <div class="col-sm-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3">
+    <div class="col-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3">
       <h3 class="h6 text-muted"><?= esc($label) ?></h3>
       <div class="fs-3 fw-semibold"><?= number_format((int) $medicine[$field]) ?></div>
       <small class="text-muted"><?= esc($medicine['unit_of_measure']) ?></small>
@@ -49,7 +86,7 @@ foreach ($batches as $batch) {
 </div>
 <div data-refresh-region="batches">
 <div class="card mb-4" id="inventory-batches">
-  <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Batches</h2><p class="small text-muted mb-0">Ordered by expiry date. Received is cumulative receipts for the lot; remaining is physical stock.</p></div>
+  <div class="card-header bg-transparent py-3 d-block"><h2 class="h5 mb-1">Batches</h2><p class="small text-muted mb-0">Ordered by expiry date. Received is cumulative receipts for the lot; remaining is physical stock.</p></div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <caption class="visually-hidden">All batches, quantities in <?= esc($medicine['unit_of_measure']) ?></caption>
@@ -57,13 +94,23 @@ foreach ($batches as $batch) {
       <tbody>
         <?php if ($batches === []): ?><tr><td colspan="<?= $canManage ? 6 : 5 ?>" class="text-center py-4 text-muted">No batches have been received.</td></tr><?php endif; ?>
         <?php foreach ($batches as $batch): ?>
+          <?php
+            $batchToday = date('Y-m-d');
+            $batchNear = date('Y-m-d', strtotime('+90 days'));
+            $isBatchExpired = $batch['expiration_date'] < $batchToday;
+            $isBatchNear = !$isBatchExpired && $batch['status'] === 'active' && (int) $batch['remaining_quantity'] > 0 && $batch['expiration_date'] <= $batchNear;
+          ?>
           <tr id="inventory-batch-<?= (int) $batch['id'] ?>">
             <th scope="row" class="ps-3 fw-normal text-break"><?= esc($batch['batch_number']) ?><small class="d-block text-muted">Batch #<?= (int) $batch['id'] ?></small></th>
-            <td><?= esc($batch['expiration_date']) ?><?php if ($batch['expiration_date'] < date('Y-m-d')): ?><span class="badge bg-danger d-block">Expired</span><?php endif; ?></td>
+            <td>
+              <?= esc($batch['expiration_date']) ?>
+              <?php if ($isBatchExpired): ?><span class="badge bg-danger d-block mt-1">Expired</span>
+              <?php elseif ($isBatchNear): ?><span class="badge bg-warning text-dark d-block mt-1">Within 90 days</span><?php endif; ?>
+            </td>
             <td><span class="badge <?= $batch['status'] === 'quarantined' ? 'bg-warning text-dark' : 'bg-success' ?>"><?= esc(ucfirst($batch['status'])) ?></span></td>
             <td class="text-end"><?= number_format((int) $batch['initial_quantity']) ?></td>
             <td class="text-end"><?= number_format((int) $batch['remaining_quantity']) ?></td>
-            <?php if ($canManage): ?><td class="text-end pe-3"><div class="d-flex flex-wrap gap-2 justify-content-end">
+            <?php if ($canManage): ?><td class="text-end pe-3"><div class="d-flex flex-wrap gap-2 justify-content-md-end">
               <?php if ((int) $batch['remaining_quantity'] > 0): ?><a href="<?= esc(site_url('/clinic/inventory/batches/' . (int) $batch['id'] . '/adjust')) ?>" class="btn btn-outline-danger btn-sm" data-app-modal-open>Remove Stock</a><?php endif; ?>
               <a href="<?= esc(site_url('/clinic/inventory/batches/' . (int) $batch['id'] . '/status')) ?>" class="btn btn-outline-secondary btn-sm" data-app-modal-open><?= $batch['status'] === 'quarantined' ? 'Review Quarantine' : 'Quarantine / Status' ?></a>
             </div></td><?php endif; ?>
@@ -76,7 +123,7 @@ foreach ($batches as $batch) {
 </div>
 <div data-refresh-region="operations">
 <div class="card mb-4" id="inventory-operations">
-  <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Latest operations</h2><p class="small text-muted mb-0">Latest 100 operations only, newest first; independent of the movement page. One correction per dispensation. Legacy allocations with a null operation ID cannot be corrected.</p></div>
+  <div class="card-header bg-transparent py-3 d-block"><h2 class="h5 mb-1">Latest operations</h2><p class="small text-muted mb-0">Latest 100 operations only, newest first; independent of the movement page. One correction per dispensation. Legacy allocations with a null operation ID cannot be corrected.</p></div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <caption class="visually-hidden">Latest 100 inventory operations and correction references</caption>
@@ -120,7 +167,7 @@ foreach ($batches as $batch) {
 </div>
 <div data-refresh-region="movements">
 <div class="card" id="inventory-movements">
-  <div class="card-header bg-transparent py-3"><h2 class="h5 mb-1">Stock movements</h2><p class="small text-muted mb-0">Page <?= $page ?> · <?= (int) $movementPagination['per_page'] ?> movements per page, newest first. Signed quantities use <?= esc($medicine['unit_of_measure']) ?>; zero indicates no physical stock change.</p></div>
+  <div class="card-header bg-transparent py-3 d-block"><h2 class="h5 mb-1">Stock movements</h2><p class="small text-muted mb-0">Page <?= $page ?> · <?= (int) $movementPagination['per_page'] ?> movements per page, newest first. Signed quantities use <?= esc($medicine['unit_of_measure']) ?>; zero indicates no physical stock change.</p></div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <caption class="visually-hidden">Paginated stock movement ledger in <?= esc($medicine['unit_of_measure']) ?></caption>
@@ -153,8 +200,8 @@ foreach ($batches as $batch) {
       </tbody>
     </table>
   </div>
-  <div class="card-footer bg-transparent py-3">
-    <form method="get" action="<?= esc(site_url('/clinic/inventory/' . $id)) ?>#inventory-movements" class="d-flex align-items-center gap-2">
+  <div class="card-footer bg-transparent py-3 d-flex flex-column flex-md-row flex-wrap align-items-stretch align-items-md-center justify-content-between gap-3">
+    <form method="get" action="<?= esc(site_url('/clinic/inventory/' . $id)) ?>#inventory-movements" class="d-flex flex-wrap align-items-center gap-2 inventory-movement-perpage">
       <label for="movementPerPage" class="small text-muted">Movements per page</label>
       <select id="movementPerPage" name="per_page" class="form-select form-select-sm w-auto">
         <?php foreach ([20, 25, 50, 100] as $size): ?><option value="<?= $size ?>"<?= $size === (int) $movementPagination['per_page'] ? ' selected' : '' ?>><?= $size ?></option><?php endforeach; ?>

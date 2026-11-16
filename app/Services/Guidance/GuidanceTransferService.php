@@ -179,9 +179,38 @@ final class GuidanceTransferService
             throw new InvalidArgumentException('Counseling case not found.', 404);
         }
 
-        return $this->transaction(function () use ($transfer, $transferId, $accept, $notes, $authority, $tenantId, $caseId): array {
+        return $this->transaction(function () use ($transferId, $accept, $notes, $authority, $tenantId, $caseId): array {
             $now = date('Y-m-d H:i:s');
             $newAssignmentId = null;
+
+            $forUpdate = $this->db->DBDriver === 'MySQLi' ? ' FOR UPDATE' : '';
+            $tTable = $this->db->protectIdentifiers($this->db->prefixTable('guidance_case_transfers'));
+            $transfer = $this->db->query(
+                "SELECT * FROM {$tTable} WHERE tenant_id = ? AND id = ?{$forUpdate}",
+                [$tenantId, $transferId]
+            )->getRowArray();
+            if ($transfer === null) {
+                throw new InvalidArgumentException('Case transfer not found.', 404);
+            }
+            if (($transfer['status'] ?? '') !== 'pending') {
+                throw new DomainException('Transfer request has already been processed.', 409);
+            }
+            if ((int) ($transfer['to_counsellor_user_id'] ?? 0) !== (int) $authority['id']) {
+                throw new DomainException('Only the designated receiver counselor can respond to this transfer request.', 403);
+            }
+
+            $cTable = $this->db->protectIdentifiers($this->db->prefixTable('counselling_cases'));
+            $case = $this->db->query(
+                "SELECT * FROM {$cTable} WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL{$forUpdate}",
+                [$tenantId, $caseId]
+            )->getRowArray();
+            if ($case === null) {
+                throw new InvalidArgumentException('Counseling case not found.', 404);
+            }
+
+            if ($accept && (int) ($case['counsellor_user_id'] ?? 0) !== (int) ($transfer['from_counsellor_user_id'] ?? 0)) {
+                throw new DomainException('Transfer offer is no longer valid because case ownership has changed.', 409);
+            }
 
             if ($accept) {
                 $status = 'accepted';
@@ -210,6 +239,9 @@ final class GuidanceTransferService
                         'relinquished_at' => null,
                         'created_at' => $now,
                     ]);
+
+                    // Cancel any other pending transfer offers for this case
+                    $this->cancelPendingTransfers($tenantId, $caseId, $now, $transferId);
                 }
             } else {
                 $status = 'declined';
@@ -282,6 +314,9 @@ final class GuidanceTransferService
                 'counsellor_user_id' => $newCounsellorUserId,
             ]);
 
+            // Cancel any pending transfer offers from prior owner(s)
+            $this->cancelPendingTransfers($tenantId, $caseId, $now);
+
             // Closes previous assignment row(s)
             $this->assignmentModel->db->table('guidance_case_assignments')
                 ->where('tenant_id', $tenantId)
@@ -344,6 +379,8 @@ final class GuidanceTransferService
             $this->caseModel->update($caseId, [
                 'counsellor_user_id' => $toCounselorUserId,
             ]);
+
+            $this->cancelPendingTransfers($tenantId, $caseId, $now);
 
             $this->assignmentModel->db->table('guidance_case_assignments')
                 ->where('tenant_id', $tenantId)
@@ -590,6 +627,27 @@ final class GuidanceTransferService
             }
             throw $e;
         }
+    }
+
+    /**
+     * Cancel any lingering pending transfer offers for a case once reassigned or transferred.
+     */
+    private function cancelPendingTransfers(int $tenantId, int $caseId, string $now, ?int $excludeTransferId = null): void
+    {
+        $builder = $this->db->table('guidance_case_transfers')
+            ->where('tenant_id', $tenantId)
+            ->where('case_id', $caseId)
+            ->where('status', 'pending');
+
+        if ($excludeTransferId !== null) {
+            $builder->where('id !=', $excludeTransferId);
+        }
+
+        $builder->update([
+            'status'         => 'cancelled',
+            'responded_at'   => $now,
+            'response_notes' => 'Cancelled due to case reassignment.',
+        ]);
     }
 
     /**

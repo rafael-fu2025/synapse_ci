@@ -8,12 +8,12 @@
 <section data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <p class="text-muted"><?= esc(ucfirst($unit)) ?> announcements only. Published content is immutable; archive and create a new announcement for corrections.</p>
 <div data-refresh-region="announcements.list">
-<div class="card"><div class="card-body pt-3"><div class="table-responsive"><table class="table align-middle">
+<div class="card"><div class="card-body pt-3"><div class="table-responsive"><table class="table align-middle announcements-table">
 <thead><tr><th>Announcement</th><th>Audience</th><th>Status / visibility (Asia/Manila)</th><th>Actions</th></tr></thead><tbody>
 <?php foreach ($announcements as $notice): $url = $baseUrl . '/' . (int) $notice['id']; ?>
 <tr><td><strong><?= esc($notice['title']) ?></strong><?php if (!empty($notice['is_pinned_advisory'])): ?> <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1">Pinned Advisory</span><?php endif; ?><details class="mt-2"><summary class="small">Preview text</summary><div class="mt-2" style="white-space:pre-wrap;overflow-wrap:anywhere"><?= esc($notice['body']) ?></div></details></td>
 <td><?= esc(ucfirst($notice['audience'])) ?><?= view('announcements/_targeting_summary', ['targetRecord' => $notice], ['saveData' => false]) ?></td><td><span class="badge bg-secondary"><?= esc(ucfirst($notice['status'])) ?></span><small class="d-block mt-1">From: <?= esc($notice['starts_at'] === null ? 'On publication' : $announcementDate($notice['starts_at'])) ?><br>Until: <?= esc($notice['ends_at'] === null ? 'No expiry' : $announcementDate($notice['ends_at'])) ?></small></td>
-<td><div class="d-flex flex-wrap gap-2">
+<td><div class="table-card-actions">
 <?php if ($notice['status'] === 'draft'): ?>
 <a class="btn btn-outline-primary btn-sm" href="<?= esc($url . '/edit') ?>" data-app-modal-open>Edit draft</a>
 <form action="<?= esc($url . '/publish') ?>" method="POST" data-background-submit data-confirm="Publish this announcement to the selected audience? Its text, audience and visibility dates cannot be edited afterward." data-confirm-title="Publish announcement" data-confirm-label="Publish announcement" data-confirm-tone="warning"><?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $notice['version'] ?>"><button class="btn btn-primary btn-sm" type="submit">Publish</button></form>
@@ -35,7 +35,7 @@
 <div data-refresh-region="announcements.read-history">
 <?php if (isset($readHistory)): ?>
 <section class="card"><div class="card-body pt-3"><h2 class="h5">Read history: <?= esc($readHistory['announcement']['title']) ?></h2><p class="text-muted small">A read marker is not acknowledgement or proof of comprehension.</p>
-<table class="table"><thead><tr><th>Person</th><th>Marked read at (Asia/Manila)</th></tr></thead><tbody><?php foreach ($readHistory['reads'] as $read): ?><tr><td><?= esc($read['first_name'] . ' ' . $read['last_name']) ?></td><td><?= esc($announcementDate($read['read_at'])) ?></td></tr><?php endforeach; ?><?php if ($readHistory['reads'] === []): ?><tr><td colspan="2">No read markers yet.</td></tr><?php endif; ?></tbody></table>
+<div class="table-responsive"><table class="table align-middle"><thead><tr><th>Person</th><th>Marked read at (Asia/Manila)</th></tr></thead><tbody><?php foreach ($readHistory['reads'] as $read): ?><tr><td><?= esc($read['first_name'] . ' ' . $read['last_name']) ?></td><td><?= esc($announcementDate($read['read_at'])) ?></td></tr><?php endforeach; ?><?php if ($readHistory['reads'] === []): ?><tr><td colspan="2">No read markers yet.</td></tr><?php endif; ?></tbody></table></div>
 <?= view('partials/table_pagination', [
     'pagination' => $readHistory['pagination'], 'baseUrl' => $baseUrl, 'filters' => [],
     'paginationPageParam' => 'read_page', 'paginationLabel' => 'Read history pages',

@@ -10,6 +10,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $pendingForms = $pendingForms ?? [];
 $actor = $actor ?? [];
@@ -21,7 +22,7 @@ $actorId = (int) ($actor['id'] ?? 0);
 
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-        <div class="d-flex align-items-center gap-2 small">
+        <div class="d-flex flex-wrap align-items-center gap-2 small">
             <span class="badge bg-<?= $canCoSign ? 'success' : 'secondary' ?>">
                 <?= $canCoSign ? 'Qualified Co-Signer' : 'Read / Oversight View' ?>
             </span>
@@ -107,7 +108,7 @@ $actorId = (int) ($actor['id'] ?? 0);
                                         <span class="badge bg-primary-subtle text-primary border ms-1">Assigned to You</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="small text-muted text-nowrap">
+                                <td class="small text-muted text-md-nowrap">
                                     <?= ! empty($row['submitted_for_cosign_at']) ? esc(date('M d, Y g:i A', strtotime((string) $row['submitted_for_cosign_at']))) : '—' ?>
                                 </td>
                                 <td class="small" style="max-width: 240px;">
@@ -117,13 +118,15 @@ $actorId = (int) ($actor['id'] ?? 0);
                                         <span class="text-muted fst-italic">No notes</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="text-end text-nowrap">
-                                    <a href="<?= site_url('guidance/clinical/forms/' . $id . '/pdf?mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary me-1">
-                                        <i class="bi bi-file-pdf me-1"></i>Preview
-                                    </a>
-                                    <a href="<?= site_url('guidance/clinical/forms/' . $id) ?>" class="btn btn-sm <?= $isMineToSign ? 'btn-warning' : 'btn-outline-primary' ?>">
-                                        <i class="bi bi-<?= $isMineToSign ? 'pen' : 'eye' ?> me-1"></i><?= $isMineToSign ? 'Review & Co-Sign' : 'Inspect' ?>
-                                    </a>
+                                <td class="text-md-end">
+                                    <div class="d-flex flex-wrap justify-content-md-end gap-2 gc-card-actions">
+                                        <a href="<?= site_url('guidance/clinical/forms/' . $id . '/pdf?mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                            <i class="bi bi-file-pdf me-1"></i>Preview
+                                        </a>
+                                        <a href="<?= site_url('guidance/clinical/forms/' . $id) ?>" class="btn btn-sm <?= $isMineToSign ? 'btn-warning' : 'btn-outline-primary' ?>">
+                                            <i class="bi bi-<?= $isMineToSign ? 'pen' : 'eye' ?> me-1"></i><?= $isMineToSign ? 'Review & Co-Sign' : 'Inspect' ?>
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>

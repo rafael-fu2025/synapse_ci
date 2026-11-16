@@ -14,6 +14,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $psychosocial = $psychosocial ?? [];
 $counseling = $counseling ?? [];
@@ -193,7 +194,7 @@ $renderAggregateCard = static function (
         <label for="eval-filter-year" class="form-label small fw-semibold">Academic Year</label>
         <input id="eval-filter-year" type="text" name="academic_year" class="form-control form-control-sm" value="<?= esc($filters['academic_year'] ?? '', 'attr') ?>" placeholder="All years">
       </div>
-      <div class="col-md-2 d-flex gap-2">
+      <div class="col-md-2 d-flex flex-wrap gap-2">
         <button type="submit" class="btn btn-primary btn-sm flex-grow-1">Apply</button>
         <a href="<?= esc(site_url('/guidance/evaluations/dashboard'), 'attr') ?>" class="btn btn-outline-secondary btn-sm">Reset</a>
       </div>
@@ -228,5 +229,6 @@ $renderAggregateCard = static function (
         $filters
     ) ?>
   </div>
+</div>
 </div>
 <?= $this->endSection() ?>

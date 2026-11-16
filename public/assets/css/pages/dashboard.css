@@ -1,4 +1,4 @@
-﻿/* dashboard.css
+/* dashboard.css
  * Dashboard and nd-prefixed dashboard styles.
  * Extracted from assets/css/style.css without changing selector order.
  */
@@ -19947,6 +19947,22 @@ body.ai-settings-drawer-open {
 }
 
 @media (max-width: 991px) {
+  .ai-settings-page :is(.btn:not(.btn-close), .form-control:not(textarea), .form-select, .bd-select-toggle, summary) {
+    min-height: 40px;
+  }
+
+  .ai-settings-page :is(.btn:not(.btn-close)) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+  }
+
+  .ai-settings-page summary {
+    min-height: 40px;
+    padding-block: 0.5rem;
+  }
+
   .ai-settings-checklist {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -20579,6 +20595,19 @@ body.ai-settings-drawer-open {
   color: var(--default-color);
 }
 
+@media (max-width: 991.98px) {
+  .ai-insights :is(.btn:not(.btn-close), .form-select, .form-control:not(textarea), .bd-select-toggle, summary) {
+    min-height: 40px;
+  }
+
+  .ai-insights .btn:not(.btn-close) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+  }
+}
+
 @media (max-width: 767.98px) {
   .ai-insights__header,
   .ai-insights__status-row,
@@ -20649,6 +20678,191 @@ body.ai-settings-drawer-open {
 @media (prefers-reduced-motion: reduce) {
   .ai-insights summary::after {
     transition: none !important;
+  }
+}
+
+/* -------------------------------------------------------------
+ * Shared Clinic / Guidance Operational Workstations & Modals
+ * ------------------------------------------------------------- */
+.appointment-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.75rem, 1fr));
+  gap: .5rem;
+}
+
+.appointment-slot-btn {
+  min-height: 44px;
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.appointment-slot-btn:disabled {
+  opacity: .42;
+  text-decoration: line-through;
+  border-style: dashed;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .appointment-slot-btn.btn-outline-secondary:not(:disabled) {
+  --bs-btn-color: #f0f0f0;
+  --bs-btn-border-color: rgba(255, 255, 255, .36);
+  --bs-btn-bg: rgba(255, 255, 255, .04);
+  --bs-btn-hover-color: #ffffff;
+  --bs-btn-hover-bg: rgba(255, 255, 255, .14);
+  --bs-btn-hover-border-color: rgba(255, 255, 255, .52);
+  color: #f0f0f0 !important;
+  border-color: rgba(255, 255, 255, .36) !important;
+  background-color: rgba(255, 255, 255, .04) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .appointment-slot-btn.btn-outline-secondary:not(:disabled):hover {
+  background-color: rgba(255, 255, 255, .14) !important;
+}
+
+.referral-handoff-cell details > summary,
+.announcements-table details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.referral-summary-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 992px) {
+  .referral-handoff-cell {
+    min-width: 11.25rem;
+    max-width: 18.75rem;
+  }
+}
+
+/* Keep 8 referral columns visible without horizontal clipping on tablet (768px-1199px). */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+  .referral-table > :not(caption) > * > * {
+    padding: .5rem .32rem;
+    font-size: .78rem;
+  }
+
+  .referral-table > thead > tr > th {
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+
+  .referral-table > tbody > tr > td {
+    overflow-wrap: break-word;
+  }
+
+  .referral-table > :not(caption) > * > :first-child {
+    padding-left: .65rem !important;
+  }
+
+  .referral-table > :not(caption) > * > :last-child {
+    padding-right: .65rem !important;
+  }
+
+  .referral-handoff-cell {
+    min-width: 0;
+    max-width: 9.5rem;
+  }
+
+  .referral-table .table-card-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: .35rem;
+  }
+
+  .referral-table .table-card-actions :is(.btn, form, form > .btn) {
+    width: 100%;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+    text-align: center;
+    line-height: 1.25;
+  }
+
+  .referral-table .table-card-actions .btn-sm {
+    padding: .25rem .42rem;
+    font-size: .74rem;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .appointment-filter {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch !important;
+    gap: .5rem;
+  }
+
+  .appointment-date-field,
+  .appointment-page-size {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .appointment-filter :is(.form-control, .form-select, .bd-select .bd-select-toggle),
+  [data-table-filters] :is(.form-control, .form-select, .bd-select .bd-select-toggle) {
+    min-height: 40px;
+  }
+
+  .appointment-filter .bd-select,
+  [data-table-filters] .bd-select {
+    width: 100%;
+  }
+
+  .referral-folder-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .5rem !important;
+  }
+
+  .referral-folder-nav .nav-link:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .referral-folder-nav .nav-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    padding: .5rem .75rem;
+  }
+
+  .referral-filter-actions > .btn {
+    flex: 1 1 8rem;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .announcements-targeting-choices {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .5rem .75rem !important;
+  }
+
+  .announcements-pagination .btn {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 419.98px) {
+  .appointment-filter {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -165,10 +165,15 @@ $externalHost = $externalUrl !== '' ? (string) (parse_url($externalUrl, PHP_URL_
         <?php endif; ?>
         </fieldset>
       <?php endforeach; ?>
-      <button type="submit" class="btn btn-primary">Submit identified response</button>
+      <div class="d-grid d-sm-flex flex-sm-wrap align-items-sm-center gap-2 mt-3">
+        <button type="submit" class="btn btn-primary">Submit identified response</button>
+        <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-outline-secondary">Back to surveys</a>
+      </div>
     </form>
   <?php endif; ?>
-  <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-link mt-3">Back to surveys</a>
+  <?php if (!empty($externalUrl) || !empty($survey['submitted'])): ?>
+    <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-link mt-3 px-0">Back to surveys</a>
+  <?php endif; ?>
 </div></div>
 <?= $this->endSection() ?>
 <?= $this->section('scripts') ?>
@@ -177,17 +182,25 @@ $externalHost = $externalUrl !== '' ? (string) (parse_url($externalUrl, PHP_URL_
 (() => {
   'use strict';
   const lifecycle = new AbortController();
-  let disposeForm = null;
+  const boundForms = window.__synapseSurveyBoundForms || (window.__synapseSurveyBoundForms = new WeakSet());
+  let boundForm = null, disposeForm = null, unregister = null;
   const dispose = () => {
     lifecycle.abort();
     disposeForm?.();
     disposeForm = null;
+    unregister?.();
+    unregister = null;
   };
-  window.SynapseNavigation?.registerCleanup(dispose);
-  document.addEventListener('synapse:before-swap', dispose, {signal: lifecycle.signal});
+  unregister = window.SynapseNavigation?.registerCleanup(dispose);
+  document.addEventListener('synapse:before-swap', event => {
+    const root = event.detail?.root;
+    if (boundForm && root && (root === boundForm || root.contains(boundForm))) dispose();
+  }, {signal: lifecycle.signal});
   const init = root => {
   const form = root?.querySelector('#survey-response-form');
-  if (!form?.isConnected || form.dataset.bound || lifecycle.signal.aborted) return;
+  if (!form?.isConnected || boundForms.has(form) || lifecycle.signal.aborted) return;
+  boundForm = form;
+  boundForms.add(form);
   form.dataset.bound = '1';
   const button = form.querySelector('button[type="submit"]');
   const error = form.querySelector('[data-survey-error]');
@@ -225,6 +238,7 @@ $externalHost = $externalUrl !== '' ? (string) (parse_url($externalUrl, PHP_URL_
     events.abort();
     form.reset();
     syncAllOtherInputs();
+    boundForms.delete(form);
     delete form.dataset.bound;
   };
   window.addEventListener('pagehide', () => { request?.abort(); form.reset(); syncAllOtherInputs(); }, {signal: events.signal});
@@ -262,7 +276,11 @@ $externalHost = $externalUrl !== '' ? (string) (parse_url($externalUrl, PHP_URL_
       }
       form.reset();
       completed = true;
-      window.location.assign(successUrl.href);
+      if (window.SynapsePortalWorkspace?.isActive?.()) {
+        void window.SynapsePortalWorkspace.navigate(successUrl.href, { bypassDirtyCheck: true });
+      } else {
+        window.location.assign(successUrl.href);
+      }
     } catch (_) {
       if (!disposed && form.isConnected) fail('Unable to confirm submission. Your answers remain on this page. Check your survey status before retrying.');
     } finally {

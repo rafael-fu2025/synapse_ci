@@ -295,6 +295,72 @@ fieldset:disabled .btn {
   overflow: hidden;
 }
 
+@media (max-width: 767.98px) {
+  .pagination {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .pagination .page-link {
+    min-height: 40px;
+    min-width: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .form-actions > :is(.btn, a.btn) {
+    min-height: 40px;
+  }
+
+  .exec-dashboard-page .nd-kpi-rail .nd-kpi-card {
+    height: 100%;
+    padding: 0.85rem;
+  }
+
+  .exec-dashboard-page .nd-kpi-rail .nd-kpi-icon {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 6px;
+  }
+
+  .exec-dashboard-page .nd-kpi-rail .nd-kpi-value {
+    font-size: 1.3rem;
+  }
+}
+
+@media (max-width: 991.98px) {
+  :is(.exec-dashboard-page, .admin-audit-page, [data-refresh-owner="admin.access"], [data-mis-sync], [data-operational-export], .report-export-alert, .referrals-workstation-page, [data-refresh-owner^="announcements."]) :is(.btn:not(.btn-close), .form-control:not(textarea), .form-select, .bd-select-toggle, .page-link) {
+    min-height: 40px;
+  }
+
+  :is(.exec-dashboard-page, .admin-audit-page, [data-refresh-owner="admin.access"], [data-mis-sync], [data-operational-export], .report-export-alert, .referrals-workstation-page, [data-refresh-owner^="announcements."]) :is(.btn:not(.btn-close), .page-link),
+  .exec-dashboard-page .nd-inline-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+  }
+
+  :is([data-refresh-owner^="announcements."], .admin-audit-page details[data-role-change-details] >) summary,
+  [data-refresh-owner^="announcements."] summary,
+  .admin-audit-page details[data-role-change-details] > summary {
+    min-height: 40px;
+    padding-block: 0.5rem;
+    line-height: 1.45;
+  }
+
+  .exec-dashboard-page .nd-inline-link {
+    min-height: 40px;
+    white-space: nowrap;
+  }
+
+  .exec-dashboard-page .exec-ops-hub .btn {
+    min-height: 44px;
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 575.98px) {
   .modal-footer > .modal-footer-actions > .btn {
     flex: 1 1 auto;

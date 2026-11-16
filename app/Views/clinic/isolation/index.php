@@ -1,7 +1,67 @@
 <?= $this->extend('layouts/app') ?>
 
+<?= $this->section('styles') ?>
+<style>
+  .clinic-isolation-alert-chip {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    text-align: start;
+    line-height: 1.35;
+    background: var(--surface-color, #ffffff);
+    color: var(--bs-danger-text-emphasis, #842029);
+    border: 1px solid var(--bs-danger-border-subtle, #f5c2c7);
+  }
+  .clinic-calendar-table {
+    min-width: 680px;
+    table-layout: fixed;
+  }
+  @media (min-width: 768px) {
+    .clinic-iso-notes {
+      max-width: 260px;
+    }
+  }
+  @media (max-width: 575.98px) {
+    .clinic-mobile-full {
+      width: 100% !important;
+    }
+  }
+  @media (max-width: 767.98px) {
+    .clinic-page-actions .btn,
+    .clinic-iso-filters .btn,
+    .clinic-iso-filters .form-control,
+    .clinic-iso-filters .form-select,
+    .clinic-iso-filters .bd-select .bd-trigger,
+    .clinic-iso-filters .bd-select .bd-select-toggle,
+    .clinic-iso-table.table-mobile-cards .btn,
+    .clinic-iso-modal .btn,
+    .clinic-iso-modal .form-control,
+    .clinic-iso-modal .form-select,
+    .clinic-iso-modal .bd-select .bd-trigger,
+    .clinic-iso-modal .bd-select .bd-select-toggle {
+      min-height: 40px;
+    }
+    .clinic-page-actions .btn,
+    .clinic-iso-filters .btn,
+    .clinic-iso-table.table-mobile-cards .btn,
+    .clinic-iso-modal .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .clinic-iso-filters .bd-select,
+    .clinic-iso-modal .bd-select {
+      width: 100%;
+    }
+    .clinic-iso-notes {
+      max-width: 100%;
+    }
+  }
+</style>
+<?= $this->endSection() ?>
+
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2">
+<div class="d-flex flex-wrap gap-2 clinic-page-actions">
   <a href="<?= site_url('/clinic/reports') ?>" class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-file-earmark-bar-graph me-1"></i> Periodic Reports
   </a>
@@ -30,13 +90,13 @@ $conditionColors = [
 <?php if (!empty($alerts)): ?>
   <div class="alert alert-danger border-0 shadow-sm mb-4" role="alert">
     <div class="d-flex align-items-start gap-2">
-      <i class="bi bi-exclamation-octagon-fill fs-4 mt-1"></i>
-      <div>
+      <i class="bi bi-exclamation-octagon-fill fs-4 mt-1 flex-shrink-0"></i>
+      <div class="flex-grow-1" style="min-width: 0;">
         <h6 class="fw-bold mb-1">Anonymized Communicable Threshold Alerts (Last 14 Days)</h6>
         <p class="small mb-2">Threshold (&ge;2 cases per condition within 14 days). Aggregates exclude patient identity to preserve medical confidentiality.</p>
         <div class="d-flex flex-wrap gap-2">
           <?php foreach ($alerts as $alert): ?>
-            <span class="badge bg-white text-danger border border-danger-subtle px-3 py-2">
+            <span class="badge clinic-isolation-alert-chip px-3 py-2">
               <strong><?= esc($alert['condition_label']) ?>:</strong> <?= (int) ($alert['case_count'] ?? 0) ?> cases · Cohort: <?= esc($alert['cohort_summary'] ?? 'Campus-wide') ?>
             </span>
           <?php endforeach; ?>
@@ -48,9 +108,9 @@ $conditionColors = [
 
 <!-- Condition KPI Summary Cards -->
 <div class="row g-3 mb-4">
-  <div class="col-md-3 col-sm-6">
+  <div class="col-6 col-md-3">
     <div class="card border-0 shadow-sm h-100 border-start border-danger border-4">
-      <div class="card-body">
+      <div class="card-body p-2 p-sm-3">
         <div class="text-muted small text-uppercase fw-semibold">Currently Under Isolation</div>
         <div class="h2 fw-bold text-danger mt-1 mb-0"><?= (int) ($activeCount ?? 0) ?></div>
         <div class="small text-muted">Active campus monitoring</div>
@@ -59,9 +119,9 @@ $conditionColors = [
   </div>
   <?php foreach (['chickenpox', 'measles', 'dengue'] as $highlightCode): ?>
     <?php $counts = $conditionCounts[$highlightCode] ?? ['active' => 0, 'total' => 0]; ?>
-    <div class="col-md-3 col-sm-6">
+    <div class="col-6 col-md-3">
       <div class="card border-0 shadow-sm h-100">
-        <div class="card-body">
+        <div class="card-body p-2 p-sm-3">
           <div class="text-muted small text-uppercase fw-semibold"><?= esc($conditions[$highlightCode] ?? $highlightCode) ?></div>
           <div class="d-flex align-items-baseline gap-2 mt-1">
             <span class="h2 fw-bold mb-0"><?= (int) $counts['active'] ?></span>
@@ -76,18 +136,18 @@ $conditionColors = [
 <!-- Filter & Month Navigation Bar -->
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-body py-3">
-    <form method="GET" action="<?= site_url('/clinic/isolation') ?>" class="row g-2 align-items-center">
-      <div class="col-md-4 d-flex align-items-center gap-2">
-        <a href="<?= site_url('/clinic/isolation?' . http_build_query(['month' => $prevMonth, 'condition' => $filters['condition'], 'status' => $filters['status']])) ?>" class="btn btn-outline-secondary btn-sm" title="Previous month">
+    <form method="GET" action="<?= site_url('/clinic/isolation') ?>" class="row g-2 align-items-center clinic-iso-filters">
+      <div class="col-12 col-md-4 d-flex align-items-center gap-2">
+        <a href="<?= site_url('/clinic/isolation?' . http_build_query(['month' => $prevMonth, 'condition' => $filters['condition'], 'status' => $filters['status']])) ?>" class="btn btn-outline-secondary btn-sm flex-shrink-0" aria-label="Previous month" title="Previous month">
           <i class="bi bi-chevron-left"></i>
         </a>
         <h5 class="fw-bold mb-0 text-center flex-grow-1"><?= esc($monthLabel) ?></h5>
-        <a href="<?= site_url('/clinic/isolation?' . http_build_query(['month' => $nextMonth, 'condition' => $filters['condition'], 'status' => $filters['status']])) ?>" class="btn btn-outline-secondary btn-sm" title="Next month">
+        <a href="<?= site_url('/clinic/isolation?' . http_build_query(['month' => $nextMonth, 'condition' => $filters['condition'], 'status' => $filters['status']])) ?>" class="btn btn-outline-secondary btn-sm flex-shrink-0" aria-label="Next month" title="Next month">
           <i class="bi bi-chevron-right"></i>
         </a>
         <input type="hidden" name="month" value="<?= esc($month) ?>">
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <select name="condition" class="form-select form-select-sm" aria-label="Filter by condition">
           <option value="all">All Conditions</option>
           <?php foreach ($conditions as $code => $label): ?>
@@ -95,7 +155,7 @@ $conditionColors = [
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="col-md-3">
+      <div class="col-6 col-md-3">
         <select name="status" class="form-select form-select-sm" aria-label="Filter by clearance status">
           <option value="all">All Statuses</option>
           <option value="active_isolation" <?= $filters['status'] === 'active_isolation' ? 'selected' : '' ?>>Active Isolation</option>
@@ -103,9 +163,9 @@ $conditionColors = [
           <option value="hospitalized" <?= $filters['status'] === 'hospitalized' ? 'selected' : '' ?>>Hospitalized</option>
         </select>
       </div>
-      <div class="col-md-2 d-flex gap-2">
+      <div class="col-12 col-md-2 d-flex gap-2">
         <button type="submit" class="btn btn-outline-primary btn-sm flex-grow-1">Apply</button>
-        <a href="<?= site_url('/clinic/isolation') ?>" class="btn btn-outline-secondary btn-sm">Reset</a>
+        <a href="<?= site_url('/clinic/isolation') ?>" class="btn btn-outline-secondary btn-sm flex-grow-1 flex-md-grow-0">Reset</a>
       </div>
     </form>
   </div>
@@ -127,13 +187,14 @@ foreach ($cases as $c) {
 }
 ?>
 <div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+  <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
     <h6 class="fw-bold mb-0"><i class="bi bi-calendar3 me-1 text-primary"></i> Monthly Isolation Calendar (<?= esc($monthLabel) ?>)</h6>
     <span class="small text-muted"><?= count($cases) ?> case(s) overlapping this month</span>
   </div>
   <div class="card-body p-2">
+    <div class="small text-muted px-1 pb-2 d-md-none"><i class="bi bi-arrow-left-right me-1"></i>Swipe horizontally to browse Mon–Sun calendar days.</div>
     <div class="table-responsive">
-      <table class="table table-bordered mb-0 small" style="table-layout: fixed;">
+      <table class="table table-bordered mb-0 small clinic-calendar-table" data-mobile-cards="false">
         <thead class="table-light text-center text-muted text-uppercase">
           <tr>
             <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
@@ -189,7 +250,7 @@ foreach ($cases as $c) {
   </div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover align-middle small mb-0">
+      <table class="table table-hover align-middle small mb-0 clinic-iso-table">
         <thead class="table-light text-muted text-uppercase">
           <tr>
             <th class="ps-3">Patient</th>
@@ -233,7 +294,7 @@ foreach ($cases as $c) {
                   <?php $sClass = match ($c['clearance_status']) { 'cleared' => 'bg-success', 'hospitalized' => 'bg-warning text-dark', default => 'bg-danger' }; ?>
                   <span class="badge <?= $sClass ?> text-uppercase"><?= esc(str_replace('_', ' ', (string) $c['clearance_status'])) ?></span>
                 </td>
-                <td class="text-break" style="max-width: 260px;">
+                <td class="text-break clinic-iso-notes">
                   <?= esc($c['notes'] ?? '—') ?>
                   <div class="text-muted" style="font-size: 0.75rem;">
                     Logged by <?= esc($c['reported_by_name'] ?? 'Clinic staff') ?>
@@ -243,7 +304,7 @@ foreach ($cases as $c) {
                 <?php if (!empty($canWrite)): ?>
                   <td class="text-end pe-3">
                     <?php if ($c['clearance_status'] === 'active_isolation'): ?>
-                      <button type="button" class="btn btn-outline-success btn-sm"
+                      <button type="button" class="btn btn-outline-success btn-sm clinic-mobile-full"
                               data-bs-toggle="modal"
                               data-bs-target="#clearIsolationModal<?= (int) $c['id'] ?>">
                         <i class="bi bi-check2-circle me-1"></i> Update / Clear
@@ -265,7 +326,7 @@ foreach ($cases as $c) {
 <?php if (!empty($canWrite) && !empty($cases)): ?>
   <?php foreach ($cases as $c): ?>
     <?php if (($c['clearance_status'] ?? '') === 'active_isolation'): ?>
-      <div class="modal fade text-start" id="clearIsolationModal<?= (int) $c['id'] ?>" tabindex="-1" aria-hidden="true">
+      <div class="modal fade text-start clinic-iso-modal" id="clearIsolationModal<?= (int) $c['id'] ?>" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
           <form method="POST" action="<?= site_url('/clinic/isolation/' . (int) $c['id'] . '/clear') ?>" class="modal-content">
             <?= csrf_field() ?>
@@ -289,9 +350,9 @@ foreach ($cases as $c) {
                 <textarea name="notes" id="clearNotes<?= (int) $c['id'] ?>" rows="2" class="form-control form-control-sm" placeholder="Afebrile, lesions crusted, fit for class..."></textarea>
               </div>
             </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-              <button type="submit" class="btn btn-success btn-sm">Confirm Status Update</button>
+            <div class="modal-footer d-flex flex-column-reverse flex-sm-row gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm clinic-mobile-full m-0" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="btn btn-success btn-sm clinic-mobile-full m-0">Confirm Status Update</button>
             </div>
           </form>
         </div>
@@ -302,7 +363,7 @@ foreach ($cases as $c) {
 
 <?php if (!empty($canWrite)): ?>
 <!-- Log Isolation Case Modal -->
-<div class="modal fade" id="logIsolationModal" tabindex="-1" aria-labelledby="logIsolationModalLabel" aria-hidden="true"
+<div class="modal fade clinic-iso-modal" id="logIsolationModal" tabindex="-1" aria-labelledby="logIsolationModalLabel" aria-hidden="true"
      x-data="isolationLogForm(<?= esc((string) json_encode(['defaultDays' => $defaultDays, 'today' => $today, 'searchUrl' => site_url('/api/patients/search?q=')]), 'attr') ?>)">
   <div class="modal-dialog modal-lg">
     <form method="POST" action="<?= site_url('/clinic/isolation/store') ?>" class="modal-content">
@@ -318,15 +379,15 @@ foreach ($cases as $c) {
           <input type="hidden" name="person_id" :value="selectedPerson ? selectedPerson.id : ''" required>
           <template x-if="!selectedPerson">
             <div>
-              <div class="input-group input-group-sm">
+              <div class="input-group">
                 <input type="text" class="form-control" x-model="searchTerm" @input.debounce.300ms="lookupPatient()" placeholder="Type name or MIS ID (min 2 chars)...">
                 <span class="input-group-text" x-show="loading"><span class="spinner-border spinner-border-sm"></span></span>
               </div>
               <div class="list-group mt-1 shadow-sm" x-show="results.length > 0">
                 <template x-for="p in results" :key="p.id">
-                  <button type="button" class="list-group-item list-group-item-action py-2 small d-flex justify-content-between align-items-center" @click="pick(p)">
+                  <button type="button" class="list-group-item list-group-item-action py-2 small d-flex flex-wrap justify-content-between align-items-center gap-2" @click="pick(p)">
                     <span><strong x-text="p.last_name + ', ' + p.first_name"></strong> (<span x-text="p.mis_id"></span>)</span>
-                    <span class="badge bg-light text-dark border text-uppercase" x-text="p.kind"></span>
+                    <span class="badge bg-secondary-subtle text-body border text-uppercase" x-text="p.kind"></span>
                   </button>
                 </template>
               </div>
@@ -334,7 +395,7 @@ foreach ($cases as $c) {
             </div>
           </template>
           <template x-if="selectedPerson">
-            <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 mb-0 small">
+            <div class="alert alert-secondary border d-flex flex-wrap justify-content-between align-items-center gap-2 py-2 mb-0 small">
               <span>
                 <strong x-text="selectedPerson.last_name + ', ' + selectedPerson.first_name"></strong>
                 · MIS ID: <span x-text="selectedPerson.mis_id"></span>
@@ -382,9 +443,9 @@ foreach ($cases as $c) {
           <textarea name="notes" id="isoNotes" rows="2" class="form-control form-control-sm" placeholder="Symptom onset, quarantine advisory issued..." maxlength="2000"></textarea>
         </div>
       </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button type="submit" class="btn btn-danger btn-sm" :disabled="!selectedPerson"><i class="bi bi-check2-circle me-1"></i> Save Isolation Case</button>
+      <div class="modal-footer d-flex flex-column-reverse flex-sm-row gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm clinic-mobile-full m-0" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger btn-sm clinic-mobile-full m-0" :disabled="!selectedPerson"><i class="bi bi-check2-circle me-1"></i> Save Isolation Case</button>
       </div>
     </form>
   </div>

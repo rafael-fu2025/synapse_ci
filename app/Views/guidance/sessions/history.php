@@ -1,6 +1,6 @@
 <?= $this->extend('layouts/modal_form') ?>
 <?= $this->section('content') ?>
-<div class="p-1">
+<div class="p-1 guidance-ui">
   <h2 class="h5">Finalized Note Version History</h2>
   <p class="small text-muted">Finalized amendments only. The current draft, if any, is shown separately in the session reader.</p>
   <?php if (!empty($historyReadAudited)): ?>

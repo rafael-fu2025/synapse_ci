@@ -57,6 +57,7 @@ $episodeId = (int) ($contextIds['episode_id'] ?? 0);
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $statusBadges = [
     'draft'          => ['bg' => 'secondary', 'label' => 'Draft (Editable)'],
@@ -184,7 +185,7 @@ if ($fieldsToRender === [] && $schemaFields !== []) {
                 </div>
             </div>
 
-            <div class="small text-end text-muted">
+            <div class="small text-lg-end text-muted">
                 <?php if ($authorInfo !== null): ?>
                     <?php $aName = trim((string) (($authorInfo['first_name'] ?? '') . ' ' . ($authorInfo['last_name'] ?? ''))) ?: (string) ($authorInfo['username'] ?? ''); ?>
                     <div>Author: <strong><?= esc($aName) ?></strong></div>
@@ -410,13 +411,13 @@ $formAction = $mode === 'create'
     </div>
 
     <?php if ($isEditable): ?>
-        <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
             <span class="small text-muted">
                 <?= $mode === 'create'
                     ? 'Creating the draft enables PDF preview, co-sign submission, or attestation.'
                     : 'Save edits before submitting or finalizing.' ?>
             </span>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary w-100 w-sm-auto">
                 <i class="bi bi-save me-1"></i><?= $mode === 'create' ? 'Create Encrypted Draft' : 'Save Encrypted Draft' ?>
             </button>
         </div>
@@ -445,11 +446,11 @@ $formAction = $mode === 'create'
                     <textarea id="submissionNotes" name="submission_notes" rows="2" class="form-control"
                               placeholder="Highlight risk observations, clinical questions, or supervision points..."></textarea>
                 </div>
-                <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span class="small text-muted">
                         As a Counselor Associate, finalized clinical records require active supervisor co-signature.
                     </span>
-                    <button type="submit" class="btn btn-warning">
+                    <button type="submit" class="btn btn-warning w-100 w-sm-auto">
                         <i class="bi bi-send me-1"></i>Submit for Supervisor Co-Sign
                     </button>
                 </div>
@@ -459,7 +460,7 @@ $formAction = $mode === 'create'
         <!-- Licensed Counselor / Supervisor Action: Digitally Attest & Finalize -->
         <div class="card border-success shadow-sm mb-3">
             <div class="card-header bg-success-subtle border-0 py-2">
-                <h6 class="card-title mb-0 p-0 text-success">
+                <h6 class="card-title mb-0 p-0 text-success-emphasis">
                     <i class="bi bi-patch-check me-2"></i>Digitally Attest &amp; Finalize
                 </h6>
             </div>
@@ -481,8 +482,8 @@ $formAction = $mode === 'create'
                         I attest that this clinical record is accurate, complete, and finalized under my practitioner credentials.
                     </label>
                 </div>
-                <div class="text-end">
-                    <button type="submit" class="btn btn-success">
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-success w-100 w-sm-auto">
                         <i class="bi bi-check2-circle me-1"></i>Digitally Attest &amp; Finalize
                     </button>
                 </div>
@@ -495,7 +496,7 @@ $formAction = $mode === 'create'
     <!-- Assigned Supervisor Action: Co-Sign & Finalize -->
     <div class="card border-success shadow-sm mb-3">
         <div class="card-header bg-success-subtle border-0 py-2">
-            <h6 class="card-title mb-0 p-0 text-success">
+            <h6 class="card-title mb-0 p-0 text-success-emphasis">
                 <i class="bi bi-pen-fill me-2"></i>Supervisor Review: Co-Sign &amp; Finalize
             </h6>
         </div>
@@ -522,8 +523,8 @@ $formAction = $mode === 'create'
                     I have reviewed this clinical documentation and apply my supervisor co-signature to finalize it.
                 </label>
             </div>
-            <div class="text-end">
-                <button type="submit" class="btn btn-success">
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-success w-100 w-sm-auto">
                     <i class="bi bi-check2-all me-1"></i>Co-Sign &amp; Finalize
                 </button>
             </div>
@@ -567,7 +568,7 @@ $formAction = $mode === 'create'
                                 </td>
                                 <td class="small fw-semibold"><?= esc($attName) ?></td>
                                 <td class="small"><?= esc((string) ($att['attestation_statement'] ?? '')) ?></td>
-                                <td class="small text-muted text-nowrap">
+                                <td class="small text-muted text-md-nowrap">
                                     <?= ! empty($att['attested_at']) ? esc(date('M d, Y g:i A', strtotime((string) $att['attested_at']))) : '—' ?>
                                 </td>
                                 <td class="small font-monospace text-muted">
@@ -581,6 +582,7 @@ $formAction = $mode === 'create'
         </div>
     </div>
 <?php endif; ?>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

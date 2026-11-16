@@ -3,7 +3,7 @@
 <?php $question = $entry['question'] ?? ['type' => 'text', 'label' => '', 'required' => true, 'options' => [], 'allow_other' => false, 'scale_min_label' => '', 'scale_max_label' => '']; ?>
 <?php $question = ['allow_other' => false, 'scale_min_label' => '', 'scale_max_label' => ''] + $question; ?>
 <p class="text-muted small">Saving <?= $entry === null ? 'creates revision 1' : 'creates a new revision' ?>. Existing survey copies and earlier revisions are never edited.</p>
-<form method="POST" action="<?= esc($formAction) ?>" data-modal-submit x-data="{ question: <?= esc(json_encode($question, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?> }">
+<form class="guidance-ui" method="POST" action="<?= esc($formAction) ?>" data-modal-submit x-data="{ question: <?= esc(json_encode($question, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?> }">
 <?= csrf_field() ?><?php if ($entry !== null): ?><input type="hidden" name="version" value="<?= (int) $entry['version'] ?>"><?php endif; ?>
 <div class="mb-3"><label class="form-label" for="bankQuestionText">Question text</label><textarea id="bankQuestionText" class="form-control" name="question[label]" x-model="question.label" maxlength="500" rows="3" required></textarea></div>
 <div class="row g-3 mb-3"><div class="col-md-6"><label for="bankQuestionCategory" class="form-label">Category</label><input id="bankQuestionCategory" name="category" maxlength="80" required class="form-control" value="<?= esc($entry['category'] ?? '') ?>" placeholder="e.g. Service feedback"></div>

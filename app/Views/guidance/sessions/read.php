@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/modal_form') ?>
 
 <?= $this->section('content') ?>
-<div class="p-1">
+<div class="p-1 guidance-ui">
   <!-- Session & Security Metadata Bar -->
   <div class="d-flex flex-wrap justify-content-between align-items-center pb-3 mb-3 border-bottom gap-2">
     <div>

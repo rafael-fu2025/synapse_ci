@@ -8,6 +8,15 @@
 .notification-history .notification-history-item:last-child { border-bottom: 0; }
 .notification-history .notification-history-title { color: inherit; }
 [data-theme="dark"] .notification-history .notification-history-item { border-color: var(--border-color, #374151); }
+@media (max-width: 991.98px) {
+  .notification-history :is(.btn:not(.btn-close), .page-link) {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+  }
+}
 @media (max-width: 575.98px) {
   .notification-history .notification-history-actions { width: 100%; }
 }

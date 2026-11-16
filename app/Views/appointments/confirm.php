@@ -37,9 +37,9 @@
       <div x-show="loadingSlots" class="text-muted small" role="status"><span class="app-loading-spinner me-2" aria-hidden="true"></span>Checking staff availability…</div>
       <p x-show="slotError" x-text="slotError" class="text-danger small" role="alert"></p>
       <p x-show="!loadingSlots && !slotError && slots.length === 0" class="text-muted small">Choose staff and a date. If no times are available, ask your department administrator to configure the schedule or choose another date.</p>
-      <div x-show="!loadingSlots && slots.length > 0" class="d-flex flex-wrap gap-2">
+      <div x-show="!loadingSlots && slots.length > 0" class="appointment-slot-grid">
         <template x-for="slot in slots" :key="slot.starts_at">
-          <button type="button" class="btn btn-sm" :class="selectedSlot === slot ? 'btn-primary' : 'btn-outline-secondary'"
+          <button type="button" class="btn appointment-slot-btn" :class="selectedSlot === slot ? 'btn-primary' : 'btn-outline-secondary'"
                   :disabled="!slot.available" :aria-pressed="selectedSlot === slot" @click="selectedSlot = slot" x-text="formatSlotTime(slot.slot_time)"></button>
         </template>
       </div>
