@@ -14,45 +14,43 @@ final class ClinicSummaryReportLatex
         $totals = $summary['totals'];
         $periodLabel = $e($period['label'] . ' (' . $period['from'] . ' to ' . $period['to'] . ')');
 
-        $monthlyRows = '';
+        $formatRows = static function (array $rows): string {
+            $out = '';
+            foreach ($rows as $cells) {
+                $out .= implode(' & ', $cells) . " \\\\ \\hline\n";
+            }
+            return rtrim($out, "\n");
+        };
+
+        $monthlyData = [];
         foreach ($summary['monthly_series'] as $m) {
-            $monthlyRows .= $e($m['label']) . ' & ' . (int) $m['count'] . " \\\\\n";
+            $monthlyData[] = [$e($m['label']), (int) $m['count']];
         }
-        if ($monthlyRows === '') {
-            $monthlyRows = "No encounters in selected period & 0 \\\\\n";
-        }
+        $monthlyRows = $formatRows($monthlyData ?: [['No encounters in selected period', 0]]);
 
-        $complaintRows = '';
+        $complaintData = [];
         foreach (array_slice($summary['complaints'], 0, 12, true) as $label => $cnt) {
-            $complaintRows .= $e((string) $label) . ' & ' . (int) $cnt . " \\\\\n";
+            $complaintData[] = [$e((string) $label), (int) $cnt];
         }
-        if ($complaintRows === '') {
-            $complaintRows = "No chief complaints recorded & 0 \\\\\n";
-        }
+        $complaintRows = $formatRows($complaintData ?: [['No chief complaints recorded', 0]]);
 
-        $dispositionRows = '';
+        $dispositionData = [];
         foreach ($summary['dispositions'] as $label => $cnt) {
-            $dispositionRows .= $e((string) $label) . ' & ' . (int) $cnt . " \\\\\n";
+            $dispositionData[] = [$e((string) $label), (int) $cnt];
         }
-        if ($dispositionRows === '') {
-            $dispositionRows = "No dispositions recorded & 0 \\\\\n";
-        }
+        $dispositionRows = $formatRows($dispositionData ?: [['No dispositions recorded', 0]]);
 
-        $medicineRows = '';
+        $medicineData = [];
         foreach ($summary['top_medicines'] as $med) {
-            $medicineRows .= $e($med['name']) . ' & ' . (int) $med['encounter_count'] . ' & ' . (int) $med['total_qty'] . ' ' . $e($med['unit']) . " \\\\\n";
+            $medicineData[] = [$e($med['name']), (int) $med['encounter_count'], (int) $med['total_qty'] . ' ' . $e($med['unit'])];
         }
-        if ($medicineRows === '') {
-            $medicineRows = "No FEFO dispensations in selected period & 0 & 0 \\\\\n";
-        }
+        $medicineRows = $formatRows($medicineData ?: [['No FEFO dispensations in selected period', 0, 0]]);
 
-        $isolationRows = '';
+        $isolationData = [];
         foreach ($summary['isolation_summary'] as $iso) {
-            $isolationRows .= $e($iso['label']) . ' & ' . (int) $iso['count'] . " \\\\\n";
+            $isolationData[] = [$e($iso['label']), (int) $iso['count']];
         }
-        if ($isolationRows === '') {
-            $isolationRows = "No communicable isolation cases logged & 0 \\\\\n";
-        }
+        $isolationRows = $formatRows($isolationData ?: [['No communicable isolation cases logged', 0]]);
 
         $replacements = [
             '__PERIOD_LABEL__'     => $periodLabel,
@@ -81,19 +79,20 @@ final class ClinicSummaryReportLatex
 \IfFileExists{t1ptm.fd}{\renewcommand{\rmdefault}{ptm}}{\renewcommand{\rmdefault}{utm}}
 \DeclareSymbolFont{operators}{T1}{\rmdefault}{m}{n}
 \SetSymbolFont{operators}{bold}{T1}{\rmdefault}{b}{n}
-\usepackage{graphicx,xcolor,booktabs,tabularx}
+\usepackage{graphicx,xcolor,tabularx}
 \definecolor{Maroon}{HTML}{800000}
 \definecolor{Ink}{HTML}{293241}
 \definecolor{Muted}{HTML}{606975}
 \color{Ink}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{4pt}
-\renewcommand{\arraystretch}{1.2}
+\renewcommand{\arraystretch}{1.35}
 \pdfinfo{/Title (University Clinic Summary Report) /Author (Foundation University)}
+\newcommand{\SectionHeading}[1]{\par\addvspace{4mm}\noindent{\bfseries\color{Maroon}#1}\par\nobreak\vspace{1.5mm}}
 \begin{document}
-\begin{minipage}[c]{14mm}
+\noindent\begin{minipage}[c]{14mm}
   \includegraphics[height=12mm]{university-seal.png}
-\end{minipage}
+\end{minipage}\hspace{4mm}%
 \begin{minipage}[c]{\dimexpr\linewidth-18mm\relax}
   {\bfseries\large\color{Maroon}FOUNDATION UNIVERSITY --- UNIVERSITY CLINIC}\par
   {\small\color{Muted}SYNAPSE Health Services \textperiodcentered{} Periodic \& CHED Spot-Check Summary Report}
@@ -101,75 +100,66 @@ final class ClinicSummaryReportLatex
 \par\vspace{2mm}{\color{Maroon}\hrule height 0.8pt}\par\vspace{3mm}
 {\bfseries Period:} __PERIOD_LABEL__ \hfill {\small\color{Muted}SY __SY__ \textperiodcentered{} Asia/Manila}
 \par\vspace{3mm}
-\begin{tabularx}{\textwidth}{@{}l r l r l r@{}}
-\toprule
-Total Visits & \textbf{__ENCOUNTERS__} & Completed & \textbf{__COMPLETED__} & Students & \textbf{__STUDENT__} \\
-Employees & \textbf{__EMPLOYEE__} & Referred & \textbf{__REFERRED__} & Communicable Cases & \textbf{__ISOLATION__} \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|X|X|X|}
+\hline
+Total Visits \hfill \textbf{__ENCOUNTERS__} & Completed \hfill \textbf{__COMPLETED__} & Students \hfill \textbf{__STUDENT__} \\
+\hline
+Employees \hfill \textbf{__EMPLOYEE__} & Referred \hfill \textbf{__REFERRED__} & Communicable Cases \hfill \textbf{__ISOLATION__} \\
+\hline
 \end{tabularx}
 
-\vspace{4mm}
-{\bfseries\color{Maroon}Monthly Encounter Breakdown}
-\begin{tabularx}{\textwidth}{@{}X r@{}}
-\toprule
-Month & Encounters \\
-\midrule
+\SectionHeading{Monthly Encounter Breakdown}
+\begin{tabularx}{\textwidth}{|X|r|}
+\hline
+\textcolor{Maroon}{\textbf{Month}} & \textcolor{Maroon}{\textbf{Encounters}} \\
+\hline\hline
 __MONTHLY_ROWS__
-\bottomrule
 \end{tabularx}
 
-\vspace{4mm}
-{\bfseries\color{Maroon}Chief Complaints \& Clinical Dispositions}
-\begin{tabularx}{\textwidth}{@{}X r | X r@{}}
-\toprule
-Complaint Category & Count & Clinical Disposition & Count \\
-\midrule
-\multicolumn{4}{@{}l@{}}{\small\textit{(Aggregated independently below for readability)}} \\
-\bottomrule
-\end{tabularx}
-
-\begin{minipage}[t]{0.48\textwidth}
-\begin{tabularx}{\linewidth}{@{}X r@{}}
-\toprule
-Chief Complaint & Visits \\
-\midrule
+\SectionHeading{Chief Complaints \& Clinical Dispositions}
+{\small\color{Muted}\textit{Aggregated independently below for readability.}}\par\vspace{2mm}
+\noindent\begin{minipage}[t]{0.48\textwidth}
+\begin{tabularx}{\linewidth}[t]{|X|r|}
+\hline
+\textcolor{Maroon}{\textbf{Chief Complaint}} & \textcolor{Maroon}{\textbf{Visits}} \\
+\hline\hline
 __COMPLAINT_ROWS__
-\bottomrule
 \end{tabularx}
-\end{minipage}
-\hfill
+\end{minipage}\hfill%
 \begin{minipage}[t]{0.48\textwidth}
-\begin{tabularx}{\linewidth}{@{}X r@{}}
-\toprule
-Disposition & Visits \\
-\midrule
+\begin{tabularx}{\linewidth}[t]{|X|r|}
+\hline
+\textcolor{Maroon}{\textbf{Disposition}} & \textcolor{Maroon}{\textbf{Visits}} \\
+\hline\hline
 __DISPOSITION_ROWS__
-\bottomrule
 \end{tabularx}
 \end{minipage}
 
-\vspace{4mm}
-{\bfseries\color{Maroon}Top Dispensed Medicines (FEFO Ledger)}
-\begin{tabularx}{\textwidth}{@{}X r r@{}}
-\toprule
-Medicine & Encounters & Quantity Dispensed \\
-\midrule
+\SectionHeading{Top Dispensed Medicines (FEFO Ledger)}
+\begin{tabularx}{\textwidth}{|X|r|r|}
+\hline
+\textcolor{Maroon}{\textbf{Medicine}} & \textcolor{Maroon}{\textbf{Encounters}} & \textcolor{Maroon}{\textbf{Quantity Dispensed}} \\
+\hline\hline
 __MEDICINE_ROWS__
-\bottomrule
 \end{tabularx}
 
-\vspace{4mm}
-{\bfseries\color{Maroon}Communicable Disease \& Enrollment Health Clearance Summary (SY __SY__)}
-\begin{tabularx}{\textwidth}{@{}X r@{}}
-\toprule
-Reported Condition (Selected Period) & Cases \\
-\midrule
+\SectionHeading{Communicable Disease \& Enrollment Health Clearance Summary (SY __SY__)}
+\begin{tabularx}{\textwidth}{|X|r|}
+\hline
+\textcolor{Maroon}{\textbf{Reported Condition (Selected Period)}} & \textcolor{Maroon}{\textbf{Cases}} \\
+\hline\hline
 __ISOLATION_ROWS__
-\bottomrule
 \end{tabularx}
-\par\vspace{2mm}
-{\small\textbf{SY __SY__ Enrollment Clearances:} Cleared: __CLEARED__ \quad Pending: __PENDING_CLR__ \quad Hold for Follow-Up: __HOLD_CLR__}
-\vfill
+\par\vspace{2.5mm}
+{\small\bfseries\color{Ink}SY __SY__ Enrollment Clearances}\par\nobreak\vspace{1mm}
+\begin{tabularx}{\textwidth}{|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|>{\centering\arraybackslash}X|}
+\hline
+\textcolor{Maroon}{\textbf{Cleared}} & \textcolor{Maroon}{\textbf{Pending}} & \textcolor{Maroon}{\textbf{Hold for Follow-Up}} \\
+\hline\hline
+\textbf{__CLEARED__} & \textbf{__PENDING_CLR__} & \textbf{__HOLD_CLR__} \\
+\hline
+\end{tabularx}
+\par\vfill
 {\scriptsize\color{Muted}Generated by SYNAPSE \textperiodcentered{} Aggregate operational data only \textperiodcentered{} No individual patient identifiers.}
 \end{document}
 TEX;

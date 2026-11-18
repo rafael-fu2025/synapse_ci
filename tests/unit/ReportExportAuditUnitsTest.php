@@ -7,14 +7,13 @@ namespace Tests\Unit;
 use App\Services\Reporting\ExportAccess;
 use App\Services\Reporting\ExportRange;
 use App\Services\Reporting\OperationalExportService;
-use CodeIgniter\Database\BaseBuilder;
-use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\Database\SQLite3\Connection;
+use CodeIgniter\Events\Events;
 use CodeIgniter\Test\CIUnitTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
-use ReflectionMethod;
 use RuntimeException;
 
-/** Private mock builders only: no operational DB or module services are executed. */
+/** Private SQLite fixtures and pure authorization/UI checks; no operational database. */
 final class ReportExportAuditUnitsTest extends CIUnitTestCase
 {
     private function actor(string $role): array
@@ -85,73 +84,103 @@ final class ReportExportAuditUnitsTest extends CIUnitTestCase
     #[DataProvider('queryScopes')]
     public function testOnlySelectedModulesAreQueriedWithTenantAndManilaBounds(string $role, string $selection, array $units): void
     {
-        $specs = [];
-        $expected = [['date_manila', 'unit', 'metric', 'count']];
-        if (in_array('clinic', $units, true)) {
-            $specs[] = ['clinic_encounters', '', 'started_at', 'completed'];
-            $expected[] = ['2026-10-01', 'clinic', 'completed_clinic_encounters_started', 7];
-        }
-        if (in_array('guidance', $units, true)) {
-            $specs[] = ['counselling_sessions s', 's.', 'started_at', 'completed'];
-            $expected[] = ['2026-10-01', 'guidance', 'completed_guidance_sessions_started', 7];
-        }
-        if (in_array('bmg', $units, true)) {
-            $specs[] = ['bmg_batches', '', 'started_at', null];
-            $specs[] = ['bmg_batches', '', 'completed_at', 'released'];
-            $specs[] = ['bmg_batches', '', 'completed_at', 'voided'];
-            foreach (['started', 'released', 'voided'] as $status) {
-                $expected[] = ['2026-10-01', 'bmg', 'bmg_batches_' . $status, 7];
+        $db = $this->fixture($units);
+        try {
+            $expected = [['date_manila', 'unit', 'metric', 'count']];
+            if (in_array('clinic', $units, true)) {
+                $expected[] = ['2026-10-01', 'clinic', 'completed_clinic_encounters_started', 7];
             }
+            if (in_array('guidance', $units, true)) {
+                $db->table('counselling_cases')->insertBatch([['id' => 1, 'tenant_id' => 37], ['id' => 2, 'tenant_id' => 38]]);
+                $expected[] = ['2026-10-01', 'guidance', 'completed_guidance_sessions_started', 7];
+            }
+            if (in_array('bmg', $units, true)) {
+                foreach (['started', 'released', 'voided'] as $status) {
+                    $expected[] = ['2026-10-01', 'bmg', 'bmg_batches_' . $status, 7];
+                }
+            }
+            for ($index = 0; $index < 7; $index++) {
+                if (in_array('clinic', $units, true)) {
+                    $db->table('clinic_encounters')->insert(['tenant_id' => 37, 'status' => 'completed', 'started_at' => '2026-09-30 16:00:00']);
+                }
+                if (in_array('guidance', $units, true)) {
+                    $db->table('counselling_sessions')->insert(['tenant_id' => 37, 'case_id' => 1, 'status' => 'completed', 'started_at' => '2026-09-30 16:00:00']);
+                }
+                if (in_array('bmg', $units, true)) {
+                    $db->table('bmg_batches')->insert(['tenant_id' => 37, 'status' => 'released',
+                        'started_at' => '2026-09-30 16:00:00', 'completed_at' => '2026-09-30 16:00:00']);
+                    $db->table('bmg_batches')->insert(['tenant_id' => 37, 'status' => 'voided',
+                        'started_at' => null, 'completed_at' => '2026-09-30 16:00:00']);
+                }
+            }
+            foreach ([38, 37] as $tenant) {
+                $time = $tenant === 38 ? '2026-09-30 16:00:00' : '2026-10-01 16:00:00';
+                if (in_array('clinic', $units, true)) {
+                    $db->table('clinic_encounters')->insert(['tenant_id' => $tenant, 'status' => 'completed', 'started_at' => $time]);
+                }
+                if (in_array('guidance', $units, true)) {
+                    $db->table('counselling_sessions')->insert(['tenant_id' => $tenant, 'case_id' => $tenant === 37 ? 1 : 2,
+                        'status' => 'completed', 'started_at' => $time]);
+                }
+                if (in_array('bmg', $units, true)) {
+                    $db->table('bmg_batches')->insert(['tenant_id' => $tenant, 'status' => 'released', 'started_at' => $time, 'completed_at' => $time]);
+                }
+            }
+            $selected = ExportAccess::selectUnits($this->actor($role), $selection);
+            $this->assertSame($units, $selected);
+            [$rows, $queries] = $this->aggregateObserved($db,
+                ExportRange::fromInput(['from' => '2026-10-01', 'to' => '2026-10-01']), 'UTC', $selected);
+            $this->assertSame($expected, $rows);
+            $this->assertCount(count($units), $queries);
+        } finally {
+            $db->close();
         }
-        $builders = [];
-        foreach ($specs as [$table, $prefix, $date, $status]) {
-            $builder = $this->createMock(BaseBuilder::class);
-            $wheres = [[$prefix . 'tenant_id', 37]];
-            if ($status !== null) { $wheres[] = [$prefix . 'status', $status]; }
-            $wheres[] = [$prefix . $date . ' >=', '2026-09-30 16:00:00'];
-            $wheres[] = [$prefix . $date . ' <', '2026-10-01 16:00:00'];
-            $builder->expects($this->exactly(count($wheres)))->method('where')->willReturnCallback(
-                function ($key, $value) use ($wheres, $builder) {
-                    static $index = 0;
-                    $this->assertSame($wheres[$index++], [$key, $value]);
-                    return $builder;
-                });
-            $builder->expects($this->never())->method('select');
-            $builder->expects($this->never())->method('get');
-            $builder->expects($this->once())->method('countAllResults')->willReturn(7);
-            if ($table === 'counselling_sessions s') {
-                $builder->expects($this->once())->method('join')
-                    ->with('counselling_cases c', 'c.id = s.case_id AND c.tenant_id = s.tenant_id')->willReturnSelf();
-            } else { $builder->expects($this->never())->method('join'); }
-            $builders[] = $builder;
-        }
-        $db = $this->createMock(BaseConnection::class);
-        $db->expects($this->exactly(count($specs)))->method('table')->willReturnCallback(
-            function ($table) use ($specs, $builders) {
-                static $index = 0;
-                $this->assertSame($specs[$index][0], $table);
-                return $builders[$index++];
-            });
-        $rows = (new ReflectionMethod(OperationalExportService::class, 'aggregate'))->invoke(new OperationalExportService(),
-            $db, 37, ExportRange::fromInput(['from' => '2026-10-01', 'to' => '2026-10-01']), 'UTC',
-            ExportAccess::selectUnits($this->actor($role), $selection));
-        $this->assertSame($expected, $rows);
     }
 
-    public function testMaximumAllUnitRangeIsBoundedTo155CountQueriesAndRows(): void
+    public function testMaximumAllUnitRangeUses33QueriesAnd155MetricRows(): void
     {
-        $db = $this->createMock(BaseConnection::class);
-        $builder = $this->createMock(BaseBuilder::class);
-        $db->expects($this->exactly(155))->method('table')->willReturn($builder);
-        $builder->method('where')->willReturnSelf();
-        $builder->method('join')->willReturnSelf();
-        $builder->expects($this->never())->method('get');
-        $builder->expects($this->exactly(155))->method('countAllResults')->willReturn(0);
-        $rows = (new ReflectionMethod(OperationalExportService::class, 'aggregate'))->invoke(new OperationalExportService(),
-            $db, 37, ExportRange::fromInput(['from' => '2026-10-01', 'to' => '2026-10-31']), 'Asia/Manila',
-            ['clinic', 'guidance', 'bmg']);
-        $this->assertCount(156, $rows);
-        $this->assertSame(['2026-10-31', 'bmg', 'bmg_batches_voided', 0], $rows[155]);
+        $db = $this->fixture(['clinic', 'guidance', 'bmg']);
+        try {
+            [$rows, $queries] = $this->aggregateObserved($db,
+                ExportRange::fromInput(['from' => '2026-10-01', 'to' => '2026-10-31']), 'Asia/Manila', ['clinic', 'guidance', 'bmg']);
+            $this->assertCount(33, $queries);
+            $this->assertCount(156, $rows);
+            $this->assertSame(['2026-10-31', 'bmg', 'bmg_batches_voided', 0], $rows[155]);
+        } finally {
+            $db->close();
+        }
+    }
+
+    private function fixture(array $units): Connection
+    {
+        $db = new Connection(['database' => ':memory:', 'DBPrefix' => '', 'DBDebug' => true]);
+        $definitions = [
+            'clinic' => ['clinic_encounters' => '(tenant_id INTEGER, status TEXT, started_at TEXT)'],
+            'guidance' => ['counselling_cases' => '(id INTEGER PRIMARY KEY, tenant_id INTEGER)',
+                'counselling_sessions' => '(tenant_id INTEGER, case_id INTEGER, status TEXT, started_at TEXT)'],
+            'bmg' => ['bmg_batches' => '(tenant_id INTEGER, status TEXT, started_at TEXT, completed_at TEXT)'],
+        ];
+        foreach ($units as $unit) {
+            foreach ($definitions[$unit] as $table => $columns) {
+                $db->query('CREATE TABLE ' . $db->escapeIdentifiers($table) . ' ' . $columns);
+            }
+        }
+        return $db;
+    }
+
+    private function aggregateObserved(Connection $db, ExportRange $range, string $timezone, array $units): array
+    {
+        $queries = [];
+        $observer = static function ($query) use ($db, &$queries): void {
+            if ($db->getLastQuery() === $query) $queries[] = $query->getQuery();
+        };
+        Events::on('DBQuery', $observer);
+        try {
+            $rows = (new OperationalExportService())->aggregate($db, 37, $range, $timezone, $units);
+            return [$rows, $queries];
+        } finally {
+            Events::removeListener('DBQuery', $observer);
+        }
     }
 
     public function testUiListsOnlyRoleAllowedUnits(): void
@@ -193,11 +222,11 @@ final class ReportExportAuditUnitsTest extends CIUnitTestCase
         $this->assertStringContainsString("ExportAccess::selectUnits(\$actor, \$input['unit'] ?? null)", $source);
         $this->assertLessThan(strpos($source, 'Database::connect()'), strpos($source, 'ExportAccess::selectUnits('));
         $audit = substr($source, strpos($source, '(new AuditService())->log('),
-            strpos($source, "return ['csv'") - strpos($source, '(new AuditService())->log('));
-        foreach (["'units' => \$units", "'row_count' => count(\$rows) - 1", '$range->metadata()'] as $metadata) {
+            strpos($source, "return [\$format =>") - strpos($source, '(new AuditService())->log('));
+        foreach (["'units' => \$units", "'row_count' => count(\$rows) - 1", "'format' => \$format", '$range->metadata()'] as $metadata) {
             $this->assertStringContainsString($metadata, $audit);
         }
-        foreach (['$csv', '$input', 'release_notes', 'sensor', 'quality_grade', 'bmg_process_logs'] as $excluded) {
+        foreach (['$content', "'content' =>", "'csv' =>", "'pdf' =>", '$input', 'release_notes', 'sensor', 'quality_grade', 'bmg_process_logs'] as $excluded) {
             $this->assertStringNotContainsString($excluded, $audit);
         }
     }

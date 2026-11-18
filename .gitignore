@@ -250,6 +250,8 @@ __pycache__/
 !/tests/unit/SurveyDraftAiExtractorTest.php
 !/tests/unit/SurveyExternalUrlTest.php
 !/tests/unit/SurveyOtherOptionTest.php
+!/tests/unit/HybridOperationalAggregateReaderTest.php
+!/tests/unit/ClinicSummaryReportLatexTest.php
 !/tests/_support/
 /tests/_support/*
 !/tests/_support/api-token-race-worker.php
@@ -267,6 +269,7 @@ __pycache__/
 /tests/database/*
 !/tests/database/TeamAccessTest.php
 !/tests/database/MobileTokenUserReferenceMigrationTest.php
+!/tests/database/HybridOperationalAggregateReaderMariaDbTest.php
 !/tests/feature/
 /tests/feature/*
 !/tests/feature/TeamApiHttpTest.php

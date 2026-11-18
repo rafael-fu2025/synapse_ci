@@ -73,6 +73,8 @@ jobs:
           tests/unit/AuditServiceTest.php
           tests/unit/GuidanceCaseServiceTest.php
           tests/unit/LoginAttemptStoreTest.php
+          tests/unit/AuthServiceTest.php
+          tests/database/HybridOperationalAggregateReaderMariaDbTest.php
           tests/unit/MobileRealtimeGrantTest.php
           tests/unit/CarouselServiceTest.php
           tests/unit/CarouselLoginSlidesTest.php
