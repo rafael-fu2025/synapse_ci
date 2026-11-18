@@ -353,23 +353,49 @@
   }
 
   /**
-   * Dark mode toggle with localStorage persistence
+   * Dark mode toggle with localStorage persistence and radial pixel-dissolve reveal
    * Uses [data-theme="dark"] on <html> to match the v3 demo design tokens
    */
-  const setTheme = (dark) => {
-    const previous = document.documentElement.getAttribute('data-theme');
-    const next = dark ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('na-dark-mode', dark ? '1' : '0');
-    // Update icon if toggle exists
-    const icon = document.querySelector('.theme-toggle .theme-icon-dark, .theme-toggle .theme-icon-light, #darkModeToggle i');
-    // For demo .theme-toggle: both icons exist in markup; CSS shows/hides by data-theme
-    // For legacy #darkModeToggle: swap icon class
-    if (icon && document.querySelector('#darkModeToggle')) {
-      const i = document.querySelector('#darkModeToggle i');
-      if (i) i.className = dark ? 'bi bi-sun' : 'bi bi-moon-stars';
+  const themeRoot = document.documentElement;
+  let themeAnimTimer = 0;
+
+  const prefersReducedMotion = () =>
+    Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  const dismissToggleTooltip = (triggerEl) => {
+    if (triggerEl && window.bootstrap?.Tooltip) {
+      const tipHost = triggerEl.matches('[data-bs-toggle="tooltip"]')
+        ? triggerEl
+        : triggerEl.closest('[data-bs-toggle="tooltip"]');
+      if (tipHost) bootstrap.Tooltip.getInstance(tipHost)?.hide();
     }
-    // Clean up any lingering tooltips when theme toggles
+    document.querySelectorAll('.tooltip').forEach(t => t.remove());
+  };
+
+  const resolveRevealOrigin = (ev, triggerEl) => {
+    if (ev && (ev.clientX || ev.clientY)) {
+      return { x: ev.clientX, y: ev.clientY };
+    }
+    const target = triggerEl || ev?.currentTarget;
+    if (target && target.getBoundingClientRect) {
+      const rect = target.getBoundingClientRect();
+      if (rect.width || rect.height) {
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      }
+    }
+    return { x: window.innerWidth, y: window.innerHeight };
+  };
+
+  const applyThemeDom = (dark) => {
+    const previous = themeRoot.getAttribute('data-theme');
+    const next = dark ? 'dark' : 'light';
+    themeRoot.setAttribute('data-theme', next);
+    // For .theme-toggle: both icons exist in markup; CSS shows/hides by data-theme.
+    // For legacy #darkModeToggle: swap icon class directly.
+    const legacyIcon = document.querySelector('#darkModeToggle i');
+    if (legacyIcon) {
+      legacyIcon.className = dark ? 'bi bi-sun' : 'bi bi-moon-stars';
+    }
     document.querySelectorAll('.tooltip').forEach(t => t.remove());
     // Charts resolve CSS tokens at render time, so they must be told to
     // re-read them. Fired after the attribute settles so tokens are current.
@@ -380,27 +406,105 @@
     }
   };
 
+  /* Coordinated CSS color crossfade when View Transitions are unavailable. */
+  const crossfadeTheme = (dark) => {
+    themeRoot.classList.add('theme-anim');
+    applyThemeDom(dark);
+    clearTimeout(themeAnimTimer);
+    themeAnimTimer = setTimeout(() => { themeRoot.classList.remove('theme-anim'); }, 520);
+  };
+
+  /* Radial dithered block-grid reveal from (x, y) via View Transitions API. */
+  const revealTheme = (dark, x, y) => {
+    const duration = 900;
+    const fade = 7;
+    const block = Math.max(9, Math.round(Math.min(window.innerWidth, window.innerHeight) / 72));
+    const cols = Math.ceil(window.innerWidth / block) + 1;
+    const rows = Math.ceil(window.innerHeight / block) + 1;
+    const cx = x / block;
+    const cy = y / block;
+    const maxRadius = Math.hypot(Math.max(cx, cols - cx), Math.max(cy, rows - cy));
+    const vt = themeRoot.__synapseThemeVt = document.startViewTransition(() => {
+      themeRoot.classList.add('theme-instant');
+      applyThemeDom(dark);
+    });
+    const cleanup = () => {
+      if (themeRoot.__synapseThemeVt !== vt) return;
+      themeRoot.classList.remove('theme-instant');
+      themeRoot.style.removeProperty('--vt-mask');
+    };
+    vt.ready.then(() => {
+      if (themeRoot.__synapseThemeVt !== vt) return;
+      themeRoot.classList.remove('theme-instant');
+      themeRoot.animate(
+        { opacity: [1, 1] },
+        { duration, easing: 'linear', pseudoElement: '::view-transition-new(root)' }
+      );
+      const cnv = document.createElement('canvas');
+      cnv.width = cols;
+      cnv.height = rows;
+      const ctx = cnv.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#fff';
+      const t0 = performance.now();
+      (function frame(now) {
+        if (themeRoot.__synapseThemeVt !== vt) return;
+        const t = Math.min((now - t0) / duration, 1);
+        const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        const radius = k * (maxRadius + fade);
+        ctx.clearRect(0, 0, cols, rows);
+        for (let row = 0; row < rows; row++) {
+          for (let col = 0; col < cols; col++) {
+            const dist = Math.hypot(col - cx, row - cy);
+            const hash = Math.abs(Math.sin(col * 127.1 + row * 311.7) * 43758.5453) % 1;
+            const alpha = (radius - dist - (hash - 0.5) * 1.4) / fade;
+            if (alpha > 0) {
+              ctx.globalAlpha = alpha >= 1 ? 1 : alpha;
+              ctx.fillRect(col, row, 1, 1);
+            }
+          }
+        }
+        ctx.globalAlpha = 1;
+        themeRoot.style.setProperty('--vt-mask', 'url("' + cnv.toDataURL() + '")');
+        if (t < 1) {
+          requestAnimationFrame(frame);
+        } else {
+          themeRoot.style.removeProperty('--vt-mask');
+        }
+      })(t0);
+    }).catch(cleanup);
+    vt.finished.then(cleanup, cleanup);
+  };
+
+  const setTheme = (dark, ev = null, triggerEl = null) => {
+    const previous = themeRoot.getAttribute('data-theme');
+    const next = dark ? 'dark' : 'light';
+    try {
+      localStorage.setItem('na-dark-mode', dark ? '1' : '0');
+    } catch (_) { /* Storage may be disabled or full. */ }
+    dismissToggleTooltip(triggerEl || ev?.currentTarget || null);
+    if (!ev || previous === next || prefersReducedMotion()) {
+      applyThemeDom(dark);
+      return;
+    }
+    if (!document.startViewTransition) {
+      crossfadeTheme(dark);
+      return;
+    }
+    const origin = resolveRevealOrigin(ev, triggerEl);
+    revealTheme(dark, origin.x, origin.y);
+  };
+
   const stored = localStorage.getItem('na-dark-mode');
   if (stored === '1') setTheme(true);
 
-  const darkToggle = select('#darkModeToggle');
-  if (darkToggle) {
-    darkToggle.addEventListener('click', function(e) {
+  document.querySelectorAll('#darkModeToggle, .theme-toggle').forEach((toggleBtn) => {
+    toggleBtn.addEventListener('click', function(e) {
       e.preventDefault();
-      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      setTheme(!isDark);
+      const isDark = themeRoot.getAttribute('data-theme') === 'dark';
+      setTheme(!isDark, e, toggleBtn);
     });
-  }
-
-  // Demo's .theme-toggle button (ph-moon / ph-sun icons toggled by data-theme via CSS)
-  const themeToggle = select('.theme-toggle');
-  if (themeToggle) {
-    themeToggle.addEventListener('click', function(e) {
-      e.preventDefault();
-      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      setTheme(!isDark);
-    });
-  }
+  });
 
   /**
    * Initiate Bootstrap tooltips with hover-only trigger (auto-dismiss on click)

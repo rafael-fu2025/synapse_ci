@@ -45,10 +45,10 @@ $statusBadge = static fn (string $status): string => match ($status) {
       </div>
     <?php endif; ?>
 
-    <div class="row g-4">
+    <div class="row g-3 g-lg-4">
       <div class="col-12 col-xl-8">
         <div class="card border-0 shadow-sm">
-          <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+          <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
             <div>
               <h2 class="h6 fw-bold mb-0">Guidance General Referral Form</h2>
               <small class="text-muted">Form Code: <?= esc($catalog['form_code'] ?? 'F-OGC-GRE-GGR-005-00') ?> · AES-256-GCM Encrypted</small>
@@ -77,17 +77,17 @@ $statusBadge = static fn (string $status): string => match ($status) {
 
                 <div id="misLookupPanel" class="p-3 rounded border bg-body-tertiary">
                   <label for="exactMisIdInput" class="form-label small fw-semibold">Exact Student / Employee MIS ID</label>
-                  <div class="input-group input-group-sm mb-2">
+                  <div class="d-flex flex-column flex-sm-row gap-2 mb-2">
                     <input type="text"
                            id="exactMisIdInput"
                            name="mis_id"
-                           class="form-control"
+                           class="form-control form-control-sm"
                            maxlength="64"
                            placeholder="Enter exact MIS ID (e.g. 2024-00123)"
                            autocomplete="off">
                     <button type="button"
                             id="resolveSubjectBtn"
-                            class="btn btn-outline-primary"
+                            class="btn btn-outline-primary btn-sm flex-shrink-0"
                             data-resolve-url="<?= esc(site_url('/portal/referrals/resolve-subject'), 'attr') ?>">
                       <i class="bi bi-person-check me-1" aria-hidden="true"></i> Resolve Subject
                     </button>
@@ -97,7 +97,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
                   </div>
                   <div id="subjectResolveStatus" class="small mt-2" role="status" aria-live="polite"></div>
                   <div id="resolvedSubjectCard" class="mt-2 p-2 rounded border bg-success-subtle text-success d-none">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                       <div>
                         <strong id="resolvedSubjectName"></strong>
                         <div class="small" id="resolvedSubjectMeta"></div>
@@ -137,9 +137,9 @@ $statusBadge = static fn (string $status): string => match ($status) {
                     </div>
                   <?php endforeach; ?>
                 </div>
-                <div class="mt-2">
+                <div id="reasonsOtherWrap" class="mt-2 d-none">
                   <label for="reasonsOtherSpecify" class="form-label small fw-semibold">If "Others" selected, please specify</label>
-                  <input type="text" id="reasonsOtherSpecify" name="reasons_other_specify" class="form-control form-control-sm" maxlength="500" placeholder="Optional clarification">
+                  <input type="text" id="reasonsOtherSpecify" name="reasons_other_specify" class="form-control form-control-sm" maxlength="500" placeholder="Optional clarification" disabled>
                 </div>
               </div>
 
@@ -178,7 +178,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
                           placeholder="E.g., initial student conference, parent/adviser notice, academic support offered"></textarea>
               </div>
 
-              <div class="d-flex flex-wrap gap-2 justify-content-end pt-3 border-top">
+              <div class="d-grid d-sm-flex flex-sm-wrap gap-2 justify-content-sm-end pt-3 border-top">
                 <button type="submit" name="action" value="draft" class="btn btn-outline-secondary">
                   <i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i> Save as Draft
                 </button>
@@ -211,7 +211,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
               <div class="list-group list-group-flush">
                 <?php foreach ($myReferrals as $ref): ?>
                   <div class="list-group-item bg-transparent py-3">
-                    <div class="d-flex justify-content-between align-items-start gap-2">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
                       <div>
                         <div class="fw-bold small"><?= esc($ref['referral_number']) ?></div>
                         <div class="small text-muted">
@@ -223,7 +223,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
                         <?= esc(str_replace('_', ' ', (string) $ref['status'])) ?>
                       </span>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mt-2">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2">
                       <span class="small text-muted text-capitalize">Hint: <?= esc($ref['priority_hint']) ?></span>
                       <div class="d-flex gap-1">
                         <?php if ($ref['status'] === 'draft' && $canonicalFormsOpen): ?>
@@ -268,6 +268,8 @@ $statusBadge = static fn (string $status): string => match ($status) {
 (function () {
   'use strict';
 
+  const boundNodes = window.__synapseReferralBound || (window.__synapseReferralBound = new WeakSet());
+
   function bindReferralLookup() {
     const sourceSelect = document.getElementById('referralSourceType');
     const misPanel = document.getElementById('misLookupPanel');
@@ -280,8 +282,8 @@ $statusBadge = static fn (string $status): string => match ($status) {
     const nameEl = document.getElementById('resolvedSubjectName');
     const metaEl = document.getElementById('resolvedSubjectMeta');
 
-    if (!sourceSelect || !resolveBtn || resolveBtn.dataset.bound === '1') return;
-    resolveBtn.dataset.bound = '1';
+    if (!sourceSelect || !resolveBtn || boundNodes.has(resolveBtn)) return;
+    boundNodes.add(resolveBtn);
 
     function toggleSourceMode() {
       const isSelf = sourceSelect.value === 'self';
@@ -369,9 +371,38 @@ $statusBadge = static fn (string $status): string => match ($status) {
     });
   }
 
-  document.addEventListener('DOMContentLoaded', bindReferralLookup);
-  document.addEventListener('synapse:page-ready', bindReferralLookup);
-  bindReferralLookup();
+  function bindOthersToggle() {
+    const form = document.getElementById('portalReferralForm');
+    const otherWrap = document.getElementById('reasonsOtherWrap');
+    const otherInput = document.getElementById('reasonsOtherSpecify');
+    const othersCheckbox = form?.querySelector('input[type="checkbox"][name="reasons[]"][value="others"]');
+    if (!form || !otherWrap || !otherInput || !othersCheckbox || boundNodes.has(othersCheckbox)) return;
+    boundNodes.add(othersCheckbox);
+
+    function syncOthersField(focusOnOpen = false) {
+      const show = othersCheckbox.checked;
+      otherWrap.classList.toggle('d-none', !show);
+      otherInput.disabled = !show;
+      if (show && focusOnOpen) {
+        otherInput.focus();
+      }
+    }
+
+    othersCheckbox.addEventListener('change', function () {
+      syncOthersField(true);
+    });
+    syncOthersField(false);
+  }
+
+  function initReferralForm() {
+    bindReferralLookup();
+    bindOthersToggle();
+  }
+
+  document.addEventListener('DOMContentLoaded', initReferralForm);
+  document.addEventListener('synapse:page-ready', initReferralForm);
+  document.addEventListener('synapse:page-load', initReferralForm);
+  initReferralForm();
 })();
 </script>
 <?= $this->endSection() ?>

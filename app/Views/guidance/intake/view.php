@@ -65,7 +65,7 @@ $assessments = $safetyHistory['assessments'] ?? [];
 $events      = $safetyHistory['events'] ?? [];
 ?>
 
-<div class="guidance-intake-workspace"
+<div class="guidance-ui guidance-intake-workspace"
      data-refresh-owner="guidance.intake.<?= $refId ?>"
      data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <div data-refresh-region="workspace" data-refresh-heading tabindex="-1">
@@ -224,8 +224,8 @@ $events      = $safetyHistory['events'] ?? [];
                     <input type="text" id="triageNotes" name="triage_notes" class="form-control form-control-sm" value="<?= esc($referral['triage_notes'] ?? '', 'attr') ?>" placeholder="Intake coordination notes">
                   </div>
                 </div>
-                <div class="mt-2 text-end">
-                  <button type="submit" class="btn btn-outline-primary btn-sm">Save Triage</button>
+                <div class="mt-2 d-flex justify-content-end">
+                  <button type="submit" class="btn btn-outline-primary btn-sm w-100 w-sm-auto">Save Triage</button>
                 </div>
               </form>
 
@@ -375,7 +375,7 @@ $events      = $safetyHistory['events'] ?? [];
       <!-- Right Column: Clinical Safety Triage & Escalation Panel -->
       <div class="col-12 col-lg-5">
         <div class="card border-0 shadow-sm mb-4">
-          <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+          <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
               <h3 class="h6 fw-bold mb-0"><i class="bi bi-shield-plus me-1" aria-hidden="true"></i> Clinical Safety Triage &amp; Escalation</h3>
               <small class="text-muted">Authoritative practitioner risk determination (separate from referrer hint)</small>
@@ -414,7 +414,7 @@ $events      = $safetyHistory['events'] ?? [];
                   </select>
                 </div>
 
-                <div class="d-flex gap-3 mb-2">
+                <div class="d-flex flex-wrap gap-2 gap-sm-3 mb-2">
                   <div class="form-check">
                     <input class="form-check-input" type="checkbox" id="selfHarmRisk" name="self_harm_risk" value="1">
                     <label class="form-check-label small" for="selfHarmRisk">Self-harm / suicide risk</label>
@@ -457,7 +457,7 @@ $events      = $safetyHistory['events'] ?? [];
                       class="p-3 rounded border bg-body-tertiary mb-3">
                   <?= csrf_field() ?>
                   <input type="hidden" name="intake_referral_id" value="<?= $refId ?>">
-                  <h4 class="h6 fw-semibold mb-2 text-danger"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i> Log Crisis Escalation</h4>
+                  <h4 class="h6 fw-semibold mb-2 text-danger-emphasis"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i> Log Crisis Escalation</h4>
 
                   <div class="mb-2">
                     <label for="escAssessmentId" class="form-label small fw-semibold mb-1">Linked Safety Assessment</label>
@@ -509,7 +509,7 @@ $events      = $safetyHistory['events'] ?? [];
                 <?php foreach ($events as $ev): ?>
                   <?php if ($ev['event_type'] === 'safety_assessment'): ?>
                     <div class="p-2 rounded border bg-body-tertiary small">
-                      <div class="d-flex justify-content-between align-items-center mb-1">
+                      <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
                         <span class="badge border text-capitalize <?= $riskBadge((string) $ev['risk_level']) ?>">
                           <?= esc(str_replace('_', ' ', (string) $ev['risk_level'])) ?> Risk
                         </span>
@@ -529,23 +529,23 @@ $events      = $safetyHistory['events'] ?? [];
                     </div>
                   <?php else: ?>
                     <div class="p-2 rounded border border-danger-subtle bg-danger-subtle small">
-                      <div class="d-flex justify-content-between align-items-center mb-1">
+                      <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
                         <strong>Escalation: <?= esc(ucwords(str_replace('_', ' ', (string) $ev['channel']))) ?></strong>
                         <span class="text-muted"><?= esc(date('M j, Y g:i A', strtotime((string) $ev['timestamp']))) ?></span>
                       </div>
                       <div><strong>Recipient:</strong> <?= esc($ev['recipient']) ?></div>
                       <div><strong>Summary:</strong> <?= esc($ev['summary_notes']) ?></div>
                       <?php if (!empty($ev['acknowledged_at'])): ?>
-                        <div class="mt-1 text-success">
+                        <div class="mt-1 text-success-emphasis">
                           <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
                           Acknowledged by <?= esc($ev['acknowledged_by']) ?> on <?= esc(date('M j, Y g:i A', strtotime((string) $ev['acknowledged_at']))) ?>
                         </div>
                       <?php elseif ($isQualifiedSafety): ?>
-                        <form action="<?= esc(site_url('/guidance/safety/escalations/' . (int) $ev['id'] . '/ack'), 'attr') ?>" method="POST" data-background-submit class="mt-2 d-flex gap-1">
+                        <form action="<?= esc(site_url('/guidance/safety/escalations/' . (int) $ev['id'] . '/ack'), 'attr') ?>" method="POST" data-background-submit class="mt-2 d-flex flex-wrap gap-2">
                           <?= csrf_field() ?>
                           <input type="hidden" name="intake_referral_id" value="<?= $refId ?>">
-                          <input type="text" name="acknowledged_by" class="form-control form-control-sm" value="<?= esc($actor['name'] ?? '', 'attr') ?>" placeholder="Acknowledging official" required>
-                          <button type="submit" class="btn btn-outline-success btn-sm flex-shrink-0">Acknowledge</button>
+                          <input type="text" name="acknowledged_by" class="form-control form-control-sm" style="flex: 1 1 11rem; min-width: 0;" value="<?= esc($actor['name'] ?? '', 'attr') ?>" placeholder="Acknowledging official" required>
+                          <button type="submit" class="btn btn-outline-success btn-sm flex-shrink-0 w-100 w-sm-auto">Acknowledge</button>
                         </form>
                       <?php endif; ?>
                     </div>

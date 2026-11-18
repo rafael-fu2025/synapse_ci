@@ -21,7 +21,7 @@
 
   <div data-filter-region="requests" data-refresh-region="appointments.pending">
     <div class="card mb-4">
-      <div class="card-header bg-transparent py-3">
+      <div class="card-header bg-transparent py-3 d-block">
         <h5 class="mb-1">Pending <?= $unit === 'clinic' ? 'Clinic' : 'Guidance' ?> Requests <span class="badge bg-light text-muted border"><?= number_format($pendingPagination['filtered']) ?></span></h5>
         <p class="small text-muted mb-0">All requested dates. Review the request, assign eligible <?= $unit === 'clinic' ? 'clinic staff' : 'counselors' ?>, and confirm a time before check-in.</p>
       </div>
@@ -32,12 +32,12 @@
             <tr><td class="ps-3"><strong><?= esc($request['last_name'] . ', ' . $request['first_name']) ?></strong><small class="d-block text-muted">ID: <?= esc($request['mis_id']) ?></small></td>
               <td><?= esc(date('M j, Y · h:i A', strtotime($request['starts_at']))) ?><small class="d-block text-muted">Not yet confirmed</small></td>
               <td><?= esc(ucwords(str_replace('_', ' ', $request['type']))) ?></td><td><?= esc($request['reason'] ?? 'Not provided') ?></td>
-              <td class="text-end pe-3">
+              <td class="text-end pe-3"><div class="table-card-actions justify-content-end">
                 <a href="<?= site_url('/' . $unit . '/appointments/' . $request['id'] . '/confirm') ?>" class="btn btn-primary btn-sm" data-app-modal-open>Review &amp; Confirm</a>
                 <form action="<?= site_url('/' . $unit . '/appointments/cancel/' . $request['id']) ?>" method="POST" class="d-inline" data-background-submit data-confirm-reason data-confirm="Cancel this pending request? No time has been reserved." data-confirm-title="Cancel request" data-confirm-label="Cancel request" data-confirm-tone="danger">
                   <?= csrf_field() ?><input type="hidden" name="reason" value=""><button type="submit" class="btn btn-outline-danger btn-sm" aria-label="Cancel request"><i class="bi bi-x-circle"></i></button>
                 </form>
-              </td></tr>
+              </div></td></tr>
           <?php endforeach; ?>
         </tbody></table>
       </div>
@@ -83,7 +83,7 @@
               <td><strong><?= esc($appt['last_name'] . ', ' . $appt['first_name']) ?></strong><small class="d-block text-muted">ID: <?= esc($appt['mis_id']) ?></small></td>
               <td><?= esc($appt['provider_name'] ?? 'Unassigned') ?></td><td><?= esc(ucwords(str_replace('_', ' ', $appt['type']))) ?></td>
               <td><span class="badge <?= in_array($appt['status'], ['scheduled', 'confirmed'], true) ? 'bg-primary' : ($appt['status'] === 'completed' ? 'bg-success' : 'bg-secondary') ?>"><?= esc($appt['status'] === 'checked_in' ? 'In queue' : ucwords(str_replace('_', ' ', $appt['status']))) ?></span></td>
-              <td class="text-end pe-3">
+              <td class="text-end pe-3"><div class="table-card-actions justify-content-end">
                 <?php if (in_array($appt['status'], ['scheduled', 'confirmed', 'checked_in'], true) && $appt['local_date'] <= $today && $appt['starts_at'] <= \App\Services\Scheduling\SchedulingClock::timestamp()): ?>
                   <form action="<?= site_url('/' . $unit . '/appointments/no-show/' . $appt['id']) ?>" method="POST" class="d-inline" data-background-submit data-confirm="Explicitly mark this absence as no-show? Unstarted linked queue tickets will be terminal. Active consultations cannot be marked no-show." data-confirm-title="Mark no-show" data-confirm-label="Mark no-show" data-confirm-tone="danger">
                     <?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $appt['version'] ?>"><button type="submit" class="btn btn-outline-danger btn-sm">Mark no-show</button>
@@ -105,7 +105,7 @@
                     <?php endif; ?>
                   <?php endif; ?>
                 <?php endif; ?>
-              </td></tr>
+              </div></td></tr>
           <?php endforeach; ?>
         </tbody></table>
       </div>

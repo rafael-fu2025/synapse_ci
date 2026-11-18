@@ -1,7 +1,75 @@
 <?= $this->extend('layouts/app') ?>
 
+<?= $this->section('styles') ?>
+<style>
+  .clinic-alert-chip {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+    text-align: start;
+    line-height: 1.3;
+    background: var(--surface-color, #ffffff);
+    color: var(--bs-danger-text-emphasis, #842029);
+    border: 1px solid var(--bs-danger-border-subtle, #f5c2c7);
+  }
+  html[data-theme="dark"] .clinic-alert-review {
+    color: #ffe0b5;
+    border-color: rgba(255, 224, 181, 0.55);
+  }
+  html[data-theme="dark"] .clinic-alert-review:hover,
+  html[data-theme="dark"] .clinic-alert-review:focus-visible {
+    background-color: rgba(255, 224, 181, 0.14);
+    color: #ffffff;
+    border-color: #ffe0b5;
+  }
+  @media (max-width: 575.98px) {
+    .clinic-mobile-full {
+      width: 100% !important;
+    }
+  }
+  @media (max-width: 767.98px) {
+    .clinic-page-actions .btn,
+    .page-dashboard .btn.clinic-alert-cta,
+    .clinic-chart-range-group .btn,
+    .clinic-recent-table.table-mobile-cards .btn {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .clinic-ops-hub .btn {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+    }
+    .nd-inline-link {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .nd-kpi-rail .nd-kpi-card {
+      height: 100%;
+      padding: 0.85rem;
+    }
+    .nd-kpi-rail .nd-kpi-value {
+      font-size: 1.45rem;
+    }
+    .clinic-chart-range-group .btn {
+      padding-inline: 0.5rem;
+    }
+    .clinic-recent-table.table-mobile-cards > :not(caption) > tr > :is(td, th),
+    .clinic-recent-table.table-mobile-cards td span,
+    .clinic-recent-table.table-mobile-cards td strong {
+      white-space: normal !important;
+      overflow-wrap: anywhere;
+    }
+  }
+</style>
+<?= $this->endSection() ?>
+
 <?= $this->section('page_actions') ?>
-<div class="d-flex gap-2">
+<div class="d-flex flex-wrap gap-2 clinic-page-actions">
   <a href="<?= site_url('/clinic/queue') ?>" class="btn btn-primary btn-sm">
     <i class="bi bi-kanban me-1"></i> Live Queue
   </a>
@@ -33,7 +101,7 @@
   <p class="small text-muted mb-3" data-queue-feedback role="status" hidden></p>
   <!-- NiceAdmin v3 KPI Rail -->
   <section class="row g-3 mb-4 nd-kpi-rail">
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-leads">
         <span class="nd-kpi-icon"><i class="bi bi-people"></i></span>
         <span class="nd-kpi-label">Today's Patient Queue</span>
@@ -44,7 +112,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-revenue">
         <span class="nd-kpi-icon"><i class="bi bi-heart-pulse"></i></span>
         <span class="nd-kpi-label">Consultations Completed</span>
@@ -55,7 +123,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-cycle">
         <span class="nd-kpi-icon"><i class="bi bi-calendar-event"></i></span>
         <span class="nd-kpi-label">Appointments Today</span>
@@ -66,7 +134,7 @@
       </article>
     </div>
 
-    <div class="col-xxl-3 col-md-6">
+    <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-retention">
         <span class="nd-kpi-icon"><i class="bi bi-capsule"></i></span>
         <span class="nd-kpi-label">Active Medicines</span>
@@ -98,30 +166,31 @@
       <div class="row g-3 mb-4">
         <?php if ($lowStock > 0 || $expiredBatches > 0 || $nearExpiryBatches > 0): ?>
           <div class="col-lg-6">
-            <div class="alert alert-warning border-0 shadow-sm h-100 mb-0 d-flex justify-content-between align-items-center gap-3">
-              <div class="small">
+            <div class="alert alert-warning border-0 shadow-sm h-100 mb-0 d-flex flex-column flex-sm-row justify-content-between align-items-stretch align-items-sm-center gap-2 gap-sm-3">
+              <div class="small" style="min-width: 0;">
                 <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> Inventory Attention Required</div>
                 <span>Low-stock items: <strong><?= $lowStock ?></strong> · Near-expiry (&le;90d): <strong><?= $nearExpiryBatches ?></strong> · Expired w/ stock: <strong><?= $expiredBatches ?></strong></span>
               </div>
-              <a href="<?= site_url('/clinic/inventory?status=low') ?>" class="btn btn-outline-dark btn-sm text-nowrap">Review Stock</a>
+              <?php $reviewStatus = $lowStock > 0 ? 'low_stock' : ($expiredBatches > 0 ? 'expired' : 'expiring_soon'); ?>
+              <a href="<?= site_url('/clinic/inventory?status=' . $reviewStatus) ?>" class="btn btn-outline-dark btn-sm text-nowrap clinic-alert-cta clinic-alert-review clinic-mobile-full">Review Stock</a>
             </div>
           </div>
         <?php endif; ?>
         <?php if (($activeIsolationCount ?? 0) > 0 || !empty($isolationAlerts)): ?>
           <div class="col-lg-6">
-            <div class="alert alert-danger border-0 shadow-sm h-100 mb-0 d-flex justify-content-between align-items-center gap-3">
-              <div class="small">
+            <div class="alert alert-danger border-0 shadow-sm h-100 mb-0 d-flex flex-column flex-sm-row justify-content-between align-items-stretch align-items-sm-center gap-2 gap-sm-3">
+              <div class="small" style="min-width: 0;">
                 <div class="fw-bold mb-1"><i class="bi bi-shield-exclamation me-1"></i> Communicable Isolation Watch</div>
                 <span>Active campus isolations: <strong><?= (int) ($activeIsolationCount ?? 0) ?></strong></span>
                 <?php if (!empty($isolationAlerts)): ?>
-                  <div class="mt-1">
+                  <div class="d-flex flex-wrap gap-1 mt-2">
                     <?php foreach ($isolationAlerts as $alert): ?>
-                      <span class="badge bg-white text-danger border me-1"><?= esc($alert['condition_label']) ?>: <?= (int) ($alert['case_count'] ?? 0) ?></span>
+                      <span class="badge clinic-alert-chip"><?= esc($alert['condition_label']) ?>: <?= (int) ($alert['case_count'] ?? 0) ?></span>
                     <?php endforeach; ?>
                   </div>
                 <?php endif; ?>
               </div>
-              <a href="<?= site_url('/clinic/isolation') ?>" class="btn btn-outline-danger btn-sm text-nowrap">Isolation Calendar</a>
+              <a href="<?= site_url('/clinic/isolation') ?>" class="btn btn-outline-danger btn-sm text-nowrap clinic-alert-cta clinic-mobile-full">Isolation Calendar</a>
             </div>
           </div>
         <?php endif; ?>
@@ -137,7 +206,7 @@
       <div class="card mb-3 border-0 shadow-sm">
         <div class="card-header nd-chart-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
           <h5 class="card-title mb-0 fw-bold">Clinical Patient Intake &amp; Consultations</h5>
-          <div class="btn-group btn-group-sm" role="group" aria-label="Chart timeframe">
+          <div class="btn-group btn-group-sm clinic-chart-range-group clinic-mobile-full" role="group" aria-label="Chart timeframe">
             <?php $curRange = $rangeKey ?? '7d'; ?>
             <a href="<?= site_url('/clinic?range=7d') ?>" class="btn <?= $curRange === '7d' ? 'btn-primary' : 'btn-outline-secondary' ?>">7 Days</a>
             <a href="<?= site_url('/clinic?range=30d') ?>" class="btn <?= $curRange === '30d' ? 'btn-primary' : 'btn-outline-secondary' ?>">30 Days</a>
@@ -165,13 +234,13 @@
 
       <!-- Recent Encounters Table -->
       <div class="card border-0 shadow-sm mb-3">
-        <div class="card-header d-flex justify-content-between align-items-center bg-transparent py-3">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 bg-transparent py-3">
           <h5 class="card-title mb-0 fw-bold">Recent Clinical Encounters</h5>
           <a href="<?= site_url('/clinic/encounters') ?>" class="nd-inline-link">View all encounters <i class="bi bi-arrow-right"></i></a>
         </div>
         <div class="card-body p-0">
           <div class="table-responsive">
-            <table class="table align-middle mb-0 nd-transaction-table">
+            <table class="table align-middle mb-0 nd-transaction-table clinic-recent-table">
               <thead class="table-light">
                 <tr>
                   <th class="ps-3">Encounter</th>
@@ -233,7 +302,7 @@
           <h5 class="card-title mb-0 fw-bold">Clinical Operations Hub</h5>
         </div>
         <div class="card-body p-3">
-          <div class="d-grid gap-2">
+          <div class="d-grid gap-2 clinic-ops-hub">
             <a href="<?= site_url('/clinic/queue') ?>" class="btn btn-outline-primary text-start p-2">
               <i class="bi bi-kanban me-2"></i> Manage Live Queue
             </a>

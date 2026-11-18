@@ -40,7 +40,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
 };
 ?>
 
-<div class="guidance-intake-queue"
+<div class="guidance-ui guidance-intake-queue"
      data-refresh-owner="guidance.intake.queue"
      data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <div data-refresh-region="workspace" data-refresh-heading tabindex="-1">
@@ -48,7 +48,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
     <!-- Walk-in / Teacher-Accompanied Referral Drawer -->
     <div class="collapse mb-3" id="staffWalkinReferralCard">
       <div class="card border-0 shadow-sm">
-        <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
+        <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
           <div>
             <h2 class="h6 fw-bold mb-0"><i class="bi bi-file-earmark-plus text-primary me-1" aria-hidden="true"></i>Walk-In / Teacher-Accompanied General Referral (F-OGC-GGR-005)</h2>
             <small class="text-muted">Record a walk-in or faculty-accompanied referral directly at Guidance Intake.</small>
@@ -102,11 +102,11 @@ $statusBadge = static fn (string $status): string => match ($status) {
             </div>
 
             <div class="row g-3 mb-3">
-              <div class="col-md-4">
+              <div id="intakeWalkinOtherWrap" class="col-md-4 d-none">
                 <label class="form-label small fw-semibold" for="intakeWalkinOther">If Others, Specify (Optional)</label>
-                <input type="text" id="intakeWalkinOther" name="reasons_other_specify" maxlength="500" class="form-control form-control-sm">
+                <input type="text" id="intakeWalkinOther" name="reasons_other_specify" maxlength="500" class="form-control form-control-sm" disabled>
               </div>
-              <div class="col-md-8">
+              <div class="col-12 col-md">
                 <label class="form-label small fw-semibold" for="intakeWalkinPrior">Prior Teacher / Adviser Actions (Optional)</label>
                 <input type="text" id="intakeWalkinPrior" name="prior_actions_taken" maxlength="500" class="form-control form-control-sm" placeholder="Initial talks, parent contact, or academic intervention taken">
               </div>
@@ -156,7 +156,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="col-md-4 d-flex gap-2">
+          <div class="col-md-4 d-flex flex-wrap gap-2">
             <button type="submit" class="btn btn-primary btn-sm">Filter</button>
             <a href="<?= esc(site_url('/guidance/intake')) ?>" class="btn btn-outline-secondary btn-sm">Reset</a>
           </div>
@@ -166,7 +166,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
 
     <!-- Intake Referrals Table -->
     <div class="card border-0 shadow-sm mb-4">
-      <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
+      <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
         <div>
           <h2 class="h6 fw-bold mb-0">Guidance Intake Referrals</h2>
           <small class="text-muted">Confidential narratives are encrypted at rest and decrypted only inside the individual referral workspace.</small>
@@ -239,8 +239,8 @@ $statusBadge = static fn (string $status): string => match ($status) {
                     <td class="small text-muted">
                       <?= !empty($row['submitted_at']) ? esc(date('M j, Y g:i A', strtotime((string) $row['submitted_at']))) : esc(date('M j, Y', strtotime((string) $row['created_at']))) ?>
                     </td>
-                    <td class="text-end pe-3">
-                      <div class="d-inline-flex gap-1">
+                    <td class="text-md-end pe-md-3">
+                      <div class="d-flex flex-wrap justify-content-md-end gap-2 gc-card-actions">
                         <?php if (!empty($row['subject_person_id'])): ?>
                           <a href="<?= esc(site_url('/guidance/students/' . (int) $row['subject_person_id'] . '/cumulative')) ?>" class="btn btn-outline-secondary btn-sm" title="Student Cumulative Guidance Record">
                             <i class="bi bi-person-lines-fill"></i>
@@ -262,7 +262,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
 
     <!-- Incoming Bridged Clinic Referrals -->
     <div class="card border-0 shadow-sm">
-      <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
+      <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
         <div>
           <h2 class="h6 fw-bold mb-0"><i class="bi bi-hospital me-1" aria-hidden="true"></i> Incoming University Clinic Referrals</h2>
           <small class="text-muted">Bridge Clinic-to-Guidance referrals into the Guidance Intake &amp; Safety Triage workflow without altering Clinic records.</small>
@@ -314,19 +314,21 @@ $statusBadge = static fn (string $status): string => match ($status) {
                         <span class="badge bg-warning-subtle text-warning border border-warning-subtle">Not Bridged</span>
                       <?php endif; ?>
                     </td>
-                    <td class="text-end pe-3">
-                      <?php if (!empty($cref['bridged_intake_id'])): ?>
-                        <a href="<?= esc(site_url('/guidance/intake/' . (int) $cref['bridged_intake_id'])) ?>" class="btn btn-outline-primary btn-sm">
-                          Open Intake
-                        </a>
-                      <?php else: ?>
-                        <form action="<?= esc(site_url('/guidance/intake/bridge-clinic/' . (int) $cref['id']), 'attr') ?>" method="POST" data-background-submit class="d-inline">
-                          <?= csrf_field() ?>
-                          <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i> Bridge to Intake
-                          </button>
-                        </form>
-                      <?php endif; ?>
+                    <td class="text-md-end pe-md-3">
+                      <div class="d-flex flex-wrap justify-content-md-end gap-2 gc-card-actions">
+                        <?php if (!empty($cref['bridged_intake_id'])): ?>
+                          <a href="<?= esc(site_url('/guidance/intake/' . (int) $cref['bridged_intake_id'])) ?>" class="btn btn-outline-primary btn-sm">
+                            Open Intake
+                          </a>
+                        <?php else: ?>
+                          <form action="<?= esc(site_url('/guidance/intake/bridge-clinic/' . (int) $cref['id']), 'attr') ?>" method="POST" data-background-submit>
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                              <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i> Bridge to Intake
+                            </button>
+                          </form>
+                        <?php endif; ?>
+                      </div>
                     </td>
                   </tr>
                 <?php endforeach; ?>
@@ -341,45 +343,83 @@ $statusBadge = static fn (string $status): string => match ($status) {
 </div>
 
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
-    var btn = document.getElementById('intakeWalkinResolveBtn');
-    var input = document.getElementById('intakeWalkinMisId');
-    var hidden = document.getElementById('intakeWalkinPersonId');
-    var status = document.getElementById('intakeWalkinResolved');
-    if (!btn || !input || !hidden || !status) return;
+  (function () {
+    var boundNodes = window.__synapseIntakeBound || (window.__synapseIntakeBound = new WeakSet());
 
-    btn.addEventListener('click', function () {
-      var misId = (input.value || '').trim();
-      if (!misId) {
-        status.textContent = 'Enter an exact MIS ID first.';
-        return;
+    function initIntakeWalkin() {
+      var otherWrap = document.getElementById('intakeWalkinOtherWrap');
+      var otherInput = document.getElementById('intakeWalkinOther');
+      var walkinForm = otherWrap ? otherWrap.closest('form') : null;
+      var othersCheckbox = walkinForm ? walkinForm.querySelector('input[type="checkbox"][name="reasons[]"][value="others"]') : null;
+      if (otherWrap && otherInput && othersCheckbox && !boundNodes.has(othersCheckbox)) {
+        boundNodes.add(othersCheckbox);
+        var syncOther = function (focusOnOpen) {
+          var show = othersCheckbox.checked;
+          otherWrap.classList.toggle('d-none', !show);
+          otherInput.disabled = !show;
+          if (show && focusOnOpen) {
+            otherInput.focus();
+          }
+        };
+        othersCheckbox.addEventListener('change', function () { syncOther(true); });
+        syncOther(false);
       }
-      var csrfInput = btn.closest('form').querySelector('input[type="hidden"][name^="csrf_"]');
-      var payload = { mis_id: misId };
-      if (csrfInput) { payload[csrfInput.name] = csrfInput.value; }
-      status.textContent = 'Resolving...';
-      fetch(<?= json_encode(site_url('/portal/referrals/resolve-subject')) ?>, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify(payload)
-      })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.csrf && csrfInput) { csrfInput.value = data.csrf.hash; }
-        if (!data.success || !data.person) {
-          hidden.value = '';
-          status.textContent = data.message || 'Subject not found.';
+
+      var btn = document.getElementById('intakeWalkinResolveBtn');
+      var input = document.getElementById('intakeWalkinMisId');
+      var hidden = document.getElementById('intakeWalkinPersonId');
+      var status = document.getElementById('intakeWalkinResolved');
+      if (!btn || !input || !hidden || !status || boundNodes.has(btn)) return;
+      boundNodes.add(btn);
+
+      btn.addEventListener('click', function () {
+        var misId = (input.value || '').trim();
+        if (!misId) {
+          status.textContent = 'Enter an exact MIS ID first.';
           return;
         }
-        var p = data.person;
-        hidden.value = p.person_id;
-        var cumulativeUrl = <?= json_encode(site_url('/guidance/students/')) ?> + p.person_id + '/cumulative';
-        status.innerHTML = '<strong>' + (p.first_name || '') + ' ' + (p.last_name || '') + '</strong> (' + (p.kind || 'person') + ') · <a href="' + cumulativeUrl + '" target="_blank" rel="noopener">Cumulative Record</a>';
-      })
-      .catch(function () {
-        status.textContent = 'Unable to resolve subject right now.';
+        var csrfInput = btn.closest('form').querySelector('input[type="hidden"][name^="csrf_"]');
+        var payload = { mis_id: misId };
+        if (csrfInput) { payload[csrfInput.name] = csrfInput.value; }
+        status.textContent = 'Resolving...';
+        fetch(<?= json_encode(site_url('/portal/referrals/resolve-subject')) ?>, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+          body: JSON.stringify(payload)
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.csrf && csrfInput) { csrfInput.value = data.csrf.hash; }
+          if (!data.success || !data.person) {
+            hidden.value = '';
+            status.textContent = data.message || 'Subject not found.';
+            return;
+          }
+          var p = data.person;
+          hidden.value = p.person_id;
+          var cumulativeUrl = <?= json_encode(site_url('/guidance/students/')) ?> + encodeURIComponent(String(p.person_id)) + '/cumulative';
+          status.textContent = '';
+          var strong = document.createElement('strong');
+          strong.textContent = ((p.first_name || '') + ' ' + (p.last_name || '')).trim();
+          var link = document.createElement('a');
+          link.href = cumulativeUrl;
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.textContent = 'Cumulative Record';
+          status.appendChild(strong);
+          status.appendChild(document.createTextNode(' (' + (p.kind || 'person') + ') · '));
+          status.appendChild(link);
+        })
+        .catch(function () {
+          status.textContent = 'Unable to resolve subject right now.';
+        });
       });
-    });
-  });
+    }
+
+    document.addEventListener('DOMContentLoaded', initIntakeWalkin);
+    document.addEventListener('synapse:page-ready', initIntakeWalkin);
+    document.addEventListener('synapse:page-load', initIntakeWalkin);
+    initIntakeWalkin();
+  })();
 </script>
 <?= $this->endSection() ?>

@@ -738,10 +738,10 @@ class GuidanceMultipleIntelligenceService
                 return [
                     'id' => (int) $userRow['id'],
                     'tenant_id' => (int) $userRow['tenant_id'],
-                    'person_id' => array_key_exists('person_id', $actor)
-                        ? ($actor['person_id'] !== null ? (int) $actor['person_id'] : null)
-                        : ($userRow['person_id'] !== null ? (int) $userRow['person_id'] : null),
-                    'role' => !empty($actor['role']) ? (string) $actor['role'] : $role,
+                    'person_id' => $userRow['person_id'] !== null
+                        ? (int) $userRow['person_id']
+                        : (array_key_exists('person_id', $actor) && $actor['person_id'] !== null ? (int) $actor['person_id'] : null),
+                    'role' => $role !== '' ? $role : (!empty($actor['role']) ? (string) $actor['role'] : ''),
                     'permissions' => $permissions,
                 ];
             }
@@ -784,10 +784,10 @@ class GuidanceMultipleIntelligenceService
         }
 
         $role = (string) ($resolvedActor['role'] ?? '');
-        if ($role === 'student') {
+        if (!\App\Services\PortalContext::isRolePermitted($role, \App\Services\PortalContext::PORTAL_GUIDANCE)) {
             $actorPersonId = isset($resolvedActor['person_id']) ? (int) $resolvedActor['person_id'] : 0;
-            if ($actorPersonId !== $targetPersonId) {
-                throw new DomainException('Students may only view their own Multiple Intelligence assessment results.', 403);
+            if ($actorPersonId <= 0 || $actorPersonId !== $targetPersonId) {
+                throw new DomainException('You may only view your own Multiple Intelligence assessment results.', 403);
             }
         }
     }

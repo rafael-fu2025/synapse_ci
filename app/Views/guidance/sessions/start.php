@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/modal_form') ?>
 <?= $this->section('content') ?>
 <p class="text-muted">Choose the type for this queue consultation. Resuming an existing session keeps its original type and appointment link.</p>
-<form action="<?= esc($formAction) ?>" method="POST" data-modal-submit data-guidance-session-start>
+<form class="guidance-ui" action="<?= esc($formAction) ?>" method="POST" data-modal-submit data-guidance-session-start>
   <?= csrf_field() ?>
   <div class="mb-3">
     <label for="sessionType" class="form-label">Session type</label>

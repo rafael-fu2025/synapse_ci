@@ -112,8 +112,9 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
             <fieldset class="mb-3 pb-3 border-bottom">
               <legend class="fs-6 fw-semibold mb-2"><?= $dimNum++ ?>. <?= esc($question) ?></legend>
               <div class="row g-2">
-                <?php foreach ($ratingScale as $score => $label): ?>
-                  <div class="col-6 col-md">
+                <?php $ratingIdx = 0; $ratingTotal = count($ratingScale); ?>
+                <?php foreach ($ratingScale as $score => $label): $ratingIdx++; ?>
+                  <div class="<?= $ratingIdx === $ratingTotal ? 'col-12 col-sm-6 col-md' : 'col-6 col-md' ?>">
                     <label class="form-check border rounded p-2 d-flex align-items-center gap-2 mb-0 h-100">
                       <input class="form-check-input mt-0" type="radio" name="<?= esc($field, 'attr') ?>" value="<?= (int) $score ?>" required>
                       <span class="form-check-label small">
@@ -129,12 +130,12 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
 
         <fieldset class="mb-4 pb-3 border-bottom">
           <legend class="fs-6 fw-bold mb-2"><?= esc($booleanQuestion) ?> <span class="text-danger">*</span></legend>
-          <div class="d-flex gap-3">
-            <label class="form-check border rounded px-3 py-2 mb-0">
+          <div class="d-flex flex-wrap gap-2 gap-sm-3">
+            <label class="form-check border rounded px-3 py-2 mb-0 flex-fill flex-sm-grow-0">
               <input class="form-check-input" type="radio" name="<?= esc($booleanField, 'attr') ?>" value="1" required>
               <span class="form-check-label fw-semibold">Yes</span>
             </label>
-            <label class="form-check border rounded px-3 py-2 mb-0">
+            <label class="form-check border rounded px-3 py-2 mb-0 flex-fill flex-sm-grow-0">
               <input class="form-check-input" type="radio" name="<?= esc($booleanField, 'attr') ?>" value="0" required>
               <span class="form-check-label fw-semibold">No</span>
             </label>
@@ -153,7 +154,7 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
                     placeholder="Do not include your name or identifying details. Comments are encrypted at rest and reviewed by a moderator before appearing in cohort aggregates."></textarea>
         </div>
 
-        <div class="d-flex justify-content-end gap-2">
+        <div class="d-grid d-sm-flex flex-sm-wrap justify-content-sm-end gap-2">
           <a href="<?= esc(site_url('/portal'), 'attr') ?>" class="btn btn-outline-secondary">Cancel</a>
           <button type="submit" class="btn btn-primary" id="eval-submit-btn">
             <i class="bi bi-shield-check me-1" aria-hidden="true"></i>Submit Pseudonymous Evaluation
@@ -205,7 +206,12 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
         return;
       }
       form.reset();
-      window.location.assign(data.redirect || '<?= esc(site_url('/portal'), 'js') ?>');
+      const targetHref = data.redirect || '<?= esc(site_url('/portal'), 'js') ?>';
+      if (window.SynapsePortalWorkspace?.isActive?.()) {
+        void window.SynapsePortalWorkspace.navigate(targetHref, { bypassDirtyCheck: true });
+      } else {
+        window.location.assign(targetHref);
+      }
     } catch (_) {
       if (errBox) {
         errBox.textContent = 'Network error submitting evaluation. Please try again.';

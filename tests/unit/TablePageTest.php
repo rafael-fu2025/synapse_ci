@@ -36,6 +36,13 @@ final class TablePageTest extends CIUnitTestCase
         }
     }
 
+    public function testExpiryStatusesAreAccepted(): void
+    {
+        foreach (['expiring_soon', 'expired'] as $status) {
+            $this->assertSame($status, TablePage::fromQuery(['status' => $status])->status);
+        }
+    }
+
     public static function invalidQueries(): iterable
     {
         foreach (['q', 'page', 'per_page', 'kind', 'status', 'fragment'] as $key) {
@@ -53,7 +60,7 @@ final class TablePageTest extends CIUnitTestCase
         yield [['q'=>"\xFF"]];
         yield [['q'=>123]];
         yield [['kind'=>'staff']];
-        yield [['status'=>'expired']];
+        yield [['status'=>'unsupported_status']];
         yield [['fragment'=>'yes']];
     }
 

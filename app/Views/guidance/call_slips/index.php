@@ -13,6 +13,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $callSlips = $callSlips ?? [];
 $currentStatus = (string) ($status ?? '');
@@ -132,7 +133,7 @@ $statusBadges = [
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <div class="btn-group btn-group-sm" role="group" aria-label="Print options for call slip <?= $csId ?>">
+                                    <div class="btn-group btn-group-sm gc-print-group" role="group" aria-label="Print options for call slip <?= $csId ?>">
                                         <a href="<?= site_url('guidance/call-slips/' . $csId . '/pdf?layout=single&mode=preview') ?>" target="_blank" class="btn btn-outline-secondary" title="Preview Single A4">
                                             <i class="bi bi-file-earmark-pdf me-1"></i>Single A4
                                         </a>
@@ -168,10 +169,10 @@ $statusBadges = [
                                         </ul>
                                     </div>
                                 </td>
-                                <td class="text-end">
-                                    <form method="post" action="<?= site_url('guidance/call-slips/' . $csId . '/status') ?>" class="d-inline-flex align-items-center gap-1" data-background-submit>
+                                <td class="text-md-end">
+                                    <form method="post" action="<?= site_url('guidance/call-slips/' . $csId . '/status') ?>" class="d-flex flex-wrap justify-content-md-end align-items-center gap-2 gc-card-actions" data-background-submit>
                                         <?= csrf_field() ?>
-                                        <select name="attendance_status" class="form-select form-select-sm" style="width: auto;">
+                                        <select name="attendance_status" class="form-select form-select-sm w-100 w-sm-auto">
                                             <?php foreach ($validStatuses as $st): ?>
                                                 <option value="<?= esc($st) ?>" <?= $csStatus === $st ? 'selected' : '' ?>>
                                                     <?= esc(ucfirst($st)) ?>
@@ -288,6 +289,7 @@ $statusBadges = [
             </div>
         </form>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

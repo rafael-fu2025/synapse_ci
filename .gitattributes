@@ -1,0 +1,8 @@
+# Black-box documents are generated and byte-verified across platforms.
+.gitattributes text eol=lf
+papers/blackbox/** text eol=lf
+papers/blackbox/**/*.docx -text
+papers/blackbox/*.docx -text
+papers/blackbox/**/*.pdf -text
+papers/blackbox/*.pdf -text
+tools/blackbox/** text eol=lf

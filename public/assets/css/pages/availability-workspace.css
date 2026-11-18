@@ -25,10 +25,18 @@
 .availability-workspace .av-exception-row > .btn { flex: 0 0 auto; }
 .availability-workspace [data-availability-feedback] { white-space: pre-wrap; overflow-wrap: anywhere; }
 .availability-workspace .modal-body { padding: 1.5rem; }
+@media (max-width: 767.98px) {
+  html body .availability-workspace :is(.form-control, .form-select, .bd-select .bd-select-toggle, .btn) { min-height: 40px; }
+  html body .availability-workspace .bd-select { width: 100%; }
+  html body .availability-workspace .av-filter-actions > .btn { flex: 1 1 8rem; min-height: 44px; }
+  html body .availability-workspace :is(.av-exception-row > .btn, [data-availability-edit-link]) { min-height: 42px; }
+}
 @media (max-width: 575.98px) {
-  .availability-workspace .av-section-link { flex: 1 1 auto; text-align: center; padding: .65rem .75rem; }
+  .availability-workspace .av-section-nav { display: grid; grid-template-columns: minmax(0, 1fr); gap: .5rem; }
+  .availability-workspace .av-section-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; width: 100%; text-align: center; padding: .65rem .75rem; }
   .availability-workspace .av-exception-row { flex-direction: column; align-items: stretch; }
-  .availability-workspace :is(.av-form-footer, .av-modal-footer) > .btn { flex: 1 1 auto; }
-  .availability-workspace .av-section-heading > .btn { width: 100%; }
+  .availability-workspace .av-form-footer { flex-direction: column; align-items: stretch; }
+  .availability-workspace :is(.av-form-footer, .av-modal-footer) > .btn { flex: 1 1 auto; min-height: 44px; }
+  .availability-workspace .av-section-heading > .btn { width: 100%; min-height: 44px; }
   .availability-workspace .modal-body { padding: 1rem; }
 }

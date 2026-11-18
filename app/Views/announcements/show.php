@@ -4,8 +4,8 @@
 <section class="portal-engagement" data-refresh-owner="portal-announcement-detail.<?= (int) $announcement['id'] ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <div class="pe-reading">
     <a class="btn btn-outline-secondary btn-sm mb-3" href="<?= esc(site_url('/portal/announcements')) ?>"><i class="bi bi-arrow-left me-2" aria-hidden="true"></i>All announcements</a>
-    <article class="card pe-content-card" aria-labelledby="announcement-title"><div class="card-body p-4 p-lg-5">
-      <div class="pe-card-top"><span class="pe-department"><i class="bi bi-megaphone" aria-hidden="true"></i><?= esc(ucfirst($announcement['unit'])) ?></span><span class="pe-state" data-refresh-region="read-state" data-refresh-heading tabindex="-1"><?= $announcement['read_at'] === null ? 'Unread' : 'Read' ?></span></div>
+    <article class="card pe-content-card" aria-labelledby="announcement-title"><div class="card-body p-3 p-sm-4 p-lg-5">
+      <div class="pe-card-top"><span class="pe-department"><?= view('partials/unit_vector_icon', ['unit' => $announcement['unit']]) ?><?= esc(ucfirst($announcement['unit'])) ?></span><span class="pe-state" data-refresh-region="read-state" data-refresh-heading tabindex="-1"><?= $announcement['read_at'] === null ? 'Unread' : 'Read' ?></span></div>
       <h1 id="announcement-title" class="h3 fw-bold text-break mb-3"><?= esc($announcement['title']) ?></h1>
       <p class="small text-muted mb-0">Published <time datetime="<?= esc($announcementDate($announcement['published_at'], 'c')) ?>"><?= esc($announcementDate($announcement['published_at'], 'd M Y, g:i A')) ?></time> (Asia/Manila)</p>
       <div class="pe-reading-body"><?= esc($announcement['body']) ?></div>

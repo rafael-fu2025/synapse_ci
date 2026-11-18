@@ -1,0 +1,20 @@
+{
+  "name": "synapse-blackbox-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic validation, assembly, and rendering for the SYNAPSE black-box suite",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "validate": "python validate.py --root ../..",
+    "build": "python build.py --root ../..",
+    "render": "node render-html.mjs --root ../..",
+    "check": "python validate.py --root ../.. && python build.py --root ../.. --check && node render-html.mjs --root ../.. --check",
+    "test": "python -m unittest discover -s tests -p test_blackbox_tools.py -v"
+  },
+  "dependencies": {
+    "marked": "18.2.1"
+  }
+}

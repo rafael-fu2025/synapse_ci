@@ -13,6 +13,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $episodes = $episodes ?? [];
 $currentStatus = (string) ($status ?? '');
@@ -114,7 +115,7 @@ $statusBadges = [
                                             <?= esc((string) ($ep['case_number'] ?? ('Case #' . (int) $ep['case_id']))) ?>
                                         </a>
                                         <?php if (! empty($ep['case_title'])): ?>
-                                            <div class="small text-muted text-truncate" style="max-width: 220px;">
+                                            <div class="small text-muted">
                                                 <?= esc((string) $ep['case_title']) ?>
                                             </div>
                                         <?php endif; ?>
@@ -128,10 +129,12 @@ $statusBadges = [
                                 <td class="small text-muted">
                                     <?= ! empty($ep['opened_at']) ? esc(date('M d, Y g:i A', strtotime((string) $ep['opened_at']))) : '—' ?>
                                 </td>
-                                <td class="text-end">
-                                    <a href="<?= site_url('guidance/episodes/' . (int) $ep['id']) ?>" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-clock-history me-1"></i>Timeline
-                                    </a>
+                                <td class="text-md-end">
+                                    <div class="d-flex justify-content-md-end gc-card-actions">
+                                        <a href="<?= site_url('guidance/episodes/' . (int) $ep['id']) ?>" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-clock-history me-1"></i>Timeline
+                                        </a>
+                                    </div>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -159,7 +162,7 @@ $statusBadges = [
                     <input type="hidden" name="person_id" :value="selected ? selected.id : ''" required>
 
                     <template x-if="selected">
-                        <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 mb-2">
+                        <div class="alert alert-light border d-flex flex-wrap justify-content-between align-items-center gap-2 py-2 mb-2">
                             <div>
                                 <div class="fw-semibold" x-text="selected.first_name + ' ' + selected.last_name"></div>
                                 <div class="small text-muted" x-text="(selected.mis_id || 'ID #' + selected.id) + (selected.kind ? ' · ' + selected.kind : '')"></div>
@@ -228,6 +231,7 @@ $statusBadges = [
             </div>
         </form>
     </div>
+</div>
 </div>
 <?= $this->endSection() ?>
 

@@ -38,7 +38,7 @@ $tierBadge = static fn (string $tier): string => match ($tier) {
 };
 ?>
 
-<div class="guidance-practitioners-workspace"
+<div class="guidance-ui guidance-practitioners-workspace"
      data-refresh-owner="guidance.governance.practitioners"
      data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <div data-refresh-region="workspace" data-refresh-heading tabindex="-1">
@@ -48,7 +48,7 @@ $tierBadge = static fn (string $tier): string => match ($tier) {
 
         <!-- Practitioner Profiles Table -->
         <div class="card border-0 shadow-sm mb-4">
-          <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
+          <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
             <div>
               <h2 class="h6 fw-bold mb-0">Registered Practitioner Credentials</h2>
               <small class="text-muted">Only active credentialed practitioners can perform safety triage, clinical authoring, or co-signing.</small>
@@ -133,7 +133,7 @@ $tierBadge = static fn (string $tier): string => match ($tier) {
 
         <!-- Active Supervisions Table -->
         <div class="card border-0 shadow-sm">
-          <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
+          <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
             <div>
               <h2 class="h6 fw-bold mb-0">Active Supervision Assignments</h2>
               <small class="text-muted">Counselor associates require supervisor co-sign to finalize clinical records.</small>

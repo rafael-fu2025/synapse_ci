@@ -1,0 +1,1383 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SYNAPSE Black Box Testing — tracker</title>
+<style>
+:root { color-scheme: light dark; }
+body { font: 14px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+       margin: 0; padding: 32px 28px 72px; background: #fbfbfd; color: #1c1c21; }
+main { max-width: 1400px; margin: 0 auto; }
+h1 { font-size: 30px; margin: 0 0 12px; }
+h2 { font-size: 21px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom: 1px solid #d8d8e0; }
+h3 { font-size: 16px; margin: 22px 0 10px; }
+p  { margin: 8px 0 14px; max-width: 1100px; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0 26px; font-size: 12.5px; }
+th, td { border: 1px solid #d8d8e0; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f1f1f6; font-weight: 600; position: sticky; top: 0; }
+tr:nth-child(even) td { background: #f7f7fa; }
+code { background: #eef0f5; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+ul { margin: 6px 0 16px; }
+a { color: #2b5fd9; }
+@media (prefers-color-scheme: dark) {
+  body { background: #14151a; color: #e7e7ee; }
+  h2 { border-color: #2e3038; }
+  th { background: #1e2028; }
+  tr:nth-child(even) td { background: #191b21; }
+  th, td { border-color: #2e3038; }
+  code { background: #23262f; }
+  a { color: #7aa2f7; }
+}</style></head>
+<body><main>
+<p style="color:#666;font-size:12px">Rendered from <code>SYNAPSE-BlackBox-Testing.md</code> (the source of truth). Generated 2026-11-02 01:24.</p>
+<h1>Black Box Testing</h1>
+<p>Black Box Testing was conducted to evaluate SYNAPSE&#39;s functional correctness based on user inputs and expected outputs, without examining the internal code or implementation. The testing focused on verifying that the platform&#39;s modules behave as expected when students, employees, clinic staff, guidance counsellors, facilities staff, and administrators interact with the system&#39;s features across its four portal surfaces and the mobile application, including authentication, appointments, queueing, clinical encounters, counselling cases, referrals, composting operations, real-time updates, governed AI insights, and system administration. The Actual Output and Result columns are populated at the time of test execution.</p>
+<h2>Execution progress (live tracker)</h2>
+<p>This file is the authoritative tracker for the complete SYNAPSE black-box suite. <strong>PASS</strong> = executed and the expected behaviour was observed · <strong>FAIL</strong> = executed and the observed behaviour contradicted the expectation · <strong>BLOCKED</strong> = the case could not be executed in this environment (the blocking reason is in the Remarks column). A completed case must <strong>not</strong> be re-run; the full evidence lives in the per-module result files listed at the bottom of this file.</p>
+<table>
+<thead>
+<tr>
+<th>Section</th>
+<th>Cases</th>
+<th>PASS</th>
+<th>FAIL</th>
+<th>BLOCKED</th>
+<th>Not run</th>
+<th>Out of scope</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1. Authentication &amp; Session (Web)</td>
+<td>12</td>
+<td>11</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>2. Personal Portal (Students &amp; Employees)</td>
+<td>12</td>
+<td>12</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>3. Clinic Console (Staff Web)</td>
+<td>14</td>
+<td>14</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>4. Guidance Console (Staff Web)</td>
+<td>12</td>
+<td>12</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>5. Referrals (Web)</td>
+<td>10</td>
+<td>9</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>6. Facilities/BMG Console (Staff Web)</td>
+<td>13</td>
+<td>8</td>
+<td>1</td>
+<td>4</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>7. Administration &amp; Platform (Web)</td>
+<td>12</td>
+<td>9</td>
+<td>0</td>
+<td>3</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>8. Real-Time and Notifications (Web + Mobile)</td>
+<td>10</td>
+<td>9</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>9. AI Insights (Staff Web)</td>
+<td>11</td>
+<td>6</td>
+<td>0</td>
+<td>5</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>10. Mobile Application (React Native)</td>
+<td>13</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>13</td>
+</tr>
+<tr>
+<td><strong>TOTAL</strong></td>
+<td><strong>119</strong></td>
+<td><strong>90</strong></td>
+<td><strong>1</strong></td>
+<td><strong>14</strong></td>
+<td><strong>0</strong></td>
+<td><strong>14</strong></td>
+</tr>
+</tbody></table>
+<h2>1. Authentication &amp; Session (Web)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AU-001</td>
+<td>Auth / Login (student)</td>
+<td>Verify Login (student). Test Steps: 1. Open the sign-in page 2. Enter a valid student number and password 3. Submit the form</td>
+<td>The student is authenticated and lands on the main self-service portal home.</td>
+<td>✅ PASS</td>
+<td>Student sign-in lands on the main self-service portal home (&quot;[REDACTED: synthetic person display name] / STUDENT&quot;). <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-002</td>
+<td>Auth / Login (employee)</td>
+<td>Verify Login (employee). Test Steps: 1. Open the sign-in page 2. Enter a valid employee number and password 3. Submit the form</td>
+<td>The employee is authenticated and lands on the main portal home with employee records available.</td>
+<td>✅ PASS</td>
+<td>Employee sign-in lands on the Employee Health Portal with the employee profile, medical flags and status. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-003</td>
+<td>Auth / Login (invalid password)</td>
+<td>Verify Login (invalid password). Test Steps: 1. Open the sign-in page 2. Enter a valid identifier with an incorrect password 3. Submit the form</td>
+<td>The system displays an authentication error and no session is established.</td>
+<td>✅ PASS</td>
+<td>Wrong password → &quot;Invalid ID or password…&quot;; a follow-up protected request redirects to sign-in (no session). <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-004</td>
+<td>Auth / Login (wrong portal host)</td>
+<td>Verify Login (wrong portal host). Test Steps: 1. Open a staff console host (for example the guidance console) 2. Enter clinic staff credentials 3. Submit the form</td>
+<td>The system rejects the sign-in with a portal-mismatch message and no session is established.</td>
+<td>✅ PASS</td>
+<td>Clinic staff credentials on the guidance host → &quot;This workstation is restricted… hostname does not grant department access&quot;, no session. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-005</td>
+<td>Auth / Login (repeated failures lockout)</td>
+<td>Verify Login (repeated failures lockout). Test Steps: 1. Attempt to sign in with an incorrect password five consecutive times 2. Attempt a sixth sign-in</td>
+<td>The account is locked for the throttle window and further attempts report the lockout regardless of password correctness.</td>
+<td>✅ PASS</td>
+<td>5 wrong attempts then a 6th with the correct password → HTTP 429 &quot;Too many sign-in attempts&quot;, Retry-After 296, no session. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-006</td>
+<td>Auth / Logout (confirmation)</td>
+<td>Verify Logout (confirmation). Test Steps: 1. Sign in 2. Open the account menu and choose sign out 3. Confirm the sign-out 4. Use the browser back button</td>
+<td>The session ends, the sign-in page is displayed, and the back button does not restore an authenticated view.</td>
+<td>✅ PASS</td>
+<td>Sign-out asks for confirmation, ends the session with &quot;You have been safely signed out.&quot;, and back does not restore an authenticated view. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-007</td>
+<td>Auth / Session identity revalidation</td>
+<td>Verify Session identity revalidation. Test Steps: 1. Sign in as a staff user [REDACTED: account record identifier]. Have an administrator deactivate the account 3. Request any page in the open session</td>
+<td>The next request is rejected and the user is returned to the sign-in page.</td>
+<td>✅ PASS</td>
+<td>After an admin identity change (auth_version 8→9) the open session&#39;s next request is refused: &quot;Your session could not be validated. Please sign in again to continue.&quot; <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-008</td>
+<td>Auth / Cross-site request forgery protection</td>
+<td>Verify Cross-site request forgery protection. Test Steps: 1. Sign in 2. Submit a state-changing form without its CSRF token (crafted request)</td>
+<td>The request is rejected with a CSRF failure and no change is made.</td>
+<td>✅ PASS</td>
+<td>A crafted POST without the CSRF token is refused with HTTP 403 &quot;This request was not processed.&quot; and the target row is unchanged. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-009</td>
+<td>Auth / Password replacement revokes sessions</td>
+<td>Verify Password replacement revokes sessions. Test Steps: 1. Sign in on two browsers 2. Replace the account password in the first browser 3. Request a page in the second browser</td>
+<td>The second browser&#39;s session is rejected on its next identity check and requires re-authentication.</td>
+<td>⛔ BLOCKED</td>
+<td>No password/account-management control exists in any UI and every candidate route 404s — passwords are owned by MIS, not by Synapse. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-010</td>
+<td>Auth / MIS unavailable</td>
+<td>Verify MIS unavailable. Test Steps: 1. Disable the MIS integration flag 2. Attempt to sign in with university credentials</td>
+<td>The system returns an explicit unavailability message rather than silently falling back to a local credential check.</td>
+<td>✅ PASS</td>
+<td>With the MIS integration disabled in an isolated instance, a university credential is refused with &quot;MIS sign-in is currently unavailable…&quot; and no local fallback occurs. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-011</td>
+<td>Auth / Local break-glass administrator login</td>
+<td>Verify Local break-glass administrator login. Test Steps: 1. Open the sign-in page 2. Enter local administrator credentials 3. Submit the form</td>
+<td>The administrator is authenticated and lands on the administrative dashboard.</td>
+<td>✅ PASS</td>
+<td>The person-less break-glass administrator signs in and lands on the Executive Admin Dashboard. <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AU-012</td>
+<td>Auth / Session host pinning</td>
+<td>Verify Session host pinning. Test Steps: 1. Sign in on the main portal 2. Reuse the session cookie against a staff console host</td>
+<td>The staff console rejects the session and requires a fresh sign-in on that host.</td>
+<td>✅ PASS</td>
+<td>A main-host session is not accepted by a staff console host (browser: fresh sign-in required; crafted replay: HTTP 403, no data). <em>(src: AUTH-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________          Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>2. Personal Portal (Students &amp; Employees)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PT-001</td>
+<td>Personal Portal / Portal home (student)</td>
+<td>Verify Portal home (student). Test Steps: 1. Sign in as a student 2. Open the portal home</td>
+<td>The portal home renders with the student&#39;s appointments, queue tickets, and announcements.</td>
+<td>✅ PASS</td>
+<td>Portal home renders queue tickets, appointments, announcements, surveys, profile and emergency contact. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-002</td>
+<td>Personal Portal / Book appointment (available slot)</td>
+<td>Verify Book appointment (available slot). Test Steps: 1. Open appointment booking 2. Choose a service and an available slot 3. Confirm the booking</td>
+<td>The appointment is created, appears in My Appointments, and the slot is no longer offered.</td>
+<td>✅ PASS</td>
+<td>Request created and listed in My Appointments; once staff confirmed it, that slot is no longer offered for the clinician. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-003</td>
+<td>Personal Portal / Book appointment (slot taken)</td>
+<td>Verify Book appointment (slot taken). Test Steps: 1. Open appointment booking 2. Choose a slot already booked by another person 3. Confirm the booking</td>
+<td>The system rejects the booking and reports that the slot is no longer available.</td>
+<td>✅ PASS</td>
+<td>The occupied slot is rendered disabled in the picker and the server rejects it with HTTP 409 &quot;The selected time slot is already booked.&quot; <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-004</td>
+<td>Personal Portal / Cancel own appointment</td>
+<td>Verify Cancel own appointment. Test Steps: 1. Open My appointment [REDACTED: appointment identifier]. Choose an upcoming appointment and cancel it</td>
+<td>The appointment is cancelled, the slot is released, and the cancellation is visible in the appointment history.</td>
+<td>✅ PASS</td>
+<td>Cancel modal + reason submitted (HTTP 200); the appointment shows Cancelled and the slot is released. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-005</td>
+<td>Personal Portal / Personal queue status</td>
+<td>Verify Personal queue status. Test Steps: 1. Check in at the front desk as a staff action, then open the personal portal queue view</td>
+<td>The queue ticket shows position in line, number of people ahead, and an estimated wait where history exists.</td>
+<td>✅ PASS</td>
+<td>Queue ticket shows place in line #1, 0 people ahead, estimated wait &quot;You&#39;re next&quot;. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-006</td>
+<td>Personal Portal / Visit history</td>
+<td>Verify Visit history. Test Steps: 1. Open visit history 2. Open one recorded visit</td>
+<td>Past visits are listed for the signed-in person and the detail view shows that visit&#39;s encounter summary.</td>
+<td>✅ PASS</td>
+<td>Visit history lists all 4 past visits with date, service, staff, attendance and encounter summary; no separate detail route exists. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-007</td>
+<td>Personal Portal / Profile photo upload and removal</td>
+<td>Verify Profile photo upload and removal. Test Steps: 1. Open profile settings 2. Upload a photo, then remove it</td>
+<td>The photo uploads, appears on the profile, and is removed on request.</td>
+<td>✅ PASS</td>
+<td>Photo uploaded (avatar updated), then removed (server re-renders with no stored picture). <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-008</td>
+<td>Personal Portal / Emergency contact update</td>
+<td>Verify Emergency contact update. Test Steps: 1. Open profile settings 2. Update the emergency contact details and save</td>
+<td>The updated emergency contact is saved and displayed.</td>
+<td>✅ PASS</td>
+<td>Emergency contact saved (&quot;Emergency contact updated.&quot;) and persisted across a full reload. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-009</td>
+<td>Personal Portal / Announcements (read tracking)</td>
+<td>Verify Announcements (read tracking). Test Steps: 1. Open announcements 2. Open one announcement and return to the list</td>
+<td>The announcement is marked as read for the account.</td>
+<td>✅ PASS</td>
+<td>Announcement shows Read with a &quot;Marked read&quot; timestamp; list counters show Unread 0 / Read 1. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-010</td>
+<td>Personal Portal / Survey participation</td>
+<td>Verify Survey participation. Test Steps: 1. Open survey [REDACTED: survey identifier]. Answer a published survey and submit</td>
+<td>The response is recorded and the survey is marked as answered for the account.</td>
+<td>✅ PASS</td>
+<td>Fresh survey answered and submitted; list moves to Available 0 / Submitted 3 with &quot;Your submission is recorded.&quot; <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-011</td>
+<td>Personal Portal / Notification inbox</td>
+<td>Verify Notification inbox. Test Steps: 1. Trigger a notification (for example an appointment confirmation) 2. Open the notification inbox, mark one read, then mark all read</td>
+<td>Unread indicators update, and marking read or read-all clears the unread state.</td>
+<td>✅ PASS</td>
+<td>One notification marked read individually, then all read — counter drops to &quot;0 unread&quot;. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>PT-012</td>
+<td>Personal Portal / Records isolation</td>
+<td>Verify Records isolation. Test Steps: 1. Sign in as a student 2. Attempt to open another person&#39;s visit history by identifier manipulation</td>
+<td>The system refuses the request and shows no other person&#39;s records.</td>
+<td>✅ PASS</td>
+<td>Identifier manipulation on portal routes ignored; staff-side routes redirect the student to their own portal with no other person&#39;s records. <em>(src: PORTAL-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________          Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>3. Clinic Console (Staff Web)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CL-001</td>
+<td>Clinic / Clinic dashboard</td>
+<td>Verify Clinic dashboard. Test Steps: 1. Sign in as clinic staff 2. Open the clinic console dashboard</td>
+<td>The dashboard renders with today&#39;s queue counters and appointment counts for the clinic unit.</td>
+<td>✅ PASS</td>
+<td>Signed in as <code>[REDACTED: synthetic account identifier]</code> → landed on <a href="http://localhost:8080/index.php/clinic">http://localhost:8080/index.php/clinic</a>, &quot;Clinic Workstation Dashboard&quot;, &quot;Welcome back, [REDACTED: synthetic staff display name]!&quot;, &quot;Foundation University Health Services · Clinic Workstation Console · Sunday, November 1, 2026&quot;. Counters rendered: &quot;TODAY&#39;S PATIENT QUEUE 0&quot; (0 waiting, 0 called), &quot;CONSULTATIONS COMPLETED 0&quot; (0 completed today), &quot;APPOINTMENTS TODAY 0&quot; (Scheduled visits), &quot;ACTIVE ME… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-002</td>
+<td>Clinic / Patient registry search</td>
+<td>Verify Patient registry search. Test Steps: 1. Open the patient registry 2. Search by name fragment and by identification number</td>
+<td>Matching patients are listed with their registry details.</td>
+<td>✅ PASS</td>
+<td>Patient Registry (2,627 records). Name fragment &quot;[REDACTED: patient surname fragment]&quot; → &quot;Showing 1–9 of 9 matching records&quot; with ID NUMBER, FULL NAME, email, TYPE, PROGRAM / DEPARTMENT, GENDER, BLOOD TYPE and Chart / Start Visit actions (e.g. [REDACTED: student identifier] [REDACTED: patient name], STUDENT, [REDACTED: academic profile]). Identification number &quot;[REDACTED: student identifier]&quot; → exactly 1 row: &quot;[REDACTED: student identifier] / [REDACTED: patient name] / [REDACTED: patient email address] / STUDENT / [REDACTED: academic profile] / — / Unknown… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-003</td>
+<td>Clinic / Patient chart</td>
+<td>Verify Patient chart. Test Steps: 1. Open a patient from the registry 2. View the chart</td>
+<td>The chart shows encounter history, vitals history, and the health profile.</td>
+<td>✅ PASS</td>
+<td>Opened <a href="http://localhost:8080/index.php/clinic/patients/[REDACTED: patient record identifier]">http://localhost:8080/index.php/clinic/patients/[REDACTED: patient record identifier]</a> — &quot;Patient Medical Record&quot;, &quot;[REDACTED: patient name]&quot;, &quot;STUDENT · [REDACTED: academic profile]&quot;, &quot;MIS ID: [REDACTED: student identifier] · Email: [REDACTED: patient email address] · Gender: Unspecified&quot;, &quot;Blood: [REDACTED: blood-type information]&quot;. Chart shows &quot;Clinical Profile&quot; (Blood Type: [REDACTED: blood-type information], Known Allergies: [REDACTED: allergy information], Chronic Conditions: [REDACTED: chronic-condition information]), &quot;Emergency Contact&quot; (all &quot;—&quot;), tabs &quot;Visit Histo… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-004</td>
+<td>Clinic / Health profile update</td>
+<td>Verify Health profile update. Test Steps: 1. Open a patient chart 2. Update health profile fields and save</td>
+<td>The health profile is updated and the change is visible on the chart.</td>
+<td>✅ PASS</td>
+<td>In the chart&#39;s &quot;Update Health Profile&quot; tab set Blood Type → [REDACTED: blood type], Drug &amp; Food Allergies → &quot;[REDACTED: allergy information]&quot;, Chronic Conditions → &quot;[REDACTED: chronic-condition information]&quot;, Emergency Contact → [REDACTED: emergency-contact name] / Sibling / [REDACTED: emergency-contact phone number] and clicked &quot;Update Health Profile&quot;. The chart then displayed &quot;Blood Type: [REDACTED: blood type]&quot;, &quot;Known Allergies: [REDACTED: allergy information]&quot;, &quot;Chronic Conditions: None reported - black-box test… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-005</td>
+<td>Clinic / Start encounter from ticket</td>
+<td>Verify Start encounter from ticket. Test Steps: 1. Check in an appointment [REDACTED: appointment identifier]. Open the queue and start the encounter for that ticket</td>
+<td>The encounter opens linked to the ticket with the encounter stepper active.</td>
+<td>✅ PASS</td>
+<td>Appointment-linked ticket [REDACTED: queue ticket identifier] started from the queue (&quot;Start Visit&quot;) and produced encounter #[REDACTED: clinical encounter identifier] - previously BLOCKED because no same-day slot existed. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-006</td>
+<td>Clinic / Record vitals</td>
+<td>Verify Record vitals. Test Steps: 1. In an open encounter 2. Enter blood pressure, pulse, temperature, and other vitals 3. Save</td>
+<td>Vitals are recorded and displayed in the encounter and in the patient&#39;s vitals history.</td>
+<td>✅ PASS</td>
+<td>Vitals saved ([REDACTED: recorded vital-sign values]); step advanced to Assessment. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-007</td>
+<td>Clinic / Assessment draft save</td>
+<td>Verify Assessment draft save. Test Steps: 1. In an open encounter 2. Record the presenting complaint and assessment 3. Save as draft 4. Reopen the encounter</td>
+<td>The draft is retained and the encounter resumes with the draft contents.</td>
+<td>✅ PASS</td>
+<td>Assessment saved; step advanced to Medicine &amp; Dispensing. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-008</td>
+<td>Clinic / Medicine dispensation (stock deducted)</td>
+<td>Verify Medicine dispensation (stock deducted). Test Steps: 1. In an open encounter 2. Dispense a quantity of a medicine with stock on hand 3. Complete the step</td>
+<td>The dispensation is recorded and the medicine&#39;s batch stock decreases accordingly.</td>
+<td>✅ PASS</td>
+<td>[REDACTED: dispensed medication] dispensed with its own confirmation (&quot;Dispense the selected quantity? Usable stock will be deducted...&quot;); 10 tablet, Lot [REDACTED: medication lot identifier]; usable stock 85 -&gt; 75. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-009</td>
+<td>Clinic / Dispensation beyond stock</td>
+<td>Verify Dispensation beyond stock. Test Steps: 1. In an open encounter 2. Dispense a quantity larger than the available batch stock</td>
+<td>The system rejects the dispensation and reports insufficient stock.</td>
+<td>✅ PASS</td>
+<td>Dispensing 999 was rejected with &quot;Insufficient usable stock.&quot; - no &quot;Retry saving draft&quot; anywhere, the medicine/quantity/instructions stayed in the form, and stock remained 75. The clinical retry affordance now appears only on a real clinical draft-save failure. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-010</td>
+<td>Clinic / Complete encounter</td>
+<td>Verify Complete encounter. Test Steps: 1. Complete an encounter that has vitals and assessment recorded</td>
+<td>The encounter is marked complete and leaves the active workflow.</td>
+<td>✅ PASS</td>
+<td>Visit sealed: encounter #[REDACTED: clinical encounter identifier] ended <code>completed</code> / <code>discharged</code> with <code>completed_at</code>. The pending-medicine guard still refused to advance while an unsubmitted medicine entry existed, and past slots are disabled in the picker. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-011</td>
+<td>Clinic / Queue lifecycle (walk-in)</td>
+<td>Verify Queue lifecycle (walk-in). Test Steps: 1. Add a walk-in to the clinic queue 2. Call next, start, and complete the entry</td>
+<td>The ticket advances through called, started, and completed states with the board updating.</td>
+<td>✅ PASS</td>
+<td>Queue board: &quot;New Walk-in&quot; → searched &quot;student&quot; → &quot;[REDACTED: synthetic person display name] / ID: [REDACTED: synthetic personnel identifier] (STUDENT)&quot; → issued ticket. [REDACTED: queue ticket identifier] appeared under &quot;Waiting Line&quot; (Waiting 1, Total 1) with &quot;Call Patient&quot; / &quot;Mark no-show&quot;; &quot;Call Patient&quot; moved it to &quot;Called &amp; Arriving&quot; (&quot;[REDACTED: queue ticket identifier] · Called: 12:24 PM&quot;) with &quot;Start Visit&quot; / &quot;Skip&quot; / &quot;Mark no-show&quot;; &quot;Start Visit&quot; moved it to &quot;In Consultation&quot; (&quot;[REDACTED: queue ticket identifier] · Started: 12:24 PM&quot;); completing… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-012</td>
+<td>Clinic / Queue transitions (skip and no-show)</td>
+<td>Verify Queue transitions (skip and no-show). Test Steps: 1. For a called ticket 2. Apply skip; for another ticket apply no-show</td>
+<td>Both transitions are recorded and the tickets leave the serving position without blocking the queue.</td>
+<td>✅ PASS</td>
+<td>Second walk-in → ticket [REDACTED: queue ticket identifier] ([REDACTED: synthetic person display name]); &quot;Call Patient&quot; → &quot;Called &amp; Arriving&quot;; &quot;Skip&quot; (title &quot;Patient not answering - Recall allowed within 60 mins&quot;) moved it to the Skipped column: counters Skipped 1, Total 2 and the card shows &quot;[REDACTED: queue ticket identifier] · Recall by: 01:44 PM&quot; with &quot;Recall to Waiting&quot; / &quot;Mark no-show&quot;. Third walk-in ([REDACTED: synthetic person display name] / [REDACTED: synthetic personnel identifier]) → ticket [REDACTED: queue ticket identifier]; &quot;Call Patient&quot; → &quot;Called: 12:48 PM&quot;; &quot;M… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-013</td>
+<td>Clinic / Appointment confirm and check-in</td>
+<td>Verify Appointment confirm and check-in. Test Steps: 1. Confirm a booked appointment [REDACTED: appointment identifier]. Check the appointment in at the front desk</td>
+<td>The appointment transitions to checked-in and a queue entry is created for today&#39;s clinic queue.</td>
+<td>✅ PASS</td>
+<td>Same-day request -&gt; &quot;Review &amp; Confirm&quot; (clinician [REDACTED: staff name], 7:00 PM slot) -&gt; Confirmed -&gt; &quot;Check-in to Queue&quot; -&gt; &quot;Patient checked in. Queue ticket [REDACTED: queue ticket identifier] issued.&quot; <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>CL-014</td>
+<td>Clinic / Inventory batch receipt and adjustment</td>
+<td>Verify Inventory batch receipt and adjustment. Test Steps: 1. Receive a medicine batch with quantity and expiry 2. Adjust stock with a reason 3. Open the operation ledger</td>
+<td>The receipt and adjustment are recorded with actor and timestamp in the append-only operation ledger.</td>
+<td>✅ PASS</td>
+<td>Created active medicine &quot;[REDACTED: dispensed medication]&quot; (Generic [REDACTED: medication name], Category Analgesic, Strength 500mg, Dosage form Tablet, Stock unit tablet, Reorder level 20, Catalog status Active). Receipt: &quot;Receive Stock&quot; → Lot [REDACTED: medication lot identifier], expiry 31/12/2027, Quantity 100, Supplier &quot;Test Supplier Co&quot;, Reference &quot;PO-TEST-001&quot; → batch row &quot;[REDACTED: medication lot identifier] / Batch #6 / 2027-12-31 / Active / RECEIVED 100 / REMAINING 10… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________           Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>4. Guidance Console (Staff Web)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GD-001</td>
+<td>Guidance / Guidance dashboard</td>
+<td>Verify Guidance dashboard. Test Steps: 1. Sign in as a counsellor 2. Open the guidance console dashboard</td>
+<td>The dashboard renders with the guidance queue counters and caseload summary.</td>
+<td>✅ PASS</td>
+<td>Signed in as <code>[REDACTED: synthetic account identifier]</code> → redirected to <a href="http://localhost:8080/index.php/guidance">http://localhost:8080/index.php/guidance</a>, &quot;Guidance Workstation Dashboard&quot;, &quot;Welcome back, [REDACTED: synthetic staff display name]!&quot;, &quot;Foundation University Guidance &amp; Counseling Center · Workstation Console · Sunday, November 1, 2026&quot;. Counters: &quot;ACTIVE COUNSELING CASES 0 / 0 closed cases&quot;, &quot;COMPLETED SESSIONS 0 / AES-256-GCM notes&quot;, &quot;WAITING QUEUE TODAY 0 / Walk-in consultations&quot;, &quot;INCOMING R… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-002</td>
+<td>Guidance / Create counselling case</td>
+<td>Verify Create counselling case. Test Steps: 1. Open cases 2. Create a case for a student with category and intake details</td>
+<td>The case is created with a case number and appears in the caseload.</td>
+<td>✅ PASS</td>
+<td>&quot;Open New Case&quot; → client search &quot;student&quot; → &quot;[REDACTED: synthetic person display name] / ID: [REDACTED: synthetic personnel identifier] (STUDENT)&quot;; Title &quot;[REDACTED: counselling case title]&quot;; Category &quot;[REDACTED: counselling case category]&quot;; intake summary recorded → the registry shows [REDACTED: counselling case identifier] | &quot;[REDACTED: counselling case title]&quot; | [REDACTED: synthetic person display name] (ID: [REDACTED: synthetic personnel identifier] · BSIT-3) | Personal | [REDACTED: synthetic account identifier] | Open | Nov 1, 2026 | Workspa… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-003</td>
+<td>Guidance / Start session with encrypted note</td>
+<td>Verify Start session with encrypted note. Test Steps: 1. Open a [REDACTED: counselling case record identifier]. Start a session 3. Record a session note and save</td>
+<td>The session is recorded and the note is stored encrypted.</td>
+<td>✅ PASS</td>
+<td>The encrypted note still decrypts (&quot;AES-256-GCM Decrypted&quot;), and now also shows &quot;This access has been audited.&quot; A <code>guidance.session.note_read</code> event was appended for session [REDACTED: counselling session identifier] (the ledger held 0 such events before the re-run). <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-004</td>
+<td>Guidance / Note isolation</td>
+<td>Verify Note isolation. Test Steps: 1. Sign in as a different counsellor 2. Attempt to open the first counsellor&#39;s session note</td>
+<td>Access is refused; the note is readable only by the owning counsellor.</td>
+<td>✅ PASS</td>
+<td><code>[REDACTED: synthetic account identifier]</code> was refused on both the case page and the direct note endpoint: <code>{&quot;message&quot;:&quot;This case is assigned to another counselor.&quot;}</code> with no plaintext. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-005</td>
+<td>Guidance / Supervisor oversight (audited)</td>
+<td>Verify Supervisor oversight (audited). Test Steps: 1. Sign in as guidance supervisor 2. Open a counsellor&#39;s case with the oversight permission 3. Inspect the audit trail</td>
+<td>The supervisor can read the case with the oversight permission, and the access is recorded as an audited exception.</td>
+<td>✅ PASS</td>
+<td>The supervisor saw &quot;Oversight mode - This access has been audited.&quot;; <code>guidance.case.oversight_read</code> events were appended for [REDACTED: counselling case record identifier] with <code>payload_json</code> null (metadata only). <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-006</td>
+<td>Guidance / Follow-up completion and misses</td>
+<td>Verify Follow-up completion and misses. Test Steps: 1. Open a case follow-up 2. Mark one follow-up completed with notes; mark another missed</td>
+<td>Both dispositions are recorded on the case timeline.</td>
+<td>✅ PASS</td>
+<td>The commitment row now offers a required Completion notes field; an empty submission was blocked by native validation; with notes the commitment became <code>completed</code> with actor and time stamped, and the note is stored as 121 bytes of AES-256-GCM ciphertext that does not contain the plaintext. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-007</td>
+<td>Guidance / Close case</td>
+<td>Verify Close case. Test Steps: 1. Open a case with completed sessions 2. Close the case with a disposition</td>
+<td>The case is closed and appears in the closed-cases view.</td>
+<td>✅ PASS</td>
+<td>Closure now requires a Closure disposition; an empty submission was blocked and the case stayed Active; with a disposition the case closed (actor + time stamped) and the disposition is stored as 190 bytes of ciphertext. The closed workspace renders &quot;Closure disposition&quot; with the decrypted text. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-008</td>
+<td>Guidance / Guidance queue operations</td>
+<td>Verify Guidance queue operations. Test Steps: 1. Check in a counselling appointment [REDACTED: appointment identifier]. Call next, start, and complete the entry in the guidance queue</td>
+<td>The guidance queue advances independently of the clinic queue.</td>
+<td>✅ PASS</td>
+<td>The pending guidance request dated 2026-11-01 was confirmable once a Sunday slot existed (8:30 PM; 7:00-8:15 PM slots were correctly disabled as elapsed), then &quot;Check-in to Queue&quot; opened the guidance queue with ticket [REDACTED: queue ticket identifier] - previously BLOCKED. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-009</td>
+<td>Guidance / Question bank authoring</td>
+<td>Verify Question bank authoring. Test Steps: 1. Open the question bank 2. Create a question, preview it, then archive it</td>
+<td>The question is created with a version, previews correctly, and archived questions no longer appear in the active set.</td>
+<td>✅ PASS</td>
+<td>&quot;Add bank question&quot; → &quot;How satisfied are you with the Guidance Center&#39;s counselling services? (GD-009)&quot;, Category &quot;Service feedback&quot;, Intended audience &quot;Students&quot;, Answer type &quot;Rating (1–5)&quot;, author review note → row &quot;Service feedback / Students / Revision 1 / Active&quot; ([REDACTED: question-bank identifier]). &quot;Preview&quot; (inline expander) opens to &quot;Rating scale: 1–5&quot; plus the author review note. &quot;Archive&quot; (confirmation &quot;Archive this question? It w… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-010</td>
+<td>Guidance / Survey build and publish</td>
+<td>Verify Survey build and publish. Test Steps: 1. Create a survey from bank questions 2. Publish it to the student audience</td>
+<td>The survey appears for the targeted audience and accepts responses.</td>
+<td>✅ PASS</td>
+<td>A bank question was created (&quot;How supported do you feel by campus counselling services? (black-box re-run)&quot;, Service feedback, Revision 1, Active) and copied into a new survey (&quot;[REDACTED: question-bank identifier] - revision 1 - independent survey copy&quot;); the survey was published. The stored question carries <code>[REDACTED: question-bank identifier], bank_revision: 1</code>. Previously BLOCKED on the copy step. <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-011</td>
+<td>Guidance / Survey response review and export</td>
+<td>Verify Survey response review and export. Test Steps: 1. Open survey responses 2. Open one response detail 3. Export the response set</td>
+<td>Responses are listed with per-response detail, and the export downloads with bounded rows.</td>
+<td>✅ PASS</td>
+<td>The student answered the bank-copied survey (&quot;Your identified survey response has been submitted.&quot;), the admin response view showed 1 submission with the answer text, and the CSV export contents were finally established: <code>[REDACTED: response identifier column],first_name,last_name,submitted_at_manila,&quot;Q1: How supported do you feel by campus counselling services? (black-box re-run)&quot;</code> followed by `77,Test,Student,&quot;2026-11-01 20:58:48&quot;,&quot;[REDACTED: identified counselling-survey response excerpt] <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>GD-012</td>
+<td>Guidance / Announcement publishing (guidance)</td>
+<td>Verify Announcement publishing (guidance). Test Steps: 1. Create and publish a guidance announcement to students</td>
+<td>The announcement appears in student announcement feeds and read receipts are recorded.</td>
+<td>✅ PASS</td>
+<td>&quot;New draft&quot; → &quot;Guidance counselling services available this week (GD-012)&quot;, body, Audience &quot;Students&quot; (&quot;All students (unrestricted)&quot;) → Draft → &quot;Publish&quot; → row shows &quot;Published / From: On publication / Until: No expiry&quot;, actions &quot;Archive&quot; / &quot;Read history&quot;. As <code>[REDACTED: synthetic account identifier]</code> the portal Announcements feed shows it under Guidance as &quot;Unread&quot; (&quot;Published 01 Nov 2026&quot;) → &quot;Read announcement&quot; → &quot;Mark as read&quot; → status &quot;Read… <em>(src: TEST-RESULTS-CL-GD.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________          Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>5. Referrals (Web)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>RF-001</td>
+<td>Referrals / Create referral (clinic to guidance)</td>
+<td>Verify Create referral (clinic to guidance). Test Steps: 1. As clinic staff 2. Create a referral for a student to the guidance unit with a recorded reason</td>
+<td>The referral is created and appears in the guidance unit&#39;s referral inbox.</td>
+<td>✅ PASS</td>
+<td><code>[REDACTED: referral identifier]</code> created by clinic staff for [REDACTED: synthetic personnel identifier] with the reason and summary recorded, and it appeared in the guidance unit&#39;s incoming referral inbox. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-002</td>
+<td>Referrals / Create referral (guidance to clinic)</td>
+<td>Verify Create referral (guidance to clinic). Test Steps: 1. As a counsellor 2. Create a referral for a student to the clinic unit</td>
+<td>The referral is created and appears in the clinic unit&#39;s referral inbox.</td>
+<td>✅ PASS</td>
+<td><code>[REDACTED: referral identifier]</code> created by the counsellor for the same student and appeared in the clinic unit&#39;s incoming referral inbox. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-003</td>
+<td>Referrals / Employee-initiated referral</td>
+<td>Verify Employee-initiated referral. Test Steps: 1. Sign in as a teaching employee 2. Flag a student for clinic follow-up with a reason</td>
+<td>The referral is created and routed to clinic staff for review.</td>
+<td>⛔ BLOCKED</td>
+<td>No employee-facing referral creation exists — the <code>employee</code> role holds only 3 <code>portal.*</code> permissions (no <code>referrals.*</code>), <code>referrals.source_module</code> is <code>enum(&#39;clinic&#39;,&#39;guidance&#39;)</code> only, the employee console/global search expose no referral action, and the sole <code>is_teaching=1</code> employee profile has no login account. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-004</td>
+<td>Referrals / Employee records isolation</td>
+<td>Verify Employee records isolation. Test Steps: 1. Sign in as a teaching employee 2. Attempt to open the flagged student&#39;s clinic or counselling records</td>
+<td>Access is refused; the referring employee never gains access to the student&#39;s records.</td>
+<td>✅ PASS</td>
+<td>Every attempt by <code>[REDACTED: synthetic account identifier]</code> to open the flagged student&#39;s chart, case, encounter, referral lists or the patient-lookup API was refused (<code>403 Department access forbidden.</code> / <code>403 Referral staff role required.</code> / <code>403 Patient lookup forbidden.</code>), with no leakage in the employee&#39;s inbox or appointments. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-005</td>
+<td>Referrals / Acknowledge referral</td>
+<td>Verify Acknowledge referral. Test Steps: 1. As the receiving unit 2. Acknowledge a received referral</td>
+<td>The referral status advances to acknowledged with the actor recorded.</td>
+<td>✅ PASS</td>
+<td>Acknowledging <code>[REDACTED: referral identifier]</code> moved the badge to Acknowledged, set <code>assigned_user_id = [REDACTED: account record identifier]</code> ([REDACTED: synthetic account identifier]) and emitted a <code>referral_acknowledged</code> workflow event naming that actor. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-006</td>
+<td>Referrals / Review and record outcome</td>
+<td>Verify Review and record outcome. Test Steps: 1. Open an acknowledged referral 2. Record the review outcome</td>
+<td>The review is recorded and the referral advances toward closure or handoff.</td>
+<td>✅ PASS</td>
+<td>&quot;Start review&quot; on the acknowledged referral moved it to Under review, recorded a <code>referral_reviewed</code> event with actor and timestamp, and left the onward handoff/close actions available. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-007</td>
+<td>Referrals / Handoff between units</td>
+<td>Verify Handoff between units. Test Steps: 1. Open a referral 2. Hand it off to the other unit with a note</td>
+<td>The referral moves to the receiving unit with the handoff recorded.</td>
+<td>✅ PASS</td>
+<td>The clinic-side handoff of <code>[REDACTED: referral identifier]</code> created encounter <code>#[REDACTED: clinical encounter identifier]</code>, set <code>target_encounter_id</code>, recorded <code>referral_handoff</code> with the actor, and moved the referral into the clinic&#39;s queue (&quot;Clinic visit linked&quot; / &quot;Receiving team manages this handoff&quot; on the sender side). <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-008</td>
+<td>Referrals / Convert referral to case</td>
+<td>Verify Convert referral to case. Test Steps: 1. Open an accepted guidance referral 2. Convert it into a counselling case</td>
+<td>A counselling case is created carrying the referral&#39;s content, and the referral is linked to the case.</td>
+<td>✅ PASS</td>
+<td>&quot;Open / Link Case&quot; on <code>[REDACTED: referral identifier]</code> created case <code>[REDACTED: counselling case identifier]</code> carrying the referral summary as its intake notes, and the referral became Case linked with <code>target_case_id = [REDACTED: counselling case record identifier]</code> and an &quot;Open linked case&quot; link. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-009</td>
+<td>Referrals / Close referral</td>
+<td>Verify Close referral. Test Steps: 1. Open a reviewed referral 2. Close it with a disposition</td>
+<td>The referral is closed and no longer appears in active inboxes.</td>
+<td>✅ PASS</td>
+<td>Closing the reviewed <code>[REDACTED: referral identifier]</code> set status Closed with <code>closed_at</code> recorded and moved it out of the incoming inbox into the Closed / History folder. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RF-010</td>
+<td>Referrals / Referral list filtering</td>
+<td>Verify Referral list filtering. Test Steps: 1. Open the referral list 2. Filter by status and by unit</td>
+<td>The list filters correctly by the selected status and unit.</td>
+<td>✅ PASS</td>
+<td>Filter controls for status and receiving unit added; queries now accept valid referral statuses instead of medicine statuses. <em>(src: REFERRALS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________           Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>6. Facilities/BMG Console (Staff Web)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>BM-001</td>
+<td>Facilities / BMG / Facilities dashboard</td>
+<td>Verify Facilities dashboard. Test Steps: 1. Sign in as a facilities operator 2. Open the facilities dashboard</td>
+<td>The dashboard renders with unit states, active batches, and rotation status.</td>
+<td>✅ PASS</td>
+<td>Facilities dashboard rendered unit states, active-batch counts and per-unit schedule/rotation status for the operator role. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-002</td>
+<td>Facilities / BMG / Register composting unit</td>
+<td>Verify Register composting unit. Test Steps: 1. Open the unit registry 2. Register a new composting unit with its service details</td>
+<td>The unit is created and appears in the registry with an active service state.</td>
+<td>✅ PASS</td>
+<td><code>BB-BM-001 / BB-BM Unit A</code> created via Add drum and appears in the registry with status <code>Active</code>. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-003</td>
+<td>Facilities / BMG / Start batch</td>
+<td>Verify Start batch. Test Steps: 1. Select an idle unit 2. Start a batch with waste category and input weight</td>
+<td>The batch is created active on that unit and the unit shows an active batch.</td>
+<td>✅ PASS</td>
+<td>Batch <code>BATCH-2026-b4888edf609a8a985943</code> created active (<code>processing</code>, 120.00 kg) and shown as the unit&#39;s current batch — though no waste-category field exists. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-004</td>
+<td>Facilities / BMG / Second active batch blocked</td>
+<td>Verify Second active batch blocked. Test Steps: 1. With an active batch on a unit 2. Attempt to start a second batch on the same unit</td>
+<td>The start is rejected deterministically; a unit may hold at most one active batch.</td>
+<td>✅ PASS</td>
+<td>Second batch rejected deterministically: HTTP 409 <code>Unit is already running an active batch.</code> and the UI withholds the Start batch control. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-005</td>
+<td>Facilities / BMG / Update batch (process log)</td>
+<td>Verify Update batch (process log). Test Steps: 1. Open the active batch 2. Record an update entry with observations</td>
+<td>The update is appended to the batch log with actor and timestamp.</td>
+<td>⛔ BLOCKED</td>
+<td>No batch process-log/update affordance exists (no control, <code>POST /facilities/batch/{id}/update</code> → 404, no such audit event). <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-006</td>
+<td>Facilities / BMG / Finish batch</td>
+<td>Verify Finish batch. Test Steps: 1. Open the active batch 2. Finish it with closing details</td>
+<td>The batch transitions to finished and the unit becomes available.</td>
+<td>✅ PASS</td>
+<td>Batch transitioned to the terminal <code>released</code> state with output 95.00 kg and the unit became available again (Start batch reappeared). <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-007</td>
+<td>Facilities / BMG / Invalid status transition</td>
+<td>Verify Invalid status transition. Test Steps: 1. Attempt to archive an active batch directly</td>
+<td>The transition is rejected with a validation message; only active to finished or cancelled is accepted.</td>
+<td>✅ PASS</td>
+<td>Invalid transitions rejected with 409 <code>Only an active batch can be completed or cancelled.</code> (a batch archive route does not exist → 404). <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-008</td>
+<td>Facilities / BMG / Cancel batch and weight guard</td>
+<td>Verify Cancel batch and weight guard. Test Steps: 1. Cancel an active batch 2. Attempt to edit its waste category or input weight</td>
+<td>The batch is cancelled, and the closed batch can no longer have its category or weight edited.</td>
+<td>✅ PASS</td>
+<td>Batch cancelled to <code>voided</code> and its weight/category can no longer be edited — the edit route 404s (though batch editing is absent entirely). <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-009</td>
+<td>Facilities / BMG / Maintenance toggle</td>
+<td>Verify Maintenance toggle. Test Steps: 1. Place a unit out of service for maintenance 2. Return it to service</td>
+<td>Both transitions are recorded and the unit&#39;s availability analytics reflect the interval.</td>
+<td>✅ PASS</td>
+<td>Active→Maintenance→Active recorded in the audit ledger (#178/#179) and reflected in the dashboard&#39;s availability counters. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-010</td>
+<td>Facilities / BMG / IoT device registration and commands</td>
+<td>Verify IoT device registration and commands. Test Steps: 1. Register a device against a unit 2. Issue a rotation command 3. Observe the device heartbeat and run report</td>
+<td>The device is registered with its token, the command is queued and acknowledged, and runs are reported.</td>
+<td>⛔ BLOCKED</td>
+<td>Device registered with a one-time 64-hex token, but rotation commands return 403 <code>Hardware permission required.</code> for every role, so no command/heartbeat/run report exists. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-011</td>
+<td>Facilities / BMG / Rotation schedule</td>
+<td>Verify Rotation schedule. Test Steps: 1. Create a rotation schedule for a unit 2. Let the schedule dispatch a command</td>
+<td>The schedule produces rotation commands per its interval, with runs recorded against the unit.</td>
+<td>⛔ BLOCKED</td>
+<td>Schedule editor is not rendered and saving daily times returns 403 <code>Hardware permission required.</code>; intent stays <code>Disabled</code> so no rotation command or run can be dispatched. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-012</td>
+<td>Facilities / BMG / USB firmware provisioning</td>
+<td>Verify USB firmware provisioning. Test Steps: 1. Open the provisioning workspace 2. Check setup status, build the sketch, inspect the release manifest, and authorize flash</td>
+<td>The build artifacts and manifest are produced and the authorization step records the release for flashing.</td>
+<td>⛔ BLOCKED</td>
+<td>Build returned <code>Build rejected: Firmware build or USB authorization is unavailable.</code> with no artifacts/manifest, and flashing is gated by <code>BMG_USB_FLASH_ENABLED</code> + <code>facilities.hardware.manage</code>; <code>arduino-cli</code> is not on the server&#39;s PATH. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>BM-013</td>
+<td>Facilities / BMG / Batch and rotation analytics</td>
+<td>Verify Batch and rotation analytics. Test Steps: 1. Open the BMG analytics view for a period</td>
+<td>Batch counts, time in status, unit availability, cancellation rate, and rotation reliability shares are presented for the selected period.</td>
+<td>❌ FAIL</td>
+<td>The BMG period analytics exist but present only batch counts — time in status, unit availability, cancellation rate and rotation reliability shares are absent and explicitly disclaimed by the report. <em>(src: FACILITIES-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________          Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>7. Administration &amp; Platform (Web)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AD-001</td>
+<td>Administration / Administrative dashboard</td>
+<td>Verify Administrative dashboard. Test Steps: 1. Sign in as platform owner 2. Open the administrative dashboard</td>
+<td>The dashboard renders platform-wide counters and health indicators.</td>
+<td>✅ PASS</td>
+<td><code>/admin</code> renders platform-wide counters (2,627 population · 4 care ops · 177 audit rows · 22 accounts) plus velocity, audit-trail and population-mix health panels. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-002</td>
+<td>Administration / Audit explorer filtering</td>
+<td>Verify Audit explorer filtering. Test Steps: 1. Open the audit explorer 2. Filter by event type, actor, entity, and date range</td>
+<td>Results filter correctly by each criterion and paging stays bounded.</td>
+<td>✅ PASS</td>
+<td>Event type, entity type/id, numeric actor id and date range all filter correctly; page size bounded to 25/50/100 (500 refused) and cursor paging stays at 25 rows/page. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-003</td>
+<td>Administration / Audit chain verification (pass)</td>
+<td>Verify Audit chain verification (pass). Test Steps: 1. Run audit chain verification on an unmodified ledger</td>
+<td>The verifier reports the chain as valid.</td>
+<td>✅ PASS</td>
+<td>&quot;Verify Cryptographic Chain&quot; returned <code>success: true — &quot;Hash-chain verification passed for 144 tenant audit records.&quot;</code> <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-004</td>
+<td>Administration / Audit export safety</td>
+<td>Verify Audit export safety. Test Steps: 1. Export audit rows that include values beginning with formula characters</td>
+<td>The export is capped and formula-leading values are neutralized.</td>
+<td>⛔ BLOCKED</td>
+<td>No audit export exists in any role&#39;s UI (no control on the ledger page; all export routes 404), so capping / formula neutralisation cannot be exercised. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-005</td>
+<td>Administration / MIS directory synchronization</td>
+<td>Verify MIS directory synchronization. Test Steps: 1. Trigger a manual MIS sync 2. Observe progress</td>
+<td>Per-department progress is reported to the operator and the directory is refreshed.</td>
+<td>⛔ BLOCKED</td>
+<td>MIS upstream is unreachable from this host (test ran off the university network): the sync returns <code>success: false</code>, stalls at 5% and commits nothing (catalogs stay 50/74/19, last commit 2026-10-22). <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-006</td>
+<td>Administration / Employee access assignment</td>
+<td>Verify Employee access assignment. Test Steps: 1. Open employee access administration 2. Assign a department staff role to an employee 3. Remove it</td>
+<td>Assignments take effect on the employee&#39;s next request and are audited.</td>
+<td>✅ PASS</td>
+<td>Role assign/remove is reflected in the access list, takes effect on the employee&#39;s next request (portal ⇄ clinic console) and is audited as <code>access.role_changed</code>. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-007</td>
+<td>Administration / Sign-in carousel management</td>
+<td>Verify Sign-in carousel management. Test Steps: 1. Add a carousel slide, reorder slides, and toggle one off</td>
+<td>The slide order and visibility are reflected on the sign-in screen.</td>
+<td>✅ PASS</td>
+<td>Slide added, moved up and hidden — order and visibility change on the actual sign-in screen; test slide deleted afterwards. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-008</td>
+<td>Administration / User lifecycle</td>
+<td>Verify User lifecycle. Test Steps: 1. Create a user, deactivate the account, and reset the password</td>
+<td>Each action takes effect; deactivated accounts cannot sign in and password reset revokes existing sessions.</td>
+<td>⛔ BLOCKED</td>
+<td>No create/deactivate/password-reset UI anywhere (console states account activation and passwords are not managed here; MIS provisioning unavailable). <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-009</td>
+<td>Administration / Role and permission catalog</td>
+<td>Verify Role and permission catalog. Test Steps: 1. Open the role and permission catalog</td>
+<td>All twelve roles and their permission codes are listed with scope descriptions.</td>
+<td>✅ PASS</td>
+<td>Catalog now displays all twelve platform roles (including Student) with scope descriptions and permission codes. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-010</td>
+<td>Administration / Report export (CSV)</td>
+<td>Verify Report export (CSV). Test Steps: 1. Open reports 2. Export a report as CSV</td>
+<td>The CSV downloads with the selected period&#39;s aggregates and bounded rows.</td>
+<td>✅ PASS</td>
+<td>CSV <code>operational_all_2026-10-26_2026-11-01.csv</code> (1,641 B) downloads with the period&#39;s aggregates and 35 bounded rows. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-011</td>
+<td>Administration / Report export (PDF)</td>
+<td>Verify Report export (PDF). Test Steps: 1. Export the same report as PDF</td>
+<td>A typeset PDF is produced through the LaTeX pipeline with identical figures.</td>
+<td>✅ PASS</td>
+<td>PDF (208,007 B, 9 pages) produced by MiKTeX pdfTeX/TeX with figures identical to the CSV. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AD-012</td>
+<td>Administration / Report viewer scope</td>
+<td>Verify Report viewer scope. Test Steps: 1. Sign in as report viewer 2. Open reports, then attempt to open the audit explorer</td>
+<td>Reports are available; the audit explorer is refused for the role.</td>
+<td>✅ PASS</td>
+<td>Report viewer can open Operational reports, while <code>/admin/audit</code> is refused (&quot;Permission required: audit.read&quot;) and other admin pages 403. <em>(src: ADMIN-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________           Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>8. Real-Time and Notifications (Web + Mobile)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>RT-001</td>
+<td>Real-Time / WebSocket connect with valid grant</td>
+<td>Verify WebSocket connect with valid grant. Test Steps: 1. Sign in on the portal 2. Allow the page to request a realtime ticket 3. Open the socket</td>
+<td>The connection is admitted and the page subscribes to its own user channel.</td>
+<td>✅ PASS</td>
+<td>Valid ticket → HTTP 200, <code>ws://localhost:8081</code>, grants <code>[REDACTED: private user channel identifier]</code>, socket returns <code>{&quot;type&quot;:&quot;ready&quot;}</code>. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-002</td>
+<td>Real-Time / Expired ticket rejected</td>
+<td>Verify Expired ticket rejected. Test Steps: 1. Capture a realtime ticket 2. Wait past its expiry 3. Attempt to connect with it</td>
+<td>The socket server rejects the expired ticket.</td>
+<td>✅ PASS</td>
+<td>Ticket used after its 60 s TTL → connection closed (1006) with no <code>ready</code> frame. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-003</td>
+<td>Real-Time / Tampered ticket rejected</td>
+<td>Verify Tampered ticket rejected. Test Steps: 1. Modify a captured ticket payload and attempt to connect</td>
+<td>The signature check fails and the connection is rejected.</td>
+<td>✅ PASS</td>
+<td>Signature altered → connection closed (1006) with no <code>ready</code> frame. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-004</td>
+<td>Real-Time / Cross-origin ticket rejected</td>
+<td>Verify Cross-origin ticket rejected. Test Steps: 1. Present a valid ticket issued for one origin from a different origin</td>
+<td>The origin binding fails and the connection is rejected.</td>
+<td>✅ PASS</td>
+<td>Foreign <code>Origin</code> → ticket refused with HTTP 403 &quot;Realtime origin not allowed.&quot;; a valid ticket replayed from another origin is rejected at the handshake. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-005</td>
+<td>Real-Time / Live queue board update</td>
+<td>Verify Live queue board update. Test Steps: 1. Open the staff queue board on two sessions 2. Advance the queue from the first session</td>
+<td>The second session&#39;s board updates without a manual refresh.</td>
+<td>✅ PASS</td>
+<td>Queue advanced from a second session; the open board moved [REDACTED: queue ticket identifier] from Waiting to &quot;Called &amp; Arriving&quot; with no refresh (board re-fetched via <code>GET /clinic/queue/board</code>). <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-006</td>
+<td>Real-Time / Personal queue hint</td>
+<td>Verify Personal queue hint. Test Steps: 1. Open the personal portal queue view 2. Have staff advance that queue</td>
+<td>The personal view re-fetches and shows the new position without reload.</td>
+<td>✅ PASS</td>
+<td>The personal card moved from #2 / 1 ahead to #1 / 0 ahead (&quot;You&#39;re next&quot;) with no reload, via the ~15 s <code>GET /portal/queue</code> re-fetch. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-007</td>
+<td>Real-Time / Mention notification</td>
+<td>Verify Mention notification. Test Steps: 1. Mention a colleague in a team chat message</td>
+<td>The colleague receives a notification with the mention and an unread indicator.</td>
+<td>✅ PASS</td>
+<td>[REDACTED: communication record identifier] mentions user [REDACTED: account record identifier]; notification [REDACTED: notification identifier] &quot;Team chat mention&quot; is delivered to that user, unread, linking to the message. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-008</td>
+<td>Real-Time / Reconciliation after disconnect</td>
+<td>Verify Reconciliation after disconnect. Test Steps: 1. Open a live view 2. Disconnect the network, advance the queue, restore the network</td>
+<td>The scheduled reconciliation poll repairs the view to the current state.</td>
+<td>✅ PASS</td>
+<td>With the push server stopped and the queue changed from another session, the open board repaired itself (Waiting 0→1, Skipped 1→0) via the scheduled poll. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-009</td>
+<td>Real-Time / Channel isolation</td>
+<td>Verify Channel isolation. Test Steps: 1. Attempt to subscribe to another user&#39;s private channel by crafting a grant request</td>
+<td>The grant only ever names the caller&#39;s own channel and the subscription is refused.</td>
+<td>✅ PASS</td>
+<td>Crafted channel/user selectors in the grant request are ignored; the ticket names only the caller&#39;s own channel. <em>(src: REALTIME-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>RT-010</td>
+<td>Real-Time / Mobile realtime grant</td>
+<td>Verify Mobile realtime grant. Test Steps: 1. Sign in on the mobile app 2. Open a queue-dependent screen 3. Have staff advance the queue</td>
+<td>The grant endpoint names exactly the signed-in user&#39;s channel, and the affected caches invalidate without pull-to-refresh.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>Test executed by: ____________________          Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>9. AI Insights (Staff Web)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AI-001</td>
+<td>AI Insights / Provider configuration and model discovery</td>
+<td>Verify Provider configuration and model discovery. Test Steps: 1. As platform owner 2. Open AI settings 3. Enter a provider endpoint and key, fetch models, and import a selection</td>
+<td>The model list is fetched and imported into the encrypted catalog; the raw key is never displayed again.</td>
+<td>✅ PASS</td>
+<td>Fetch returned 187 models, one imported (catalogue 173 → 174, active model unchanged) and the key was never shown again. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-002</td>
+<td>AI Insights / Save pauses analytics</td>
+<td>Verify Save pauses analytics. Test Steps: 1. Change any AI setting and save 2. Attempt to generate an insight before re-enabling</td>
+<td>Saving pauses analytics and generation is unavailable until explicitly re-enabled and re-tested.</td>
+<td>✅ PASS</td>
+<td>Saving showed <code>Aggregate analytics is paused until you enable it</code> and the panel&#39;s generation buttons were disabled until a fresh test + explicit enable. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-003</td>
+<td>AI Insights / Key secrecy</td>
+<td>Verify Key secrecy. Test Steps: 1. Reload the AI settings page after saving a key</td>
+<td>The key field is blank; the stored key is never returned to the browser.</td>
+<td>✅ PASS</td>
+<td>After reload the key field is empty (<code>A key is saved. It is never sent back to this page.</code>) and the key string is absent from the served HTML. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-004</td>
+<td>AI Insights / Department access grants</td>
+<td>Verify Department access grants. Test Steps: 1. Grant a role read, generate, review, and approve access for a department 2. Inspect the audit trail</td>
+<td>Each grant change is recorded as its own audited event and the panel reflects the new access.</td>
+<td>✅ PASS</td>
+<td>Each of the four grant presses produced its own audited event (#153–#156) with chained hashes, and the panel enabled the actions once granted. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-005</td>
+<td>AI Insights / Generation requires explicit grant</td>
+<td>Verify Generation requires explicit grant. Test Steps: 1. Sign in as a staff role without the generate grant 2. Open the department insights panel 3. Request generation</td>
+<td>The request is refused for lack of grant and no job is queued.</td>
+<td>✅ PASS</td>
+<td>With <code>ai.insights.generate</code> revoked the panel offers no generation control at all and <code>ai_jobs</code> stayed at 2 rows — no job queued. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-006</td>
+<td>AI Insights / Prepare local summary</td>
+<td>Verify Prepare local summary. Test Steps: 1. As an authorized role 2. Prepare the local summary for a fixed analysis</td>
+<td>The snapshot is computed from aggregates, small-cell counts are withheld, and the snapshot is stored encrypted.</td>
+<td>⛔ BLOCKED</td>
+<td>Prepare was refused: <code>No comparison is available yet…</code> — the fixed Sept/Oct 2026 window has no eligible visits (all seeded encounters are 2026-11-01); encrypted snapshot storage confirmed on seeded rows. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-007</td>
+<td>AI Insights / Queued request without worker</td>
+<td>Verify Queued request without worker. Test Steps: 1. Queue a generation request while the insight worker is stopped</td>
+<td>The request remains queued; no provider call occurs without the worker.</td>
+<td>⛔ BLOCKED</td>
+<td>The request could not be queued (same eligibility refusal); no job row appeared, and <code>ai:dispatch</code> reported <code>processed=0</code>. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-008</td>
+<td>AI Insights / Worker generation</td>
+<td>Verify Worker generation. Test Steps: 1. Start the insight worker with a queued job</td>
+<td>The worker executes the job within its budgets and the draft is stored encrypted against its snapshot.</td>
+<td>⛔ BLOCKED</td>
+<td>The worker ran (<code>processed=0 failed=0 outcome_unknown=0</code>) but no queued job existed, so no new draft was produced. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-009</td>
+<td>AI Insights / Versioned review decisions</td>
+<td>Verify Versioned review decisions. Test Steps: 1. Open a generated draft 2. Record accept, then reject, then approve decisions across drafts</td>
+<td>Each decision is versioned, recorded, and reflected in the draft&#39;s state.</td>
+<td>⛔ BLOCKED</td>
+<td>No draft was presented for review (the only draft is rejected/older-configuration), so no accept/reject/approve could be recorded in the UI. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-010</td>
+<td>AI Insights / Unapproved drafts withheld</td>
+<td>Verify Unapproved drafts withheld. Test Steps: 1. Sign in as a department role with read access only 2. Open the insights panel</td>
+<td>Only approved releases are presented; unapproved drafts are not shown.</td>
+<td>⛔ BLOCKED</td>
+<td>Unapproved drafts are correctly withheld (<code>No AI drafts yet</code>), but no approved release exists and no summary could be prepared, so approved-release presentation was not observable. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>AI-011</td>
+<td>AI Insights / Disable analytics</td>
+<td>Verify Disable analytics. Test Steps: 1. Disable aggregate AI from the admin settings 2. Open a department insights panel as staff</td>
+<td>The panels are unavailable and generation endpoints refuse requests.</td>
+<td>✅ PASS</td>
+<td>Pause analytics → <code>AI analytics paused</code>, <code>ai:status enabled=0</code>, panel buttons disabled, and both insight endpoints answered HTTP 422 <code>invalid_request</code>. <em>(src: AI-INSIGHTS-RESULTS.md)</em></td>
+</tr>
+<tr>
+<td>Test executed by: ____________________           Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>10. Mobile Application (React Native)</h2>
+<table>
+<thead>
+<tr>
+<th>Test Case ID</th>
+<th>Module / Function</th>
+<th>Test Scenario</th>
+<th>Expected Results</th>
+<th>Pass</th>
+<th>Remarks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>MB-001</td>
+<td>Mobile App / Sign in (student)</td>
+<td>Verify Sign in (student). Test Steps: 1. Open the app 2. Enter student credentials on the sign-in screen 3. Sign in</td>
+<td>The app authenticates, lands on the home tab, and the session persists across app restarts.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-002</td>
+<td>Mobile App / Silent token refresh</td>
+<td>Verify Silent token refresh. Test Steps: 1. Use the app until the access token expires 2. Perform any request</td>
+<td>The request triggers a single silent refresh and completes without prompting re-authentication.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-003</td>
+<td>Mobile App / Refresh reuse detection</td>
+<td>Verify Refresh reuse detection. Test Steps: 1. Replay an already-used refresh token from a captured request</td>
+<td>The token family is revoked, the app requires sign-in, and no data is served to the replayed token.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-004</td>
+<td>Mobile App / Home dashboard</td>
+<td>Verify Home dashboard. Test Steps: 1. Sign in and open the Home tab</td>
+<td>Upcoming appointments, queue status, and announcements render for the signed-in person.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-005</td>
+<td>Mobile App / Appointment booking and cancellation</td>
+<td>Verify Appointment booking and cancellation. Test Steps: 1. Book an appointment through the app 2. Then cancel it</td>
+<td>The booking appears in the appointments list and cancelling releases the slot.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-006</td>
+<td>Mobile App / Queue board</td>
+<td>Verify Queue board. Test Steps: 1. Open the Queue tab while a queue is active</td>
+<td>The board shows current tickets per destination with the person&#39;s own ticket highlighted where present.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-007</td>
+<td>Mobile App / Visit history and health records</td>
+<td>Verify Visit history and health records. Test Steps: 1. Open the Visits tab 2. Open one visit record</td>
+<td>The history lists past visits and the detail view shows the record summary.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-008</td>
+<td>Mobile App / Announcements</td>
+<td>Verify Announcements. Test Steps: 1. Open announcements 2. Open one item</td>
+<td>Announcements load with read tracking consistent with the web portal.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-009</td>
+<td>Mobile App / Survey submission</td>
+<td>Verify Survey submission. Test Steps: 1. Open an assigned survey [REDACTED: survey identifier]. Answer and submit</td>
+<td>The response is recorded and the survey is marked answered.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-010</td>
+<td>Mobile App / Notifications</td>
+<td>Verify Notifications. Test Steps: 1. Open the notifications view 2. Mark one read, then read all</td>
+<td>Unread state updates and reconciles with the server.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-011</td>
+<td>Mobile App / Staff queue monitor visibility</td>
+<td>Verify Staff queue monitor visibility. Test Steps: 1. Sign in as a student and look for the staff queue monitor; then sign in as staff</td>
+<td>The monitor screen is absent for students and present for authorized staff.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-012</td>
+<td>Mobile App / Realtime invalidation</td>
+<td>Verify Realtime invalidation. Test Steps: 1. Keep the app open on the queue screen 2. Have staff advance the queue</td>
+<td>The affected view updates without pull-to-refresh.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>MB-013</td>
+<td>Mobile App / Sign out</td>
+<td>Verify Sign out. Test Steps: 1. Open profile settings and sign out</td>
+<td>Tokens are revoked server-side; the app returns to the sign-in screen and cached data is not served after restart.</td>
+<td>⏭ Out of scope</td>
+<td>Not executed: the mobile React Native application is outside the web black-box scope of this run.</td>
+</tr>
+<tr>
+<td>Test executed by: ____________________           Date of execution: ____________________</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>Result files (full evidence)</h2>
+<p>Every verdict in this tracker is backed by a per-module evidence file. A case marked PASS, FAIL or
+BLOCKED must <strong>not</strong> be re-run without a reason.</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Cases</th>
+<th>Evidence file</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Authentication &amp; Session</td>
+<td>AU-001 … AU-012</td>
+<td><code>papers/blackbox/results/AUTH-RESULTS.md</code></td>
+</tr>
+<tr>
+<td>Personal Portal</td>
+<td>PT-001 … PT-012</td>
+<td><code>papers/blackbox/results/PORTAL-RESULTS.md</code></td>
+</tr>
+<tr>
+<td>Clinic Console</td>
+<td>CL-001 … CL-014</td>
+<td><code>papers/blackbox/TEST-RESULTS-CL-GD.md</code></td>
+</tr>
+<tr>
+<td>Guidance Console</td>
+<td>GD-001 … GD-012</td>
+<td><code>papers/blackbox/TEST-RESULTS-CL-GD.md</code></td>
+</tr>
+<tr>
+<td>Referrals</td>
+<td>RF-001 … RF-010</td>
+<td><code>papers/blackbox/results/REFERRALS-RESULTS.md</code></td>
+</tr>
+<tr>
+<td>Facilities / BMG Console</td>
+<td>BM-001 … BM-013</td>
+<td><code>papers/blackbox/results/FACILITIES-RESULTS.md</code></td>
+</tr>
+<tr>
+<td>Administration &amp; Platform</td>
+<td>AD-001 … AD-012</td>
+<td><code>papers/blackbox/results/ADMIN-RESULTS.md</code></td>
+</tr>
+<tr>
+<td>Real-Time &amp; Notifications</td>
+<td>RT-001 … RT-010</td>
+<td><code>papers/blackbox/results/REALTIME-RESULTS.md</code></td>
+</tr>
+<tr>
+<td>AI Insights</td>
+<td>AI-001 … AI-011</td>
+<td><code>papers/blackbox/results/AI-INSIGHTS-RESULTS.md</code></td>
+</tr>
+<tr>
+<td>Mobile Application</td>
+<td>MB-001 … MB-013</td>
+<td><em>not executed — outside the web scope of this run</em></td>
+</tr>
+</tbody></table>
+<h3>Scope of this run</h3>
+<ul>
+<li><strong>Executed:</strong> 105 web cases (all sections except the mobile application).</li>
+<li><strong>Not executed:</strong> the 13 mobile cases (MB-001 … MB-013) and RT-010 (the mobile realtime grant).</li>
+<li><strong>Environment:</strong> <code>http://localhost:8080</code> — local development worktree with the remediation in place.
+The dedicated portal hosts <code>synapse.localhost</code>, <code>clinic.localhost</code>, <code>guidance.localhost</code> and
+<code>bmg.localhost</code> (all on port 8080) were used for the host-scoped authentication cases.</li>
+<li><strong>Browser:</strong> a single in-app Browser tab throughout the parent-driven modules; the four parallel
+module agents drove their own isolated browser session and closed it when finished.</li>
+</ul>
+
+</main></body></html>

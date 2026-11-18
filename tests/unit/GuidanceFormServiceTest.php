@@ -128,8 +128,11 @@ final class GuidanceFormServiceTest extends FreshDatabaseTestCase
     public function testManifestSyncAndCatalogPopulation(): void
     {
         $syncResult = $this->definitionService->syncManifestToDatabase(1);
-        $this->assertGreaterThanOrEqual(8, $syncResult['definitions']);
-        $this->assertGreaterThanOrEqual(8, $syncResult['revisions']);
+        $this->assertGreaterThanOrEqual(0, $syncResult['definitions']);
+        $this->assertGreaterThanOrEqual(0, $syncResult['revisions']);
+        $this->assertGreaterThanOrEqual(8, $this->db->table('guidance_form_definitions')->where('tenant_id', 1)->countAllResults());
+        $this->assertGreaterThanOrEqual(8, $this->db->table('guidance_form_definition_revisions')->where('tenant_id', 1)->countAllResults());
+        $this->assertSame(['definitions' => 0, 'revisions' => 0], $this->definitionService->syncManifestToDatabase(1));
 
         // Verify General Referral definition
         $genRef = $this->definitionService->getActiveDefinition('guidance_general_referral', 1);

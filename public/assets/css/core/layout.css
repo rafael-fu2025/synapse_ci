@@ -736,6 +736,61 @@ body.sidebar-collapsed .app-header .logo { width: var(--na-sidebar-collapsed); p
   display: block;
 }
 
+/* Coordinated color crossfade during a theme switch (only while .theme-anim
+   is set, so it never interferes with hover/scroll transitions). Used as the
+   fallback for browsers without the View Transitions API. */
+html.theme-anim,
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition: background-color 0.5s ease, border-color 0.5s ease, color 0.5s ease,
+    fill 0.5s ease, stroke 0.5s ease, box-shadow 0.5s ease, outline-color 0.5s ease !important;
+}
+
+/* Suspend element transitions during View Transition snapshot capture so
+   base.css/layout.css transitions capture at the final palette immediately. */
+html.theme-instant,
+html.theme-instant *,
+html.theme-instant *::before,
+html.theme-instant *::after {
+  transition: none !important;
+}
+
+/* View Transitions: pixel-dissolve reveal driven by JS (--vt-mask).
+   pointer-events: none allows immediate interaction while the transition runs. */
+::view-transition,
+::view-transition-group(*),
+::view-transition-image-pair(*),
+::view-transition-old(root),
+::view-transition-new(root) {
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  -webkit-mask-image: var(--vt-mask);
+  mask-image: var(--vt-mask);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-anim,
+  html.theme-anim *,
+  html.theme-anim *::before,
+  html.theme-anim *::after {
+    transition: none !important;
+  }
+}
+
 /*--------------------------------------------------------------
 # Dropdown Panels
 --------------------------------------------------------------*/

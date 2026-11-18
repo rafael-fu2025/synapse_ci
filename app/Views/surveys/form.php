@@ -11,7 +11,7 @@ $aiStatus = is_array($aiPrefillStatus ?? null) ? $aiPrefillStatus : ['available'
 $aiAvailable = !empty($aiStatus['available']);
 $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPrefillUrl : site_url('guidance/surveys/ai-prefill');
 ?>
-<div x-data="SynapseSurveyBuilder(<?= esc(json_encode($questions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>, <?= esc(json_encode($survey['audience'] ?? 'all'), 'attr') ?>, <?= esc(json_encode(site_url('guidance/question-bank/catalog')), 'attr') ?>, <?= esc(json_encode($surveyMode), 'attr') ?>, <?= esc(json_encode($externalUrl), 'attr') ?>, <?= esc(json_encode($aiEndpoint), 'attr') ?>)">
+<div class="guidance-ui" x-data="SynapseSurveyBuilder(<?= esc(json_encode($questions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>, <?= esc(json_encode($survey['audience'] ?? 'all'), 'attr') ?>, <?= esc(json_encode(site_url('guidance/question-bank/catalog')), 'attr') ?>, <?= esc(json_encode($surveyMode), 'attr') ?>, <?= esc(json_encode($externalUrl), 'attr') ?>, <?= esc(json_encode($aiEndpoint), 'attr') ?>)">
   <div class="alert alert-info small">In-app surveys collect encrypted identified responses visible only to authorized Guidance administrators and supervisors. External links (such as Google Forms) open on the external form provider. Publishing permanently freezes the configuration, audience, and availability window.</div>
   <noscript><div class="alert alert-warning">Enable JavaScript to use the question builder.</div></noscript>
   <form action="<?= esc($formAction) ?>" method="post" data-modal-submit>
@@ -131,7 +131,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
 
         <div class="mb-3">
           <label class="form-label small fw-semibold mb-1" for="surveyAiSourceFile">Or upload questionnaire file</label>
-          <div class="input-group input-group-sm">
+          <div class="input-group">
             <input id="surveyAiSourceFile" type="file" class="form-control" x-ref="aiFileInput" accept=".txt,.md,.csv,.docx,.pdf" @change="onAiFileChange($event)" :disabled="aiBusy">
             <button type="button" class="btn btn-outline-secondary" x-show="aiFileName !== ''" @click="clearAiFile($refs.aiFileInput)" :disabled="aiBusy">Clear file</button>
           </div>
@@ -139,8 +139,8 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
         </div>
 
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-          <div class="d-flex flex-wrap align-items-center gap-3 small">
-            <div class="btn-group btn-group-sm" role="radiogroup" aria-label="AI question merge mode">
+          <div class="d-flex flex-wrap align-items-center gap-3 small w-100 w-sm-auto">
+            <div class="btn-group btn-group-sm flex-wrap gc-print-group" role="radiogroup" aria-label="AI question merge mode">
               <button type="button" class="btn" :class="aiMergeMode === 'replace' ? 'btn-primary' : 'btn-outline-secondary'" role="radio" :aria-checked="aiMergeMode === 'replace'" @click="aiMergeMode = 'replace'" :disabled="aiBusy">Replace draft questions</button>
               <button type="button" class="btn" :class="aiMergeMode === 'append' ? 'btn-primary' : 'btn-outline-secondary'" role="radio" :aria-checked="aiMergeMode === 'append'" @click="aiMergeMode = 'append'" :disabled="aiBusy">Append (up to 20 total)</button>
             </div>
@@ -149,7 +149,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
               <span class="form-check-label">Fill blank title &amp; description</span>
             </label>
           </div>
-          <div class="d-flex gap-2">
+          <div class="d-flex flex-wrap gap-2 w-100 w-sm-auto justify-content-sm-end">
             <button type="button" class="btn btn-outline-secondary btn-sm" x-show="aiBusy" @click="cancelAiPrefill()">Cancel</button>
             <button type="button" class="btn btn-outline-secondary btn-sm" x-show="aiRawLog.length > 0 || aiBusy" @click="aiShowRawSse = !aiShowRawSse" :aria-expanded="aiShowRawSse">
               <i class="bi bi-terminal me-1" aria-hidden="true"></i><span x-text="aiShowRawSse ? 'Hide Raw SSE' : 'Raw SSE (' + aiRawLog.length + ')'"></span>
@@ -191,7 +191,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
               <label class="form-label small fw-semibold mb-1 d-block" :for="'aiClar-' + cIdx" x-text="clar.question"></label>
               <div class="d-flex flex-wrap gap-1 mb-1" x-show="clar.suggested_options.length > 0">
                 <template x-for="(opt, oIdx) in clar.suggested_options" :key="oIdx">
-                  <button type="button" class="btn btn-sm py-0 px-2" :class="clar.answer === opt ? 'btn-primary' : 'btn-outline-secondary'" @click="pickClarificationOption(clar, opt)" :disabled="aiBusy" x-text="opt"></button>
+                  <button type="button" class="btn btn-sm px-2" :class="clar.answer === opt ? 'btn-primary' : 'btn-outline-secondary'" @click="pickClarificationOption(clar, opt)" :disabled="aiBusy" x-text="opt"></button>
                 </template>
               </div>
               <input :id="'aiClar-' + cIdx" type="text" class="form-control form-control-sm" maxlength="400" x-model="clar.answer" :disabled="aiBusy" placeholder="Type clarification answer (optional)…">
@@ -221,7 +221,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
       <div class="row g-2 mb-3"><div class="col-md-4"><label class="form-label" for="surveyBankSearch">Search bank</label><input id="surveyBankSearch" class="form-control" type="search" maxlength="100" x-model="bankQuery" @input="bankFilterInput('bankQuery', $event)" @compositionstart="bankComposition('bankQuery', $event, true)" @compositionend="bankComposition('bankQuery', $event, false)" @keydown.enter="bankSearchEnter($event)"></div>
       <div class="col-md-3"><label class="form-label" for="surveyBankCategory">Category</label><input id="surveyBankCategory" class="form-control" maxlength="80" x-model="bankCategory" @input="bankFilterInput('bankCategory', $event)" @compositionstart="bankComposition('bankCategory', $event, true)" @compositionend="bankComposition('bankCategory', $event, false)" @keydown.enter="bankSearchEnter($event)" placeholder="Exact category"></div>
       <div class="col-md-3"><label class="form-label" for="surveyBankAudience">Intended audience</label><select id="surveyBankAudience" class="form-select" x-model="bankAudience" @change="bankFilterInput('bankAudience', $event, true)"><option value="">Any audience</option><option value="students">Students + both</option><option value="employees">Employees + both</option><option value="all">Both audiences</option></select></div>
-      <div class="col-md-2 d-flex align-items-end"><button class="btn btn-outline-primary" type="button" @click="searchBank(1)" :disabled="bankBusy">Search bank</button></div></div>
+      <div class="col-md-2 d-flex align-items-end"><button class="btn btn-outline-primary w-100" type="button" @click="searchBank(1)" :disabled="bankBusy">Search bank</button></div></div>
       <p class="small" role="status" x-show="bankBusy">Loading bank questions…</p>
       <p class="alert alert-danger small" role="alert" x-show="bankError" x-text="bankError"></p>
       <p class="text-muted small" x-show="!bankBusy && !bankError && bankItems.length === 0">No matching active questions. Adjust the filters or add an entry from the Question Bank page.</p>
@@ -265,8 +265,10 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
         <template x-for="(option, optionIndex) in question.options" :key="optionIndex">
           <div class="input-group mb-2"><input class="form-control" :aria-label="'Option ' + (optionIndex + 1)" :name="'questions[' + index + '][options][' + optionIndex + ']'" x-model="question.options[optionIndex]" @input="detach(question)" maxlength="200" required><button class="btn btn-outline-secondary" type="button" :disabled="question.options.length <= 2" @click="detach(question); question.options.splice(optionIndex, 1)" aria-label="Remove option">Remove</button></div>
         </template>
-        <button class="btn btn-outline-primary btn-sm me-2" type="button" x-show="['single','multiple'].includes(question.type)" :disabled="question.options.length >= 10" @click="detach(question); question.options.push('')">Add option</button>
-        <button class="btn btn-outline-danger btn-sm" type="button" :disabled="questions.length <= 1" @click="questions.splice(index, 1)">Remove question</button>
+        <div class="d-flex flex-wrap gap-2 mt-2">
+          <button class="btn btn-outline-primary btn-sm" type="button" x-show="['single','multiple'].includes(question.type)" :disabled="question.options.length >= 10" @click="detach(question); question.options.push('')">Add option</button>
+          <button class="btn btn-outline-danger btn-sm" type="button" :disabled="questions.length <= 1" @click="questions.splice(index, 1)">Remove question</button>
+        </div>
       </fieldset>
     </template>
     <button class="btn btn-outline-primary btn-sm mb-3" type="button" :disabled="questions.length >= 20" @click="questions.push({type:'text',label:'',required:true,options:[],scale_min_label:'',scale_max_label:''})">Add question</button>

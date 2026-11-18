@@ -1,7 +1,95 @@
 <?= $this->extend('layouts/app') ?>
 
+<?= $this->section('styles') ?>
+<style>
+  .clinic-wrap-badge {
+    white-space: normal;
+    text-align: start;
+    line-height: 1.35;
+    max-width: 100%;
+  }
+  .clinic-chart-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 1.25rem;
+  }
+  @media (min-width: 576px) {
+    .clinic-chart-avatar {
+      width: 72px;
+      height: 72px;
+      font-size: 1.75rem;
+    }
+  }
+  html[data-theme="dark"] .clinic-cert-btn {
+    color: var(--default-color, #f0f0f0);
+    border-color: var(--control-border, #767676);
+  }
+  html[data-theme="dark"] .clinic-cert-btn:hover,
+  html[data-theme="dark"] .clinic-cert-btn:focus-visible {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  @media (max-width: 575.98px) {
+    .clinic-mobile-full {
+      width: 100% !important;
+    }
+  }
+  @media (max-width: 767.98px) {
+    .clinic-page-actions .btn,
+    .clinic-chart-section .btn,
+    .clinic-chart-section .form-control,
+    .clinic-chart-section .form-select,
+    .clinic-chart-section .bd-select .bd-trigger,
+    .clinic-chart-section .bd-select .bd-select-toggle {
+      min-height: 40px;
+    }
+    .clinic-page-actions .btn,
+    .clinic-chart-section .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .clinic-chart-section .bd-select {
+      width: 100%;
+    }
+    .clinic-chart-tabs {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.45rem;
+      padding: 0.65rem 0.75rem !important;
+      border-bottom: 1px solid var(--border-color, #dee2e6) !important;
+    }
+    .clinic-chart-tabs .nav-item {
+      display: flex;
+    }
+    .clinic-chart-tabs .nav-item:last-child {
+      grid-column: 1 / -1;
+    }
+    .clinic-chart-tabs .nav-link {
+      width: 100%;
+      min-height: 44px;
+      padding: 0.5rem 0.65rem !important;
+      font-size: 0.8125rem;
+      border: 1px solid var(--border-color, #dee2e6) !important;
+      border-radius: 0.5rem !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      text-align: center;
+      line-height: 1.25;
+    }
+    .clinic-chart-tabs .nav-link.active {
+      border-color: var(--fu-brand, #800000) !important;
+      background-color: var(--bs-primary-bg-subtle, #f8eeee) !important;
+      color: var(--bs-primary-text-emphasis, #5a0000) !important;
+    }
+  }
+</style>
+<?= $this->endSection() ?>
+
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2">
+<div class="d-flex flex-wrap gap-2 clinic-page-actions">
   <?php $referralActor = session()->get('user') ?? []; ?>
   <?php if (($referralActor['role'] ?? '') === 'superadmin' || in_array('referrals.create', $referralActor['permissions'] ?? [], true)): ?>
   <a href="<?= esc(site_url('/clinic/referrals/create?' . http_build_query(['person_id' => $chart['person']['id']]))) ?>" class="btn btn-outline-primary btn-sm" data-app-modal-open>Refer to Guidance</a>
@@ -18,7 +106,7 @@
   <?php elseif (!empty($canStartVisit)): ?>
   <form action="<?= site_url('/clinic/encounters/start-direct/' . $chart['person']['id']) ?>" method="POST" class="d-inline">
     <?= csrf_field() ?>
-    <button type="submit" class="btn btn-primary btn-sm ms-1">
+    <button type="submit" class="btn btn-primary btn-sm">
       <i class="bi bi-plus-circle me-1"></i> Start New Visit
     </button>
   </form>
@@ -59,61 +147,61 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
     $dispensationsByEncounter[$item['encounter_id']][] = $item;
 }
 ?>
-<section data-patient-chart="<?= (int) $person['id'] ?>"
+<section class="clinic-chart-section" data-patient-chart="<?= (int) $person['id'] ?>"
          data-refresh-owner="clinic.patient.<?= (int) $person['id'] ?>"
          data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <div data-refresh-region="profile" data-refresh-heading tabindex="-1">
 
 <!-- 1. NiceAdmin v3 Profile Board Banner Component -->
 <div class="page-profile mb-4">
-  <div class="card border-0 shadow-sm p-4">
+  <div class="card border-0 shadow-sm p-3 p-sm-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-      <div class="d-flex align-items-center gap-3">
+      <div class="d-flex align-items-center gap-3" style="min-width: 0;">
         <div class="position-relative flex-shrink-0">
-          <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold fs-3 shadow-sm" style="width: 72px; height: 72px;">
+          <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-sm clinic-chart-avatar">
             <?= strtoupper(substr($person['first_name'], 0, 1) . substr($person['last_name'], 0, 1)) ?>
           </div>
           <span class="position-absolute bottom-0 end-0 bg-success border border-white rounded-circle" style="width: 14px; height: 14px;"></span>
         </div>
-        <div>
-          <div class="text-uppercase small fw-bold text-primary" style="letter-spacing: 0.05em;">
+        <div style="min-width: 0;">
+          <div class="text-uppercase small fw-bold text-primary text-break" style="letter-spacing: 0.05em;">
             <?= esc(ucfirst($person['kind'])) ?> · <?= esc($student ? ($student['program'] . ' (Year ' . $student['year_level'] . ')') : ($employee['department'] ?? 'University Member')) ?>
           </div>
-          <h2 class="h4 fw-bold mb-1 text-dark"><?= esc($person['last_name'] . ', ' . $person['first_name'] . ' ' . ($person['middle_name'] ?? '')) ?></h2>
+          <h2 class="h4 fw-bold mb-1 text-break"><?= esc($person['last_name'] . ', ' . $person['first_name'] . ' ' . ($person['middle_name'] ?? '')) ?></h2>
           <?php
             $chartEmail = !empty($person['email'])
                 ? $person['email']
                 : \App\Services\UniversityEmail::derive($person['first_name'] ?? null, $person['last_name'] ?? null);
           ?>
-          <div class="text-muted small">
+          <div class="text-muted small d-flex flex-wrap gap-1 column-gap-2" style="min-width: 0;">
             <span>MIS ID: <strong><?= esc($person['mis_id']) ?></strong></span>
             <?php if (!empty($chartEmail)): ?>
-              <span class="ms-2">· Email: <strong><?= esc($chartEmail) ?></strong></span>
+              <span class="text-break">· Email: <strong class="text-break"><?= esc($chartEmail) ?></strong></span>
             <?php endif; ?>
-            <span class="ms-2">· Gender: <?= esc(ucfirst($person['gender'] ?? 'Unspecified')) ?></span>
+            <span>· Gender: <?= esc(ucfirst($person['gender'] ?? 'Unspecified')) ?></span>
             <?php if (!empty($person['date_of_birth'])): ?>
-              <span class="ms-2">· DOB: <?= date('M j, Y', strtotime($person['date_of_birth'])) ?></span>
+              <span>· DOB: <?= date('M j, Y', strtotime($person['date_of_birth'])) ?></span>
             <?php endif; ?>
           </div>
         </div>
       </div>
 
       <!-- Quick Health Pill Tags -->
-      <div class="d-flex flex-wrap align-items-center gap-2">
+      <div class="d-flex flex-wrap align-items-center gap-2 w-100 w-lg-auto" style="min-width: 0;">
         <?php $totalVisits = (int) ($visitSummary['total_visits'] ?? count($encounters)); ?>
         <?php $syVisits = (int) ($visitSummary['current_sy_visits'] ?? 0); ?>
-        <span class="badge <?= $totalVisits >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-info-subtle text-info-emphasis border border-info-subtle' ?> px-3 py-2" title="Total visits on record (SY <?= esc((string) ($visitSummary['current_school_year'] ?? '')) ?>: <?= $syVisits ?>)">
+        <span class="badge clinic-wrap-badge <?= $totalVisits >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-info-subtle text-info-emphasis border border-info-subtle' ?> px-3 py-2" title="Total visits on record (SY <?= esc((string) ($visitSummary['current_school_year'] ?? '')) ?>: <?= $syVisits ?>)">
           <i class="bi bi-calendar2-check me-1"></i> Visits: <strong><?= $totalVisits ?></strong> (<?= $syVisits ?> this SY)
         </span>
-        <span class="badge bg-light text-dark border px-3 py-2">
+        <span class="badge clinic-wrap-badge bg-secondary-subtle text-body border px-3 py-2">
           <i class="bi bi-droplet-half text-danger me-1"></i> Blood: <strong><?= esc($health['blood_type'] ?? 'Unknown') ?></strong>
         </span>
         <?php if (!empty($health['allergies'])): ?>
-          <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
+          <span class="badge clinic-wrap-badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
             <i class="bi bi-exclamation-triangle-fill me-1"></i> Allergies: <?= esc($health['allergies']) ?>
           </span>
         <?php endif; ?>
-        <button type="button" class="btn btn-outline-secondary btn-sm d-print-none" data-print-chart>
+        <button type="button" class="btn btn-outline-secondary btn-sm d-print-none clinic-mobile-full" data-print-chart>
           <i class="bi bi-printer me-1"></i> Print Chart
         </button>
       </div>
@@ -138,7 +226,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
         <div class="mb-3">
           <span class="text-muted d-block">Known Allergies:</span>
           <?php if (!empty($health['allergies'])): ?>
-            <div class="text-danger fw-semibold small bg-danger-subtle p-2 rounded mt-1">
+            <div class="text-danger-emphasis fw-semibold small bg-danger-subtle border border-danger-subtle p-2 rounded mt-1">
               <i class="bi bi-exclamation-triangle-fill me-1"></i> <?= esc($health['allergies']) ?>
             </div>
           <?php else: ?>
@@ -147,7 +235,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
         </div>
         <div class="mb-2">
           <span class="text-muted d-block">Chronic Conditions:</span>
-          <span class="fw-semibold text-dark"><?= esc($health['chronic_conditions'] ?? 'None on file') ?></span>
+          <span class="fw-semibold text-break"><?= esc($health['chronic_conditions'] ?? 'None on file') ?></span>
         </div>
         <?php if (!empty($health['medical_history_notes'])): ?>
           <div class="mb-2"><span class="text-muted d-block">Medical History:</span><span class="small"><?= nl2br(esc($health['medical_history_notes'])) ?></span></div>
@@ -162,24 +250,24 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
     <div class="card border-0 shadow-sm p-3 mb-4">
       <h6 class="fw-bold mb-3"><i class="bi bi-activity text-primary me-1"></i> Visit Frequency Summary</h6>
       <div class="small">
-        <div class="d-flex justify-content-between py-1 border-bottom">
+        <div class="d-flex flex-wrap justify-content-between gap-2 py-1 border-bottom">
           <span class="text-muted">All-Time Visits:</span>
           <strong><?= (int) ($visitSummary['total_visits'] ?? 0) ?></strong>
         </div>
-        <div class="d-flex justify-content-between py-1 border-bottom">
+        <div class="d-flex flex-wrap justify-content-between gap-2 py-1 border-bottom">
           <span class="text-muted">SY <?= esc((string) ($visitSummary['current_school_year'] ?? '')) ?>:</span>
           <strong><?= $syVisits ?> <?= $syVisits === 1 ? 'visit' : 'visits' ?></strong>
         </div>
-        <div class="d-flex justify-content-between py-1 border-bottom">
+        <div class="d-flex flex-wrap justify-content-between gap-2 py-1 border-bottom">
           <span class="text-muted">Last Visit:</span>
-          <strong><?= esc($formatManila($visitSummary['last_visit_at'] ?? null)) ?></strong>
+          <strong class="text-break"><?= esc($formatManila($visitSummary['last_visit_at'] ?? null)) ?></strong>
         </div>
         <?php if (!empty($visitSummary['top_complaints'])): ?>
           <div class="mt-2">
             <span class="text-muted d-block mb-1">Frequent Complaints:</span>
             <div class="d-flex flex-wrap gap-1">
               <?php foreach ($visitSummary['top_complaints'] as $tc): ?>
-                <span class="badge bg-light text-dark border"><?= esc($tc['label']) ?> (<?= (int) $tc['count'] ?>)</span>
+                <span class="badge clinic-wrap-badge bg-secondary-subtle text-body border"><?= esc($tc['label']) ?> (<?= (int) $tc['count'] ?>)</span>
               <?php endforeach; ?>
             </div>
           </div>
@@ -194,7 +282,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
           <?php foreach ($isolationCases as $iso): ?>
             <li class="py-1 border-bottom">
               <strong><?= esc(\App\Services\Clinic\IsolationTrackingService::CONDITIONS[$iso['condition_code']] ?? $iso['condition_code']) ?></strong>
-              <span class="badge bg-secondary-subtle text-dark ms-1"><?= esc(str_replace('_', ' ', (string) $iso['clearance_status'])) ?></span>
+              <span class="badge bg-secondary-subtle text-body ms-1"><?= esc(str_replace('_', ' ', (string) $iso['clearance_status'])) ?></span>
               <div class="text-muted"><?= esc($iso['isolation_start_date']) ?> to <?= esc($iso['isolation_end_date']) ?></div>
             </li>
           <?php endforeach; ?>
@@ -206,17 +294,17 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
     <div class="card border-0 shadow-sm p-3">
       <h6 class="fw-bold mb-3"><i class="bi bi-telephone-plus text-primary me-1"></i> Emergency Contact</h6>
       <div class="small">
-        <div class="d-flex justify-content-between py-1 border-bottom">
+        <div class="d-flex flex-wrap justify-content-between gap-2 py-1 border-bottom">
           <span class="text-muted">Name:</span>
-          <strong><?= esc($health['emergency_contact_name'] ?? '—') ?></strong>
+          <strong class="text-break"><?= esc($health['emergency_contact_name'] ?? '—') ?></strong>
         </div>
-        <div class="d-flex justify-content-between py-1 border-bottom">
+        <div class="d-flex flex-wrap justify-content-between gap-2 py-1 border-bottom">
           <span class="text-muted">Relationship:</span>
-          <strong><?= esc($health['emergency_contact_relationship'] ?? '—') ?></strong>
+          <strong class="text-break"><?= esc($health['emergency_contact_relationship'] ?? '—') ?></strong>
         </div>
-        <div class="d-flex justify-content-between py-1">
+        <div class="d-flex flex-wrap justify-content-between gap-2 py-1">
           <span class="text-muted">Phone:</span>
-          <strong><?= esc($health['emergency_contact_phone'] ?? '—') ?></strong>
+          <strong class="text-break"><?= esc($health['emergency_contact_phone'] ?? '—') ?></strong>
         </div>
       </div>
     </div>
@@ -226,7 +314,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
   <div class="col-lg-8">
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-transparent border-bottom p-0">
-        <ul class="nav nav-tabs nav-tabs-bordered flex-wrap" role="tablist">
+        <ul class="nav nav-tabs nav-tabs-bordered flex-wrap clinic-chart-tabs" role="tablist">
           <li class="nav-item">
             <button class="nav-link active py-3 px-3 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-visits" type="button">
               <i class="bi bi-clock-history me-1"></i> Visit History (<?= count($encounters) ?>)
@@ -255,7 +343,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
         </ul>
       </div>
 
-      <div class="card-body p-4 tab-content">
+      <div class="card-body p-3 p-sm-4 tab-content">
 
         <!-- Tab 1: Visit History -->
         <div class="tab-pane fade show active" id="tab-visits">
@@ -268,9 +356,9 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
             <div class="list-group list-group-flush">
               <?php foreach ($encounters as $e): ?>
                 <div class="list-group-item bg-transparent p-3 border-bottom">
-                  <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                      <h6 class="fw-bold mb-0 text-dark"><?= esc($e['chief_complaint'] ?? 'General Consult') ?></h6>
+                  <div class="d-flex flex-column flex-sm-row justify-content-between align-items-stretch align-items-sm-start gap-2 mb-2">
+                    <div style="min-width: 0;">
+                      <h6 class="fw-bold mb-0 text-break"><?= esc($e['chief_complaint'] ?? 'General Consult') ?></h6>
                       <small class="text-muted">
                         <?= esc($formatManila($e['visited_at'] ?? $e['started_at'])) ?> · Attending: <?= esc($e['attending_name'] ?? 'Unavailable') ?>
                         <?php if (!empty($e['encoder_name']) && $e['encoder_name'] !== ($e['attending_name'] ?? null)): ?>
@@ -278,13 +366,13 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
                         <?php endif; ?>
                       </small>
                     </div>
-                    <div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 flex-shrink-0">
                       <?php if (!empty($e['disposition'])): ?>
-                        <span class="badge bg-light text-dark border">
+                        <span class="badge bg-secondary-subtle text-body border">
                           <?= esc(ucwords(str_replace('_', ' ', $e['disposition']))) ?>
                         </span>
                       <?php endif; ?>
-                      <a href="<?= site_url('/clinic/encounters/' . $e['id']) ?>" class="btn btn-outline-primary btn-sm ms-2">
+                      <a href="<?= site_url('/clinic/encounters/' . $e['id']) ?>" class="btn btn-outline-primary btn-sm clinic-mobile-full">
                         View Visit
                       </a>
                     </div>
@@ -303,7 +391,7 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
                         <li class="text-break">
                           <?= esc($item['medicine_name'] . ' ' . ($item['strength'] ?? '')) ?>:
                           <?= esc($item['quantity'] . ' ' . $item['unit_of_measure']) ?>
-                          (Lot <?= esc($item['batch_number']) ?>) — <?= esc($item['instructions'] ?? 'As directed') ?>
+                          (Lot <?= esc($item['batch_number']) ?><?php if (!empty($item['expiration_date'])): ?>; expiry <?= esc($item['expiration_date']) ?><?php endif; ?>) — <?= esc($item['instructions'] ?? 'As directed') ?>
                           <?php if (!empty($item['reversed_by_operation_id'])): ?>
                             <span class="badge bg-secondary">Corrected: <?= $item['correction_mode'] === 'restore_unissued' ? 'unissued units restored' : 'stock unchanged' ?></span>
                           <?php endif; ?>
@@ -458,8 +546,8 @@ foreach ($chart['dispensation_history'] ?? [] as $item) {
             </div>
 
             <?php if (!empty($canWriteHealth)): ?>
-              <div class="d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary">
+              <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2">
+                <button type="submit" class="btn btn-primary clinic-mobile-full">
                   <i class="bi bi-save me-1"></i> Update Health Profile
                 </button>
               </div>

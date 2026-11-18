@@ -6,7 +6,7 @@
 </div>
 
 <?php if (in_array('clinic', $units ?? [], true)): ?>
-  <div class="alert alert-primary border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+  <div class="alert alert-primary border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 report-export-alert">
     <div class="small">
       <strong>Need &gt;31-day Clinic Monthly, Semester, or CHED School-Year (June–Present) Reports?</strong>
       <div class="text-muted">Use the extended Clinic Periodic &amp; CHED Summary Report workspace for multi-month trends, FEFO dispensing totals, isolation cases, and health clearances up to 366 days.</div>

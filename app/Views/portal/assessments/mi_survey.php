@@ -28,6 +28,48 @@ $initialCount = count($draft);
     .mi-likert-group {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .mi-likert-option:last-child {
+      grid-column: 1 / -1;
+    }
+    .mi-section-tabs {
+      display: grid !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.4rem !important;
+    }
+    .mi-section-tabs .mi-section-tab {
+      width: 100%;
+      padding-inline: 0.35rem;
+      font-size: 0.76rem;
+    }
+  }
+  @media (max-width: 575.98px) {
+    .mi-section-tabs {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .mi-section-nav {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+    .mi-section-nav-actions {
+      display: contents !important;
+    }
+    .mi-section-nav .mi-prev-btn {
+      order: 1;
+      width: 100%;
+    }
+    .mi-section-nav.mi-section-nav--last .mi-prev-btn {
+      grid-column: 1 / -1;
+    }
+    .mi-section-nav .mi-next-btn {
+      order: 2;
+      width: 100%;
+    }
+    .mi-section-nav .mi-save-draft-btn {
+      order: 3;
+      grid-column: 1 / -1;
+      width: 100%;
+    }
   }
   .mi-likert-option input[type="radio"] {
     position: absolute;
@@ -62,9 +104,9 @@ $initialCount = count($draft);
   }
 </style>
 
-<div class="card border-0 shadow-sm mb-3">
+<div class="card border-0 shadow-sm mb-3" id="mi-progress-card">
   <div class="card-body">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-2">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 gap-sm-3 mb-2">
       <div>
         <h5 class="fw-bold mb-1"><?= esc($catalog['title'] ?? 'Multiple Intelligences Survey (McKenzie 1999)') ?></h5>
         <p class="text-muted small mb-0">
@@ -74,7 +116,7 @@ $initialCount = count($draft);
           <?php endif; ?>
         </p>
       </div>
-      <div class="text-end">
+      <div class="text-start text-sm-end">
         <div class="small text-muted">Answered Progress</div>
         <div class="h5 fw-bold mb-0"><span id="mi-answered-count"><?= $initialCount ?></span> / 80</div>
       </div>
@@ -82,7 +124,7 @@ $initialCount = count($draft);
     <div class="progress mb-2" style="height: 10px;">
       <div id="mi-progress-bar" class="progress-bar" role="progressbar" style="width: <?= round(($initialCount / 80) * 100, 1) ?>%;" aria-valuenow="<?= $initialCount ?>" aria-valuemin="0" aria-valuemax="80"></div>
     </div>
-    <div class="d-flex flex-wrap gap-1 mt-3" id="mi-section-pills" role="tablist" aria-label="Survey sections">
+    <div class="d-flex flex-wrap gap-1 mt-3 mi-section-tabs" id="mi-section-pills" role="tablist" aria-label="Survey sections">
       <?php foreach ($chunks as $secIdx => $secItems): ?>
         <?php
         $startNum = ($secIdx * 10) + 1;
@@ -119,7 +161,7 @@ $initialCount = count($draft);
 
   <?php foreach ($chunks as $secIdx => $secItems): ?>
     <div class="card border-0 shadow-sm mb-3 mi-section-pane <?= $secIdx === 0 ? '' : 'd-none' ?>" data-section-index="<?= $secIdx ?>">
-      <div class="card-header bg-transparent d-flex justify-content-between align-items-center py-3">
+      <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
         <h6 class="fw-bold mb-0">
           Section <?= $secIdx + 1 ?> of <?= count($chunks) ?>
           <span class="text-muted fw-normal">(Items <?= ($secIdx * 10) + 1 ?>–<?= ($secIdx * 10) + count($secItems) ?>)</span>
@@ -161,11 +203,11 @@ $initialCount = count($draft);
           </fieldset>
         <?php endforeach; ?>
 
-        <div class="d-flex justify-content-between align-items-center pt-2">
+        <div class="mi-section-nav <?= $secIdx === count($chunks) - 1 ? 'mi-section-nav--last ' : '' ?>d-flex flex-wrap justify-content-between align-items-center gap-2 pt-2">
           <button type="button" class="btn btn-outline-secondary btn-sm mi-prev-btn" <?= $secIdx === 0 ? 'disabled' : '' ?> data-prev-section="<?= $secIdx - 1 ?>">
             <i class="bi bi-chevron-left me-1" aria-hidden="true"></i>Previous Section
           </button>
-          <div class="d-flex gap-2">
+          <div class="mi-section-nav-actions d-flex flex-wrap gap-2">
             <button type="button" class="btn btn-outline-primary btn-sm mi-save-draft-btn">
               <i class="bi bi-cloud-check me-1" aria-hidden="true"></i>Save Encrypted Draft
             </button>
@@ -200,7 +242,7 @@ $initialCount = count($draft);
           I confirm this student digital attestation and verify that all 80 responses are my own.
         </label>
       </div>
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div class="d-grid d-sm-flex flex-sm-wrap justify-content-sm-between align-items-sm-center gap-2">
         <button type="button" class="btn btn-outline-primary mi-save-draft-btn" id="mi-save-draft-footer">
           <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Save Encrypted Draft (<span id="mi-footer-count"><?= $initialCount ?></span>/80)
         </button>
@@ -242,7 +284,13 @@ $initialCount = count($draft);
       tab.classList.toggle('btn-primary', idx === index);
       tab.classList.toggle('btn-outline-secondary', idx !== index);
     });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const scrollTarget = document.getElementById('mi-progress-card') || document.getElementById('portal-workspace-pane');
+    if (scrollTarget) {
+      const top = Math.max(0, window.scrollY + scrollTarget.getBoundingClientRect().top - 76);
+      window.scrollTo({ top, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const collectResponses = () => {
@@ -384,7 +432,11 @@ $initialCount = count($draft);
         if (finalizeBtn) finalizeBtn.disabled = false;
         return;
       }
-      window.location.assign(data.redirect);
+      if (window.SynapsePortalWorkspace?.isActive?.()) {
+        void window.SynapsePortalWorkspace.navigate(data.redirect, { bypassDirtyCheck: true });
+      } else {
+        window.location.assign(data.redirect);
+      }
     } catch (_) {
       setFeedback('danger', 'Unable to confirm finalization. Please check your connection and retry.');
       if (finalizeBtn) finalizeBtn.disabled = false;

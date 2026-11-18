@@ -6,12 +6,14 @@ namespace App\Filters;
 
 use App\Services\AuthenticatedUser;
 use App\Services\DashboardAccess;
+use App\Services\Guidance\GuidanceAccessPolicy;
 use App\Services\PortalContext;
 use App\Services\Scheduling\SchedulingClock;
 use CodeIgniter\Filters\FilterInterface;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 use Config\Database;
+use DomainException;
 use RuntimeException;
 
 /** Defense at the HTTP boundary for legacy handlers; domain services keep their own guards. */
@@ -85,6 +87,12 @@ final class WebAccessFilter implements FilterInterface
                     $this->permit($permission);
                 }
             }
+            // Client registry and longitudinal records are read-only Guidance data,
+            // including the legacy cumulative URL. Reload the grant even for superadmin.
+            if (!$write && preg_match('~^guidance/(?:clients(?:/\d+)?|students/\d+/cumulative)$~D', $path)) {
+                $this->actor = (new GuidanceAccessPolicy(db: Database::connect()))
+                    ->authorize($this->actor, 'guidance.cases.read');
+            }
             if (str_starts_with($path, 'facilities')) {
                 if (!PortalContext::isRolePermitted($actor['role'], 'bmg')) throw new RuntimeException('Facilities access forbidden.', 403);
                 // AI POST actions own their scoped capabilities; generation also checks source read.
@@ -95,7 +103,7 @@ final class WebAccessFilter implements FilterInterface
                 }
             }
             $this->records($path, $request, $write);
-        } catch (RuntimeException $e) {
+        } catch (DomainException | RuntimeException $e) {
             if (str_starts_with($e->getMessage(), 'Permission required: ')) {
                 return AuthenticatedUser::denied($request, true, $e->getMessage(), '/portal');
             }
@@ -127,14 +135,15 @@ final class WebAccessFilter implements FilterInterface
     {
         $case = $this->record('counselling_cases', $id, true);
         $this->record('people', (int) $case['person_id'], true);
-        $isOwner = (int) $case['counsellor_user_id'] === $this->actor['id'];
-        if (!$isOwner) {
-            if ($write) {
-                throw new RuntimeException('This case is assigned to another counselor.', 403);
-            }
-            if ($this->actor['role'] !== 'superadmin' && !in_array('guidance.cases.read_any', $this->actor['permissions'], true)) {
-                throw new RuntimeException('This case is assigned to another counselor.', 403);
-            }
+        if (!$write) {
+            // Use the same authoritative rule as the cumulative record's workspace links.
+            // Consultation/oversight reads never grant mutation authority or skip service audits.
+            $this->actor = (new GuidanceAccessPolicy(
+                identitySource: static fn (): ?array => (new AuthenticatedUser())->current(),
+                db: Database::connect()
+            ))->readCase($case, $this->actor);
+        } elseif ((int) $case['counsellor_user_id'] !== $this->actor['id']) {
+            throw new RuntimeException('This case is assigned to another counselor.', 403);
         }
         return $case;
     }
@@ -149,6 +158,9 @@ final class WebAccessFilter implements FilterInterface
 
     private function records(string $path, RequestInterface $request, bool $write): void
     {
+        if (!$write && preg_match('~^guidance/(?:clients/(\d+)|students/(\d+)/cumulative)$~D', $path, $m)) {
+            $this->record('people', (int) ($m[1] !== '' ? $m[1] : $m[2]), true);
+        }
         if (!$write && str_contains($path, '/start-for-ticket/')) return;
         if (preg_match('~^(clinic|guidance)/queue/(?:call|start|complete|skip|recall|no-show)/(\d+)$~', $path, $m)) $this->ticket((int) $m[2], $m[1]);
         if (preg_match('~^guidance/cases/choose-for-ticket/(\d+)$~', $path, $m)) {

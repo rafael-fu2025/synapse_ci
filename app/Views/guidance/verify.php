@@ -13,11 +13,11 @@ $statusBadge = static fn (string $status): string => match (strtolower($status))
     default      => 'bg-secondary',
 };
 ?>
-<main class="container py-5">
+<main class="container py-4 py-sm-5 guidance-ui">
   <div class="row justify-content-center">
     <div class="col-lg-6 col-md-8">
       <div class="card border-0 shadow-sm">
-        <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+        <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
           <div>
             <div class="small text-muted fw-semibold text-uppercase">Foundation University · Office of the Guidance Center</div>
             <h4 class="fw-bold mb-0">Controlled Document Verification</h4>
@@ -33,10 +33,10 @@ $statusBadge = static fn (string $status): string => match (strtolower($status))
             </div>
           <?php else: ?>
             <?php $docStatus = (string) ($verification['status'] ?? 'active'); ?>
-            <div class="d-flex justify-content-between align-items-center p-3 rounded bg-body-tertiary mb-3">
-              <div>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 p-3 rounded bg-body-tertiary mb-3">
+              <div class="min-width-0">
                 <div class="small text-muted">Verification Code</div>
-                <div class="h5 fw-bold mb-0 font-monospace"><?= esc($verification['verification_code'] ?? '') ?></div>
+                <div class="h5 fw-bold mb-0 font-monospace text-break"><?= esc($verification['verification_code'] ?? '') ?></div>
               </div>
               <span class="badge <?= $statusBadge($docStatus) ?> fs-6 text-uppercase">
                 <?= esc($docStatus) ?>

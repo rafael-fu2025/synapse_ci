@@ -82,7 +82,7 @@ $badgeFor = static fn (string $status): string => match ($status) {
               <?php endif; ?>
             </div>
 
-            <div class="d-flex flex-wrap gap-2 mt-2">
+            <div class="d-grid d-sm-flex flex-sm-wrap gap-2 mt-2">
               <?php if ($isCompleted): ?>
                 <a href="<?= esc(site_url('/portal/assessments/mi/results/' . (int) $item['submission_id']), 'attr') ?>" class="btn btn-primary btn-sm">
                   <i class="bi bi-bar-chart-steps me-1" aria-hidden="true"></i>View 8-Domain Profile

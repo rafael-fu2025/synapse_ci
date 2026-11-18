@@ -12,12 +12,12 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<section data-refresh-owner="guidance.case-list" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
+<section class="guidance-ui" data-refresh-owner="guidance.case-list" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
          data-live-filters data-filter-key="guidance-cases" data-filter-url="<?= esc(site_url('/guidance/cases'), 'attr') ?>" data-mutation-refresh>
 <div class="card border-0 shadow-sm">
   <div class="card-header bg-transparent d-flex flex-wrap align-items-center py-3 gap-2">
     <!-- Filter form -->
-    <form method="GET" action="<?= esc(site_url('/guidance/cases'), 'attr') ?>" class="d-flex align-items-center gap-2" data-filter-form>
+    <form method="GET" action="<?= esc(site_url('/guidance/cases'), 'attr') ?>" class="d-flex flex-wrap align-items-center gap-2 gc-filter-bar w-100 w-lg-auto" data-filter-form>
       <select name="status" class="form-select form-select-sm">
         <option value="">All Statuses</option>
         <option value="open" <?= ($status === 'open') ? 'selected' : '' ?>>Open</option>
@@ -128,8 +128,8 @@
                 <td class="small text-muted">
                   <?= date('M j, Y', strtotime($c['opened_at'])) ?>
                 </td>
-                <td class="text-end pe-3">
-                  <div class="d-inline-flex gap-1">
+                <td class="text-md-end pe-md-3">
+                  <div class="d-flex flex-wrap justify-content-md-end gap-2 gc-card-actions">
                     <?php if (!empty($c['person_id'])): ?>
                       <a href="<?= site_url('/guidance/students/' . (int) $c['person_id'] . '/cumulative') ?>" class="btn btn-outline-secondary btn-sm" title="View Student Cumulative Guidance Record">
                         <i class="bi bi-person-lines-fill"></i>

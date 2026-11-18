@@ -563,7 +563,7 @@ $outcomes = $outcomes ?? ['closure_disposition' => null, 'completion_notes' => [
 
     <!-- TAB 3: FOLLOW-UPS -->
     <div class="tab-pane fade" id="tab-followups" role="tabpanel" aria-labelledby="case-followups-tab">
-      <div class="d-flex justify-content-between align-items-center mb-3">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <h6 class="fw-bold mb-0">Commitments &amp; Action Items</h6>
         <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#newFollowupForm">
           <i class="bi bi-plus-circle me-1"></i> Add Commitment
@@ -749,8 +749,8 @@ $outcomes = $outcomes ?? ['closure_disposition' => null, 'completion_notes' => [
                   <td class="small text-muted">
                     <?= !empty($cf['updated_at']) ? date('M j, Y g:i A', strtotime((string) $cf['updated_at'])) : '—' ?>
                   </td>
-                  <td class="text-end">
-                    <div class="btn-group btn-group-sm">
+                  <td class="text-md-end">
+                    <div class="btn-group btn-group-sm gc-print-group">
                       <a href="<?= esc(site_url('/guidance/clinical/forms/' . (int) $cf['id'])) ?>" class="btn btn-outline-primary">
                         <?= $cfStatus === 'finalized' ? 'View' : ($cfStatus === 'pending_cosign' ? 'Review / Co-Sign' : 'Edit') ?>
                       </a>

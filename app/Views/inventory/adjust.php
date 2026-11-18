@@ -4,10 +4,10 @@
 require __DIR__ . '/_form_values.php';
 $maximum = min(1000000, (int) $batch['remaining_quantity']);
 ?>
-<p class="mb-1 fw-semibold"><?= esc($medicine['name']) ?> · Lot <?= esc($batch['batch_number']) ?></p>
+<p class="mb-1 fw-semibold text-break"><?= esc($medicine['name']) ?> · Lot <?= esc($batch['batch_number']) ?></p>
 <p class="text-muted">Remaining: <?= number_format((int) $batch['remaining_quantity']) ?> <?= esc($medicine['unit_of_measure']) ?> · Expiry: <?= esc($batch['expiration_date']) ?> · Status: <?= esc($batch['status']) ?></p>
 <div class="alert alert-warning" role="note">Remove stock only. Enter a positive whole-unit quantity; the server subtracts it from this batch and records the reason. This cannot add stock or directly overwrite a balance. History is preserved.</div>
-<form action="<?= esc($formAction) ?>" method="POST" data-modal-submit>
+<form action="<?= esc($formAction) ?>" method="POST" class="inventory-modal-form" data-modal-submit>
   <?= csrf_field() ?>
   <input type="hidden" name="idempotency_key" value="<?= esc($value('idempotency_key', $idempotencyKey)) ?>">
   <div class="row g-3">

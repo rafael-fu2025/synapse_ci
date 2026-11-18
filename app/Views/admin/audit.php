@@ -10,7 +10,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<section data-refresh-owner="audit.ledger" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<section class="admin-audit-page" data-refresh-owner="audit.ledger" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <?php
 $filters = $filters ?? [];
 $filterErrors = $filterErrors ?? [];
@@ -63,7 +63,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
         </select>
       </div>
       <?php foreach (['from' => 'From', 'to' => 'To'] as $key => $label): ?>
-        <div class="col-12 col-sm-6 col-lg-3">
+        <div class="col-6 col-sm-6 col-lg-3">
           <label for="audit-<?= $key ?>-display" class="form-label small mb-1"><?= $label ?></label>
           <input type="text" class="form-control form-control-sm" id="audit-<?= $key ?>-display" data-datepicker data-target="#audit-<?= $key ?>" placeholder="DD/MM/YYYY" autocomplete="off" aria-describedby="audit-date-note">
           <input type="hidden" id="audit-<?= $key ?>" name="<?= $key ?>" value="<?= esc($filters[$key] ?? '', 'attr') ?>">

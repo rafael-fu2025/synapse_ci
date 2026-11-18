@@ -228,6 +228,12 @@ __pycache__/
 !/tests/unit/GuidanceIntakeAndSafetyMigrationTest.php
 !/tests/unit/GuidanceEpisodesAppointmentsAndCallSlipsMigrationTest.php
 !/tests/unit/GuidanceEpisodeServiceTest.php
+!/tests/unit/GuidanceEpisodeSummaryTest.php
+!/tests/unit/GuidanceEpisodeDetailsAuthorizationTest.php
+!/tests/unit/GuidanceFormContextPolicyTest.php
+!/tests/unit/GuidanceClientDirectoryTest.php
+!/tests/unit/GuidanceClientRecordTest.php
+!/tests/unit/GuidanceTranscriptEnhancementsTest.php
 !/tests/unit/GuidanceAppointmentCallSlipTest.php
 !/tests/unit/GuidanceSlipPdfTest.php
 !/tests/unit/GuidanceClinicalFormServiceTest.php
@@ -247,6 +253,14 @@ __pycache__/
 !/tests/_support/
 /tests/_support/*
 !/tests/_support/api-token-race-worker.php
+!/tests/_support/guidance-read-bootstrap.php
+!/tests/_support/fresh-framework-bootstrap.php
+!/tests/_support/FreshDatabaseTestCase.php
+!/tests/_support/fresh-database-bootstrap.php
+!/tests/_support/run-fresh-database-tests.py
+!/tests/_support/render-guidance-clients-fixture.php
+!/tests/_support/render-portal-workspace-fixture.php
+!/tests/_support/guidance-clients-fixture-server.cjs
 !/tests/_support/queue-invalidation-phpunit.xml
 !/tests/_support/push-lan-phpunit.xml
 !/tests/database/
@@ -263,9 +277,16 @@ __pycache__/
 !/tests/browser/refresh-regions.test.cjs
 !/tests/browser/announcement-refresh-regions.test.cjs
 !/tests/browser/clinical-refresh-regions.test.cjs
+!/tests/browser/guidance-clients-presentation.test.cjs
+!/tests/browser/portal-workspace.test.cjs
 !/tests/browser/clinic-e2e-live.test.cjs
 !/tests/browser/guidance-e2e-live.test.cjs
-/papers/
+# Versioned black-box specifications and sanitized result summaries. Raw evidence
+# remains under ignored writable/blackbox/runs/.
+!/papers/
+/papers/*
+!/papers/blackbox/
+!/papers/blackbox/**
 /fwdforguidancecumulative/
 
 #-------------------------

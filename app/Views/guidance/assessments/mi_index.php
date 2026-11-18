@@ -9,6 +9,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $statusFilter = $statusFilter ?? '';
 $miGateEnabled = (bool) ($miGateEnabled ?? false);
@@ -96,7 +97,7 @@ $badgeFor = static fn (string $status): string => match ($status) {
         <h5 class="card-title mb-0 fw-bold">
           <i class="bi bi-ui-checks-grid me-2 text-primary" aria-hidden="true"></i>Assigned Multiple Intelligence Surveys
         </h5>
-        <form method="GET" action="<?= esc(site_url('/guidance/assessments/mi'), 'attr') ?>" class="d-flex gap-2 align-items-center">
+        <form method="GET" action="<?= esc(site_url('/guidance/assessments/mi'), 'attr') ?>" class="d-flex flex-wrap gap-2 align-items-center gc-filter-bar w-100 w-md-auto">
           <select name="status" class="form-select form-select-sm" aria-label="Filter by status">
             <option value="">All Statuses</option>
             <?php foreach (['assigned' => 'Assigned', 'in_progress' => 'In Progress', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $val => $label): ?>
@@ -157,9 +158,9 @@ $badgeFor = static fn (string $status): string => match ($status) {
                         <?= esc(ucwords(str_replace('_', ' ', (string) ($row['status'] ?? '')))) ?>
                       </span>
                     </td>
-                    <td class="text-end pe-3">
+                    <td class="text-md-end pe-md-3">
                       <?php if ($isDone): ?>
-                        <div class="d-inline-flex gap-1">
+                        <div class="d-flex flex-wrap justify-content-md-end gap-2 gc-card-actions">
                           <a href="<?= esc(site_url('/guidance/assessments/mi/results/' . (int) $row['submission_id']), 'attr') ?>" class="btn btn-outline-primary btn-sm">
                             <i class="bi bi-bar-chart-steps me-1" aria-hidden="true"></i>8-Domain Profile
                           </a>
@@ -180,5 +181,6 @@ $badgeFor = static fn (string $status): string => match ($status) {
       </div>
     </div>
   </div>
+</div>
 </div>
 <?= $this->endSection() ?>

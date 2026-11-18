@@ -2,7 +2,7 @@
 $query = $query ?? [];
 $pageKey = $pageKey ?? 'page';
 ?>
-<nav aria-label="<?= esc($paginationLabel ?? 'Announcement pages') ?>" class="d-flex align-items-center justify-content-between gap-3 my-3">
+<nav aria-label="<?= esc($paginationLabel ?? 'Announcement pages') ?>" class="d-flex flex-column flex-sm-row flex-wrap align-items-sm-center justify-content-between gap-2 gap-sm-3 my-3 announcements-pagination">
   <span class="small text-muted"><?= (int) $pagination['total'] ?> records · Page <?= (int) $pagination['page'] ?> of <?= (int) $pagination['pages'] ?> · 25 per page</span>
   <div class="btn-group">
     <?php if ($pagination['page'] > 1): ?><a class="btn btn-outline-secondary btn-sm" rel="prev" href="<?= esc($baseUrl . '?' . http_build_query(array_merge($query, [$pageKey => $pagination['page'] - 1]))) ?>">Previous</a><?php endif; ?>

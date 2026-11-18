@@ -35,6 +35,7 @@ $isClosedOrTransferred = in_array($epStatus, ['closed', 'transferred'], true);
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <?php
 $statusBadges = [
     'open'        => 'primary',
@@ -168,12 +169,12 @@ $kindMeta = [
                     $ts = (string) ($item['timestamp'] ?? '');
                     ?>
                     <div class="list-group-item px-0 py-3">
-                        <div class="d-flex justify-content-between align-items-start gap-3">
-                            <div class="d-flex gap-3 align-items-start">
-                                <span class="badge rounded-pill bg-<?= esc($meta['color']) ?>-subtle text-<?= esc($meta['color']) ?> border p-2">
+                        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start gap-2 gap-sm-3">
+                            <div class="d-flex gap-3 align-items-start min-width-0 w-100">
+                                <span class="badge rounded-pill bg-<?= esc($meta['color']) ?>-subtle text-<?= esc($meta['color']) ?> border p-2 flex-shrink-0">
                                     <i class="bi <?= esc($meta['icon']) ?>"></i>
                                 </span>
-                                <div>
+                                <div class="min-width-0 flex-grow-1">
                                     <div class="d-flex flex-wrap align-items-center gap-2">
                                         <span class="fw-semibold"><?= esc((string) ($item['title'] ?? $meta['label'])) ?></span>
                                         <span class="badge bg-light text-dark border"><?= esc($meta['label']) ?></span>
@@ -186,54 +187,54 @@ $kindMeta = [
                                     <?php endif; ?>
 
                                     <?php if ($kind === 'appointment' && ! empty($rec['id'])): ?>
-                                        <div class="mt-2 d-flex flex-wrap gap-1">
-                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=single&mode=preview') ?>" target="_blank" class="btn btn-xs btn-outline-secondary btn-sm py-0 px-2">
+                                        <div class="mt-2 d-flex flex-wrap gap-2">
+                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=single&mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                                 <i class="bi bi-file-pdf me-1"></i>Preview Single A4
                                             </a>
-                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=quad&mode=preview') ?>" target="_blank" class="btn btn-xs btn-outline-secondary btn-sm py-0 px-2">
+                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=quad&mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                                 <i class="bi bi-grid-2x2 me-1"></i>Preview 4-Up Tear-Off
                                             </a>
-                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=single&mode=issue') ?>" target="_blank" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2">
+                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=single&mode=issue') ?>" target="_blank" class="btn btn-sm btn-outline-primary">
                                                 Issue Single A4
                                             </a>
-                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=quad&mode=issue') ?>" target="_blank" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2">
+                                            <a href="<?= site_url('guidance/appointments/' . (int) $rec['id'] . '/pdf?layout=quad&mode=issue') ?>" target="_blank" class="btn btn-sm btn-outline-primary">
                                                 Issue 4-Up Sheet
                                             </a>
                                         </div>
                                     <?php elseif ($kind === 'call_slip' && ! empty($rec['id'])): ?>
-                                        <div class="mt-2 d-flex flex-wrap gap-1">
-                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=single&mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                                        <div class="mt-2 d-flex flex-wrap gap-2">
+                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=single&mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                                 <i class="bi bi-file-pdf me-1"></i>Preview Single A4
                                             </a>
-                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=quad&mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=quad&mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                                 <i class="bi bi-grid-2x2 me-1"></i>Preview 4-Up Tear-Off
                                             </a>
-                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=single&mode=issue') ?>" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
+                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=single&mode=issue') ?>" target="_blank" class="btn btn-sm btn-outline-primary">
                                                 Issue Single A4
                                             </a>
-                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=quad&mode=issue') ?>" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
+                                            <a href="<?= site_url('guidance/call-slips/' . (int) $rec['id'] . '/pdf?layout=quad&mode=issue') ?>" target="_blank" class="btn btn-sm btn-outline-primary">
                                                 Issue 4-Up Sheet
                                             </a>
                                         </div>
                                     <?php elseif ($kind === 'case' && ! empty($rec['id'])): ?>
                                         <div class="mt-2">
-                                            <a href="<?= site_url('guidance/cases/' . (int) $rec['id']) ?>" class="btn btn-sm btn-outline-primary py-0 px-2">
+                                            <a href="<?= site_url('guidance/cases/' . (int) $rec['id']) ?>" class="btn btn-sm btn-outline-primary">
                                                 Open Case Workspace
                                             </a>
                                         </div>
                                     <?php elseif ($kind === 'form' && ! empty($rec['id'])): ?>
-                                        <div class="mt-2 d-flex gap-1">
-                                            <a href="<?= site_url('guidance/clinical/forms/' . (int) $rec['id']) ?>" class="btn btn-sm btn-outline-primary py-0 px-2">
+                                        <div class="mt-2 d-flex flex-wrap gap-2">
+                                            <a href="<?= site_url('guidance/clinical/forms/' . (int) $rec['id']) ?>" class="btn btn-sm btn-outline-primary">
                                                 Open Clinical Form
                                             </a>
-                                            <a href="<?= site_url('guidance/clinical/forms/' . (int) $rec['id'] . '/pdf?mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                                            <a href="<?= site_url('guidance/clinical/forms/' . (int) $rec['id'] . '/pdf?mode=preview') ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                                 Preview PDF
                                             </a>
                                         </div>
                                     <?php endif; ?>
                                 </div>
                             </div>
-                            <div class="small text-muted text-nowrap">
+                            <div class="small text-muted text-sm-nowrap ps-5 ps-sm-0">
                                 <?= $ts !== '' ? esc(date('M d, Y g:i A', strtotime($ts))) : '—' ?>
                             </div>
                         </div>
@@ -326,4 +327,5 @@ $kindMeta = [
         </div>
     </div>
 <?php endif; ?>
+</div>
 <?= $this->endSection() ?>

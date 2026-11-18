@@ -312,19 +312,107 @@
       });
     });
 
-    // Login screen theme toggle
+    // Login screen theme toggle (radial pixel-dissolve reveal matching app shell)
     const authToggle = document.getElementById('authThemeToggle');
     if (authToggle) {
+      const root = document.documentElement;
+      let animTimer = 0;
+      const applyTheme = (nextTheme) => {
+        root.setAttribute('data-theme', nextTheme);
+      };
+      const originPoint = (ev) => {
+        if (ev && (ev.clientX || ev.clientY)) return { x: ev.clientX, y: ev.clientY };
+        const rect = authToggle.getBoundingClientRect();
+        return rect.width || rect.height
+          ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+          : { x: window.innerWidth, y: window.innerHeight };
+      };
+      const revealTheme = (nextTheme, x, y) => {
+        const duration = 900;
+        const fade = 7;
+        const block = Math.max(9, Math.round(Math.min(window.innerWidth, window.innerHeight) / 72));
+        const cols = Math.ceil(window.innerWidth / block) + 1;
+        const rows = Math.ceil(window.innerHeight / block) + 1;
+        const cx = x / block;
+        const cy = y / block;
+        const maxRadius = Math.hypot(Math.max(cx, cols - cx), Math.max(cy, rows - cy));
+        const vt = root.__synapseThemeVt = document.startViewTransition(() => {
+          root.classList.add('theme-instant');
+          applyTheme(nextTheme);
+        });
+        const cleanup = () => {
+          if (root.__synapseThemeVt !== vt) return;
+          root.classList.remove('theme-instant');
+          root.style.removeProperty('--vt-mask');
+        };
+        vt.ready.then(() => {
+          if (root.__synapseThemeVt !== vt) return;
+          root.classList.remove('theme-instant');
+          root.animate(
+            { opacity: [1, 1] },
+            { duration, easing: 'linear', pseudoElement: '::view-transition-new(root)' }
+          );
+          const cnv = document.createElement('canvas');
+          cnv.width = cols;
+          cnv.height = rows;
+          const ctx = cnv.getContext('2d');
+          if (!ctx) return;
+          ctx.fillStyle = '#fff';
+          const t0 = performance.now();
+          (function frame(now) {
+            if (root.__synapseThemeVt !== vt) return;
+            const t = Math.min((now - t0) / duration, 1);
+            const k = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            const radius = k * (maxRadius + fade);
+            ctx.clearRect(0, 0, cols, rows);
+            for (let row = 0; row < rows; row++) {
+              for (let col = 0; col < cols; col++) {
+                const dist = Math.hypot(col - cx, row - cy);
+                const hash = Math.abs(Math.sin(col * 127.1 + row * 311.7) * 43758.5453) % 1;
+                const alpha = (radius - dist - (hash - 0.5) * 1.4) / fade;
+                if (alpha > 0) {
+                  ctx.globalAlpha = alpha >= 1 ? 1 : alpha;
+                  ctx.fillRect(col, row, 1, 1);
+                }
+              }
+            }
+            ctx.globalAlpha = 1;
+            root.style.setProperty('--vt-mask', 'url("' + cnv.toDataURL() + '")');
+            if (t < 1) requestAnimationFrame(frame);
+            else root.style.removeProperty('--vt-mask');
+          })(t0);
+        }).catch(cleanup);
+        vt.finished.then(cleanup, cleanup);
+      };
+
       authToggle.addEventListener('click', function(e) {
         e.preventDefault();
-        const tip = bootstrap.Tooltip.getInstance(authToggle);
-        if (tip) tip.hide();
+        if (window.bootstrap?.Tooltip) {
+          const tip = bootstrap.Tooltip.getInstance(authToggle);
+          if (tip) tip.hide();
+        }
         document.querySelectorAll('.tooltip').forEach(t => t.remove());
 
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const isDark = root.getAttribute('data-theme') === 'dark';
         const nextTheme = isDark ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', nextTheme);
-        localStorage.setItem('na-dark-mode', isDark ? '0' : '1');
+        try {
+          localStorage.setItem('na-dark-mode', isDark ? '0' : '1');
+        } catch (_) { /* Storage may be disabled or full. */ }
+
+        const reduceMotion = Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if (reduceMotion) {
+          applyTheme(nextTheme);
+          return;
+        }
+        if (!document.startViewTransition) {
+          root.classList.add('theme-anim');
+          applyTheme(nextTheme);
+          clearTimeout(animTimer);
+          animTimer = setTimeout(() => { root.classList.remove('theme-anim'); }, 520);
+          return;
+        }
+        const origin = originPoint(e);
+        revealTheme(nextTheme, origin.x, origin.y);
       });
     }
   });

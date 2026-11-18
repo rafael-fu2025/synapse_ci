@@ -13,7 +13,7 @@ final class TablePage
      * Status vocabularies belong to the list that owns them. The shared helper must not
      * impose one list's vocabulary on another: a referral status is not a medicine status.
      */
-    public const MEDICINE_STATUSES = ['all', 'active', 'archived', 'low_stock'];
+    public const MEDICINE_STATUSES = ['all', 'active', 'archived', 'low_stock', 'expiring_soon', 'expired'];
 
     private function __construct(
         public readonly string $q,

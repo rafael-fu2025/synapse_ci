@@ -4,7 +4,7 @@ $labels = \App\Services\Referrals\ReferralService::LIST_STATUS_LABELS;
 ?>
 <div data-table-content>
 <div class="card"><div class="table-responsive">
-<table class="table table-hover align-middle mb-0 small">
+<table class="table table-hover align-middle mb-0 small referral-table">
   <thead><tr><th class="ps-3">Referral</th><th>Student / employee</th><th>Route</th><th>Priority</th><th>Shared handoff</th><th>Status</th><th>Sent by</th><th class="pe-3">Actions</th></tr></thead>
   <tbody>
   <?php if ($referrals === []): ?><tr><td colspan="8" class="text-center text-muted p-4">No referrals match this folder and search.</td></tr><?php endif; ?>
@@ -20,10 +20,10 @@ $labels = \App\Services\Referrals\ReferralService::LIST_STATUS_LABELS;
       <td><strong><?= esc($ref['last_name'] . ', ' . $ref['first_name']) ?></strong><small class="d-block text-muted"><?= esc($ref['mis_id']) ?> · <?= esc(ucfirst($ref['kind'])) ?></small></td>
       <td><?= esc(ucfirst($ref['source_module']) . ' → ' . ucfirst($ref['target_module'])) ?></td>
       <td><span class="badge <?= $ref['priority'] === 'crisis' ? 'bg-danger' : ($ref['priority'] === 'urgent' ? 'bg-warning text-dark' : 'bg-secondary') ?>"><?= esc(ucfirst($ref['priority'])) ?></span></td>
-      <td style="min-width:180px;max-width:300px"><strong><?= esc(ucwords(str_replace('_', ' ', $ref['reason_code']))) ?></strong><details class="mt-1"><summary>View shared summary</summary><p class="text-muted mb-0 mt-2" style="white-space:pre-wrap;overflow-wrap:anywhere"><?= esc($ref['reason_description'] ?? '') ?></p></details></td>
+      <td class="referral-handoff-cell"><strong><?= esc(ucwords(str_replace('_', ' ', $ref['reason_code']))) ?></strong><details class="mt-1"><summary>View shared summary</summary><p class="text-muted mb-0 mt-2 referral-summary-text"><?= esc($ref['reason_description'] ?? '') ?></p></details></td>
       <td><span class="badge <?= $ref['status'] === 'closed' ? 'bg-secondary' : 'bg-primary' ?>"><?= esc($labels[$ref['status']] ?? $ref['status']) ?></span><?php if ($ref['target_module'] === 'clinic' && $linked): ?><small class="d-block text-muted mt-1">Clinic visit linked</small><?php endif; ?></td>
       <td><?= esc($ref['issuer_name'] ?? 'Former staff') ?></td>
-      <td class="pe-3"><div class="d-flex flex-wrap gap-2">
+      <td class="pe-3"><div class="table-card-actions">
         <?php if ($receiving && $ref['status'] === 'submitted' && $can('referrals.acknowledge')): ?>
           <form action="<?= esc($base . '/acknowledge') ?>" method="POST" data-background-submit><?= csrf_field() ?><button class="btn btn-outline-primary btn-sm" type="submit">Acknowledge</button></form>
         <?php endif; ?>

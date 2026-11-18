@@ -86,6 +86,19 @@ details[open] .team-chat-members-chevron { transform: rotate(180deg); }
 .teams-comment { padding: .85rem; margin-bottom: .7rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface-color); }
 .teams-activity { padding-left: 1.2rem; font-size: .82rem; }
 .teams-activity li { padding: .5rem 0; }
+@media (max-width: 767.98px) {
+  .teams-workspace :is(.form-control, .form-select, .bd-select .bd-select-toggle, .btn) {
+    min-height: 40px;
+  }
+  .teams-workspace .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .teams-workspace .bd-select {
+    width: 100%;
+  }
+}
 @media (max-width: 575.98px) {
   .teams-board { grid-template-columns: minmax(0, 1fr); overflow-x: visible; }
 }

@@ -1,10 +1,10 @@
 <?= $this->extend('layouts/modal_form') ?>
 <?= $this->section('content') ?>
 <?php require __DIR__ . '/_form_values.php'; ?>
-<p class="mb-1 fw-semibold"><?= esc($medicine['name']) ?> · Lot <?= esc($batch['batch_number']) ?></p>
+<p class="mb-1 fw-semibold text-break"><?= esc($medicine['name']) ?> · Lot <?= esc($batch['batch_number']) ?></p>
 <p class="text-muted">Expiry: <?= esc($batch['expiration_date']) ?> · Current status: <?= esc($batch['status']) ?> · Remaining: <?= number_format((int) $batch['remaining_quantity']) ?> <?= esc($medicine['unit_of_measure']) ?></p>
 <div class="alert alert-info" role="note">Quarantined stock physically remains on hand but is blocked from usable stock and dispensing. Status changes do not change physical quantities. The server blocks release of expired batches, and active batches must also be unexpired to be usable.</div>
-<form action="<?= esc($formAction) ?>" method="POST" data-modal-submit>
+<form action="<?= esc($formAction) ?>" method="POST" class="inventory-modal-form" data-modal-submit>
   <?= csrf_field() ?>
   <input type="hidden" name="idempotency_key" value="<?= esc($value('idempotency_key', $idempotencyKey)) ?>">
   <div class="mb-3">

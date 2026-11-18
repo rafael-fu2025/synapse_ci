@@ -1,0 +1,159 @@
+{
+  "canonical_file_count": 14,
+  "files": [
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/SYNAPSE-BlackBox-Testing.docx",
+      "archived_sha256": "1ac652484c7e5b6c86465ff8a8b84059acbed6fd6cf9d4e04b2d297e26078622",
+      "byte_preserved": true,
+      "original_git_path": "papers/blackbox/SYNAPSE-BlackBox-Testing.docx",
+      "original_sha256": "1ac652484c7e5b6c86465ff8a8b84059acbed6fd6cf9d4e04b2d297e26078622",
+      "redaction_status": "not_required",
+      "role": "protocol"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/SYNAPSE-BlackBox-Testing.html",
+      "archived_sha256": "668c0652d212cc42c8d876d2b0c4e0fb82dfe0e846b9f104677d83cb439fc6f4",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/SYNAPSE-BlackBox-Testing.html",
+      "original_sha256": "deab27710e631c855ead631d87f5940a8e5737deb7bb87ae8de8e12d4bac0f6d",
+      "redaction_status": "redacted",
+      "role": "generated"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/SYNAPSE-BlackBox-Testing.md",
+      "archived_sha256": "4421c146da925befc1382017a23fd4554ea630aacc51f136091ad81c05093642",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/SYNAPSE-BlackBox-Testing.md",
+      "original_sha256": "e96de618942880fabea617b6e351f6244920620b87b6e875ad575182e26217d0",
+      "redaction_status": "redacted",
+      "role": "source"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/TEST-RESULTS-CL-GD.md",
+      "archived_sha256": "5d016c3ae4210e101d2fba1fbb3becec975509e2f66e44e20290fa39c7795387",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/TEST-RESULTS-CL-GD.md",
+      "original_sha256": "d0c8e1f1213c65fa8010f2b6e03fb74221851b34d69812f73086df731eed26e1",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/TEST-RUN-PROMPT.md",
+      "archived_sha256": "38340d1b3e2673ffd75c3b4756dd2fb513e4b9ffe3001dd2edf30ea0250ca64d",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/TEST-RUN-PROMPT.md",
+      "original_sha256": "50340c9eaee4fbead70d742df6f04c81623e0ea8c52b2692cc62baabd4cc5373",
+      "redaction_status": "redacted",
+      "role": "process"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/VERIFICATION-ANALYSIS-FAIL-BLOCKED.md",
+      "archived_sha256": "8c254b90eb9855cc4b29a31f88cc080ce49ebf04c6439393a8e3f0cff88214ee",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/VERIFICATION-ANALYSIS-FAIL-BLOCKED.md",
+      "original_sha256": "b3fb87974e17333df4443bc73db2211fd5800c0958d67f5b23c27f63036f5995",
+      "redaction_status": "redacted",
+      "role": "analysis"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/results/ADMIN-RESULTS.md",
+      "archived_sha256": "3f18cba69fe4243cddc62b0476ebf4d87be7451c0555c313f38f20779cc12a23",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/results/ADMIN-RESULTS.md",
+      "original_sha256": "e6a8dfa3372793dcc221473401dfda68c1178423302a514fb73af9a282aea0e5",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/results/AI-INSIGHTS-RESULTS.md",
+      "archived_sha256": "f44bae1cc2d391ea923a43d5df4f0f36564b491a0e841e688de63aa1e1641095",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/results/AI-INSIGHTS-RESULTS.md",
+      "original_sha256": "1d53f5ac49b152536f30a72809fff107fe17582c1b023a232d0faf8e8393dcb7",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/results/AUTH-RESULTS.md",
+      "archived_sha256": "decba90331bd6bb1692d1ff452628cfbae9e8756cff2d8787dcbfee9d0877aca",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/results/AUTH-RESULTS.md",
+      "original_sha256": "023f03e0f69567a4e07c788fad5f5070e6d37ce920da6838f57d49a139e0a6dd",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/results/FACILITIES-RESULTS.md",
+      "archived_sha256": "bdc1ab67db6e26f3c5f90cfd670c519bc5526100d6fa3c7dfaba1ff012cb3444",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/results/FACILITIES-RESULTS.md",
+      "original_sha256": "177d2b42f88b7d0444d9b724eb4cf07b865b3a35529445a1defa8089fc13553c",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/results/PORTAL-RESULTS.md",
+      "archived_sha256": "9af0a1afa6d627059891e93f7334177ba4d981e17451f622517a50cca04c171d",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/results/PORTAL-RESULTS.md",
+      "original_sha256": "44bc229e9619329efc5a2501ff7fbebc3a59742b83bc781fdb258889f371f9fa",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/results/REALTIME-RESULTS.md",
+      "archived_sha256": "f719a724a5980799e361c49c5c852f2639aee0b9996f200db4196096316d749b",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/results/REALTIME-RESULTS.md",
+      "original_sha256": "55451fe72d510f067af1cfbb436bd43839e61cf6a7092e9abc9b77cd03e6bbc4",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/results/REFERRALS-RESULTS.md",
+      "archived_sha256": "a4d8d037d37302c4c0fbd814e5ace54d146e717d86739674c4d2fcce9c3c15da",
+      "byte_preserved": false,
+      "original_git_path": "papers/blackbox/results/REFERRALS-RESULTS.md",
+      "original_sha256": "29094a934e284ae7786c305b34ad02d90f65f135a307122a43ac8efc085aa9cd",
+      "redaction_status": "redacted",
+      "role": "evidence"
+    },
+    {
+      "archive_path": "papers/blackbox/archive/2026-11-02/sample/sample-BlackBox-Testing.docx",
+      "archived_sha256": "012ccb058bda507805c1a3235ac67eaf0329c40673f9859aecd49a0f1434b35f",
+      "byte_preserved": true,
+      "original_git_path": "papers/blackbox/sample/sample-BlackBox-Testing.docx",
+      "original_sha256": "012ccb058bda507805c1a3235ac67eaf0329c40673f9859aecd49a0f1434b35f",
+      "redaction_status": "not_required",
+      "role": "protocol"
+    }
+  ],
+  "final_totals": {
+    "blocked": 14,
+    "executed_web": 105,
+    "fail": 1,
+    "not_run": 0,
+    "out_of_scope": 14,
+    "pass": 90,
+    "total": 119
+  },
+  "frozen": true,
+  "run_range": {
+    "end": "2026-11-02",
+    "start": "2026-11-01"
+  },
+  "schema_version": 2,
+  "source_commit": "0383939de24119936dee372f86fb4565d12c42d7",
+  "supporting_files": [
+    {
+      "path": "README.md",
+      "role": "archive_notice",
+      "sha256": "34282f26a13694c82fd449e3792cd3b336062235baf773161454050a18d51c7f"
+    },
+    {
+      "path": "REDACTIONS.md",
+      "role": "redaction_log",
+      "sha256": "875d466c88a2d56a71798117d8ee141c240ed78a05736ecd6d765e2f4f91ae99"
+    }
+  ]
+}

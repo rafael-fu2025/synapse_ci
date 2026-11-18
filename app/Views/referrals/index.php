@@ -10,7 +10,7 @@
 <div data-refresh-region="referrals.folders">
 <div class="card mb-3"><div class="card-body pt-3">
   <p class="text-muted small mb-3"><?= ucfirst($unit) ?> Workstation · <?= $unit === 'clinic' ? 'Send to Guidance; receive from Guidance.' : 'Send to Clinic; receive from Clinic.' ?> Shared handoff summaries only.</p>
-  <nav class="nav nav-pills gap-2" aria-label="Referral folders">
+  <nav class="nav nav-pills gap-2 referral-folder-nav" aria-label="Referral folders">
     <?php foreach (['incoming' => 'Incoming', 'sent' => 'Sent', 'history' => 'Closed / History'] as $key => $label): ?>
       <a class="nav-link <?= $tab === $key ? 'active' : '' ?>" href="<?= esc($baseUrl . '?' . http_build_query(['tab' => $key])) ?>" <?= $tab === $key ? 'aria-current="page"' : '' ?>><?= $label ?> <span class="badge <?= $tab === $key ? 'bg-light text-dark' : 'bg-secondary' ?> ms-1"><?= (int) ($counts[$key] ?? 0) ?></span></a>
     <?php endforeach; ?>
@@ -26,7 +26,7 @@
       <div class="col-md-3"><label for="referralStatus" class="form-label">Status</label><select name="status" id="referralStatus" class="form-select"><?php foreach (['all' => 'All statuses'] + \App\Services\Referrals\ReferralService::LIST_STATUS_LABELS as $key => $label): ?><option value="<?= esc($key) ?>" <?= (string) $filters['status'] === $key ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?></select></div>
       <div class="col-md-3"><label for="referralUnit" class="form-label">Receiving unit</label><select name="unit" id="referralUnit" class="form-select"><?php foreach (['all' => 'All units'] + \App\Services\Referrals\ReferralService::LIST_UNIT_LABELS as $key => $label): ?><option value="<?= esc($key) ?>" <?= (string) $filters['target_unit'] === $key ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?></select></div>
       <div class="col-md-2"><label for="referralPageSize" class="form-label">Per page</label><select name="per_page" id="referralPageSize" class="form-select"><?php foreach ([25,50,100] as $size): ?><option value="<?= $size ?>" <?= (int) $filters['per_page'] === $size ? 'selected' : '' ?>><?= $size ?></option><?php endforeach; ?></select></div>
-      <div class="col-md-12 d-flex gap-2"><button class="btn btn-primary" type="submit">Search</button><a class="btn btn-outline-secondary" data-table-reset href="<?= esc($baseUrl . '?' . http_build_query(['tab' => $tab])) ?>">Reset</a></div>
+      <div class="col-md-12 d-flex flex-wrap gap-2 referral-filter-actions"><button class="btn btn-primary" type="submit">Search</button><a class="btn btn-outline-secondary" data-table-reset href="<?= esc($baseUrl . '?' . http_build_query(['tab' => $tab])) ?>">Reset</a></div>
     </form>
   </div></div>
   <p data-table-status role="status" aria-live="polite" class="small text-muted"></p>

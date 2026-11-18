@@ -1,3 +1,16 @@
+/* Shared table row action layout; responsive mobile cards retain touch-sized actions. */
+.table-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+}
+
+.table-card-actions > form {
+  display: inline-flex;
+  margin: 0;
+}
+
 /* Shared mobile table cards; desktop retains the native table layout. */
 @media (max-width: 767.98px) {
   .table.table-mobile-cards {
@@ -61,26 +74,67 @@
     color: var(--muted-color);
     font-size: .75rem;
     font-weight: 600;
+    line-height: 1.25;
+    overflow-wrap: break-word;
   }
 
-  /* Select-all controls must remain visible and usable on mobile. */
-  .table-mobile-cards.table-mobile-controls > thead {
+  .table.table-mobile-cards .table-card-actions {
+    justify-content: flex-start !important;
+  }
+
+  .table.table-mobile-cards .table-card-actions .btn {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Select-all controls must remain visible and usable on mobile as neutral chips. */
+  html body .table.table-mobile-cards.table-mobile-controls > thead {
     position: static;
     display: block;
     width: auto;
     height: auto;
-    margin: .5rem;
+    margin: .5rem .5rem .25rem;
+    background: transparent !important;
     overflow: visible;
     clip-path: none;
     white-space: normal;
   }
 
-  .table-mobile-controls > thead > tr {
+  html body .table.table-mobile-cards.table-mobile-controls > thead > tr {
     display: flex;
     flex-wrap: wrap;
+    gap: .5rem;
+    border: 0;
+    margin: 0;
+    background: transparent !important;
   }
 
-  .table-mobile-controls > thead > tr > th:not(:has(input, button, select)) {
-    display: none;
+  html body .table.table-mobile-cards.table-mobile-controls > thead > tr > th:not(:has(input, button, select)) {
+    display: none !important;
+  }
+
+  html body .table.table-mobile-cards.table-mobile-controls > thead > tr > th:has(input, button, select) {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    width: auto !important;
+    min-height: 44px;
+    padding: .5rem .75rem !important;
+    margin: 0;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-md, .375rem);
+    background-color: var(--surface-color) !important;
+    color: var(--default-color) !important;
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: .8125rem;
+    font-weight: 600;
+  }
+
+  html body .table.table-mobile-cards.table-mobile-controls > thead > tr > th:has(input, button, select) * {
+    color: inherit !important;
+    margin-bottom: 0 !important;
   }
 }

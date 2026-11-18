@@ -9,7 +9,7 @@ $patientFiltered = (int) ($pagination['filtered'] ?? count($patientRows));
 
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-hover align-middle mb-0">
+      <table class="table table-hover align-middle mb-0 clinic-patients-table">
         <caption class="visually-hidden">Filtered patient directory</caption>
         <thead class="text-muted small text-uppercase">
           <tr>
@@ -64,7 +64,7 @@ $patientFiltered = (int) ($pagination['filtered'] ?? count($patientRows));
                 </td>
                 <td>
                   <?php $vCount = (int) ($p['visit_count'] ?? 0); ?>
-                  <span class="badge <?= $vCount >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-light text-dark border' ?>">
+                  <span class="badge <?= $vCount >= 3 ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' : 'bg-secondary-subtle text-body border' ?>">
                     <?= $vCount ?> <?= $vCount === 1 ? 'visit' : 'visits' ?>
                   </span>
                   <?php if (!empty($p['last_visit_at'])): ?>
@@ -72,16 +72,16 @@ $patientFiltered = (int) ($pagination['filtered'] ?? count($patientRows));
                   <?php endif; ?>
                 </td>
                 <td class="text-end pe-3">
-                  <div class="btn-group">
+                  <div class="table-card-actions d-flex flex-wrap gap-2 justify-content-md-end">
                     <a href="<?= esc(site_url('/clinic/patients/' . (int) $p['id'])) ?>" class="btn btn-outline-primary btn-sm">
                       <i class="bi bi-file-earmark-medical me-1"></i> Chart
                     </a>
                     <?php if (!empty($openVisits[$p['id']])): ?>
-                      <a href="<?= esc(site_url('/clinic/encounters/' . (int) $openVisits[$p['id']])) ?>" class="btn btn-primary btn-sm ms-1">Resume Visit</a>
+                      <a href="<?= esc(site_url('/clinic/encounters/' . (int) $openVisits[$p['id']])) ?>" class="btn btn-primary btn-sm">Resume Visit</a>
                     <?php elseif (!empty($canStartVisit)): ?>
-                                        <form action="<?= esc(site_url('/clinic/encounters/start-direct/' . (int) $p['id'])) ?>" method="POST" class="d-inline">
+                    <form action="<?= esc(site_url('/clinic/encounters/start-direct/' . (int) $p['id'])) ?>" method="POST" class="d-inline">
                       <?= csrf_field() ?>
-                      <button type="submit" class="btn btn-primary btn-sm ms-1">
+                      <button type="submit" class="btn btn-primary btn-sm">
                         <i class="bi bi-plus-circle me-1"></i> Start Visit
                       </button>
                     </form>

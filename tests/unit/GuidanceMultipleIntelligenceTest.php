@@ -364,7 +364,7 @@ final class GuidanceMultipleIntelligenceTest extends FreshDatabaseTestCase
             $all80,
             $statement,
             1,
-            ['id' => 99, 'person_id' => $this->studentPersonId, 'role' => 'student']
+            ['id' => $this->studentUserId, 'person_id' => $this->studentPersonId, 'role' => 'student']
         );
 
         self::assertSame('finalized', $finalized['status']);
@@ -387,7 +387,7 @@ final class GuidanceMultipleIntelligenceTest extends FreshDatabaseTestCase
         self::assertNotEmpty($finalized['attestation_statement_hash']);
         self::assertSame(hash('sha256', $statement), $finalized['attestation_statement_hash']);
         self::assertNotEmpty($finalized['snapshot_hash']);
-        self::assertSame(99, (int) $finalized['attested_by_user_id']);
+        self::assertSame($this->studentUserId, (int) $finalized['attested_by_user_id']);
 
         // Double finalize should throw DomainException
         $this->expectException(DomainException::class);

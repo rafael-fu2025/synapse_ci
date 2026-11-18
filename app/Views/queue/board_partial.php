@@ -62,7 +62,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
           </div>
         <?php else: ?>
           <?php foreach ($summary['waiting'] as $item): ?>
-            <div class="card border-0 shadow-sm mb-2 p-3">
+            <div class="card border-0 shadow-sm mb-2 p-3 queue-ticket-card">
               <div class="d-flex justify-content-between align-items-start mb-2">
                 <span class="badge bg-dark-subtle text-dark fs-6 fw-bold px-2 py-1">
                   <?= esc($item['ticket_code']) ?>
@@ -86,7 +86,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                 <?php endif; ?>
               </div>
 
-              <div class="d-flex gap-1 mt-2">
+              <div class="d-flex gap-1 mt-2 queue-card-actions">
                 <button type="button"
                         class="btn btn-primary btn-sm w-100"
                         hx-post="<?= site_url($unit . '/queue/call/' . $item['id']) ?>"
@@ -118,12 +118,12 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
           </div>
         <?php else: ?>
           <?php foreach ($summary['called'] as $item): ?>
-            <div class="card border-0 shadow-sm mb-2 p-3 border-start border-warning border-4">
-              <div class="d-flex justify-content-between align-items-start mb-2">
+            <div class="card border-0 shadow-sm mb-2 p-3 border-start border-warning border-4 queue-ticket-card">
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
                 <span class="badge bg-warning text-dark fs-6 fw-bold px-2 py-1">
                   <?= esc($item['ticket_code']) ?>
                 </span>
-                <span class="badge bg-light text-muted small border">
+                <span class="badge queue-timestamp-badge small border">
                   Called: <?= date('h:i A', strtotime($item['called_at'] ?? 'now')) ?>
                 </span>
               </div>
@@ -135,7 +135,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                 ID: <?= esc($item['mis_id']) ?>
               </div>
 
-              <div class="d-flex gap-2">
+              <div class="d-flex gap-2 queue-card-actions">
                 <?php if ($unit === 'guidance'): ?>
                   <?php if ($canOpenGuidanceSession): ?>
                     <a href="<?= site_url('/guidance/cases/choose-for-ticket/' . $item['id']) ?>" class="btn btn-success btn-sm flex-grow-1" data-app-modal-open>
@@ -162,7 +162,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                       data-confirm-tone="warning">
                   <?= csrf_field() ?>
                   <button type="submit" class="btn btn-outline-secondary btn-sm" title="Patient not answering - Recall allowed within 60 mins">
-                    <i class="bi bi-skip-forward"></i> Skip
+                    <i class="bi bi-skip-forward me-1" aria-hidden="true"></i> Skip
                   </button>
                 </form>
               </div>
@@ -189,12 +189,12 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
           </div>
         <?php else: ?>
           <?php foreach ($summary['in_consultation'] as $item): ?>
-            <div class="card border-0 shadow-sm mb-2 p-3 border-start border-info border-4">
-              <div class="d-flex justify-content-between align-items-start mb-2">
+            <div class="card border-0 shadow-sm mb-2 p-3 border-start border-info border-4 queue-ticket-card">
+              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
                 <span class="badge bg-info fs-6 fw-bold px-2 py-1">
                   <?= esc($item['ticket_code']) ?>
                 </span>
-                <span class="badge bg-light text-muted small border">
+                <span class="badge queue-timestamp-badge small border">
                   Started: <?= date('h:i A', strtotime($item['started_at'] ?? 'now')) ?>
                 </span>
               </div>
@@ -206,7 +206,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                 ID: <?= esc($item['mis_id']) ?>
               </div>
 
-              <div class="d-flex gap-2">
+              <div class="d-flex gap-2 queue-card-actions">
                 <?php if ($unit === 'clinic'): ?>
                   <form action="<?= site_url('/clinic/encounters/start-for-ticket/' . $item['id']) ?>" method="POST" class="flex-grow-1">
                     <?= csrf_field() ?>
@@ -261,8 +261,8 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
             </div>
           <?php else: ?>
             <?php foreach ($summary['skipped'] as $item): ?>
-              <div class="card border-0 shadow-sm mb-2 p-2 bg-white">
-                <div class="d-flex justify-content-between align-items-center mb-1">
+              <div class="card border-0 shadow-sm mb-2 p-3 queue-ticket-card">
+                <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-1">
                   <span class="badge bg-secondary-subtle text-secondary fw-bold">
                     <?= esc($item['ticket_code']) ?>
                   </span>
@@ -274,7 +274,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                   <?= esc($item['last_name'] . ', ' . $item['first_name']) ?>
                 </div>
                 <button type="button"
-                        class="btn btn-outline-primary btn-sm mt-2 w-100 py-1"
+                        class="btn btn-outline-primary btn-sm mt-2 w-100 py-1 queue-card-action-btn"
                         hx-post="<?= site_url($unit . '/queue/recall/' . $item['id']) ?>"
                         hx-target="#queue-board-container"
                         hx-swap="innerHTML">

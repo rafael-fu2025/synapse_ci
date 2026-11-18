@@ -1,5 +1,6 @@
 <?= $this->extend('layouts/app') ?>
 <?= $this->section('content') ?>
+<div class="guidance-ui">
 <div class="card border-0 shadow-sm mb-4"><div class="card-body p-4">
   <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
     <div>
@@ -30,16 +31,16 @@
 </div></div>
 
 <div class="card border-0 shadow-sm">
-  <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+  <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
     <h6 class="fw-bold mb-0"><i class="bi bi-person-check text-primary me-2"></i>Staff-Only Interview Attribution &amp; Personnel Remarks</h6>
     <?php if (!empty($response['interviewed_by_user_id'])): ?>
-      <span class="badge bg-success-subtle text-success border border-success-subtle">
+      <span class="badge bg-success-subtle text-success border border-success-subtle text-wrap text-start">
         Interviewed by <?= esc((string) ($response['interviewer_name'] ?? 'Guidance Staff')) ?>
         <?php if (!empty($response['interviewer_tier'])): ?> (<?= esc((string) $response['interviewer_tier']) ?>)<?php endif; ?>
         · <?= esc(date('M j, Y', strtotime((string) $response['interviewed_at']))) ?>
       </span>
     <?php else: ?>
-      <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Pending Staff Interview</span>
+      <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle text-wrap text-start">Pending Staff Interview</span>
     <?php endif; ?>
   </div>
   <div class="card-body p-4">
@@ -71,10 +72,11 @@
           <textarea id="survey-staff-remarks" name="staff_remarks" rows="3" maxlength="2000" class="form-control" placeholder="Record interview observations, follow-up needs, or referral notes..."><?= esc((string) ($response['staff_remarks'] ?? '')) ?></textarea>
         </div>
       </div>
-      <button type="submit" class="btn btn-primary btn-sm">
+      <button type="submit" class="btn btn-primary btn-sm w-100 w-sm-auto">
         <i class="bi bi-shield-check me-1"></i> Save Interview Attribution &amp; Remarks
       </button>
     </form>
   </div>
+</div>
 </div>
 <?= $this->endSection() ?>

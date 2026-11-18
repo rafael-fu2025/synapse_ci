@@ -1,4 +1,4 @@
-<button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2"
+<button type="button" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-2 queue-history-trigger"
         data-bs-toggle="offcanvas" data-bs-target="#queueNoShowHistory" aria-controls="queueNoShowHistory">
   <i class="bi bi-clock-history" aria-hidden="true"></i>
   No-show history <span class="badge bg-secondary" data-queue-no-show-count><?= count($noShows) ?></span>

@@ -36,7 +36,7 @@
     <div class="card mb-0 h-100"><div class="card-body p-3">
       <h2 class="h5" id="profileAccountTitle">Your university profile</h2>
       <p class="small text-muted">These details are managed by MIS. Contact the university office for corrections; uploading a picture does not change your identity or access.</p>
-      <dl class="row mb-0">
+      <dl class="row g-2 mb-0">
         <dt class="col-sm-4">Name</dt><dd class="col-sm-8 text-break"><?= esc(trim(($person['first_name'] ?? '') . ' ' . ($person['middle_name'] ?? '') . ' ' . ($person['last_name'] ?? ''))) ?></dd>
         <dt class="col-sm-4">University ID</dt><dd class="col-sm-8 text-break"><?= esc($person['mis_id'] ?? 'Not recorded') ?></dd>
         <dt class="col-sm-4">Profile type</dt><dd class="col-sm-8"><?= esc(ucfirst($person['kind'])) ?></dd>
@@ -46,7 +46,7 @@
   </section>
   <section class="col-12" aria-labelledby="profileEmergencyTitle">
     <div class="card mb-0"><div class="card-body p-3">
-      <div class="d-flex justify-content-between align-items-center mb-1">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-1">
         <h2 class="h5 mb-0" id="profileEmergencyTitle">Emergency contact</h2>
         <span class="badge bg-secondary">Clinic file</span>
       </div>
@@ -87,9 +87,9 @@
                    autocomplete="tel">
           </div>
         </div>
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="d-grid d-sm-flex flex-sm-wrap align-items-sm-center justify-content-sm-between gap-2">
           <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-save me-1" aria-hidden="true"></i>Save emergency contact</button>
-          <p class="small text-muted mb-0" data-emergency-contact-feedback role="status" aria-live="polite"></p>
+          <p class="small text-muted mb-0" data-emergency-contact-feedback role="status" aria-live="polite" hidden></p>
         </div>
       </form>
     </div></div>
@@ -107,18 +107,20 @@
       <form action="<?= esc(site_url('portal/settings/contact-info')) ?>" method="POST" data-background-submit>
         <?= csrf_field() ?>
         <div class="row g-3 mb-3">
-          <div class="col-md-4">
+          <div class="col-12 col-md-4">
             <label class="form-label small fw-semibold" for="contactPhone">Current contact number</label>
             <input class="form-control form-control-sm" id="contactPhone" name="phone" type="text" maxlength="30"
                    value="<?= esc((string) ($person['phone'] ?? ''), 'attr') ?>" placeholder="e.g. 0917 123 4567" autocomplete="tel">
           </div>
-          <div class="col-md-8">
+          <div class="col-12 col-md-8">
             <label class="form-label small fw-semibold" for="contactAddress">Current / boarding house address</label>
             <input class="form-control form-control-sm" id="contactAddress" name="address" type="text" maxlength="500"
                    value="<?= esc((string) ($person['address'] ?? ''), 'attr') ?>" placeholder="House / Boarding House / Street / Barangay / City" autocomplete="street-address">
           </div>
         </div>
-        <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Update current contact &amp; residence</button>
+        <div class="d-grid d-sm-block">
+          <button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Update current contact &amp; residence</button>
+        </div>
       </form>
     </div></div>
   </section>

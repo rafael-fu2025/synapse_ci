@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace App\Services\Guidance;
 
 use App\Models\GuidanceConsentReceiptModel;
+use App\Models\GuidanceFormAttestationModel;
+use App\Models\GuidanceFormDefinitionModel;
+use App\Models\GuidanceFormDefinitionRevisionModel;
 use App\Models\GuidanceFormDraftModel;
 use App\Models\GuidanceFormInstanceModel;
 use App\Models\GuidanceFormRevisionModel;
 use App\Models\GuidancePrivacyNoticeModel;
 use App\Models\GuidanceRetentionPolicyModel;
 use App\Models\PersonModel;
+use App\Services\Audit\AuditService;
 use App\Services\Crypto\GuidanceFormCipher;
 use App\Services\CurrentTenant;
 use CodeIgniter\Database\BaseConnection;
@@ -30,6 +34,7 @@ class GuidanceFormService
     private PersonModel $personModel;
     private GuidanceFormCipher $cipher;
     private GuidanceAccessPolicy $accessPolicy;
+    private GuidanceFormContextPolicy $contextPolicy;
     private GuidanceFormDefinitionService $definitionService;
     private FormAttestationService $attestationService;
     private GuidanceDocumentService $documentService;
@@ -50,18 +55,30 @@ class GuidanceFormService
         ?GuidanceDocumentService $documentService = null,
         ?BaseConnection $db = null
     ) {
-        $this->instanceModel = $instanceModel ?? new GuidanceFormInstanceModel();
-        $this->draftModel = $draftModel ?? new GuidanceFormDraftModel();
-        $this->revisionModel = $revisionModel ?? new GuidanceFormRevisionModel();
-        $this->privacyNoticeModel = $privacyNoticeModel ?? new GuidancePrivacyNoticeModel();
-        $this->retentionPolicyModel = $retentionPolicyModel ?? new GuidanceRetentionPolicyModel();
-        $this->consentReceiptModel = $consentReceiptModel ?? new GuidanceConsentReceiptModel();
-        $this->personModel = $personModel ?? new PersonModel();
+        $models = array_filter([
+            $instanceModel, $draftModel, $revisionModel, $privacyNoticeModel,
+            $retentionPolicyModel, $consentReceiptModel, $personModel,
+        ]);
+        $this->db = $db ?? ($models !== [] ? reset($models)->db : Database::connect());
+        foreach ($models as $model) {
+            if ($model->db !== $this->db) {
+                throw new InvalidArgumentException('Guidance models must share their transaction connection.');
+            }
+        }
+        $this->instanceModel = $instanceModel ?? new GuidanceFormInstanceModel($this->db);
+        $this->draftModel = $draftModel ?? new GuidanceFormDraftModel($this->db);
+        $this->revisionModel = $revisionModel ?? new GuidanceFormRevisionModel($this->db);
+        $this->privacyNoticeModel = $privacyNoticeModel ?? new GuidancePrivacyNoticeModel($this->db);
+        $this->retentionPolicyModel = $retentionPolicyModel ?? new GuidanceRetentionPolicyModel($this->db);
+        $this->consentReceiptModel = $consentReceiptModel ?? new GuidanceConsentReceiptModel($this->db);
+        $this->personModel = $personModel ?? new PersonModel($this->db);
         $this->cipher = $cipher ?? new GuidanceFormCipher();
-        $this->db = $db ?? Database::connect();
         $this->accessPolicy = $accessPolicy ?? new GuidanceAccessPolicy(db: $this->db);
-        $this->definitionService = $definitionService ?? new GuidanceFormDefinitionService();
-        $this->attestationService = $attestationService ?? new FormAttestationService();
+        $this->contextPolicy = new GuidanceFormContextPolicy(db: $this->db);
+        $this->definitionService = $definitionService ?? new GuidanceFormDefinitionService(
+            new GuidanceFormDefinitionModel($this->db), new GuidanceFormDefinitionRevisionModel($this->db)
+        );
+        $this->attestationService = $attestationService ?? new FormAttestationService(new GuidanceFormAttestationModel($this->db));
         $this->documentService = $documentService ?? new GuidanceDocumentService(db: $this->db);
     }
 
@@ -80,16 +97,16 @@ class GuidanceFormService
         $authority = $this->resolveFormWriteAuthority($actor);
         $tid = (int) $authority['tenant_id'];
 
-        // Verify person belongs to tenant
-        $person = $this->personModel->scoped($tid)->find($personId);
-        if ($person === null) {
-            throw new InvalidArgumentException('Person not found in active tenant.', 404);
-        }
-
-        // Resolve active definition and revision
+        // Resolve the real definition before applying operational/confidential context rules.
         $defBundle = $this->definitionService->getActiveDefinition($internalKey, $tid);
         $def = $defBundle['definition'];
         $rev = $defBundle['revision'];
+        $context = $this->contextPolicy->assertCreationAccess([
+            'person_id' => $personId, 'case_id' => $caseId, 'session_id' => $sessionId,
+            'referral_id' => $referralId, 'appointment_id' => $appointmentId,
+            'form_definition_id' => $def['id'], 'definition_revision_id' => $rev['id'],
+        ], $authority);
+        $authority = $context['authority'];
 
         $year = date('Y');
         $instanceNumber = sprintf('OGC-%s-%06d', $year, random_int(1, 999999));
@@ -98,11 +115,13 @@ class GuidanceFormService
             'tenant_id' => $tid,
             'form_definition_id' => (int) $def['id'],
             'definition_revision_id' => (int) $rev['id'],
-            'person_id' => $personId,
-            'case_id' => $caseId,
-            'session_id' => $sessionId,
-            'referral_id' => $referralId,
-            'appointment_id' => $appointmentId,
+            'person_id' => $context['person_id'],
+            'case_id' => $context['case_id'],
+            'session_id' => $context['session_id'],
+            'episode_id' => $context['episode_id'],
+            'referral_id' => $context['referral_id'],
+            'appointment_id' => $context['appointment_id'],
+            'intake_id' => $context['intake_id'],
             'instance_number' => $instanceNumber,
             'status' => 'draft',
             'created_by_user_id' => (int) $authority['id'],
@@ -167,6 +186,8 @@ class GuidanceFormService
         if ($instance === null) {
             throw new InvalidArgumentException('Form instance not found.', 404);
         }
+
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, true)['authority'];
 
         if ($instance['status'] !== 'draft') {
             throw new DomainException('Cannot modify non-draft form instance.', 409);
@@ -251,8 +272,12 @@ class GuidanceFormService
             throw new InvalidArgumentException('Form instance not found.', 404);
         }
 
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, false, true)['authority'];
+
         $draft = $this->draftModel->scoped($tid)->where('form_instance_id', $instanceId)->first();
         if ($draft === null) {
+            // Instance-level submission/supervisor notes remain confidential without a draft.
+            $this->auditFormRead('guidance.form.draft_read', $instance, $authority);
             return [
                 'instance' => $instance,
                 'draft' => null,
@@ -280,6 +305,7 @@ class GuidanceFormService
         );
 
         $data = json_decode($plaintext, true, 512, JSON_THROW_ON_ERROR);
+        $this->auditFormRead('guidance.form.draft_read', $instance, $authority);
 
         return [
             'instance' => $instance,
@@ -311,13 +337,25 @@ class GuidanceFormService
             throw new InvalidArgumentException('Form instance not found.', 404);
         }
 
+        $context = $this->assertInstanceCaseAccess($instance, $authority, true, true);
+        $authority = $context['authority'];
+
+        if ($instance['status'] !== 'draft' && $instance['status'] !== 'pending_cosign') {
+            throw new DomainException('Only draft or pending_cosign instances can be finalized.', 409);
+        }
+
         $authorUserId = (int) $instance['created_by_user_id'];
         $actorId = (int) $authority['id'];
         $pTable = $this->db->protectIdentifiers($this->db->prefixTable('guidance_practitioner_profiles'));
-        $hasProfile = $this->db->query("SELECT id FROM {$pTable} WHERE tenant_id = ? AND user_id = ? AND is_active = 1", [$tid, $authorUserId])->getRowArray();
+        $hasProfile = $this->db->tableExists('guidance_practitioner_profiles')
+            ? $this->db->query("SELECT id, credential_tier FROM {$pTable} WHERE tenant_id = ? AND user_id = ? AND is_active = 1", [$tid, $authorUserId])->getRowArray()
+            : null;
         if ($hasProfile !== null) {
             // If the author is an associate and this is the associate submitting:
             if ($actorId === $authorUserId && !$this->accessPolicy->canFinalizeDirectly($actorId, $tid)) {
+                if ($instance['status'] !== 'draft') {
+                    throw new DomainException('Form instance is already pending co-signature.', 409);
+                }
                 // Transition draft -> pending_cosign
                 $this->instanceModel->update($instanceId, [
                     'status' => 'pending_cosign',
@@ -329,12 +367,13 @@ class GuidanceFormService
                     'requires_cosign' => true,
                 ];
             }
-            // Otherwise, validate supervisor/practitioner standing to finalize
+            // Otherwise, validate supervisor/practitioner standing to finalize. A global
+            // grant or stale stored supervisor must not revive ended associate supervision.
+            if ($actorId !== $authorUserId && ($hasProfile['credential_tier'] ?? '') === 'counselor_associate'
+                && !$context['is_current_supervisor']) {
+                throw new DomainException('Actor must be the current assigned supervisor.', 403);
+            }
             $this->accessPolicy->assertCanFinalizeNote($authority, $authorUserId, $tid);
-        }
-
-        if ($instance['status'] !== 'draft' && $instance['status'] !== 'pending_cosign') {
-            throw new DomainException('Only draft or pending_cosign instances can be finalized.', 409);
         }
 
         $draft = $this->draftModel->scoped($tid)->where('form_instance_id', $instanceId)->first();
@@ -451,13 +490,15 @@ class GuidanceFormService
         ?int $revisionNumber = 1,
         ?array $actor = null
     ): array {
-        $authority = $this->accessPolicy->resolve($actor, 'guidance.cases.read');
+        $authority = $this->resolveFormReadAuthority($actor);
         $tid = (int) $authority['tenant_id'];
 
         $instance = $this->instanceModel->scoped($tid)->find($instanceId);
         if ($instance === null) {
             throw new InvalidArgumentException('Form instance not found.', 404);
         }
+
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, false, true)['authority'];
 
         $revNum = $revisionNumber ?? 1;
         $revRow = $this->revisionModel->scoped($tid)
@@ -489,6 +530,7 @@ class GuidanceFormService
         );
 
         $data = json_decode($plaintext, true, 512, JSON_THROW_ON_ERROR);
+        $this->auditFormRead('guidance.form.finalized_read', $instance, $authority);
 
         // Fetch attestation
         $attestation = $this->db->table('guidance_form_attestations')
@@ -516,6 +558,8 @@ class GuidanceFormService
         if ($instance === null) {
             throw new InvalidArgumentException('Form instance not found.', 404);
         }
+
+        $authority = $this->assertInstanceCaseAccess($instance, $authority, true)['authority'];
 
         if ($instance['status'] !== 'draft') {
             throw new DomainException('Only draft instances can be submitted for co-sign.', 409);
@@ -604,5 +648,27 @@ class GuidanceFormService
             throw new DomainException('Guidance permission forbidden.', 403);
         }
         return $authority;
+    }
+
+    private function assertInstanceCaseAccess(
+        array $instance,
+        array $authority,
+        bool $write,
+        bool $allowSupervisor = false
+    ): array {
+        return $this->contextPolicy->assertInstanceAccess($instance, $authority, $write, $allowSupervisor);
+    }
+
+    /** Persist metadata only before any reader releases decrypted form data. */
+    private function auditFormRead(string $event, array $instance, array $authority): void
+    {
+        try {
+            (new AuditService(null, $this->db))->log(
+                $event, 'guidance_form_instances', (string) $instance['id'], 'read', [],
+                (int) $authority['id'], (string) $authority['role']
+            );
+        } catch (\Throwable $exception) {
+            throw new RuntimeException('Unable to audit guidance form read.', 503, $exception);
+        }
     }
 }

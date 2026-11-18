@@ -309,6 +309,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('guidance', 'GuidanceController::dashboard');
         $routes->get('guidance/dashboard', 'GuidanceController::dashboard');
         $routes->get('guidance/cases', 'GuidanceController::cases');
+        $routes->get('guidance/clients', 'GuidanceController::clients');
+        $routes->get('guidance/clients/(:num)', 'GuidanceController::cumulativeRecord/$1');
         $routes->get('guidance/students/(:num)/cumulative', 'GuidanceController::cumulativeRecord/$1');
         $routes->get('guidance/reports/summary', 'GuidanceController::periodicSummary');
         $routes->get('guidance/cases/create', 'GuidanceController::newCase');
@@ -420,6 +422,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->post('portal/referrals/resolve-subject', 'GuidanceIntakeController::resolveSubject');
     $routes->post('portal/referrals/store', 'GuidanceIntakeController::portalStore');
     $routes->post('guidance/intake/(:num)/withdraw', 'GuidanceIntakeController::withdraw/$1');
+    $routes->get('portal/call-slips', 'PortalController::callSlips');
     $routes->post('portal/guidance/call-slips/(:num)/acknowledge', 'GuidanceCallSlipController::portalAcknowledgeCallSlip/$1');
 
     $routes->get('portal/assessments/mi', 'GuidanceMultipleIntelligenceController::portalList');

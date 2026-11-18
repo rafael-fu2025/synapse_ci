@@ -238,9 +238,22 @@ async function pageFor(t, options = {}) {
   return { page, state, documents };
 }
 async function ready(page, settings = true) {
-  await page.waitForFunction(settings => Boolean(window.SynapseNavigation && window.SynapseProfileSettings &&
-    document.querySelector('#main h1') && !document.body.classList.contains('is-navigating') &&
-    (!settings || document.querySelector('#main [data-profile-settings]'))), settings);
+  try {
+    await page.waitForFunction(settings => Boolean(window.SynapseNavigation && window.SynapseProfileSettings &&
+      document.querySelector('#main h1') && !document.body.classList.contains('is-navigating') &&
+      !document.documentElement.classList.contains('portal-shell-hydrating') && document.querySelector('#main')?.style.opacity !== '0' &&
+      document.querySelector('#portal-workspace-pane') && document.querySelector('#portal-workspace-pane').getAttribute('aria-busy') !== 'true' &&
+      document.querySelector('#portal-workspace-pane').dataset.currentPaneUrl === location.href &&
+      (!settings || document.querySelector('#portal-workspace-pane [data-profile-settings]'))), settings);
+  } catch (error) {
+    console.error('Portal readiness: ' + JSON.stringify(await page.evaluate(() => ({ url: location.href, entry: history.state,
+      pane: { ...document.querySelector('#portal-workspace-pane')?.dataset }, busy: document.querySelector('#portal-workspace-pane')?.getAttribute('aria-busy'),
+      navigateUrl: window.SynapseNavigation?.workspace?.currentUrl, owns: window.SynapsePortalWorkspace?.owns(location.href),
+      mainBusy: document.getElementById('main')?.getAttribute('aria-busy'), restoring: window.SynapseNavigation?.workspace?.restoring,
+      navigating: document.body.classList.contains('is-navigating'), opacity: document.getElementById('main')?.style.opacity,
+      status: document.getElementById('navigation-status')?.textContent, toast: document.querySelector('.synapse-toast-message')?.textContent }))));
+    throw error;
+  }
 }
 async function settle(page) {
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -251,15 +264,23 @@ async function assertNoProfileModal(page) {
   assert.equal(await page.locator('.modal-backdrop').count(), 0);
   assert.equal(await page.locator('body').evaluate(body => body.classList.contains('modal-open')), false);
 }
-async function assertSettingsPage(page) {
+async function assertSettingsPage(page, { standalone = false } = {}) {
   assert.equal(new URL(page.url()).pathname, '/portal/settings');
   assert.equal(await page.locator('#main h1').count(), 1);
-  assert.equal(await page.locator('#main h1').innerText(), 'Profile & Settings');
+  if (standalone) {
+    assert.equal(await page.locator('#main h1').innerText(), 'Profile & Settings');
+    assert.equal(await page.locator('#portal-workspace-pane').count(), 0);
+  } else {
+    assert.match(await page.locator('#main h1').innerText(), /^(Student|Employee) Health Portal$/);
+    assert.equal(await page.locator('#portal-workspace-pane[data-active-pane="settings"]').count(), 1);
+    assert.equal(await page.locator('#portal-workspace-pane .portal-workspace-title').innerText(), 'Profile & Settings');
+  }
   assert.equal(await page.locator('#main [data-profile-settings]').count(), 1);
   assert.equal(await page.locator('[data-profile-settings]').evaluate(panel =>
     ['profilePhotoForm', 'emergencyContactForm', 'profilePhotoTitle', 'profileAccountTitle', 'profileEmergencyTitle']
       .every(id => panel.contains(document.getElementById(id))) && !panel.closest('[role="dialog"], .modal')), true);
-  const back = page.locator('#main .page-actions').getByRole('link', { name: 'Back to My Health Portal', exact: true });
+  const back = page.locator(standalone ? '#main .page-actions' : '#portal-workspace-pane .portal-workspace-actions')
+    .getByRole('link', { name: 'Back to My Health Portal', exact: true });
   assert.equal(new URL(await back.getAttribute('href'), origin).href, origin + '/portal');
   assert.equal(await back.getAttribute('data-app-modal-close'), null);
   for (const [selector, action] of [['#profilePhotoForm', PHOTO], ['[data-profile-photo-remove]', REMOVE], ['#emergencyContactForm', CONTACT]]) {
@@ -271,19 +292,29 @@ async function assertSettingsPage(page) {
 }
 async function rememberShell(page) {
   await page.evaluate(() => { window.fixtureShell = {
-    main: document.getElementById('main'), header: document.querySelector('header.header'), sidebar: document.querySelector('.sidebar')
+    main: document.getElementById('main'), header: document.querySelector('header.header'), sidebar: document.querySelector('.sidebar'),
+    pane: document.getElementById('portal-workspace-pane'), profile: document.querySelector('.portal-profile-card'),
+    dock: document.querySelector('.portal-app-dock'), content: document.getElementById('portal-workspace-pane')?.firstElementChild,
   }; });
 }
 async function assertSoftSwap(page, documents, documentCount) {
   assert.equal(documents.length, documentCount, 'Eligible entry must not request a new browser document');
   assert.equal(await page.evaluate(() => Boolean(window.fixtureShell &&
-    window.fixtureShell.main !== document.getElementById('main') &&
+    window.fixtureShell.main === document.getElementById('main') && window.fixtureShell.pane === document.getElementById('portal-workspace-pane') &&
+    window.fixtureShell.profile === document.querySelector('.portal-profile-card') && window.fixtureShell.dock === document.querySelector('.portal-app-dock') &&
+    window.fixtureShell.content !== document.getElementById('portal-workspace-pane')?.firstElementChild &&
     window.fixtureShell.header === document.querySelector('header.header') &&
-    window.fixtureShell.sidebar === document.querySelector('.sidebar'))), true, 'Only main is replaced; the shell stays alive');
-  assert.equal(await page.locator('#main h1').evaluate(heading => heading === document.activeElement), true, 'Navigation focuses the incoming H1');
+    window.fixtureShell.sidebar === document.querySelector('.sidebar'))), true, 'Only pane children are replaced; the unified shell stays alive');
+  assert.equal(await page.evaluate(() => document.getElementById('portal-workspace-pane')?.contains(document.activeElement)), true,
+    'Pane navigation focuses its incoming heading, not the persistent Portal H1');
 }
 async function entryLink(page, source) {
   if (source === 'account') await page.locator('.user-trigger').click();
+  if (source.startsWith('portal-')) {
+    const toggle = page.locator('[data-portal-emergency-toggle]');
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+    await page.locator('[data-portal-profile-stack].is-emergency-open [data-portal-emergency-content]').waitFor({ state: 'visible' });
+  }
   const link = source === 'account' ? page.locator('.user-menu a[href$="/portal/settings"]')
     : source === 'sidebar' ? page.locator('.sidebar-nav a[href$="/portal/settings"]')
       : page.locator('[data-portal-emergency-card]').getByRole('link', { name: source === 'portal-add' ? 'Add emergency contact' : 'Edit', exact: true });
@@ -332,9 +363,13 @@ async function save(page, operation, text = operation === 'contact' ? 'Emergency
   await feedback(page, operation, text);
 }
 async function feedback(page, operation, text) {
-  const selector = operation === 'contact' ? '[data-emergency-contact-feedback]' : '[data-profile-photo-feedback]';
-  await page.waitForFunction(({ selector, text }) => document.querySelector(selector)?.textContent.includes(text) &&
+  const selector = operation === 'contact' ? '#synapse-toast-container .synapse-toast-message' : '[data-profile-photo-feedback]';
+  await page.waitForFunction(({ selector, text }) => [...document.querySelectorAll(selector)].some(element => element.textContent.includes(text)) &&
     !document.querySelector('[data-profile-settings] form[aria-busy="true"]'), { selector, text });
+  if (operation === 'contact') {
+    assert.equal(await page.locator('[data-emergency-contact-feedback]').isHidden(), true, 'Shared toast replaces duplicate inline save status');
+    assert.equal(await page.locator('[data-emergency-contact-feedback]').textContent(), '');
+  }
 }
 async function resetPhoto(page) {
   await page.locator('#profilePhotoForm').evaluate(form => form.reset());
@@ -349,13 +384,14 @@ async function recordConfirm(page, answer) {
 }
 async function expectDirtyStay(page, state) {
   await settle(page);
-  const address = page.url(), reads = state.reads.length;
+  const address = page.url(), reads = state.reads.filter(read => read.headers['x-synapse-portal-badge-sync'] !== '1').length;
   await rememberShell(page); await recordConfirm(page, false);
   assert.equal(await page.evaluate(target => SynapseNavigation.navigate(target, { fallback: false }), origin + '/portal/announcements'), false);
   assert.equal(page.url(), address);
   assert.equal(await page.evaluate(() => document.getElementById('main') === window.fixtureShell.main), true);
   assert.equal(await page.evaluate(() => window.fixtureConfirmMessages.length), 1, 'The existing window.confirm navigator owns dirty consent');
-  assert.equal(state.reads.length, reads, 'Cancel must not fetch or discard the outgoing draft');
+  assert.equal(state.reads.filter(read => read.headers['x-synapse-portal-badge-sync'] !== '1').length, reads,
+    'Cancel must not fetch a destination or discard the outgoing draft; unrelated badge sync remains optional');
   assert.equal(await page.locator('#synapseConfirmModal.show').count(), 0, 'Dirty navigation must not use the removal confirmation UI');
   await assertNoProfileModal(page);
 }
@@ -408,25 +444,28 @@ async function mutationControlsDisabled(page) {
 }
 
 for (const kind of ['student', 'employee']) for (const fragment of [false, true]) {
-  test(`${kind} direct${fragment ? ' fragment=1' : ''} GET is one ordinary full settings page with a fixed portal action`, async t => {
+  test(`${kind} direct${fragment ? ' fragment=1' : ''} GET hydrates one settings pane with a fixed portal action`, async t => {
     const start = '/portal/settings' + (fragment ? '?fragment=1&return_url=https%3A%2F%2Fexample.test%2Funsafe' : '');
     const { page, state } = await pageFor(t, { kind, start });
     await assertSettingsPage(page);
-    assert.equal(state.reads.length, 1);
+    assert.equal(state.reads.filter(read => read.path === '/portal/settings').length, 1, 'The destination is fetched once');
+    assert.equal(state.reads.filter(read => read.path === '/portal' && read.headers['x-synapse-portal-badge-sync'] === '1').length, 1,
+      'One optional shell GET hydrates the direct sub-route without another settings GET');
     assert.equal(await page.locator('[data-profile-settings] [data-profile-photo-current]').count(), 1);
     assert.equal(await page.locator('[data-profile-settings] [data-emergency-contact-feedback]').count(), 1);
     assert.equal(state.posts.length, 0);
   });
 }
 for (const source of ['account', 'sidebar', 'portal-edit', 'portal-add']) {
-  test(`${source} entry replaces main, changes URL/history and focuses H1 without a profile modal`, async t => {
+  test(`${source} entry replaces the pane, changes URL/history and focuses its title without a profile modal`, async t => {
     const { page, documents } = await pageFor(t, {
       kind: source === 'account' ? 'employee' : 'student', start: source.startsWith('portal-') ? '/portal' : '/portal/announcements',
       contact: source === 'portal-add' ? Object.fromEntries(fields.map(name => [name, null])) : undefined
     });
-    const documentCount = documents.length;
+    const documentCount = documents.length, historyLength = await page.evaluate(() => history.length);
     await rememberShell(page);
     await open(page, source);
+    assert.equal(await page.evaluate(() => history.length), historyLength + 1, 'An in-pane entry adds exactly one owned history entry');
     await assertSoftSwap(page, documents, documentCount);
     assert.equal(await page.locator('.sidebar-nav a[href$="/portal/settings"]').evaluate(link => link.classList.contains('active')), true);
     await page.evaluate(() => history.back());
@@ -564,15 +603,18 @@ test('contact saves only on explicit submit, adopts the normalized response base
   assert.deepEqual(state.posts[0].names.sort(), [...fields, 'csrf_test_name'].sort());
   assert.deepEqual(await contactValues(page), changedContact); assert.deepEqual(state.contact, changedContact);
   await recordConfirm(page, false); await rememberShell(page);
-  await page.locator('#main .page-actions').getByRole('link', { name: 'Back to My Health Portal', exact: true }).click();
+  await page.locator('#portal-workspace-pane .portal-workspace-actions').getByRole('link', { name: 'Back to My Health Portal', exact: true }).click();
   await page.waitForURL(origin + '/portal'); await ready(page, false);
   await assertSoftSwap(page, documents, documentCount);
   assert.deepEqual(await page.evaluate(() => window.fixtureConfirmMessages), []);
+  await page.locator('[data-portal-emergency-toggle]').click();
   const card = page.locator('[data-portal-emergency-card]');
+  await card.locator('[data-portal-emergency-content]').waitFor({ state: 'visible' });
   assert.match(await card.innerText(), /Dr\. Roberto Santos/); assert.match(await card.innerText(), /Father/);
   assert.doesNotMatch(await card.innerText(), /Maria Santos/);
   assert.equal(await card.locator('a[href^="tel:"]').getAttribute('href'), 'tel:+639185551234');
-  assert.equal(state.reads.at(-1).path, '/portal', 'The card is server-rendered from persisted contact state, not an old modal patch');
+  assert.equal(state.reads.filter(read => read.path === '/portal' && read.headers['x-synapse-portal-pane'] === '1').length, 1,
+    'Return fetches the appointments pane from persisted state; badge sync GETs are separate');
   await open(page, 'portal-edit');
   assert.deepEqual(await contactValues(page), changedContact);
   await expectCleanLeave(page);
@@ -585,6 +627,8 @@ test('canonical blank contact fields become null, clear the draft baseline and r
   assert.deepEqual(state.contact, Object.fromEntries(fields.map(name => [name, null])));
   assert.deepEqual(await contactValues(page), Object.fromEntries(fields.map(name => [name, ''])));
   await expectCleanLeave(page);
+  await page.locator('[data-portal-emergency-toggle]').click();
+  await page.locator('[data-portal-emergency-content]').waitFor({ state: 'visible' });
   assert.match(await page.locator('[data-portal-emergency-content]').innerText(), /No emergency contact recorded/);
   await open(page, 'portal-add');
   assert.deepEqual(await contactValues(page), Object.fromEntries(fields.map(name => [name, ''])));
@@ -623,7 +667,7 @@ for (const operation of ['photo', 'contact']) {
   });
 }
 
-test('failed contact save retains both drafts, displays page-owned escaped status, and reversion uses the last saved normalized baseline', async t => {
+test('failed contact save retains both drafts, displays escaped shared toast status, and reversion uses the last saved normalized baseline', async t => {
   const { page, state } = await pageFor(t, { hasPhoto: false });
   await fillContact(page, Object.fromEntries(fields.map(name => [name, '  ' + changedContact[name] + '  '])));
   await save(page, 'contact');
@@ -636,7 +680,8 @@ test('failed contact save retains both drafts, displays page-owned escaped statu
   assert.equal(state.posts[1].token, canonicalToken);
   assert.deepEqual(await contactValues(page), invalidDraft); assert.deepEqual(state.contact, changedContact);
   assert.equal(await page.locator('[data-profile-photo-preview]').getAttribute('src'), blob);
-  assert.equal(await page.locator('[data-emergency-contact-feedback] img').count(), 0);
+  assert.equal(await page.locator('#synapse-toast-container img').count(), 0);
+  assert.equal(await page.locator('[data-emergency-contact-feedback]').textContent(), '');
   assert.equal(await page.evaluate(() => window.contactXss), undefined);
   assert.equal(await page.locator('#emergencyContactName').isEnabled(), true);
   await expectDirtyStay(page, state);
@@ -644,19 +689,38 @@ test('failed contact save retains both drafts, displays page-owned escaped statu
   await expectCleanLeave(page);
 });
 
-test('the fixed page action uses native navigator confirm: cancel keeps both drafts, accept discards without saving', async t => {
+async function confirmModal(page, action, accept) {
+  try {
+    await action();
+    await page.locator('#synapseConfirmModal.show').waitFor();
+    await page.locator(accept ? '[data-confirm-accept]' : '[data-confirm-cancel]').click();
+    await page.waitForFunction(() => {
+      const modal = document.getElementById('synapseConfirmModal');
+      return !modal?.classList.contains('show') &&
+        modal?.getAttribute('aria-hidden') === 'true' &&
+        document.querySelectorAll('.modal-backdrop').length === 0 &&
+        !document.body.classList.contains('modal-open');
+    });
+    return { error: undefined };
+  } catch (error) {
+    return { error };
+  }
+}
+
+test('the fixed page action uses custom confirm modal: cancel keeps both drafts, accept discards without saving', async t => {
   const { page, state, documents } = await pageFor(t);
   const blob = await makeDraft(page, 'both'), address = page.url(), documentCount = documents.length;
   await rememberShell(page);
-  const back = page.locator('#main .page-actions').getByRole('link', { name: 'Back to My Health Portal', exact: true });
-  const canceled = await nativeDialog(page, () => back.click(), 'confirm', false);
+  const back = page.locator('#portal-workspace-pane .portal-workspace-actions').getByRole('link', { name: 'Back to My Health Portal', exact: true });
+  const canceled = await confirmModal(page, () => back.click(), false);
   assert.equal(canceled.error, undefined); assert.equal(page.url(), address);
   assert.equal(await page.evaluate(() => document.getElementById('main') === window.fixtureShell.main), true);
   assert.equal(await page.locator('[data-profile-photo-preview]').getAttribute('src'), blob);
   assert.deepEqual(await contactValues(page), changedContact);
   await assertNoProfileModal(page);
-  const accepted = await nativeDialog(page, () => back.click(), 'confirm', true);
+  const accepted = await confirmModal(page, () => back.click(), true);
   assert.equal(accepted.error, undefined);
+  await page.locator('#main [data-profile-settings]').waitFor({ state: 'detached' });
   await page.waitForURL(origin + '/portal'); await ready(page, false);
   await assertSoftSwap(page, documents, documentCount);
   assert.ok((await page.evaluate(() => window.revokedBlobs)).includes(blob));
@@ -668,15 +732,16 @@ for (const kind of ['photo', 'contact', 'both']) {
     await open(page);
     const blob = await makeDraft(page, kind), documentCount = documents.length;
     await rememberShell(page);
-    const canceled = await nativeDialog(page, () => page.evaluate(() => history.back()), 'confirm', false);
+    const canceled = await confirmModal(page, () => page.evaluate(() => history.back()), false);
     assert.equal(canceled.error, undefined);
     await page.waitForURL(origin + '/portal/settings'); await ready(page); await settle(page);
     assert.equal(await page.evaluate(() => document.getElementById('main') === window.fixtureShell.main), true);
     if (blob) assert.equal(await page.locator('[data-profile-photo-preview]').getAttribute('src'), blob);
     if (kind !== 'photo') assert.deepEqual(await contactValues(page), changedContact);
     await assertNoProfileModal(page);
-    const accepted = await nativeDialog(page, () => page.evaluate(() => history.back()), 'confirm', true);
+    const accepted = await confirmModal(page, () => page.evaluate(() => history.back()), true);
     assert.equal(accepted.error, undefined);
+    await page.locator('#main [data-profile-settings]').waitFor({ state: 'detached' });
     await page.waitForURL(origin + '/portal/announcements'); await ready(page, false);
     await assertSoftSwap(page, documents, documentCount);
     if (blob) assert.ok((await page.evaluate(() => window.revokedBlobs)).includes(blob));
@@ -770,7 +835,11 @@ test('only photo removal uses SynapseConfirm; cancel preserves both drafts, acce
   const { page, state } = await pageFor(t, { kind: 'employee', hasPhoto: true });
   const upload = page.getByRole('button', { name: 'Upload picture', exact: true }), remove = page.getByRole('button', { name: 'Remove picture', exact: true });
   const uploadBox = await upload.boundingBox(), removeBox = await remove.boundingBox();
-  assert.ok(Math.abs(uploadBox.y - removeBox.y) < 1); assert.ok(Math.abs(uploadBox.height - removeBox.height) < 1);
+  assert.ok(uploadBox && removeBox && uploadBox.width > 0 && removeBox.width > 0);
+  assert.ok(Math.abs(uploadBox.height - removeBox.height) < 1, 'Wrapped pane actions retain equal control heights');
+  assert.equal(await upload.evaluate(button => button.form === document.getElementById('profilePhotoForm')), true);
+  assert.equal(await remove.evaluate(button => button.closest('[data-profile-photo-remove]')?.parentElement ===
+    document.querySelector('button[form="profilePhotoForm"]').parentElement), true, 'Upload and removal share one responsive action group');
   assert.equal(await page.getByRole('heading', { name: 'Appearance', exact: true }).count(), 0);
   const blob = await makeDraft(page, 'both'), address = page.url();
   await remove.click(); await page.locator('#synapseConfirmModal.show').waitFor();
@@ -889,8 +958,9 @@ for (const operation of ['photo', 'contact']) {
     await page.getByRole('button', { name: operation === 'photo' ? 'Upload picture' : 'Save emergency contact', exact: true }).click();
     await waitFor(() => state.posts.length === 1 && state.posts[0].finished, 'Synthetic non-JSON response must be returned');
     await page.waitForFunction(() => !document.querySelector('[data-profile-settings] form[aria-busy="true"]'));
-    const selector = operation === 'photo' ? '[data-profile-photo-feedback]' : '[data-emergency-contact-feedback]';
-    assert.match(await page.locator(selector).innerText(), /response|save|JSON|Unexpected|check|received/i);
+    const selector = operation === 'photo' ? '[data-profile-photo-feedback]' : '#synapse-toast-container .synapse-toast-message';
+    await page.waitForFunction(selector => [...document.querySelectorAll(selector)].some(element => /response|save|JSON|Unexpected|check|received/i.test(element.textContent)), selector);
+    assert.match(await page.locator(selector).last().innerText(), /response|save|JSON|Unexpected|check|received/i);
     if (operation === 'photo') assert.equal(await page.locator('#profilePhotoUpload').evaluate(input => input.files.length), 1);
     else assert.deepEqual(await contactValues(page), changedContact);
     await expectDirtyStay(page, state);
@@ -915,7 +985,7 @@ test('untrusted saved photo URLs cannot redirect avatar requests or clear the pe
 for (const operation of ['photo', 'contact', 'remove']) {
   test(`JavaScript-disabled native ${operation} POST preserves the form/CSRF contract and returns to fixed settings`, async t => {
     const { page, state, documents } = await pageFor(t, { javaScript: false, hasPhoto: operation === 'remove' });
-    await assertSettingsPage(page);
+    await assertSettingsPage(page, { standalone: true });
     if (operation === 'photo') await page.locator('#profilePhotoUpload').setInputFiles({ name: 'native.png', mimeType: 'image/png', buffer: png });
     if (operation === 'contact') await fillContact(page);
     const selector = operation === 'photo' ? 'Upload picture' : operation === 'contact' ? 'Save emergency contact' : 'Remove picture';
@@ -925,7 +995,7 @@ for (const operation of ['photo', 'contact', 'remove']) {
     assert.equal(state.posts[0].path, operation === 'photo' ? PHOTO : operation === 'contact' ? CONTACT : REMOVE);
     assert.ok(state.posts[0].token); assert.equal(state.posts[0].csrfHeader, undefined);
     assert.ok(documents.length >= 3, 'Native fallback posts and follows a server redirect');
-    await assertSettingsPage(page);
+    await assertSettingsPage(page, { standalone: true });
     if (operation === 'photo') {
       assert.equal(state.hasPhoto, true); assert.equal(state.posts[0].filename, 'native.png');
       assert.equal(await page.locator('[data-profile-photo-remove]').isVisible(), true);

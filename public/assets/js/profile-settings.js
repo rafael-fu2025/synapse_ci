@@ -53,8 +53,23 @@
         feedback.className = `small ${error ? 'text-danger' : 'text-muted'}`;
       }
       function contactMessage(message, tone = 'muted') {
-        contactFeedback.textContent = message;
+        const text = typeof message === 'string' ? message.trim() : '';
+        const hasToast = typeof window.SynapseToast?.show === 'function';
+        if (!text || hasToast) {
+          contactFeedback.textContent = '';
+          contactFeedback.className = 'small text-muted mb-0';
+          contactFeedback.hidden = true;
+          if (text && hasToast && (tone === 'success' || tone === 'danger')) {
+            window.SynapseToast.show(text, {
+              type: tone === 'success' ? 'success' : 'error',
+              key: 'emergency-contact',
+            });
+          }
+          return;
+        }
+        contactFeedback.textContent = text;
         contactFeedback.className = `small text-${tone} mb-0`;
+        contactFeedback.hidden = false;
       }
       function previewSelection(announce = true) {
         clearPreview(); input.setCustomValidity('');
@@ -86,13 +101,13 @@
         afterSharedListener(() => { if (!event.defaultPrevented) previewSelection(); });
       }, { signal: events.signal });
       function updateContactDraft() {
-        contactMessage(contactDirty() ? 'Unsaved changes. Save emergency contact to keep them.' : 'Saved contact details restored.');
+        contactMessage('');
         afterSharedListener();
       }
       contact.addEventListener('input', updateContactDraft, { signal: events.signal });
       contact.addEventListener('change', updateContactDraft, { signal: events.signal });
       contact.addEventListener('reset', event => {
-        afterSharedListener(() => { if (!event.defaultPrevented) contactMessage('Saved contact details restored.'); });
+        afterSharedListener(() => { if (!event.defaultPrevented) contactMessage(''); });
       }, { signal: events.signal });
 
       function guardNavigation(event) {
@@ -105,7 +120,10 @@
           return;
         }
         // Browser-restored values can be dirty without having dispatched an input event.
-        if ((photoDirty() || contactDirty()) && !window.SynapseNavigation?.hasUnsavedChanges() && !window.confirm('You have unsaved changes. Leave this page?')) event.preventDefault();
+        if ((photoDirty() || contactDirty()) && !window.SynapseNavigation?.hasUnsavedChanges()) {
+          if (event.detail && typeof event.detail === 'object') event.detail.dirty = true;
+          else if (!window.confirm('You have unsaved changes. Leave this page?')) event.preventDefault();
+        }
       }
       function guardUnload(event) {
         if (!active() || (!pending && !photoDirty() && !contactDirty())) return;
@@ -149,7 +167,8 @@
           finishLoading = window.SynapseLoading?.begin(owner, { label: editingContact ? 'Saving…' : deleting ? 'Removing picture…' : 'Compressing and saving…', button: event.submitter }) || finishLoading;
         } catch (_) { /* Inline feedback remains available without the loading UI. */ }
         controls.forEach(([control]) => { control.disabled = true; });
-        tell(editingContact ? 'Saving emergency contact…' : deleting ? 'Removing your picture…' : 'Uploading and compressing your picture…');
+        if (editingContact) contactMessage('');
+        else tell(deleting ? 'Removing your picture…' : 'Uploading and compressing your picture…');
         const timeout = setTimeout(() => job.controller.abort(), editingContact ? 45000 : 120000);
         let finished = false;
         job.finish = () => {
@@ -184,6 +203,7 @@
               field.defaultValue = baseline[index];
             });
             contactMessage(typeof payload.message === 'string' ? payload.message.slice(0, 1500) : 'Emergency contact updated.', 'success');
+            document.dispatchEvent(new CustomEvent('synapse:emergency-contact-updated', { detail: saved }));
           } else {
             if (typeof payload.has_photo !== 'boolean' || payload.has_photo === deleting || typeof payload.photo_url !== 'string') throw new Error('The save response was incomplete. Reload to check your picture before retrying.');
             const fallback = panel.dataset.defaultAvatar;

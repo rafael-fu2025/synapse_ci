@@ -18,16 +18,20 @@ use App\Services\Scheduling\SchedulingClock;
 
 final class GuidanceController extends BaseController
 {
-    private GuidanceCaseService $caseService;
+    private ?GuidanceCaseService $caseService = null;
     private CounsellingCaseModel $caseModel;
     private CounsellingSessionModel $sessionModel;
     private ?\Closure $actorResolver = null;
 
     public function __construct()
     {
-        $this->caseService = new GuidanceCaseService();
         $this->caseModel = new CounsellingCaseModel();
         $this->sessionModel = new CounsellingSessionModel();
+    }
+
+    private function caseService(): GuidanceCaseService
+    {
+        return $this->caseService ??= new GuidanceCaseService();
     }
 
     /**
@@ -206,7 +210,7 @@ final class GuidanceController extends BaseController
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try {
             $actor = $this->freshActor('guidance.cases.read');
-            $package = $this->caseService->getCaseDetails($id);
+            $package = $this->caseService()->getCaseDetails($id);
             $tenantId = (int) $package['case']['tenant_id'];
 
             // Find if there is an in_progress active session
@@ -218,11 +222,11 @@ final class GuidanceController extends BaseController
 
             $decryptedNote = null;
             if ($activeSession !== null) {
-                $decryptedNote = $this->caseService->getDecryptedSessionNote((int) $activeSession['id']);
+                $decryptedNote = $this->caseService()->getDecryptedSessionNote((int) $activeSession['id']);
             }
 
             // Outcome plaintext is fetched only through its fresh, audited read path.
-            $outcomes = $this->caseService->getDecryptedCaseOutcomes($id);
+            $outcomes = $this->caseService()->getDecryptedCaseOutcomes($id);
 
             $clinicalHistory = [
                 'controlled_forms'     => [],
@@ -368,7 +372,7 @@ final class GuidanceController extends BaseController
     /** Case access filters protect the subject's private photo just like the workspace. */
     public function casePhoto(int $id)
     {
-        $package = $this->caseService->getCaseDetails($id);
+        $package = $this->caseService()->getCaseDetails($id);
         $patient = $package['patient'];
         $photos = new \App\Services\ProfilePhotoService();
         $path = $photos->path((int) $package['case']['tenant_id'], (int) $patient['id']);
@@ -422,7 +426,7 @@ final class GuidanceController extends BaseController
             throw new \InvalidArgumentException('Case title and person are required.', 422);
         }
 
-        $case = $this->caseService->createCase($personId, (int) $actor['id'], $title, $category, $summaryNotes, $actor);
+        $case = $this->caseService()->createCase($personId, (int) $actor['id'], $title, $category, $summaryNotes, $actor);
         $redirect = '/guidance/cases/' . $case['case']['id'];
         $successMsg = "Case {$case['case']['case_number']} opened successfully.";
 
@@ -437,10 +441,10 @@ final class GuidanceController extends BaseController
         try {
             $this->response->setHeader('Cache-Control', 'private, no-store');
             $this->freshActor('guidance.cases.read');
-            $session = $this->caseService->getSession($sessionId);
+            $session = $this->caseService()->getSession($sessionId);
 
-            $package = $this->caseService->getCaseDetails((int) $session['case_id']);
-            $note = $this->caseService->getDecryptedSessionNote($sessionId);
+            $package = $this->caseService()->getCaseDetails((int) $session['case_id']);
+            $note = $this->caseService()->getDecryptedSessionNote($sessionId);
 
             $author = null;
             if ($note !== null && !empty($note['author_id'])) {
@@ -473,7 +477,7 @@ final class GuidanceController extends BaseController
     public function startSession(int $caseId)
     {
         return $this->mutate(function (array $actor) use ($caseId): array {
-            $this->caseService->openSession($caseId, (int) $actor['id'], $this->postedSessionType(), actor: $actor);
+            $this->caseService()->openSession($caseId, (int) $actor['id'], $this->postedSessionType(), actor: $actor);
             return ['/guidance/cases/' . $caseId, 'Counseling session opened.', $this->caseRefresh($caseId)];
         }, permission: 'guidance.cases.create');
     }
@@ -482,7 +486,7 @@ final class GuidanceController extends BaseController
     {
         return $this->mutate(function (array $actor) use ($caseId): array {
             $this->requireConfirmation();
-            $this->caseService->closeCase($caseId, confirmed: true,
+            $this->caseService()->closeCase($caseId, confirmed: true,
                 closureDisposition: $this->postedOutcome('closure_disposition'), actor: $actor);
             return ['/guidance/cases/' . $caseId, 'Case closed.', $this->caseRefresh($caseId)];
         });
@@ -492,7 +496,7 @@ final class GuidanceController extends BaseController
     {
         return $this->mutate(function (array $actor) use ($caseId): array {
             $this->requireConfirmation();
-            $this->caseService->monitorCase($caseId, $actor);
+            $this->caseService()->monitorCase($caseId, $actor);
             return ['/guidance/cases/' . $caseId, 'Case moved to monitoring.', $this->caseRefresh($caseId)];
         });
     }
@@ -502,8 +506,8 @@ final class GuidanceController extends BaseController
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try {
             $actor = $this->freshActor('guidance.cases.read');
-            $history = $this->caseService->getDecryptedSessionNoteHistory($sessionId);
-            $session = $this->caseService->getSession($sessionId);
+            $history = $this->caseService()->getDecryptedSessionNoteHistory($sessionId);
+            $session = $this->caseService()->getSession($sessionId);
             $case = $this->caseModel->scoped()->find((int) $session['case_id']);
             return view('guidance/sessions/history', [
                 'title' => 'Finalized Note Version History', 'history' => $history,
@@ -558,15 +562,15 @@ final class GuidanceController extends BaseController
     public function saveSessionNotes(int $sessionId)
     {
         return $this->mutate(function (array $actor) use ($sessionId): array {
-            $session = $this->caseService->getSession($sessionId);
+            $session = $this->caseService()->getSession($sessionId);
             $notes = (string) $this->request->getPost('notes');
             $action = (string) $this->request->getPost('action');
 
             if ($action === 'finalize') {
-                $this->caseService->finalizeSessionNotes($sessionId, $notes, (int) $actor['id'], $actor);
+                $this->caseService()->finalizeSessionNotes($sessionId, $notes, (int) $actor['id'], $actor);
                 $msg = 'Session notes finalized and encrypted into version history.';
             } else {
-                $this->caseService->saveDraftNotes($sessionId, $notes, (int) $actor['id'], $actor);
+                $this->caseService()->saveDraftNotes($sessionId, $notes, (int) $actor['id'], $actor);
                 $msg = 'Draft notes autosaved.';
             }
 
@@ -580,7 +584,7 @@ final class GuidanceController extends BaseController
     public function closeSession(int $sessionId)
     {
         return $this->mutate(function (array $actor) use ($sessionId): array {
-            $session = $this->caseService->getSession($sessionId);
+            $session = $this->caseService()->getSession($sessionId);
             $attachSheet = $this->request->getPost('attach_contact_sheet') === '1';
             $tenantId = (int) $actor['tenant_id'];
 
@@ -597,7 +601,7 @@ final class GuidanceController extends BaseController
                 }
             }
 
-            $this->caseService->closeSession($sessionId, $actor);
+            $this->caseService()->closeSession($sessionId, $actor);
             $message = 'Session closed successfully.';
 
             if ($attachSheet) {
@@ -655,7 +659,7 @@ final class GuidanceController extends BaseController
             if ($dueDate === '' || trim($actionPlan) === '') {
                 throw new \InvalidArgumentException('Due date and action plan are required.', 422);
             }
-            $this->caseService->addFollowup($caseId, null, $dueDate, $actionPlan, $actor);
+            $this->caseService()->addFollowup($caseId, null, $dueDate, $actionPlan, $actor);
             return ['/guidance/cases/' . $caseId, 'Action item assigned.', $this->caseRefresh($caseId)];
         });
     }
@@ -670,7 +674,7 @@ final class GuidanceController extends BaseController
             if ($followup === null) {
                 throw new \RuntimeException('Action item not found.', 404);
             }
-            $this->caseService->completeFollowup($followupId, $this->postedOutcome('completion_notes'), $actor);
+            $this->caseService()->completeFollowup($followupId, $this->postedOutcome('completion_notes'), $actor);
             return ['/guidance/cases/' . $followup['case_id'], 'Commitment marked as completed.', $this->caseRefresh((int) $followup['case_id'])];
         });
     }
@@ -679,7 +683,7 @@ final class GuidanceController extends BaseController
     {
         return $this->mutate(function (array $actor) use ($followupId): array {
             $this->requireConfirmation();
-            $followup = $this->caseService->missFollowup($followupId, $actor);
+            $followup = $this->caseService()->missFollowup($followupId, $actor);
             return ['/guidance/cases/' . $followup['case_id'], 'Commitment explicitly marked missed.', $this->caseRefresh((int) $followup['case_id'])];
         });
     }
@@ -693,12 +697,12 @@ final class GuidanceController extends BaseController
             // Keep existing queue forms and JSON redirect handling: the first POST
             // only opens a picker, without changing the ticket, case or session.
             if ($this->request->getPost('session_type') === null) {
-                $this->caseService->getTicketForSessionSelection($queueEntryId, $actor);
+                $this->caseService()->getTicketForSessionSelection($queueEntryId, $actor);
                 return ['/guidance/cases/choose-for-ticket/' . $queueEntryId, 'Choose a session type to start or resume.',
                     $this->navigationRefresh('/guidance/cases/choose-for-ticket/' . $queueEntryId, 'guidance.case-list')];
             }
             // The service scopes the guidance ticket and selects an owned case atomically.
-            $session = $this->caseService->openSessionForTicket($queueEntryId, (int) $actor['id'],
+            $session = $this->caseService()->openSessionForTicket($queueEntryId, (int) $actor['id'],
                 $this->postedSessionType(), $actor);
             return ['/guidance/cases/' . $session['case_id'], 'Counseling session opened.',
                 $this->navigationRefresh('/guidance/cases/' . $session['case_id'], 'guidance.case.' . $session['case_id'])];
@@ -710,7 +714,7 @@ final class GuidanceController extends BaseController
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try {
             $actor = $this->freshActor('guidance.cases.create');
-            $this->caseService->getTicketForSessionSelection($queueEntryId, $actor);
+            $this->caseService()->getTicketForSessionSelection($queueEntryId, $actor);
             return view('guidance/sessions/start', [
                 'title' => 'Choose Counseling Session Type', 'queueEntryId' => $queueEntryId,
                 'formAction' => site_url('/guidance/cases/start-for-ticket/' . $queueEntryId),
@@ -727,7 +731,7 @@ final class GuidanceController extends BaseController
     private function freshActor(?string $permission = null): array
     {
         return $this->actorResolver === null
-            ? $this->caseService->currentActor($permission)
+            ? (new \App\Services\Guidance\GuidanceAccessPolicy())->current($permission)
             : ($this->actorResolver)($permission);
     }
 
@@ -814,8 +818,49 @@ final class GuidanceController extends BaseController
     }
 
     /**
-     * GET guidance/students/(:num)/cumulative
-     * Consolidated read-only Guidance cumulative profile (demographics, MI history, survey interview status, visits).
+     * Guidance client directory. Identity browsing does not grant case-content access.
+     */
+    public function clients()
+    {
+        $this->response->setHeader('Cache-Control', 'private, no-store')->setHeader('Vary', 'X-Requested-With');
+        $fragment = $this->request->getGet('fragment') === '1';
+        try {
+            $actor = $this->freshActor('guidance.cases.read');
+            $page = \App\Libraries\TablePage::fromQuery($this->request->getGet(), ['all'], 'Guidance');
+            $directory = new \App\Services\Guidance\GuidanceClientDirectoryService();
+            $data = $directory->paginateClients($page, $actor) + [
+                'title' => 'Guidance Clients & Records',
+                'pageTitle' => 'Guidance Clients & Records',
+                'baseUrl' => site_url('/guidance/clients'),
+                'actor' => $actor,
+                'breadcrumbs' => [
+                    ['label' => 'Guidance', 'url' => site_url('/guidance')],
+                    ['label' => 'Clients & Records', 'url' => ''],
+                ],
+            ];
+            $body = $page->fragment
+                ? '<div data-table-content>' . view('guidance/clients/_results', $data, ['saveData' => false]) . '</div>'
+                : view('guidance/clients/index', $data);
+            return $this->response->setBody($body);
+        } catch (\Throwable $error) {
+            [$status, $message] = $this->safeFailure($error, 'clients');
+            if ($status === 500) {
+                $status = 503;
+                $message = 'The Guidance client directory is temporarily unavailable.';
+            }
+            if ($error instanceof \InvalidArgumentException && $status === 422) {
+                $message = $error->getMessage();
+            }
+            $this->response->setStatusCode($status);
+            return $fragment || $this->request->isAJAX()
+                ? $this->response->setJSON(['message' => $message])
+                : $this->response->setBody('<div class="alert alert-danger">' . esc($message) . '</div>');
+        }
+    }
+
+    /**
+     * GET guidance/clients/(:num), with the legacy cumulative route retained.
+     * Read-only longitudinal Guidance record with separately authorized histories.
      */
     public function cumulativeRecord(int $personId)
     {
@@ -823,17 +868,19 @@ final class GuidanceController extends BaseController
         try {
             $actor = $this->freshActor('guidance.cases.read');
             $service = new \App\Services\Guidance\GuidanceCumulativeService();
-            $record = $service->getStudentCumulativeRecord($personId, $actor);
+            $record = $service->getStudentCumulativeRecord($personId, $actor, $this->request->getGet());
             $person = $record['person'];
             $fullName = trim((string) ($person['last_name'] ?? '') . ', ' . (string) ($person['first_name'] ?? ''));
 
             return view('guidance/students/cumulative', $record + [
-                'title'       => 'Cumulative Guidance Record — ' . $fullName,
-                'pageTitle'   => 'Cumulative Guidance Record',
+                'title'       => 'Guidance Record — ' . $fullName,
+                'pageTitle'   => 'Guidance Record',
                 'actor'       => $actor,
+                'baseUrl'     => site_url('/guidance/clients/' . $personId),
                 'breadcrumbs' => [
                     ['label' => 'Guidance', 'url' => site_url('/guidance')],
-                    ['label' => 'Cumulative Record', 'url' => ''],
+                    ['label' => 'Clients & Records', 'url' => site_url('/guidance/clients')],
+                    ['label' => $fullName, 'url' => ''],
                 ],
             ]);
         } catch (\Throwable $error) {

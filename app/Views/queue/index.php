@@ -5,7 +5,7 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex align-items-center gap-2">
+<div class="d-flex flex-wrap align-items-center gap-2">
   <button type="button"
           id="queue-call-next"
           class="btn btn-primary"
@@ -24,9 +24,9 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3 queue-board-toolbar">
   <div>
-    <h2 class="h5 fw-bold mb-0 text-dark">
+    <h2 class="h5 fw-bold mb-0 queue-board-title">
       <?= ($unit === 'clinic') ? 'University Clinic Queue Board' : 'Guidance & Counseling Queue Board' ?>
     </h2>
     <span class="text-muted small">
@@ -34,17 +34,16 @@
     </span>
   </div>
 
-  <div class="d-flex flex-wrap align-items-center gap-2">
+  <div class="d-flex flex-wrap align-items-center gap-2 queue-board-controls">
     <?= view('queue/no_show_history', ['noShows' => $summary['no_show'] ?? [], 'queueDate' => $queueDate]) ?>
-    <div class="d-flex align-items-center gap-2">
+    <div class="d-flex align-items-center gap-2 queue-date-field">
     <label for="queueDateFilter" class="form-label small text-muted mb-0">Date:</label>
     <!-- Custom date picker: visible trigger + ISO hidden value.
          The HTMX trigger lives on the hidden input so the request always
          carries the ISO date under its original param name. -->
     <input type="text"
            id="queueDateFilter"
-           class="form-control form-control-sm"
-           style="width: 160px;"
+           class="form-control form-control-sm queue-date-input"
            data-datepicker
            data-target="#queueDateFilter_iso">
     <input type="hidden"
@@ -87,13 +86,13 @@
         <?= csrf_field() ?>
         <input type="hidden" name="person_id" :value="selectedPerson?.id">
 
-        <div class="modal-body p-4" :inert="submitting || committed">
+        <div class="modal-body p-3 p-sm-4" :inert="submitting || committed">
           <div class="alert alert-warning" role="alert" x-show="feedback" x-text="feedback" x-cloak></div>
           <!-- Search box -->
           <div class="mb-3">
             <label class="form-label fw-semibold">Search Student or Employee</label>
             <div class="input-group">
-              <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
+              <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
               <input type="text"
                      class="form-control"
                      placeholder="Type Student ID, Employee ID, or Name..."
@@ -131,31 +130,31 @@
 
           <!-- Selected Patient Card -->
           <div x-show="selectedPerson" style="display: none;" class="card border-primary-subtle bg-primary-subtle p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-start">
+            <div class="d-flex justify-content-between align-items-start gap-2">
               <div>
                 <span class="badge bg-primary text-white text-uppercase" x-text="selectedPerson?.kind || ''"></span>
                 <h6 class="fw-bold text-dark mt-1 mb-0" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name) : ''"></h6>
                 <div class="text-muted small" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></div>
               </div>
-              <button type="button" class="btn btn-sm btn-link text-danger p-0" @click="changePerson()">Change</button>
+              <button type="button" class="btn btn-sm btn-link text-danger queue-change-person" @click="changePerson()">Change</button>
             </div>
           </div>
 
           <!-- Priority Selection -->
           <div class="mb-3">
             <label class="form-label fw-semibold">Triage Priority</label>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-3">
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="priority" id="priRoutine" value="routine" checked>
                 <label class="form-check-label" for="priRoutine">Routine</label>
               </div>
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="priority" id="priUrgent" value="urgent">
-                <label class="form-check-label text-warning fw-semibold" for="priUrgent">Urgent</label>
+                <label class="form-check-label queue-priority-urgent fw-semibold" for="priUrgent">Urgent</label>
               </div>
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="priority" id="priEmergency" value="emergency">
-                <label class="form-check-label text-danger fw-semibold" for="priEmergency">Emergency</label>
+                <label class="form-check-label queue-priority-emergency fw-semibold" for="priEmergency">Emergency</label>
               </div>
             </div>
           </div>

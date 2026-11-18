@@ -384,5 +384,198 @@ final class ClinicTranscriptEnhancementsTest extends FreshDatabaseTestCase
         self::assertCount(1, $pinned);
         self::assertSame('Enrollment Chest X-Ray Advisory', $pinned[0]['title']);
     }
+
+    public function testMedicineExpiryTrackingAcrossCatalogFormPaginationDispenseAndChart(): void
+    {
+        $inventory = new InventoryService($this->db);
+        $nearExpiry = date('Y-m-d', strtotime('+30 days'));
+        $expiredDate = date('Y-m-d', strtotime('-15 days'));
+
+        // Partial initial batch must fail with 422 before inserting a catalog row.
+        try {
+            $inventory->saveMedicine(null, [
+                'name' => 'Orphan Med ' . bin2hex(random_bytes(3)),
+                'generic_name' => 'Test',
+                'category' => 'Analgesic',
+                'dosage_form' => 'tablet',
+                'strength' => '500 mg',
+                'unit_of_measure' => 'tablet',
+                'minimum_stock_level' => 5,
+                'is_active' => 1,
+                'initial_batch_number' => 'LOT-PARTIAL',
+            ], $this->clinicAdminUserId, 'init-fail-' . bin2hex(random_bytes(4)));
+            self::fail('Expected InvalidArgumentException when initial batch fields are incomplete.');
+        } catch (\InvalidArgumentException $e) {
+            self::assertSame(422, $e->getCode());
+        }
+
+        $medName = 'Cetirizine Expiry ' . bin2hex(random_bytes(3));
+        $created = $inventory->saveMedicine(null, [
+            'name' => $medName,
+            'generic_name' => 'Cetirizine',
+            'category' => 'Custom Antihistamine Class',
+            'dosage_form' => 'tablet',
+            'strength' => '10 mg',
+            'unit_of_measure' => 'tablet',
+            'minimum_stock_level' => 5,
+            'is_active' => 1,
+            'initial_batch_number' => 'LOT-NEAR-01',
+            'initial_expiration_date' => $nearExpiry,
+            'initial_quantity' => 25,
+            'initial_supplier' => 'Mercury Drug',
+            'initial_reference' => 'PO-2026-01',
+        ], $this->clinicAdminUserId, 'init-ok-' . bin2hex(random_bytes(4)));
+        self::assertSame(25, (int) $created['total_stock']);
+
+        // Adding the same medicine again with a new batch/expiry merges into the existing medicine row.
+        $laterExpiry = date('Y-m-d', strtotime('+180 days'));
+        $merged = $inventory->saveMedicine(null, [
+            'name' => $medName,
+            'generic_name' => 'Cetirizine',
+            'category' => 'Custom Antihistamine Class',
+            'dosage_form' => 'tablet',
+            'strength' => '10 mg',
+            'unit_of_measure' => 'tablet',
+            'minimum_stock_level' => 5,
+            'is_active' => 1,
+            'initial_batch_number' => 'LOT-LATER-02',
+            'initial_expiration_date' => $laterExpiry,
+            'initial_quantity' => 15,
+            'initial_supplier' => 'Watsons',
+            'initial_reference' => 'PO-2026-02',
+        ], $this->clinicAdminUserId, 'init-merge-' . bin2hex(random_bytes(4)));
+        self::assertSame((int) $created['id'], (int) $merged['id']);
+        self::assertSame(40, (int) $merged['total_stock']);
+
+        // Suggestions automatically include newly saved medicine name & category alongside presets.
+        $suggestions = $inventory->catalogSuggestions();
+        self::assertContains($medName, $suggestions['options']['name']);
+        self::assertContains('Custom Antihistamine Class', $suggestions['options']['category']);
+        self::assertContains('Biogesic', $suggestions['options']['name']);
+        self::assertContains('syrup', $suggestions['options']['dosage_form']);
+
+        // Create a second medicine with an expired-only batch to verify expired filter and projection.
+        $expiredOnly = $inventory->saveMedicine(null, [
+            'name' => 'Expired Only ' . bin2hex(random_bytes(3)),
+            'generic_name' => 'Amoxicillin',
+            'category' => 'Antibiotic',
+            'dosage_form' => 'capsule',
+            'strength' => '500 mg',
+            'unit_of_measure' => 'capsule',
+            'minimum_stock_level' => 5,
+            'is_active' => 1,
+        ], $this->clinicAdminUserId, 'exp-med-' . bin2hex(random_bytes(4)));
+        $this->db->table('clinic_medicine_batches')->insert([
+            'tenant_id' => $this->tenantId,
+            'medicine_id' => (int) $expiredOnly['id'],
+            'batch_number' => 'LOT-OLD-01',
+            'expiration_date' => $expiredDate,
+            'initial_quantity' => 8,
+            'remaining_quantity' => 8,
+            'status' => 'active',
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+        $this->db->table('clinic_medicines')->where('id', (int) $expiredOnly['id'])->update(['total_stock' => 8]);
+
+        $expiringPage = $inventory->paginateMedicines(TablePage::fromQuery([
+            'q' => $medName, 'status' => 'expiring_soon', 'page' => 1, 'per_page' => 25,
+        ]));
+        self::assertCount(1, $expiringPage['medicines']);
+        self::assertSame($nearExpiry, $expiringPage['medicines'][0]['next_expiration_date']);
+
+        $expiredPage = $inventory->paginateMedicines(TablePage::fromQuery([
+            'status' => 'expired', 'page' => 1, 'per_page' => 25,
+        ]));
+        self::assertNotEmpty($expiredPage['medicines']);
+        $foundExpired = array_values(array_filter($expiredPage['medicines'], fn ($r) => (int) $r['id'] === (int) $expiredOnly['id']));
+        self::assertCount(1, $foundExpired);
+        self::assertNull($foundExpired[0]['next_expiration_date']);
+        self::assertSame($expiredDate, $foundExpired[0]['earliest_expired_date']);
+
+        $resultsHtml = view('inventory/_results', [
+            'medicines' => array_merge($expiringPage['medicines'], $foundExpired),
+            'pagination' => ['filtered' => 2, 'page' => 1, 'per_page' => 25, 'pages' => 1, 'total' => 2, 'from' => 1, 'to' => 2],
+            'filters' => ['q' => '', 'status' => 'all', 'per_page' => 25],
+            'baseUrl' => site_url('/clinic/inventory'),
+            'canManage' => true,
+            'canWrite' => true,
+        ], ['saveData' => false]);
+        self::assertStringContainsString('Earliest expiry', $resultsHtml);
+        self::assertStringContainsString($nearExpiry, $resultsHtml);
+        self::assertStringContainsString('Within 90 days', $resultsHtml);
+        self::assertStringContainsString($expiredDate, $resultsHtml);
+        self::assertStringContainsString('Expired lot only', $resultsHtml);
+
+        // Create and Edit forms render initial expiry / summary fields and combobox choices cleanly.
+        $createFormHtml = view('inventory/catalog', [
+            'medicine' => null,
+            'catalogSuggestions' => $suggestions,
+            'title' => 'Add Medicine',
+            'pageTitle' => 'Add Medicine',
+            'formAction' => site_url('/clinic/inventory/store'),
+            'cancelUrl' => site_url('/clinic/inventory'),
+            'formModalPage' => true,
+            'idempotencyKey' => 'form-key-create',
+            'breadcrumbs' => [],
+        ], ['saveData' => false]);
+        self::assertStringContainsString('name="initial_expiration_date"', $createFormHtml);
+        self::assertStringContainsString('data-datepicker', $createFormHtml);
+        self::assertStringContainsString('name="initial_batch_number"', $createFormHtml);
+        self::assertStringContainsString('data-catalog-combobox="name"', $createFormHtml);
+        self::assertStringContainsString('data-catalog-combobox="category"', $createFormHtml);
+        self::assertStringContainsString('data-catalog-combobox="dosage_form"', $createFormHtml);
+        self::assertStringContainsString($medName, $createFormHtml);
+        self::assertStringContainsString('Custom Antihistamine Class', $createFormHtml);
+
+        $details = $inventory->details((int) $created['id']);
+        $editFormHtml = view('inventory/catalog', [
+            'medicine' => $details['medicine'],
+            'title' => 'Edit Medicine',
+            'pageTitle' => 'Edit Medicine',
+            'formAction' => site_url('/clinic/inventory/' . $created['id'] . '/update'),
+            'cancelUrl' => site_url('/clinic/inventory/' . $created['id']),
+            'formModalPage' => true,
+            'idempotencyKey' => 'form-key-edit',
+            'breadcrumbs' => [],
+        ], ['saveData' => false]);
+        self::assertStringContainsString('Current batch expiry summary', $editFormHtml);
+        self::assertStringContainsString($nearExpiry, $editFormHtml);
+
+        // Dispense dropdown catalog model + stepper + patient history chart include expiry dates.
+        $dispenseList = (new \App\Models\ClinicMedicineModel($this->db))->getDispenseCatalogList();
+        $medInDropdown = array_values(array_filter($dispenseList, fn ($m) => (int) $m['id'] === (int) $created['id']));
+        self::assertCount(1, $medInDropdown);
+        self::assertSame($nearExpiry, $medInDropdown[0]['next_expiration_date']);
+
+        $encService = new EncounterService(db: $this->db);
+        $started = $encService->startEncounter($this->studentId, $this->physicianUserId);
+        $enc = $started['encounter'];
+        $encId = (int) $enc['id'];
+        $encounterPackage = $encService->getEncounterDetails($encId);
+        $stepperHtml = view('clinic/encounters/stepper', [
+            'title'              => 'Visit: Villanueva',
+            'pageTitle'          => 'Clinical Consultation Stepper',
+            'encounter'          => $encounterPackage,
+            'healthProfile'      => [],
+            'studentProfile'     => null,
+            'employeeProfile'    => null,
+            'availableMedicines' => $dispenseList,
+            'complaintCatalog'   => \App\Services\Clinic\EncounterService::COMPLAINT_CATALOG,
+            'schoolYear'         => '2026-2027',
+            'dispenseKey'        => 'disp-view-key',
+            'canDispense'        => true,
+            'canSeal'            => true,
+            'canAddendum'        => false,
+            'breadcrumbs'        => [],
+        ], ['saveData' => false]);
+        self::assertStringContainsString('Expiring ' . date('M j, Y', strtotime($nearExpiry)), $stepperHtml);
+
+        $inventory->dispense($encId, (int) $created['id'], 2, 'Once daily', $this->clinicAdminUserId, 'disp-hist-' . bin2hex(random_bytes(4)));
+        $chart = (new PatientHistoryService($this->db))->getPatientChart($this->studentId, includeAppointments: false);
+        $chartDispensations = $chart['dispensation_history'] ?? [];
+        self::assertNotEmpty($chartDispensations);
+        self::assertSame($nearExpiry, $chartDispensations[0]['expiration_date']);
+    }
 }
 

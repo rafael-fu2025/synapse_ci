@@ -1,0 +1,54 @@
+{
+  "suite_version": "2026.11-draft.1",
+  "target_application_commit": "884b9f0d647b9b7deb0085ac6af8d4520a269c53",
+  "historical_source_commit": "0383939de24119936dee372f86fb4565d12c42d7",
+  "canonical_source": "papers/blackbox/sections",
+  "generated_root_outputs": [
+    "papers/blackbox/SYNAPSE-BlackBox-Testing.md",
+    "papers/blackbox/SYNAPSE-BlackBox-Testing.html"
+  ],
+  "section_files": [
+    "papers/blackbox/sections/01-authentication-hosts.md",
+    "papers/blackbox/sections/02-portal-scheduling-profile.md",
+    "papers/blackbox/sections/03-clinic-core.md",
+    "papers/blackbox/sections/04-clinic-extensions.md",
+    "papers/blackbox/sections/05-guidance-core.md",
+    "papers/blackbox/sections/06-guidance-intake-governance.md",
+    "papers/blackbox/sections/07-guidance-forms-episodes.md",
+    "papers/blackbox/sections/08-guidance-assessments-evaluations.md",
+    "papers/blackbox/sections/09-referrals.md",
+    "papers/blackbox/sections/10-team-workspace-web.md",
+    "papers/blackbox/sections/11-bmg-bookkeeping.md",
+    "papers/blackbox/sections/12-bmg-hardware.md",
+    "papers/blackbox/sections/13-administration.md",
+    "papers/blackbox/sections/14-realtime-notifications.md",
+    "papers/blackbox/sections/15-ai-insights.md",
+    "papers/blackbox/sections/16-mobile-personal.md",
+    "papers/blackbox/sections/17-mobile-team-workspace.md",
+    "papers/blackbox/sections/18-mobile-platform.md",
+    "papers/blackbox/sections/19-responsive-web.md",
+    "papers/blackbox/sections/20-guidance-mobile-api.md"
+  ],
+  "expected_case_count": 245,
+  "legacy_counts": {
+    "historical_total": 119,
+    "RETAIN": 72,
+    "REWRITE": 42,
+    "RETIRED": 5,
+    "current_total_from_legacy_scope": 114
+  },
+  "allowed_lifecycles": [
+    "READY",
+    "DRAFT",
+    "CONDITIONAL"
+  ],
+  "allowed_verdicts": [
+    "NOT_RUN",
+    "PASS",
+    "FAIL",
+    "BLOCKED",
+    "NOT_IN_RUN"
+  ],
+  "default_verdict": "NOT_RUN",
+  "archive_path": "papers/blackbox/archive/2026-11-02"
+}

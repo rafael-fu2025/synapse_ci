@@ -82,6 +82,7 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Guidance Workstation</li>
           <?= $sidebarLink('guidance', 'guidance', 'Guidance Dashboard', 'ph-light ph-squares-four', ['guidance.cases.read', 'guidance.queue.read', 'referrals.read'], true) ?>
           <?= $sidebarLink('guidance', 'guidance/queue', 'Guidance Queue', 'ph-light ph-clock-countdown', ['guidance.queue.read']) ?>
+          <?= $sidebarLink('guidance', 'guidance/clients', 'Clients & Records', 'ph-light ph-address-book', ['guidance.cases.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/cases', 'Counseling Cases (Encrypted)', 'ph-light ph-folder-notch-open', ['guidance.cases.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/appointments', 'Appointments', 'ph-light ph-calendar-check', ['guidance.schedule.read']) ?>
           <?= $sidebarLink('guidance', 'guidance/referrals', 'Clinic-Guidance Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>

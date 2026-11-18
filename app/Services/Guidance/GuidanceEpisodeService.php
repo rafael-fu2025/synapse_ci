@@ -47,7 +47,7 @@ class GuidanceEpisodeService
     private GuidancePractitionerService $practitionerService;
     private GuidanceTransferService $transferService;
     private GuidanceAccessPolicy $accessPolicy;
-    private EncryptionService $encryptionService;
+    private ?EncryptionService $encryptionService;
     private BaseConnection $db;
 
     public function __construct(
@@ -111,7 +111,8 @@ class GuidanceEpisodeService
             accessPolicy: $this->accessPolicy,
             db: $this->db
         );
-        $this->encryptionService = $encryptionService ?? new EncryptionService();
+        // Metadata-only reads need no encryption keys; legacy entry points initialize them.
+        $this->encryptionService = $encryptionService;
     }
 
     /**
@@ -124,6 +125,7 @@ class GuidanceEpisodeService
      */
     public function openEpisode(int $personId, array $data, ?int $tenantId = null): array
     {
+        $this->encryptionService ??= new EncryptionService();
         $actor = $data['actor'] ?? null;
         $authority = $this->resolveActor($actor);
         $tenantId = $tenantId !== null ? $tenantId : (int) ($authority['tenant_id'] ?? CurrentTenant::id());
@@ -172,6 +174,7 @@ class GuidanceEpisodeService
             if (!empty($case['person_id']) && (int) $case['person_id'] !== $personId) {
                 throw new InvalidArgumentException('Counseling case subject does not match episode person.', 422);
             }
+            $this->assertCanAuthorizeLinkedCase($authority, $case);
         }
 
         $status = (string) ($data['status'] ?? 'open');
@@ -212,6 +215,87 @@ class GuidanceEpisodeService
     }
 
     /**
+     * Read authorized episode metadata for a same-tenant student or employee.
+     *
+     * Returns every readable row, newest first, so callers can count and paginate
+     * this person's summaries without loading episode details or clinical content.
+     * A linked case must also be readable; invalid or restricted links are omitted.
+     *
+     * @param array<string, mixed>|null $actor Optional caller identity hint
+     * @return list<array{id: mixed, tenant_id: mixed, person_id: mixed, case_id: mixed,
+     *     intake_referral_id: mixed, status: string, opened_at: string, closed_at: ?string,
+     *     primary_counselor_user_id: mixed}>
+     */
+    public function getPersonEpisodeSummaries(int $personId, ?array $actor = null): array
+    {
+        $authority = $this->accessPolicy->resolve($actor, 'guidance.cases.read');
+        $tenantId = (int) $authority['tenant_id'];
+
+        $person = $this->db->table('people')
+            ->select('id')
+            ->where('tenant_id', $tenantId)
+            ->where('id', $personId)
+            ->where('deleted_at', null)
+            ->whereIn('kind', ['student', 'employee'])
+            ->get()->getRowArray();
+        if ($person === null) {
+            throw new InvalidArgumentException('Person record not found.', 404);
+        }
+
+        if (!$this->db->tableExists('guidance_episodes')) {
+            return [];
+        }
+
+        $episodes = $this->db->table('guidance_episodes')
+            ->select('id, tenant_id, person_id, case_id, intake_referral_id, status, opened_at, closed_at, primary_counselor_user_id')
+            ->where('tenant_id', $tenantId)
+            ->where('person_id', $personId)
+            ->where('deleted_at', null)
+            ->orderBy('opened_at', 'DESC')
+            ->orderBy('id', 'DESC')
+            ->get()->getResultArray();
+
+        $readableEpisodes = [];
+        foreach ($episodes as $episode) {
+            try {
+                $this->assertCanReadEpisode($authority, $episode, $tenantId);
+                $readableEpisodes[] = $episode;
+            } catch (DomainException $exception) {
+                if ($exception->getCode() !== 403) {
+                    throw $exception;
+                }
+            }
+        }
+
+        // Fetch only the linked case authorization fields, once for this person.
+        $caseIds = array_values(array_unique(array_filter(array_column($readableEpisodes, 'case_id'))));
+        $readableCases = [];
+        if ($caseIds !== []) {
+            $cases = $this->db->table('counselling_cases')
+                ->select('id, tenant_id, person_id, counsellor_user_id')
+                ->where('tenant_id', $tenantId)
+                ->where('person_id', $personId)
+                ->where('deleted_at', null)
+                ->whereIn('id', $caseIds)
+                ->get()->getResultArray();
+            foreach ($cases as $case) {
+                try {
+                    $this->accessPolicy->assertCanReadCase($case, $authority);
+                    $readableCases[(int) $case['id']] = true;
+                } catch (DomainException $exception) {
+                    if ($exception->getCode() !== 403) {
+                        throw $exception;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_filter($readableEpisodes, static fn (array $episode): bool =>
+            $episode['case_id'] === null || isset($readableCases[(int) $episode['case_id']])
+        ));
+    }
+
+    /**
      * Retrieve full guidance episode details including linked referrals, appointments,
      * call slips, counseling case/sessions, and evaluations.
      *
@@ -222,81 +306,118 @@ class GuidanceEpisodeService
      */
     public function getEpisodeDetails(int $episodeId, ?int $tenantId = null, ?array $actor = null): array
     {
-        $authority = $this->resolveActor($actor);
-        $tenantId = $tenantId !== null ? $tenantId : (int) ($authority['tenant_id'] ?? CurrentTenant::id());
+        $this->encryptionService ??= new EncryptionService();
+        $authority = $this->resolveActor($actor, 'guidance.cases.read');
+        $resolvedTenantId = (int) $authority['tenant_id'];
+        if ($tenantId !== null && $tenantId !== $resolvedTenantId) {
+            throw new DomainException('Guidance tenant forbidden.', 403);
+        }
+        $tenantId = $resolvedTenantId;
 
         $episode = $this->episodeModel->scoped($tenantId)->find($episodeId);
         if ($episode === null) {
-            throw new InvalidArgumentException("Guidance episode {$episodeId} not found in tenant {$tenantId}.", 404);
+            throw new InvalidArgumentException('Guidance episode not found.', 404);
         }
-
-        // Enforce read access: guidance.cases.read_any OR assigned counselor OR supervisor
         $this->assertCanReadEpisode($authority, $episode, $tenantId);
 
-        // Gather linked person
-        $person = $this->personModel->scoped($tenantId)->find((int) $episode['person_id']);
-
-        // Gather primary counselor
+        $personId = (int) $episode['person_id'];
+        $person = $this->personModel->scoped($tenantId)->find($personId);
+        if ($person === null) {
+            throw new InvalidArgumentException('Episode client not found.', 404);
+        }
         $primaryCounselor = !empty($episode['primary_counselor_user_id'])
-            ? $this->userModel->scoped($tenantId)->find((int) $episode['primary_counselor_user_id'])
-            : null;
+            ? $this->userModel->scoped($tenantId)->select('id, person_id, username, role')
+                ->find((int) $episode['primary_counselor_user_id']) : null;
 
-        // Gather linked intake referral
-        $intakeReferral = null;
+        // Exact links only: an absent episode link never selects another case for this person.
+        $linkedIntake = null;
         if (!empty($episode['intake_referral_id'])) {
-            $intakeReferral = $this->intakeReferralModel->scoped($tenantId)->find((int) $episode['intake_referral_id']);
+            $linkedIntake = $this->intakeReferralModel->scoped($tenantId)
+                ->select('id, subject_person_id, linked_case_id, referral_number, source_type, priority_hint, status, submitted_at, created_at')
+                ->find((int) $episode['intake_referral_id']);
+            if ($linkedIntake === null) {
+                throw new InvalidArgumentException('Linked intake referral not found.', 404);
+            }
+            if ((int) $linkedIntake['subject_person_id'] !== $personId) {
+                throw new DomainException('Episode intake subject mismatch.', 403);
+            }
         }
-        if ($intakeReferral === null && !empty($episode['person_id'])) {
-            $intakeReferral = $this->intakeReferralModel->scoped($tenantId)
-                ->where('subject_person_id', (int) $episode['person_id'])
-                ->orderBy('id', 'DESC')
-                ->first();
-        }
 
-        // Gather appointments linked to episode
-        $appointments = $this->appointmentModel->scoped($tenantId)
-            ->where('episode_id', $episodeId)
-            ->orderBy('scheduled_date', 'ASC')
-            ->orderBy('scheduled_time', 'ASC')
-            ->findAll();
-
-        // Gather call slips linked to episode
-        $callSlips = $this->callSlipModel->scoped($tenantId)
-            ->where('episode_id', $episodeId)
-            ->orderBy('call_date', 'ASC')
-            ->orderBy('call_time', 'ASC')
-            ->findAll();
-
-        // Gather counseling case & sessions
         $case = null;
-        if (!empty($episode['case_id'])) {
-            $case = $this->caseModel->scoped($tenantId)->find((int) $episode['case_id']);
-        }
-        if ($case === null && !empty($episode['person_id'])) {
-            $case = $this->caseModel->scoped($tenantId)
-                ->where('person_id', (int) $episode['person_id'])
-                ->orderBy('id', 'DESC')
-                ->first();
-        }
-
         $sessions = [];
-        if ($case !== null && !empty($case['id'])) {
-            $sessions = $this->sessionModel->scoped($tenantId)
-                ->where('case_id', (int) $case['id'])
-                ->orderBy('id', 'ASC')
-                ->findAll();
+        if (!empty($episode['case_id'])) {
+            $linkedCase = $this->caseModel->scoped($tenantId)
+                ->select('id, tenant_id, person_id, counsellor_user_id')->find((int) $episode['case_id']);
+            if ($linkedCase === null) {
+                throw new InvalidArgumentException('Linked counseling case not found.', 404);
+            }
+            if ((int) $linkedCase['person_id'] !== $personId) {
+                throw new DomainException('Episode case subject mismatch.', 403);
+            }
+            $this->accessPolicy->assertCanReadCase($linkedCase, $authority);
+            if (!empty($linkedIntake['linked_case_id']) && (int) $linkedIntake['linked_case_id'] !== (int) $linkedCase['id']) {
+                throw new DomainException('Episode intake and case links disagree.', 403);
+            }
+            $package = (new GuidanceCaseService(accessPolicy: $this->accessPolicy, db: $this->db))
+                ->getCaseDetails((int) $linkedCase['id']);
+            $case = $package['case'];
+            $sessions = $package['sessions'];
+        } elseif (!empty($linkedIntake['linked_case_id'])) {
+            $intakeCase = $this->caseModel->scoped($tenantId)
+                ->select('id, tenant_id, person_id, counsellor_user_id')->find((int) $linkedIntake['linked_case_id']);
+            if ($intakeCase === null || (int) $intakeCase['person_id'] !== $personId) {
+                throw new InvalidArgumentException('Linked intake case not found.', 404);
+            }
+            $this->accessPolicy->assertCanReadCase($intakeCase, $authority);
+        }
+        $permissions = $authority['permissions'] ?? [];
+        $intakeReferral = in_array('guidance.intake.process', $permissions, true) ? $linkedIntake : null;
+
+        $appointments = in_array('guidance.schedule.read', $permissions, true)
+            ? $this->appointmentModel->scoped($tenantId)
+                ->select('id, episode_id, person_id, counselor_user_id, appointment_number, scheduled_date, scheduled_time, purpose, status, form_instance_id')
+                ->where('episode_id', $episodeId)->where('person_id', $personId)
+                ->orderBy('scheduled_date', 'ASC')->orderBy('scheduled_time', 'ASC')->findAll() : [];
+        $callSlips = in_array('guidance.call_slips.issue', $permissions, true)
+            ? $this->callSlipModel->scoped($tenantId)
+                ->select('id, episode_id, person_id, issuing_counselor_user_id, call_slip_number, call_date, call_time, purpose, attendance_status, parent_guardian_delivery, form_instance_id')
+                ->where('episode_id', $episodeId)->where('person_id', $personId)
+                ->orderBy('call_date', 'ASC')->orderBy('call_time', 'ASC')->findAll() : [];
+
+        $formContext = null;
+        $appointments = $this->filterEpisodeDocuments($appointments, $authority, $formContext);
+        $callSlips = $this->filterEpisodeDocuments($callSlips, $authority, $formContext);
+        $evaluations = [];
+        $formFields = array_intersect([
+            'id', 'tenant_id', 'person_id', 'created_by_user_id', 'form_definition_id', 'definition_revision_id',
+            'case_id', 'session_id', 'episode_id', 'appointment_id', 'referral_id', 'intake_id',
+            'instance_number', 'status', 'created_at', 'finalized_at',
+        ], $this->db->getFieldNames('guidance_form_instances'));
+        foreach ($this->formInstanceModel->scoped($tenantId)->select($formFields)
+            ->where('person_id', $personId)->where('episode_id', $episodeId)
+            ->orderBy('id', 'DESC')->findAll() as $instance) {
+            try {
+                $formContext ??= new GuidanceFormContextPolicy(db: $this->db);
+                $formContext->assertInstanceAccess($instance, $authority, false, true);
+            } catch (DomainException | InvalidArgumentException $error) {
+                if (!in_array($error->getCode(), [403, 404, 422], true)) {
+                    throw $error;
+                }
+                continue;
+            }
+            $evaluations[] = array_intersect_key($instance, array_flip([
+                'id', 'instance_number', 'status', 'form_definition_id', 'created_at', 'finalized_at',
+            ]));
         }
 
-        // Gather evaluations / controlled form instances
-        $evaluations = $this->formInstanceModel->scoped($tenantId)
-            ->where('person_id', (int) $episode['person_id'])
-            ->orderBy('id', 'DESC')
-            ->findAll();
-
-        $decryptedClosureNotes = null;
-        if (!empty($episode['closure_notes_cipher'])) {
-            $decryptedClosureNotes = $this->decryptClosureNotesPayload((string) $episode['closure_notes_cipher']);
-        }
+        // The read audit is required before releasing closure content or the assembled package.
+        (new AuditService(null, $this->db))->log(
+            'guidance.episode.read', 'guidance_episodes', (string) $episodeId, 'read', [],
+            (int) $authority['id'], (string) $authority['role']
+        );
+        $decryptedClosureNotes = !empty($episode['closure_notes_cipher'])
+            ? $this->decryptClosureNotesPayload((string) $episode['closure_notes_cipher']) : null;
+        unset($episode['closure_notes_cipher']);
 
         return array_merge($episode, [
             'episode'             => $episode,
@@ -312,6 +433,37 @@ class GuidanceEpisodeService
             'evaluations'         => $evaluations,
             'closure_notes'       => $decryptedClosureNotes,
         ]);
+    }
+
+    /** Validate document links before exposing their metadata or preview actions. */
+    private function filterEpisodeDocuments(array $records, array $authority, ?GuidanceFormContextPolicy &$formContext): array
+    {
+        $allowed = [];
+        foreach ($records as $record) {
+            if (!empty($record['form_instance_id'])) {
+                $fields = array_intersect([
+                    'id', 'tenant_id', 'person_id', 'created_by_user_id', 'form_definition_id', 'definition_revision_id',
+                    'case_id', 'session_id', 'episode_id', 'appointment_id', 'referral_id', 'intake_id',
+                ], $this->db->getFieldNames('guidance_form_instances'));
+                $instance = $this->formInstanceModel->scoped((int) $authority['tenant_id'])->select($fields)
+                    ->find((int) $record['form_instance_id']);
+                if ($instance === null || (int) $instance['person_id'] !== (int) $record['person_id']
+                    || (!empty($instance['episode_id']) && (int) $instance['episode_id'] !== (int) $record['episode_id'])) {
+                    continue;
+                }
+                try {
+                    $formContext ??= new GuidanceFormContextPolicy(db: $this->db);
+                    $formContext->assertInstanceAccess($instance, $authority, false, true);
+                } catch (DomainException | InvalidArgumentException $error) {
+                    if (!in_array($error->getCode(), [403, 404, 422], true)) {
+                        throw $error;
+                    }
+                    continue;
+                }
+            }
+            $allowed[] = $record;
+        }
+        return $allowed;
     }
 
     /**
@@ -331,6 +483,7 @@ class GuidanceEpisodeService
         ?int $tenantId = null,
         ?array $actor = null
     ): array {
+        $this->encryptionService ??= new EncryptionService();
         $authority = $this->resolveActor($actor);
         $tenantId = $tenantId !== null ? $tenantId : (int) ($authority['tenant_id'] ?? CurrentTenant::id());
 
@@ -404,6 +557,7 @@ class GuidanceEpisodeService
         ?int $tenantId = null,
         ?array $actor = null
     ): array {
+        $this->encryptionService ??= new EncryptionService();
         $authority = $this->resolveActor($actor);
         $tenantId = $tenantId !== null ? $tenantId : (int) ($authority['tenant_id'] ?? CurrentTenant::id());
 
@@ -418,6 +572,13 @@ class GuidanceEpisodeService
 
         // Enforce transfer authority (assigned counselor or supervisor/admin)
         $this->assertCanTransferEpisode($authority, $episode, $tenantId);
+
+        if (!empty($episode['case_id'])) {
+            $linkedCase = $this->caseModel->scoped($tenantId)->find((int) $episode['case_id']);
+            if ($linkedCase !== null) {
+                $this->assertCanAuthorizeLinkedCase($authority, $linkedCase);
+            }
+        }
 
         // Cannot transfer to self / same counselor
         if ((int) ($episode['primary_counselor_user_id'] ?? 0) === $newCounselorUserId) {
@@ -521,7 +682,7 @@ class GuidanceEpisodeService
         try {
             $decoded = json_decode($cipherPayload, true);
             if (is_array($decoded) && isset($decoded['cipher'], $decoded['nonce'], $decoded['tag'], $decoded['key_version'])) {
-                return $this->encryptionService->decrypt(
+                return ($this->encryptionService ??= new EncryptionService())->decrypt(
                     base64_decode((string) $decoded['cipher'], true),
                     base64_decode((string) $decoded['nonce'], true),
                     base64_decode((string) $decoded['tag'], true),
@@ -556,7 +717,7 @@ class GuidanceEpisodeService
             return;
         }
 
-        if ($primaryCounselorId > 0) {
+        if ($primaryCounselorId > 0 && $this->db->tableExists('guidance_supervision_assignments')) {
             $supAssignment = $this->db->table('guidance_supervision_assignments')
                 ->where('tenant_id', $tenantId)
                 ->where('associate_user_id', $primaryCounselorId)
@@ -643,6 +804,16 @@ class GuidanceEpisodeService
         }
 
         throw new DomainException('Episode transfer forbidden: actor is not authorized to transfer this episode.', 403);
+    }
+
+    private function assertCanAuthorizeLinkedCase(array $authority, array $case): void
+    {
+        $permissions = $authority['permissions'] ?? [];
+        if (in_array('guidance.cases.reassign', $permissions, true)) {
+            return;
+        }
+
+        $this->accessPolicy->assertCanWriteCase($case, $authority);
     }
 
     /**

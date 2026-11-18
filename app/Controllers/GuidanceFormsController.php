@@ -206,9 +206,14 @@ final class GuidanceFormsController extends BaseController
             $actor = $this->freshActor('guidance.cases.read');
             $bundle = $this->formService->getFinalizedRevision($instanceId, $revisionNumber, $actor);
 
+            $revision = $bundle['revision'];
+            if (is_array($revision)) {
+                unset($revision['snapshot_cipher'], $revision['snapshot_nonce'], $revision['snapshot_tag']);
+            }
+
             return $this->response->setJSON([
                 'status' => 'success',
-                'revision' => $bundle['revision'],
+                'revision' => $revision,
                 'data' => $bundle['data'],
                 'attestation' => $bundle['attestation'],
             ]);

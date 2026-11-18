@@ -14,14 +14,16 @@ $localTime = static function (?string $value): string {
   <div class="card border-0 shadow-sm">
     <div class="card-body p-3">
       <p class="small text-muted">This is an attendance history, not your clinical chart. Confidential medical and counseling notes are not displayed. Contact the department for records or follow-up instructions.</p>
-      <form method="get" action="<?= esc($baseUrl) ?>" class="d-flex flex-wrap align-items-end gap-2 mb-3" data-filter-form aria-label="Filter visit history">
-        <div class="col-12 col-sm-6 col-xl-4"><label class="form-label small mb-1" for="visitHistoryService">Service</label><select class="form-select form-select-sm" id="visitHistoryService" name="service">
+      <form method="get" action="<?= esc($baseUrl) ?>" class="row g-2 align-items-end mb-3" data-filter-form aria-label="Filter visit history">
+        <div class="col-12 col-sm-7 col-xl-5"><label class="form-label small mb-1" for="visitHistoryService">Service</label><select class="form-select form-select-sm" id="visitHistoryService" name="service">
           <?php foreach (['all' => 'All services', 'clinic' => 'University Clinic', 'guidance' => 'Guidance & Counseling'] as $value => $label): ?>
             <option value="<?= esc($value) ?>" <?= $filters['service'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
           <?php endforeach; ?>
         </select></div>
-        <button class="btn btn-primary btn-sm" type="submit">Filter</button>
-        <a class="btn btn-outline-secondary btn-sm" href="<?= esc($baseUrl) ?>" data-filter-reset>Reset</a>
+        <div class="col-12 col-sm-auto d-flex gap-2">
+          <button class="btn btn-primary btn-sm flex-fill flex-sm-grow-0" type="submit">Filter</button>
+          <a class="btn btn-outline-secondary btn-sm flex-fill flex-sm-grow-0" href="<?= esc($baseUrl) ?>" data-filter-reset>Reset</a>
+        </div>
       </form>
       <?= view('partials/live_filter_feedback') ?>
       <div data-filter-region="history">
@@ -29,17 +31,17 @@ $localTime = static function (?string $value): string {
           <div class="alert alert-light border mb-0" role="status">No completed visits<?= $filters['service'] === 'all' ? '' : ' for this service' ?> are recorded yet. Appointment requests, cancellations, and visits still in progress are not included.</div>
         <?php else: ?>
           <div class="table-responsive">
-            <table class="table align-middle mb-0">
+            <table class="table table-mobile-cards align-middle mb-0">
               <caption class="visually-hidden">Your completed visits, newest first</caption>
               <thead><tr><th scope="col">Visit date</th><th scope="col">Service</th><th scope="col">Attending staff</th><th scope="col">Attendance</th><th scope="col">Summary</th></tr></thead>
               <tbody>
                 <?php foreach ($visits as $visit): ?>
                   <tr data-visit-row>
-                    <td class="text-nowrap"><?= esc($localTime($visit['started_at'])) ?><small class="d-block text-muted">Completed: <?= esc($localTime($visit['completed_at'])) ?></small></td>
-                    <td><?= esc($visit['unit'] === 'clinic' ? 'University Clinic' : 'Guidance & Counseling') ?></td>
-                    <td class="text-break"><?= esc($visit['staff_name']) ?></td>
-                    <td><?= $visit['attendance'] === 'appointment' ? 'By appointment' : 'Walk-in' ?></td>
-                    <td><span class="badge bg-success mb-1">Completed</span><span class="d-block small"><?= esc($visit['summary']) ?></span></td>
+                    <td data-label="Visit date" class="text-nowrap"><?= esc($localTime($visit['started_at'])) ?><small class="d-block text-muted">Completed: <?= esc($localTime($visit['completed_at'])) ?></small></td>
+                    <td data-label="Service"><?= esc($visit['unit'] === 'clinic' ? 'University Clinic' : 'Guidance & Counseling') ?></td>
+                    <td data-label="Attending staff" class="text-break"><?= esc($visit['staff_name']) ?></td>
+                    <td data-label="Attendance"><?= $visit['attendance'] === 'appointment' ? 'By appointment' : 'Walk-in' ?></td>
+                    <td data-label="Summary"><span class="badge bg-success mb-1">Completed</span><span class="d-block small"><?= esc($visit['summary']) ?></span></td>
                   </tr>
                 <?php endforeach; ?>
               </tbody>
