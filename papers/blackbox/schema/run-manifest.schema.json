@@ -1,0 +1,613 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synapse.invalid/schemas/blackbox/run-manifest.schema.json",
+  "title": "SYNAPSE black-box run manifest",
+  "description": "Sanitized provenance for one black-box execution. Hashes establish internal consistency only. Trusted execution requires a separately verifiable attestation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "sanitized",
+    "suite_target_commit",
+    "tested_commit",
+    "dirty",
+    "dirty_patch_sha256",
+    "executed_by",
+    "migrations",
+    "flags",
+    "environment",
+    "browser_device",
+    "timezone",
+    "started_at",
+    "finished_at",
+    "artifacts",
+    "cleanup"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "schema_version": {
+      "type": "integer",
+      "const": 2
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+    },
+    "sanitized": {
+      "type": "boolean",
+      "const": true
+    },
+    "suite_target_commit": {
+      "$ref": "#/$defs/commit"
+    },
+    "tested_commit": {
+      "$ref": "#/$defs/commit"
+    },
+    "dirty": {
+      "type": "boolean"
+    },
+    "dirty_patch_sha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "executed_by": {
+      "$ref": "#/$defs/executedBy"
+    },
+    "attestation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/attestation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "migrations": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "$ref": "#/$defs/migration"
+      }
+    },
+    "flags": {
+      "type": "object",
+      "maxProperties": 1024,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,127}$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "$ref": "#/$defs/plainText512"
+          },
+          {
+            "type": "number",
+            "minimum": -1000000000000,
+            "maximum": 1000000000000
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "environment": {
+      "$ref": "#/$defs/environment"
+    },
+    "browser_device": {
+      "$ref": "#/$defs/browserDevice"
+    },
+    "timezone": {
+      "type": "string",
+      "pattern": "^(?:UTC|[A-Za-z_]+(?:/[A-Za-z0-9_+.-]+)+)$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 8192,
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "cleanup": {
+      "$ref": "#/$defs/cleanup"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "dirty": {
+            "const": true
+          }
+        },
+        "required": [
+          "dirty"
+        ]
+      },
+      "then": {
+        "properties": {
+          "dirty_patch_sha256": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "dirty_patch_sha256": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "plainText": {
+      "type": "string",
+      "pattern": "^[^\\u0000-\\u001f\\u007f\\r\\n]*$"
+    },
+    "plainText512": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/plainText"
+        },
+        {
+          "maxLength": 512
+        }
+      ]
+    },
+    "nonemptyPlainText": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/plainText"
+        },
+        {
+          "minLength": 1
+        }
+      ]
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?![./])(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[:\\\\\\u0000-\\u001f\\u007f])[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "executedBy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "role",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        },
+        "role": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "HUMAN",
+            "HUMAN_WITH_AUTOMATION"
+          ]
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "sha256",
+        "format",
+        "signer",
+        "trust_policy"
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "enum": [
+            "DSSE",
+            "MINISIGN",
+            "OPENPGP",
+            "X509-CMS"
+          ]
+        },
+        "signer": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 256
+            }
+          ]
+        },
+        "trust_policy": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 512
+            }
+          ]
+        }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "status",
+        "sha256"
+      ],
+      "properties": {
+        "name": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 256
+            }
+          ]
+        },
+        "version": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "APPLIED",
+            "ALREADY_APPLIED",
+            "NOT_APPLICABLE"
+          ]
+        },
+        "sha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "APPLIED",
+                  "ALREADY_APPLIED"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sha256": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "sha256": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_url",
+        "app_environment",
+        "database_engine",
+        "server_os",
+        "runtime_versions"
+      ],
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "app_environment": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        },
+        "database_engine": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        },
+        "server_os": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 256
+            }
+          ]
+        },
+        "runtime_versions": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 128,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
+          },
+          "additionalProperties": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/nonemptyPlainText"
+              },
+              {
+                "maxLength": 128
+              }
+            ]
+          }
+        }
+      }
+    },
+    "browserDevice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "browser",
+        "browser_version",
+        "device",
+        "viewport",
+        "user_agent_sha256",
+        "automation"
+      ],
+      "properties": {
+        "browser": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        },
+        "browser_version": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        },
+        "device": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 256
+            }
+          ]
+        },
+        "viewport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "width",
+            "height",
+            "device_scale_factor"
+          ],
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32768
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32768
+            },
+            "device_scale_factor": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 16
+            }
+          }
+        },
+        "user_agent_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "automation": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nonemptyPlainText"
+            },
+            {
+              "maxLength": 128
+            }
+          ]
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes",
+        "media_type",
+        "case_ids"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "media_type": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"
+        },
+        "case_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 245,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/caseId"
+          }
+        }
+      }
+    },
+    "caseId": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\\d{3}$"
+    },
+    "cleanup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "actions",
+        "notes",
+        "evidence"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "COMPLETED",
+            "NOT_REQUIRED",
+            "FAILED"
+          ]
+        },
+        "actions": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/nonemptyPlainText"
+              },
+              {
+                "maxLength": 512
+              }
+            ]
+          }
+        },
+        "notes": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/plainText"
+            },
+            {
+              "maxLength": 2048
+            }
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
+        }
+      }
+    }
+  }
+}

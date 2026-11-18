@@ -281,7 +281,12 @@ __pycache__/
 !/tests/browser/portal-workspace.test.cjs
 !/tests/browser/clinic-e2e-live.test.cjs
 !/tests/browser/guidance-e2e-live.test.cjs
-/papers/
+# Versioned black-box specifications and sanitized result summaries. Raw evidence
+# remains under ignored writable/blackbox/runs/.
+!/papers/
+/papers/*
+!/papers/blackbox/
+!/papers/blackbox/**
 /fwdforguidancecumulative/
 
 #-------------------------
