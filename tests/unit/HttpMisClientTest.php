@@ -69,6 +69,12 @@ final class HttpMisClientTest extends TestCase
         yield 'invalid credentials' => [403, '{"message":"invalid credentials"}'];
         yield 'invalid credentials with retry hint' => [403, '{"status":"error","message":"Invalid credentials. Please try again."}'];
         yield 'error key' => [403, '{"error":"Invalid credentials"}'];
+        yield '403 invalid id or password' => [403, '{"message":"Invalid ID or password."}'];
+        yield '404 student not found' => [404, '{"status":"error","message":"Student not found."}'];
+        yield '404 employee not found' => [404, '{"message":"Employee not found"}'];
+        yield '422 laravel selected id invalid' => [422, '{"message":"The selected student id is invalid.","errors":{"student_id":["The selected student id is invalid."]}}'];
+        yield '422 employee id errors array' => [422, '{"message":"Validation failed","errors":{"employee_id":["Invalid employee_id."]}}'];
+        yield '200 explicit error envelope' => [200, '{"status":"error","message":"Account not recognized. Please try again."}'];
     }
 
     #[DataProvider('credentialRejections')]
@@ -92,6 +98,10 @@ final class HttpMisClientTest extends TestCase
         yield 'generic forbidden' => [403, '{"message":"Forbidden"}'];
         yield 'credential phrase in unrelated message' => [403, '{"message":"API key forbidden; invalid credentials"}'];
         yield 'HTML forbidden' => [403, '<html>Account not recognized</html>'];
+        yield '404 route missing' => [404, '{"message":"Not Found"}'];
+        yield '404 HTML missing' => [404, '<html>Not Found</html>'];
+        yield '422 API key message' => [422, '{"message":"API-Key header is required"}'];
+        yield '200 error without credential phrase' => [200, '{"status":"error","message":"Database connection failed"}'];
         yield 'rate limited' => [429, '{"message":"invalid credentials"}'];
         yield 'server error' => [500, '{"message":"invalid credentials"}'];
         yield 'unavailable' => [503, 'upstream-secret'];

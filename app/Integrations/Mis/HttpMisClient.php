@@ -6,6 +6,10 @@ namespace App\Integrations\Mis;
 
 final class HttpMisClient implements MisClientInterface
 {
+    private const CREDENTIAL_REJECTION_PATTERN = '/^(?:account not recognized|invalid credentials|invalid (?:id|username|student|employee)(?:\s+or\s+password)?|incorrect password|wrong password|(?:account|user|student|employee|record)\s+not\s+found|no\s+(?:matching\s+)?(?:account|user|student|employee)\s+found)(?:[.!]?(?:\s+please try again[.!]?)?)?$/iD';
+
+    private const VALIDATION_ID_REJECTION_PATTERN = '/^(?:the\s+(?:selected\s+)?(?:student|employee)[_\s]?id\s+is\s+invalid|invalid\s+(?:student|employee)[_\s]?id)[.!]?$/iD';
+
     private string $baseUrl;
     private string $apiKey;
     private int $timeout;
@@ -55,6 +59,7 @@ final class HttpMisClient implements MisClientInterface
         if (trim($this->apiKey) === '' || preg_match('/[\r\n]/', $this->apiKey)
             || !is_array($url) || ($url['scheme'] ?? null) !== 'https' || empty($url['host'])
             || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment'])) {
+            $this->logLoginFailure($path, 'config', 0);
             throw new MisUnavailableException();
         }
         try {
@@ -70,14 +75,18 @@ final class HttpMisClient implements MisClientInterface
                 json_encode($body, JSON_THROW_ON_ERROR),
                 $this->timeout,
             );
+        } catch (MisUnavailableException $e) {
+            throw $e;
         } catch (\Throwable) {
             // Do not chain transport errors: they can contain credentials or URLs.
+            $this->logLoginFailure($path, 'transport', 0);
             throw new MisUnavailableException();
         }
 
         if (! is_array($response)
             || ! is_int($response['status'] ?? null)
             || ! is_string($response['body'] ?? null)) {
+            $this->logLoginFailure($path, 'malformed_transport_response', 0);
             throw new MisUnavailableException();
         }
 
@@ -87,23 +96,109 @@ final class HttpMisClient implements MisClientInterface
         }
 
         $decoded = json_decode($response['body'], true);
-        if ($status === 403 && is_array($decoded)) {
-            foreach (['message', 'error'] as $key) {
-                $message = $decoded[$key] ?? null;
-                if (is_string($message)
-                    && preg_match('/^(?:account not recognized|invalid credentials)(?:[.!]?(?:\s+please try again[.!]?)?)?$/iD', trim($message))) {
-                    return null;
-                }
-            }
+        if ($this->isCredentialRejection($status, $decoded)) {
+            return null;
         }
 
         if ($status < 200 || $status >= 300
             || ! is_array($decoded) || $decoded === [] || array_is_list($decoded)) {
+            $this->logLoginFailure($path, $status >= 200 && $status < 300 ? 'invalid_json_body' : 'http_error', $status, is_array($decoded) ? $decoded : null);
+            throw new MisUnavailableException();
+        }
+
+        if ($this->isExplicitErrorEnvelope($decoded)) {
+            $this->logLoginFailure($path, 'error_envelope', $status, $decoded);
             throw new MisUnavailableException();
         }
 
         // Profile/envelope validation belongs to the mapper, not the transport.
         return $decoded;
+    }
+
+    private function isExplicitErrorEnvelope(array $decoded): bool
+    {
+        $explicitError = ($decoded['status'] ?? null) === 'error' || ($decoded['success'] ?? null) === false;
+        $hasProfileData = is_array($decoded['data'] ?? null) && $decoded['data'] !== [];
+        return $explicitError && ! $hasProfileData;
+    }
+
+    private function isCredentialRejection(int $status, mixed $decoded): bool
+    {
+        if (! is_array($decoded) || array_is_list($decoded)) {
+            return false;
+        }
+
+        if ($status === 403 || $status === 404) {
+            return $this->matchesRejectionMessage($decoded, self::CREDENTIAL_REJECTION_PATTERN);
+        }
+
+        if ($status === 422) {
+            if ($this->matchesRejectionMessage($decoded, self::CREDENTIAL_REJECTION_PATTERN)
+                || $this->matchesRejectionMessage($decoded, self::VALIDATION_ID_REJECTION_PATTERN)) {
+                return true;
+            }
+            $errors = $decoded['errors'] ?? null;
+            if (is_array($errors)) {
+                foreach (['student_id', 'employee_id', 'id'] as $field) {
+                    $fieldErrors = $errors[$field] ?? null;
+                    if (is_array($fieldErrors)) {
+                        foreach ($fieldErrors as $msg) {
+                            if (is_string($msg) && (
+                                preg_match(self::CREDENTIAL_REJECTION_PATTERN, trim($msg)) === 1
+                                || preg_match(self::VALIDATION_ID_REJECTION_PATTERN, trim($msg)) === 1
+                            )) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        if ($status >= 200 && $status < 300 && $this->isExplicitErrorEnvelope($decoded)) {
+            return $this->matchesRejectionMessage($decoded, self::CREDENTIAL_REJECTION_PATTERN);
+        }
+
+        return false;
+    }
+
+    private function matchesRejectionMessage(array $decoded, string $pattern): bool
+    {
+        foreach (['message', 'error'] as $key) {
+            $message = $decoded[$key] ?? null;
+            if (is_string($message) && preg_match($pattern, trim($message)) === 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Log only non-secret structural metadata (never keys, passwords, tokens, URLs, or payloads). */
+    private function logLoginFailure(string $path, string $stage, int $status, ?array $decoded = null, ?int $curlErrno = null): void
+    {
+        if (! function_exists('log_message')) {
+            return;
+        }
+        $keys = [];
+        if ($decoded !== null) {
+            foreach (array_slice(array_keys($decoded), 0, 10) as $key) {
+                if (is_string($key) && preg_match('/\A[A-Za-z0-9_.-]{1,40}\z/', $key) === 1) {
+                    $keys[] = $key;
+                }
+            }
+        }
+        try {
+            log_message('warning', 'MIS login unavailable [endpoint={endpoint}, stage={stage}, status={status}, curl_errno={curlErrno}, keys={keys}]', [
+                'endpoint'  => $path,
+                'stage'     => $stage,
+                'status'    => $status,
+                'curlErrno' => $curlErrno ?? 0,
+                'keys'      => $keys === [] ? 'none' : implode(',', $keys),
+            ]);
+        } catch (\Throwable) {
+            // Logging must never prevent fail-closed exception handling.
+        }
     }
 
     /**
@@ -135,6 +230,8 @@ final class HttpMisClient implements MisClientInterface
 
             $raw = curl_exec($ch);
             if ($raw === false) {
+                $path = parse_url($url, PHP_URL_PATH);
+                $this->logLoginFailure(is_string($path) ? $path : 'unknown', 'curl_exec', 0, null, curl_errno($ch));
                 throw new MisUnavailableException();
             }
 

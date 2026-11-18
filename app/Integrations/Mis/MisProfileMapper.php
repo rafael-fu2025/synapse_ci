@@ -14,6 +14,10 @@ namespace App\Integrations\Mis;
  */
 final class MisProfileMapper
 {
+    private const STUDENT_ID_KEYS = ['student_id', 'studentId', 'student_number', 'student_no', 'id'];
+    private const EMPLOYEE_ID_KEYS = ['employee_id', 'employeeId', 'employee_number', 'employee_no', 'emp_id', 'empId', 'emp_no', 'staff_id', 'id_number', 'id'];
+    private const ENTITY_WRAPPERS = ['employee', 'student', 'user', 'profile'];
+
     /**
      * @param array<string, mixed> $payload
      * @return array{
@@ -35,21 +39,26 @@ final class MisProfileMapper
      */
     public function mapStudent(array $payload): array
     {
-        $data = $this->profile($payload);
-        $misId = $this->string($data, 'student_id', 'id', 'studentId', 'student_number');
+        $data = $this->profile($payload, self::STUDENT_ID_KEYS);
+        $misId = $this->string($data, ...self::STUDENT_ID_KEYS);
         if ($misId === null) {
             throw new MisUnavailableException();
         }
 
         return $this->withHash([
             'mis_id'      => $misId,
-            'first_name'  => $this->string($data, 'first_name', 'firstName', 'fname'),
-            'middle_name' => $this->string($data, 'middle_name', 'middleName', 'middlename'),
-            'last_name'   => $this->string($data, 'last_name', 'lastName', 'lname'),
+            'first_name'  => $this->string($data, 'first_name', 'firstName', 'fname', 'firstname'),
+            'middle_name' => $this->string($data, 'middle_name', 'middleName', 'middlename', 'mname'),
+            'last_name'   => $this->string($data, 'last_name', 'lastName', 'lname', 'lastname'),
             'program'     => $this->string($data, 'program', 'course', 'program_name'),
             'year_level'  => $this->int($data, 'level', 'year_level', 'yearLevel'),
             'section'     => $this->string($data, 'section', 'block', 'block_section'),
-            'department'  => $this->string($data, 'department', 'department_name', 'department_code'),
+            'department'  => $this->nestedString(
+                $data,
+                'department',
+                ['department', 'department_name', 'departmentName', 'department_code'],
+                ['name', 'department_name', 'title', 'code', 'department_code']
+            ),
             'enrollment_type' => $this->enrollmentType($data),
             'is_graduating' => $this->bool($data, 'is_graduating'),
             'enrollment_type_provided' => array_key_exists('student_type', $data) || array_key_exists('enrollment_type', $data),
@@ -74,8 +83,8 @@ final class MisProfileMapper
      */
     public function mapEmployee(array $payload): array
     {
-        $data = $this->profile($payload);
-        $misId = $this->string($data, 'employee_id', 'id', 'employeeId', 'employee_number');
+        $data = $this->profile($payload, self::EMPLOYEE_ID_KEYS);
+        $misId = $this->string($data, ...self::EMPLOYEE_ID_KEYS);
         if ($misId === null) {
             throw new MisUnavailableException();
         }
@@ -85,14 +94,46 @@ final class MisProfileMapper
 
         return $this->withHash([
             'mis_id'            => $misId,
-            'first_name'        => $this->string($data, 'first_name', 'firstName', 'fname'),
-            'middle_name'       => $this->string($data, 'middle_name', 'middleName', 'middlename'),
-            'last_name'         => $this->string($data, 'last_name', 'lastName', 'lname'),
-            'department'        => $this->string($data, 'department', 'department_name', 'departmentName', 'department_code'),
-            'position'          => $this->string($data, 'position', 'job_title', 'position_name'),
+            'first_name'        => $this->string($data, 'first_name', 'firstName', 'fname', 'firstname'),
+            'middle_name'       => $this->string($data, 'middle_name', 'middleName', 'middlename', 'mname'),
+            'last_name'         => $this->string($data, 'last_name', 'lastName', 'lname', 'lastname'),
+            'department'        => $this->nestedString(
+                $data,
+                'department',
+                ['department', 'department_name', 'departmentName', 'department_code', 'dept_name', 'dept'],
+                ['name', 'department_name', 'title', 'code', 'department_code']
+            ),
+            'position'          => $this->nestedString(
+                $data,
+                'position',
+                ['position', 'job_title', 'position_name', 'designation', 'title'],
+                ['name', 'position_name', 'title']
+            ),
             'employment_status' => in_array($status, ['active', 'inactive', 'on_leave'], true) ? $status : null,
             'is_teaching'       => $this->bool($data, 'is_teaching', 'isTeaching', 'teaching', 'is_faculty'),
         ]);
+    }
+
+    /**
+     * Extracts a valid email address from an MIS login response without altering canonical mapped hashes.
+     *
+     * @param array<string, mixed> $payload
+     */
+    public function extractEmail(array $payload): ?string
+    {
+        try {
+            $data = $this->profile($payload, array_values(array_unique([...self::STUDENT_ID_KEYS, ...self::EMPLOYEE_ID_KEYS])));
+        } catch (MisUnavailableException) {
+            return null;
+        }
+
+        $candidate = $this->string($data, 'email_address', 'emailAddress', 'email', 'university_email', 'work_email');
+        if ($candidate === null || mb_strlen($candidate, 'UTF-8') > 150) {
+            return null;
+        }
+        $normalized = strtolower($candidate);
+
+        return filter_var($normalized, FILTER_VALIDATE_EMAIL) === false ? null : $normalized;
     }
 
     private function enrollmentType(array $data): ?string
@@ -117,7 +158,8 @@ final class MisProfileMapper
         return count(array_unique($types)) === 1 ? $types[0] : null;
     }
 
-    private function profile(array $payload): array
+    /** @param list<string> $idKeys */
+    private function profile(array $payload, array $idKeys = []): array
     {
         // An explicit data envelope must be valid; never fall back to its tokens or id.
         for ($depth = 0; $depth < 2 && array_key_exists('data', $payload); $depth++) {
@@ -130,13 +172,59 @@ final class MisProfileMapper
         if ($payload === [] || array_key_exists('data', $payload)) {
             throw new MisUnavailableException();
         }
+        $this->assertAssociativePayload($payload);
+
+        // Unwrap a nested entity wrapper (e.g., data.employee) only when no explicit ID exists at this level.
+        if ($idKeys !== [] && ! $this->hasAnyKey($payload, array_values(array_diff($idKeys, ['id'])))) {
+            foreach (self::ENTITY_WRAPPERS as $wrapper) {
+                if (array_key_exists($wrapper, $payload)) {
+                    $inner = $payload[$wrapper];
+                    if (is_array($inner) && $inner !== [] && ! array_key_exists('data', $inner)) {
+                        $this->assertAssociativePayload($inner);
+                        return $inner;
+                    }
+                }
+            }
+        }
+
+        return $payload;
+    }
+
+    private function assertAssociativePayload(array $payload): void
+    {
         foreach (array_keys($payload) as $key) {
             if (! is_string($key)) {
                 throw new MisUnavailableException();
             }
         }
+    }
 
-        return $payload;
+    /** @param list<string> $keys */
+    private function hasAnyKey(array $payload, array $keys): bool
+    {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $payload)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @param list<string> $scalarKeys
+     * @param list<string> $nestedKeys
+     */
+    private function nestedString(array $data, string $objectKey, array $scalarKeys, array $nestedKeys): ?string
+    {
+        $scalar = $this->string($data, ...$scalarKeys);
+        if ($scalar !== null) {
+            return $scalar;
+        }
+        $nested = $data[$objectKey] ?? null;
+        if (is_array($nested) && ! array_is_list($nested)) {
+            return $this->string($nested, ...$nestedKeys);
+        }
+        return null;
     }
 
     private function withHash(array $mapped): array
