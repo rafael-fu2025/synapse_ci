@@ -8,6 +8,10 @@
             <file>tests/unit/EncryptionServiceTest.php</file>
             <file>tests/unit/HttpMisClientTest.php</file>
             <file>tests/unit/MisProfileMapperTest.php</file>
+            <file>tests/unit/HybridOperationalAggregateReaderTest.php</file>
+            <file>tests/unit/ReportExportAuditTest.php</file>
+            <file>tests/unit/ReportExportAuditUnitsTest.php</file>
+            <file>tests/unit/ClinicSummaryReportLatexTest.php</file>
             <file>tests/unit/ProductionSessionConfigTest.php</file>
             <file>tests/unit/SessionRotationSecurityTest.php</file>
             <file>tests/unit/StrictModeConfigTest.php</file>

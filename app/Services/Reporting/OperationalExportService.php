@@ -44,35 +44,6 @@ final class OperationalExportService
 
     public function aggregate(BaseConnection $db, int $tenantId, ExportRange $range, string $storageTimezone, array $units): array
     {
-        $rows = [['date_manila', 'unit', 'metric', 'count']];
-        for ($day = $range->start; $day <= $range->end; $day = $day->modify('+1 day')) {
-            $daily = ExportRange::fromInput(['from' => $day->format('Y-m-d'), 'to' => $day->format('Y-m-d')]);
-            [$from, $until] = $daily->bounds($storageTimezone);
-            // Only aggregate counts reach PHP; no notes, diagnoses, names or person-level rows.
-            if (in_array('clinic', $units, true)) {
-                $clinic = $db->table('clinic_encounters')->where('tenant_id', $tenantId)->where('status', 'completed')
-                    ->where('started_at >=', $from)->where('started_at <', $until)->countAllResults();
-                $rows[] = [$day->format('Y-m-d'), 'clinic', 'completed_clinic_encounters_started', $clinic];
-            }
-            if (in_array('guidance', $units, true)) {
-                $guidance = $db->table('counselling_sessions s')
-                    ->join('counselling_cases c', 'c.id = s.case_id AND c.tenant_id = s.tenant_id')
-                    ->where('s.tenant_id', $tenantId)->where('s.status', 'completed')
-                    ->where('s.started_at >=', $from)->where('s.started_at <', $until)->countAllResults();
-                $rows[] = [$day->format('Y-m-d'), 'guidance', 'completed_guidance_sessions_started', $guidance];
-            }
-            if (in_array('bmg', $units, true)) {
-                $started = $db->table('bmg_batches')->where('tenant_id', $tenantId)
-                    ->where('started_at >=', $from)->where('started_at <', $until)->countAllResults();
-                $rows[] = [$day->format('Y-m-d'), 'bmg', 'bmg_batches_started', $started];
-                // Both terminal transitions use completed_at in BmgService; not sensor or quality evidence.
-                foreach (['released', 'voided'] as $status) {
-                    $count = $db->table('bmg_batches')->where('tenant_id', $tenantId)->where('status', $status)
-                        ->where('completed_at >=', $from)->where('completed_at <', $until)->countAllResults();
-                    $rows[] = [$day->format('Y-m-d'), 'bmg', 'bmg_batches_' . $status, $count];
-                }
-            }
-        }
-        return $rows;
+        return (new HybridOperationalAggregateReader())->aggregate($db, $tenantId, $range, $storageTimezone, $units);
     }
 }

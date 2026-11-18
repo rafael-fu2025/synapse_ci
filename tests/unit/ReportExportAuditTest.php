@@ -12,8 +12,7 @@ use App\Services\Reporting\ExportAccess;
 use App\Services\Reporting\ExportCsv;
 use App\Services\Reporting\ExportRange;
 use App\Services\Reporting\OperationalExportService;
-use CodeIgniter\Database\BaseBuilder;
-use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\Database\SQLite3\Connection;
 use CodeIgniter\Test\CIUnitTestCase;
 use Config\Services;
 use Psr\Log\NullLogger;
@@ -103,32 +102,35 @@ final class ReportExportAuditTest extends CIUnitTestCase
 
     public function testOperationalQueriesOnlyCountTenantScopedCompletedActivity(): void
     {
-        $db = $this->createMock(BaseConnection::class);
-        $clinic = $this->createMock(BaseBuilder::class);
-        $guidance = $this->createMock(BaseBuilder::class);
-        $db->expects($this->exactly(2))->method('table')->willReturnMap([
-            ['clinic_encounters', $clinic], ['counselling_sessions s', $guidance],
-        ]);
-        $indices = ['' => 0, 's.' => 0];
-        foreach ([[$clinic, ''], [$guidance, 's.']] as [$builder, $prefix]) {
-            $expected = [[$prefix . 'tenant_id', 37], [$prefix . 'status', 'completed'],
-                [$prefix . 'started_at >=', '2026-09-30 16:00:00'], [$prefix . 'started_at <', '2026-10-01 16:00:00']];
-            $builder->expects($this->exactly(4))->method('where')->willReturnCallback(
-                function ($key, $value) use (&$indices, $prefix, $expected, $builder) {
-                    $this->assertSame($expected[$indices[$prefix]++], [$key, $value]);
-                    return $builder;
-                });
-            $builder->expects($this->never())->method('select');
-            $builder->expects($this->never())->method('get');
-            $builder->expects($this->once())->method('countAllResults')->willReturn(3);
+        $db = new Connection(['database' => ':memory:', 'DBPrefix' => '', 'DBDebug' => true]);
+        try {
+            $db->query('CREATE TABLE clinic_encounters (tenant_id INTEGER, status TEXT, started_at TEXT)');
+            $db->query('CREATE TABLE counselling_cases (id INTEGER PRIMARY KEY, tenant_id INTEGER)');
+            $db->query('CREATE TABLE counselling_sessions (tenant_id INTEGER, case_id INTEGER, status TEXT, started_at TEXT)');
+            $db->table('counselling_cases')->insertBatch([['id' => 1, 'tenant_id' => 37], ['id' => 2, 'tenant_id' => 38]]);
+            foreach (['2026-09-30 16:00:00', '2026-10-01 05:00:00', '2026-10-01 15:59:59'] as $time) {
+                $db->table('clinic_encounters')->insert(['tenant_id' => 37, 'status' => 'completed', 'started_at' => $time]);
+                $db->table('counselling_sessions')->insert(['tenant_id' => 37, 'case_id' => 1, 'status' => 'completed', 'started_at' => $time]);
+            }
+            foreach ([[38, 'completed', '2026-09-30 16:00:00'], [37, 'open', '2026-09-30 16:00:00'],
+                [37, 'completed', '2026-10-01 16:00:00'], [37, 'completed', null]] as [$tenant, $status, $time]) {
+                $db->table('clinic_encounters')->insert(['tenant_id' => $tenant, 'status' => $status, 'started_at' => $time]);
+                $db->table('counselling_sessions')->insert(['tenant_id' => $tenant, 'case_id' => $tenant === 37 ? 1 : 2,
+                    'status' => $status, 'started_at' => $time]);
+            }
+            foreach ([2, 99] as $case) {
+                $db->table('counselling_sessions')->insert(['tenant_id' => 37, 'case_id' => $case,
+                    'status' => 'completed', 'started_at' => '2026-09-30 16:00:00']);
+            }
+            // The unselected BMG table does not exist in this private fixture.
+            $rows = (new OperationalExportService())->aggregate($db, 37,
+                ExportRange::fromInput(['from' => '2026-10-01', 'to' => '2026-10-01']), 'UTC', ['clinic', 'guidance']);
+            $this->assertSame([['date_manila', 'unit', 'metric', 'count'],
+                ['2026-10-01', 'clinic', 'completed_clinic_encounters_started', 3],
+                ['2026-10-01', 'guidance', 'completed_guidance_sessions_started', 3]], $rows);
+        } finally {
+            $db->close();
         }
-        $guidance->expects($this->once())->method('join')
-            ->with('counselling_cases c', 'c.id = s.case_id AND c.tenant_id = s.tenant_id')->willReturnSelf();
-        $rows = (new ReflectionMethod(OperationalExportService::class, 'aggregate'))->invoke(new OperationalExportService(),
-            $db, 37, ExportRange::fromInput(['from' => '2026-10-01', 'to' => '2026-10-01']), 'UTC', ['clinic', 'guidance']);
-        $this->assertSame([['date_manila', 'unit', 'metric', 'count'],
-            ['2026-10-01', 'clinic', 'completed_clinic_encounters_started', 3],
-            ['2026-10-01', 'guidance', 'completed_guidance_sessions_started', 3]], $rows);
     }
 
     public function testIdentifiedExportRejectsOverflowBeforeDecryption(): void
@@ -206,8 +208,16 @@ final class ReportExportAuditTest extends CIUnitTestCase
         }
         $operational = file_get_contents(APPPATH . 'Services/Reporting/OperationalExportService.php');
         $this->assertLessThan(strpos($operational, '$range ='), strpos($operational, 'ExportAccess::actor()'));
-        $this->assertLessThan(strpos($operational, "return [\$format =>"), strpos($operational, '(new AuditService())->log('));
-        $this->assertStringContainsString("'format' => \$format", $operational);
+        $auditStart = strpos($operational, '(new AuditService())->log(');
+        $auditEnd = strpos($operational, "return [\$format =>");
+        $this->assertIsInt($auditStart);
+        $this->assertIsInt($auditEnd);
+        $this->assertLessThan($auditEnd, $auditStart);
+        $audit = substr($operational, $auditStart, $auditEnd - $auditStart);
+        $this->assertStringContainsString("'format' => \$format", $audit);
+        foreach (['$content', "'content' =>", "'csv' =>", "'pdf' =>"] as $excluded) {
+            $this->assertStringNotContainsString($excluded, $audit);
+        }
         foreach (['ReportExportController.php', 'SurveyController.php'] as $file) {
             $source = file_get_contents(APPPATH . 'Controllers/' . $file);
             $method = $file === 'SurveyController.php' ? substr($source, strpos($source, 'public function exportResponses'),

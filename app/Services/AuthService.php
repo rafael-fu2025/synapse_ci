@@ -79,18 +79,20 @@ final class AuthService
 
         // Only a credential rejection (null) permits trying the other MIS namespace.
         // Transport/contract failures propagate instead of being reported as a bad password.
-        $studentRes = $this->misClient->studentLogin($id, $password);
+        $misLookupId = $this->resolveMisLookupId($id, $localUser);
+
+        $studentRes = $this->misClient->studentLogin($misLookupId, $password);
         if ($studentRes !== null) {
-            $profile = $this->mapper->mapStudent($studentRes);
-            $this->assertReturnedIdentifier($id, $profile['mis_id']);
-            return $this->provision($profile, 'student');
+            $profile = $this->mapLoginProfile($studentRes, 'student');
+            $this->assertReturnedIdentifier($misLookupId, $profile['mis_id'], 'student');
+            return $this->provision($profile, 'student', $this->mapper->extractEmail($studentRes));
         }
 
-        $employeeRes = $this->misClient->employeeLogin($id, $password);
+        $employeeRes = $this->misClient->employeeLogin($misLookupId, $password);
         if ($employeeRes !== null) {
-            $profile = $this->mapper->mapEmployee($employeeRes);
-            $this->assertReturnedIdentifier($id, $profile['mis_id']);
-            return $this->provision($profile, 'employee');
+            $profile = $this->mapLoginProfile($employeeRes, 'employee');
+            $this->assertReturnedIdentifier($misLookupId, $profile['mis_id'], 'employee');
+            return $this->provision($profile, 'employee', $this->mapper->extractEmail($employeeRes));
         }
 
         return null;
@@ -112,42 +114,18 @@ final class AuthService
      * @param array<string, mixed> $profile
      * @return array<string, mixed>
      */
-    private function provisionStudent(array $profile): array
+    private function provisionStudent(array $profile, ?string $misEmail = null): array
     {
-        $now = date('Y-m-d H:i:s');
-        $person = $this->provisionablePerson($profile['mis_id'], 'student');
-        $this->assertRequiredNames($person, $profile);
+        [$personId, $resolvedEmail] = $this->upsertMisPerson($profile, 'student', $misEmail);
 
-        $derivedEmail = UniversityEmail::derive($profile['first_name'] ?? null, $profile['last_name'] ?? null);
-
-        $personData = $this->provided([
-            'tenant_id'        => CurrentTenant::id(),
-            'kind'             => 'student',
-            'mis_id'           => $profile['mis_id'],
-            'first_name'       => $profile['first_name'],
-            'middle_name'      => $profile['middle_name'],
-            'last_name'        => $profile['last_name'],
-            'email'            => $derivedEmail,
-            'mis_synced_at'    => $now,
-            'mis_payload_hash' => $profile['raw_hash'],
-        ]);
-
-        if ($person === null) {
-            $personId = (int) $this->personModel->insert($personData);
-        } else {
-            $personId = (int) $person['id'];
-            $this->personModel->update($personId, $personData);
-        }
-
-        // Student Profile
         $studentProfile = $this->studentProfileModel->findByPersonId($personId);
         $spData = $this->provided([
             'tenant_id'   => CurrentTenant::id(),
             'person_id'   => $personId,
-            'program'     => $profile['program'],
+            'program'     => $this->clip($profile['program'], 100),
             'year_level'  => $profile['year_level'],
-            'section'     => $profile['section'],
-            'department'  => $profile['department'],
+            'section'     => $this->clip($profile['section'], 50),
+            'department'  => $this->clip($profile['department'], 100),
         ]);
         // Explicit unknowns revoke audience eligibility; omission (including older
         // mapper doubles without presence markers) must not overwrite known values.
@@ -163,21 +141,7 @@ final class AuthService
             $this->studentProfileModel->update($studentProfile['id'], $spData);
         }
 
-        // User Account
-        $user = $this->userModel->scoped()->where('person_id', $personId)->first();
-        if ($user === null) {
-            $userId = (int) $this->userModel->insert([
-                'tenant_id' => CurrentTenant::id(),
-                'person_id' => $personId,
-                'username'  => $profile['mis_id'],
-                'email'     => $derivedEmail,
-                'role'      => 'student',
-                'status'    => 'active',
-            ]);
-            $user = $this->userModel->find($userId);
-        }
-
-        return $user;
+        return $this->provisionUserAccount($personId, $profile['mis_id'], $resolvedEmail, 'student');
     }
 
     /**
@@ -186,40 +150,16 @@ final class AuthService
      * @param array<string, mixed> $profile
      * @return array<string, mixed>
      */
-    private function provisionEmployee(array $profile): array
+    private function provisionEmployee(array $profile, ?string $misEmail = null): array
     {
-        $now = date('Y-m-d H:i:s');
-        $person = $this->provisionablePerson($profile['mis_id'], 'employee');
-        $this->assertRequiredNames($person, $profile);
+        [$personId, $resolvedEmail] = $this->upsertMisPerson($profile, 'employee', $misEmail);
 
-        $derivedEmail = UniversityEmail::derive($profile['first_name'] ?? null, $profile['last_name'] ?? null);
-
-        $personData = $this->provided([
-            'tenant_id'        => CurrentTenant::id(),
-            'kind'             => 'employee',
-            'mis_id'           => $profile['mis_id'],
-            'first_name'       => $profile['first_name'],
-            'middle_name'      => $profile['middle_name'],
-            'last_name'        => $profile['last_name'],
-            'email'            => $derivedEmail,
-            'mis_synced_at'    => $now,
-            'mis_payload_hash' => $profile['raw_hash'],
-        ]);
-
-        if ($person === null) {
-            $personId = (int) $this->personModel->insert($personData);
-        } else {
-            $personId = (int) $person['id'];
-            $this->personModel->update($personId, $personData);
-        }
-
-        // Employee Profile
         $empProfile = $this->employeeProfileModel->findByPersonId($personId);
         $epData = $this->provided([
             'tenant_id'         => CurrentTenant::id(),
             'person_id'         => $personId,
-            'department'        => $profile['department'],
-            'position'          => $profile['position'],
+            'department'        => $this->clip($profile['department'], 100),
+            'position'          => $this->clip($profile['position'], 100),
             'employment_status' => $profile['employment_status'],
             'is_teaching'       => $profile['is_teaching'] === null ? null : ($profile['is_teaching'] ? 1 : 0),
         ]);
@@ -231,20 +171,126 @@ final class AuthService
         }
 
         // User Account (preserve assigned privileged roles such as clinic_admin, counsellor, etc.)
-        $user = $this->userModel->scoped()->where('person_id', $personId)->first();
-        if ($user === null) {
-            $userId = (int) $this->userModel->insert([
-                'tenant_id' => CurrentTenant::id(),
-                'person_id' => $personId,
-                'username'  => $profile['mis_id'],
-                'email'     => $derivedEmail,
-                'role'      => 'employee',
-                'status'    => 'active',
-            ]);
-            $user = $this->userModel->find($userId);
+        return $this->provisionUserAccount($personId, $profile['mis_id'], $resolvedEmail, 'employee');
+    }
+
+    /**
+     * Inserts or refreshes the canonical MIS person record and returns [personId, resolvedEmail].
+     *
+     * @param array<string, mixed> $profile
+     * @return array{0: int, 1: ?string}
+     */
+    private function upsertMisPerson(array $profile, string $kind, ?string $misEmail): array
+    {
+        $now = date('Y-m-d H:i:s');
+        $person = $this->provisionablePerson($profile['mis_id'], $kind);
+        $this->assertRequiredNames($person, $profile, $kind);
+
+        $resolvedEmail = $this->clip(
+            $misEmail ?? UniversityEmail::derive($profile['first_name'] ?? null, $profile['last_name'] ?? null),
+            150
+        );
+
+        $personData = $this->provided([
+            'tenant_id'        => CurrentTenant::id(),
+            'kind'             => $kind,
+            'mis_id'           => $profile['mis_id'],
+            'first_name'       => $this->clip($profile['first_name'], 100),
+            'middle_name'      => $this->clip($profile['middle_name'], 100),
+            'last_name'        => $this->clip($profile['last_name'], 100),
+            'email'            => $resolvedEmail,
+            'mis_synced_at'    => $now,
+            'mis_payload_hash' => $profile['raw_hash'],
+        ]);
+
+        if ($person === null) {
+            $personId = (int) $this->personModel->insert($personData);
+        } else {
+            $personId = (int) $person['id'];
+            $this->personModel->update($personId, $personData);
         }
 
-        return $user;
+        return [$personId, $resolvedEmail];
+    }
+
+    /**
+     * Resolves an email login input to the local MIS ID when uniquely matched; otherwise passes input as-is.
+     */
+    private function resolveMisLookupId(string $identifier, ?array $localUser): string
+    {
+        if (! str_contains($identifier, '@')) {
+            return $identifier;
+        }
+        if ($localUser !== null && ! empty($localUser['person_id'])) {
+            $person = $this->personModel->scoped()->find((int) $localUser['person_id']);
+            if ($person !== null && ! empty($person['mis_id'])) {
+                return (string) $person['mis_id'];
+            }
+        }
+        $matches = $this->personModel->scoped()
+            ->where('LOWER(email)', mb_strtolower($identifier, 'UTF-8'))
+            ->findAll(2);
+        $misIds = array_values(array_unique(array_filter(array_column($matches, 'mis_id'), static fn (mixed $v): bool => is_string($v) && $v !== '')));
+        if (count($misIds) === 1) {
+            return $misIds[0];
+        }
+        return $identifier;
+    }
+
+    /** @return array<string, mixed> */
+    private function mapLoginProfile(array $response, string $kind): array
+    {
+        try {
+            return $kind === 'student'
+                ? $this->mapper->mapStudent($response)
+                : $this->mapper->mapEmployee($response);
+        } catch (MisUnavailableException $e) {
+            $this->logMisFailure('map_' . $kind, $response);
+            throw $e;
+        }
+    }
+
+    /** @return array<string, mixed> */
+    private function provisionUserAccount(int $personId, string $misId, ?string $email, string $defaultRole): array
+    {
+        $user = $this->userModel->scoped()->where('person_id', $personId)->first();
+        if ($user !== null) {
+            if ($email !== null && empty($user['email'])) {
+                $this->userModel->update((int) $user['id'], ['email' => $email]);
+                $user = $this->userModel->find((int) $user['id']);
+            }
+            return $user;
+        }
+
+        $userId = (int) $this->userModel->insert([
+            'tenant_id' => CurrentTenant::id(),
+            'person_id' => $personId,
+            'username'  => $this->availableUsername($misId, $defaultRole),
+            'email'     => $email,
+            'role'      => $defaultRole,
+            'status'    => 'active',
+        ]);
+        return $this->userModel->find($userId);
+    }
+
+    private function availableUsername(string $misId, string $kind): string
+    {
+        if ($this->userModel->withDeleted()->scoped()->where('username', $misId)->first() === null) {
+            return $misId;
+        }
+        $candidate = mb_substr($kind . ':' . $misId, 0, 100, 'UTF-8');
+        if ($this->userModel->withDeleted()->scoped()->where('username', $candidate)->first() === null) {
+            return $candidate;
+        }
+        return mb_substr($kind . ':' . bin2hex(random_bytes(4)) . ':' . $misId, 0, 100, 'UTF-8');
+    }
+
+    private function clip(?string $value, int $max): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+        return mb_strlen($value, 'UTF-8') > $max ? mb_substr($value, 0, $max, 'UTF-8') : $value;
     }
 
     private function provided(array $values): array
@@ -252,18 +298,58 @@ final class AuthService
         return array_filter($values, static fn (mixed $value): bool => $value !== null);
     }
 
-    private function assertReturnedIdentifier(string $identifier, string $returned): void
+    private function assertReturnedIdentifier(string $identifier, string $returned, string $kind = 'unknown'): void
     {
-        if (mb_strlen($returned) > 50 || preg_match('/[\x00-\x1F\x7F]/', $returned)
-            || !hash_equals($identifier, $returned)) {
+        $expected = mb_strtolower(trim($identifier), 'UTF-8');
+        $actual = mb_strtolower(trim($returned), 'UTF-8');
+        if ($actual === '' || mb_strlen($returned, 'UTF-8') > 50 || preg_match('/[\x00-\x1F\x7F]/', $returned)
+            || !hash_equals($expected, $actual)) {
+            $this->logMisFailure('assert_' . $kind . '_id', null, [
+                'reason' => mb_strlen($returned, 'UTF-8') > 50 ? 'too_long' : 'mismatch',
+            ]);
             throw new MisUnavailableException();
         }
     }
 
-    private function assertRequiredNames(?array $person, array $profile): void
+    private function assertRequiredNames(?array $person, array $profile, string $kind = 'unknown'): void
     {
         if ($person === null && (empty($profile['first_name']) || empty($profile['last_name']))) {
+            $this->logMisFailure('assert_' . $kind . '_names', null, [
+                'reason' => empty($profile['first_name']) ? 'missing_first_name' : 'missing_last_name',
+            ]);
             throw new MisUnavailableException();
+        }
+    }
+
+    /** Log only non-secret structural failure context; never log credentials, tokens, or PII. */
+    private function logMisFailure(string $stage, ?array $payload = null, array $meta = []): void
+    {
+        if (! function_exists('log_message')) {
+            return;
+        }
+        $keys = [];
+        if ($payload !== null) {
+            foreach (array_slice(array_keys($payload), 0, 10) as $key) {
+                if (is_string($key) && preg_match('/\A[A-Za-z0-9_.-]{1,40}\z/', $key) === 1) {
+                    $keys[] = $key;
+                }
+            }
+            if (is_array($payload['data'] ?? null)) {
+                foreach (array_slice(array_keys($payload['data']), 0, 10) as $key) {
+                    if (is_string($key) && preg_match('/\A[A-Za-z0-9_.-]{1,40}\z/', $key) === 1) {
+                        $keys[] = 'data.' . $key;
+                    }
+                }
+            }
+        }
+        try {
+            log_message('warning', 'MIS auth provisioning failed [stage={stage}, reason={reason}, keys={keys}]', [
+                'stage'  => $stage,
+                'reason' => (string) ($meta['reason'] ?? 'contract_error'),
+                'keys'   => $keys === [] ? 'none' : implode(',', $keys),
+            ]);
+        } catch (\Throwable) {
+            // Logging must never mask or alter authentication failure behavior.
         }
     }
 
@@ -288,14 +374,16 @@ final class AuthService
      * @param array<string, mixed> $profile
      * @return array<string, mixed>|null
      */
-    private function provision(array $profile, string $kind): ?array
+    private function provision(array $profile, string $kind, ?string $misEmail = null): ?array
     {
         $db = \Config\Database::connect();
         if (!$db->transBegin()) {
             throw new \RuntimeException('Account provisioning transaction could not be started.');
         }
         try {
-            $user = $kind === 'student' ? $this->provisionStudent($profile) : $this->provisionEmployee($profile);
+            $user = $kind === 'student'
+                ? $this->provisionStudent($profile, $misEmail)
+                : $this->provisionEmployee($profile, $misEmail);
             if ((new AuthenticatedUser())->forIdentity((int) $user['id'], CurrentTenant::id()) === null) {
                 throw new \DomainException('Invalid provisioned identity.');
             }

@@ -366,4 +366,75 @@ final class MisProfileMapperTest extends TestCase
             );
         }
     }
+
+    public function testEmployeeEntityWrapperAndExplicitIdPriorityOverNumericPrimaryKey(): void
+    {
+        $mapped = $this->mapper->mapEmployee([
+            'status' => 'success',
+            'data'   => [
+                'employee' => [
+                    'id'              => 42,
+                    'employee_id'     => 'EMP-FIXTURE-218',
+                    'firstname'       => 'Casey',
+                    'mname'           => 'Test',
+                    'lastname'        => 'Fixture',
+                    'department_code' => 'DEPT-96',
+                    'department_name' => 'Fixture Department',
+                    'position'        => 'Test Lecturer',
+                ],
+                'access_token' => 'secret',
+            ],
+        ]);
+
+        $this->assertSame('EMP-FIXTURE-218', $mapped['mis_id']);
+        $this->assertSame('Casey', $mapped['first_name']);
+        $this->assertSame('Test', $mapped['middle_name']);
+        $this->assertSame('Fixture', $mapped['last_name']);
+        $this->assertSame('Fixture Department', $mapped['department']);
+        $this->assertSame('Test Lecturer', $mapped['position']);
+    }
+
+    public function testEmployeeNestedObjectsAndEmpIdAliases(): void
+    {
+        $mapped = $this->mapper->mapEmployee([
+            'employee' => [
+                'emp_id'     => 'EMP-100',
+                'first_name' => 'Ana',
+                'last_name'  => 'Lim',
+                'department' => ['code' => '10', 'name' => 'Health Services'],
+                'position'   => ['title' => 'Clinic Nurse'],
+            ],
+        ]);
+
+        $this->assertSame('EMP-100', $mapped['mis_id']);
+        $this->assertSame('Health Services', $mapped['department']);
+        $this->assertSame('Clinic Nurse', $mapped['position']);
+    }
+
+    public function testExtractEmailReadsValidMisAddressAndRejectsInvalid(): void
+    {
+        $this->assertSame(
+            'student.fixture@example.test',
+            $this->mapper->extractEmail([
+                'data' => [
+                    'data' => [
+                        'student_id'    => 'STUDENT-FIXTURE-877',
+                        'email_address' => ' STUDENT.FIXTURE@EXAMPLE.TEST ',
+                    ],
+                ],
+            ])
+        );
+        $this->assertSame(
+            'employee.fixture@example.test',
+            $this->mapper->extractEmail([
+                'data' => [
+                    'employee' => [
+                        'employee_id' => 'EMP-FIXTURE-218',
+                        'work_email'  => 'employee.fixture@example.test',
+                    ],
+                ],
+            ])
+        );
+        $this->assertNull($this->mapper->extractEmail(['data' => ['employee_id' => 'EMP-FIXTURE-218', 'email_address' => 'not-an-email']]));
+    }
 }
