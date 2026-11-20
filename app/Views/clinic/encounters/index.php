@@ -69,10 +69,10 @@
   <div class="card-header bg-transparent py-3">
     <!-- Filter form -->
     <form method="GET" action="<?= esc(site_url('/clinic/encounters'), 'attr') ?>" class="row g-2 align-items-center clinic-filter-form" data-filter-form>
-      <div class="col-12 col-md-6 col-xl-3">
+      <div class="col-12 col-md-6 col-xl-4">
         <input type="search" name="q" value="<?= esc($filters['q'] ?? '') ?>" class="form-control form-control-sm w-100" placeholder="Patient, MIS ID, complaint" aria-label="Search patient, MIS ID, or complaint">
       </div>
-      <div class="col-6 col-sm-4 col-md-3 col-xl-auto">
+      <div class="col-6 col-sm-4 col-md-3 col-xl-2">
         <select name="status" class="form-select form-select-sm w-100" aria-label="Filter by status">
           <option value="">All Statuses</option>
           <option value="in_progress" <?= ($status === 'in_progress') ? 'selected' : '' ?>>In Progress</option>
@@ -80,7 +80,7 @@
           <option value="referred" <?= ($status === 'referred') ? 'selected' : '' ?>>Referred</option>
         </select>
       </div>
-      <div class="col-6 col-sm-4 col-md-3 col-xl-auto">
+      <div class="col-6 col-sm-4 col-md-3 col-xl-3">
         <select name="complaint" class="form-select form-select-sm w-100" aria-label="Filter by complaint">
           <option value="">All Complaints</option>
           <?php foreach (($complaintCatalog ?? []) as $cKey => $cMeta): ?>
@@ -88,7 +88,7 @@
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="col-6 col-sm-4 col-md-4 col-xl-auto">
+      <div class="col-6 col-sm-4 col-md-4 col-xl-3">
         <select name="disposition" class="form-select form-select-sm w-100" aria-label="Filter by disposition">
           <option value="">All Dispositions</option>
           <?php foreach (($dispositions ?? []) as $dKey => $dLabel): ?>
@@ -100,7 +100,7 @@
         $fromVal = ($filters['from'] ?? '') !== '' ? (string) $filters['from'] : (string) ($date ?? '');
         $toVal = ($filters['to'] ?? '') !== '' ? (string) $filters['to'] : (string) ($date ?? '');
       ?>
-      <div class="col-6 col-sm-4 col-md-3 col-xl-auto">
+      <div class="col-6 col-sm-4 col-md-3 col-xl-3">
         <input type="text"
                class="form-control form-control-sm w-100"
                id="encounterFromFilter"
@@ -110,7 +110,7 @@
                value="">
         <input type="hidden" name="from" id="encounterFromFilter_iso" value="<?= esc($fromVal) ?>">
       </div>
-      <div class="col-6 col-sm-4 col-md-3 col-xl-auto">
+      <div class="col-6 col-sm-4 col-md-3 col-xl-3">
         <input type="text"
                class="form-control form-control-sm w-100"
                id="encounterToFilter"
@@ -120,7 +120,7 @@
                value="">
         <input type="hidden" name="to" id="encounterToFilter_iso" value="<?= esc($toVal) ?>">
       </div>
-      <div class="col-12 col-sm-4 col-md-2 col-xl-auto">
+      <div class="col-6 col-sm-4 col-md-2 col-xl-2">
         <label for="encounterPerPage" class="visually-hidden">Encounters per page</label>
         <select name="per_page" id="encounterPerPage" class="form-select form-select-sm w-100">
           <?php foreach ([20, 25, 50, 100] as $size): ?>
@@ -128,9 +128,9 @@
           <?php endforeach; ?>
         </select>
       </div>
-      <div class="col-12 col-sm-auto d-flex gap-2">
-        <button type="submit" class="btn btn-outline-primary btn-sm flex-grow-1 flex-sm-grow-0">Filter</button>
-        <a href="<?= site_url('/clinic/encounters') ?>" class="btn btn-outline-secondary btn-sm flex-grow-1 flex-sm-grow-0">Reset</a>
+      <div class="col-12 col-md-auto col-xl-4 ms-md-auto d-flex flex-nowrap justify-content-md-end gap-2">
+        <button type="submit" class="btn btn-outline-primary btn-sm flex-grow-1 flex-md-grow-0">Filter</button>
+        <a href="<?= site_url('/clinic/encounters') ?>" class="btn btn-outline-secondary btn-sm flex-grow-1 flex-md-grow-0">Reset</a>
       </div>
     </form>
   </div>

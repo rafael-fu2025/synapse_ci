@@ -288,7 +288,7 @@ final class StaffAssignmentSchedulingTest extends CIUnitTestCase
         $grants = $this->db->table('role_permissions')->orderBy('role')->orderBy('permission_id')->get()->getResultArray();
         $stored = (new PersonModel())->find($person);
         $mis = $this->createMock(MisClientInterface::class);
-        $mis->expects($this->once())->method('studentLogin')->willReturn(null);
+        $mis->expects($this->never())->method('studentLogin');
         $mis->expects($this->once())->method('employeeLogin')->willReturn(['response' => 'success', 'data' => ['data' => [
             'employeeId' => $stored['mis_id'], 'firstName' => $stored['first_name'], 'lastName' => $stored['last_name'],
             'departmentName' => 'Health Services', 'employmentStatus' => 'active', 'position' => 'Clinician',

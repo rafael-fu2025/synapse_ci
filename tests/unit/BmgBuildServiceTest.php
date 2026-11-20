@@ -627,6 +627,64 @@ final class BmgBuildServiceTest extends CIUnitTestCase
         $this->assertSame([], $this->calls, 'Invalid inputs must never start the compiler.');
     }
 
+    public function testPurgeExpiredRemovesExpiredAndCorruptBuildsWhileRespectingActiveLockAndCommand(): void
+    {
+        $missingRoot = $this->root . '/missing-builds';
+        $missingService = new BmgBuildService($this->buildDb, $this->config, $missingRoot);
+        $this->assertSame(['removed' => 0, 'busy' => false], $missingService->purgeExpired());
+
+        $validId = $this->builds->build(1, $this->input())['release']['id'];
+        $expiredId = $this->builds->build(1, $this->input())['release']['id'];
+        $this->resign($this->root . '/' . $expiredId . '/manifest.json', ['created' => time() - 1801, 'expires' => time() - 1]);
+
+        $corruptId = 'build-' . str_repeat('c', 32);
+        mkdir($this->root . '/' . $corruptId, 0700, true);
+        file_put_contents($this->root . '/' . $corruptId . '/manifest.json', '{not-valid-json');
+
+        $unrelatedDir = $this->root . '/manual-release';
+        mkdir($unrelatedDir, 0700, true);
+
+        $lockHandle = fopen($this->root . '/.build-lock', 'c');
+        $this->assertNotFalse($lockHandle);
+        $this->assertTrue(flock($lockHandle, LOCK_EX | LOCK_NB));
+        try {
+            $this->assertSame(['removed' => 0, 'busy' => true], $this->builds->purgeExpired());
+            $this->assertDirectoryExists($this->root . '/' . $expiredId);
+            $this->assertDirectoryExists($this->root . '/' . $corruptId);
+        } finally {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
+        }
+
+        $this->assertSame(['removed' => 2, 'busy' => false], $this->builds->purgeExpired());
+        $this->assertDirectoryExists($this->root . '/' . $validId);
+        $this->assertDirectoryExists($unrelatedDir);
+        $this->assertDirectoryDoesNotExist($this->root . '/' . $expiredId);
+        $this->assertDirectoryDoesNotExist($this->root . '/' . $corruptId);
+
+        $optionsProp = new ReflectionProperty(\CodeIgniter\CLI\CLI::class, 'options');
+        $savedOptions = $optionsProp->getValue();
+        $optionsProp->setValue(null, []);
+        try {
+            $service = $this->builds;
+            $command = new class(service('logger'), service('commands'), $service) extends \App\Commands\PurgeBmgBuilds {
+                public function __construct($logger, $commands, private BmgBuildService $injected)
+                {
+                    parent::__construct($logger, $commands);
+                }
+                protected function purgeService(): BmgBuildService
+                {
+                    return $this->injected;
+                }
+            };
+            $optionsProp->setValue(null, []);
+            $this->assertSame(EXIT_SUCCESS, $command->run([]));
+            $this->assertSame(EXIT_ERROR, $command->run(['foo' => 'bar']));
+        } finally {
+            $optionsProp->setValue(null, $savedOptions);
+        }
+    }
+
     private function controller(string $method, array $post = []): \App\Controllers\BmgUsbController
     {
         $request = service('request');

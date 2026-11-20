@@ -39,7 +39,7 @@ final class GuidanceClientDirectoryService
         if ($page->q !== '') {
             $builder->groupStart();
             LikePattern::apply($builder, 'p.mis_id', $page->q);
-            $tokens = preg_split('/\s+/u', $page->q, -1, PREG_SPLIT_NO_EMPTY);
+            $tokens = preg_split('/[\s,]+/u', $page->q, -1, PREG_SPLIT_NO_EMPTY);
             if ($tokens !== []) {
                 $builder->orGroupStart();
                 foreach ($tokens as $token) {

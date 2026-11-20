@@ -46,6 +46,8 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
     private int $associateUserId;
     private int $facultyUserId;
     private int $studentPersonId;
+    private int $secondStudentPersonId;
+    private int $studentUserId;
     private string $studentMisId = '2026-9001';
 
     protected function setUp(): void
@@ -105,6 +107,33 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
             'department' => 'CAS',
         ]);
 
+        $this->secondStudentPersonId = (int) $this->personModel->insert([
+            'tenant_id'  => 1,
+            'mis_id'     => '2026-B-' . $suffix,
+            'kind'       => 'student',
+            'first_name' => 'Lina',
+            'last_name'  => 'Garcia',
+            'email'      => 'lina.garcia.' . $suffix . '@example.edu',
+        ], true);
+        $this->studentModel->insert([
+            'tenant_id'  => 1,
+            'person_id'  => $this->secondStudentPersonId,
+            'program'    => 'BS Education',
+            'year_level' => 2,
+            'department' => 'COE',
+        ]);
+
+        $this->studentUserId    = (int) $this->userModel->insert([
+            'tenant_id'     => 1,
+            'person_id'     => $this->studentPersonId,
+            'username'      => 'student_' . $suffix,
+            'email'         => 'student.' . $suffix . '@example.edu',
+            'password_hash' => password_hash('Secret123!', PASSWORD_BCRYPT),
+            'role'          => 'student',
+            'status'        => 'active',
+            'auth_version'  => 1,
+        ], true);
+
         $this->supervisorUserId = $this->createUser('sup_guidance_' . $suffix, 'guidance_supervisor', 'Elena', 'Reyes', 'SUP-' . $suffix);
         $this->associateUserId  = $this->createUser('assoc_guidance_' . $suffix, 'counsellor', 'Carlo', 'Mendoza', 'ASC-' . $suffix);
         $this->facultyUserId    = $this->createUser('fac_teacher_' . $suffix, 'employee', 'Rosa', 'Cruz', 'FAC-' . $suffix);
@@ -121,7 +150,7 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
             'email'      => $username . '@example.edu',
         ], true);
 
-        return (int) $this->userModel->insert([
+        $userId = (int) $this->userModel->insert([
             'tenant_id'     => 1,
             'person_id'     => $personId,
             'username'      => $username,
@@ -131,6 +160,17 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
             'status'        => 'active',
             'auth_version'  => 1,
         ], true);
+        $this->db->table('employee_profiles')->insert([
+            'tenant_id' => 1,
+            'person_id' => $personId,
+            'department' => str_starts_with($role, 'guidance') || $role === 'counsellor' ? 'Guidance' : 'Faculty',
+            'position' => $role,
+            'employment_status' => 'active',
+            'is_teaching' => $role === 'employee' ? 1 : 0,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+        return $userId;
     }
 
     private function buildRequest(string $method, array $post = [], array $get = [], bool $ajax = true): array
@@ -293,23 +333,29 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
         $ctrl = $this->makeIntakeController($this->supervisorUserId, $this->facultyUserId, 'POST', [
             'mis_id' => '2026-%',
         ]);
-        $res = $ctrl->resolveSubject();
+        $res = $ctrl->resolveStudent();
         $this->assertSame(404, $res->getStatusCode());
 
         // 2. Exact MIS ID resolves person
         $ctrl = $this->makeIntakeController($this->supervisorUserId, $this->facultyUserId, 'POST', [
             'mis_id' => $this->studentMisId,
         ]);
-        $res = $ctrl->resolveSubject();
+        $res = $ctrl->resolveStudent();
         $this->assertSame(200, $res->getStatusCode());
         $payload = json_decode((string) $res->getBody(), true, 512, JSON_THROW_ON_ERROR);
         $this->assertTrue($payload['success']);
         $this->assertSame($this->studentPersonId, $payload['person']['person_id']);
 
+        // 2b. Student accounts cannot use the employee referral resolver or form.
+        $studentCtrl = $this->makeIntakeController($this->supervisorUserId, $this->studentUserId, 'POST', [
+            'mis_id' => $this->studentMisId,
+        ]);
+        $this->assertSame(403, $studentCtrl->resolveStudent()->getStatusCode());
+
         // 3. Live portal submission blocked when canonical_forms_signoff gate is disabled
         $ctrl = $this->makeIntakeController($this->supervisorUserId, $this->facultyUserId, 'POST', [
             'source_type'       => 'employee_teacher',
-            'subject_person_id' => $this->studentPersonId,
+            'subject_person_ids' => [$this->studentPersonId, $this->secondStudentPersonId],
             'reasons'           => ['emotional_distress'],
             'reasons_narrative' => 'Observed severe distress during exam week.',
             'priority_hint'     => 'urgent',
@@ -322,21 +368,33 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
         foreach (['guidance_head', 'qa_office', 'dpo'] as $role) {
             $this->gateService->recordSignoff('canonical_forms_signoff', $role, 'OK', 1, $this->supervisorUserId);
         }
+        $beforeMaxId = (int) ($this->db->table('guidance_intake_referrals')->selectMax('id')->get()->getRowArray()['id'] ?? 0);
         $ctrl = $this->makeIntakeController($this->supervisorUserId, $this->facultyUserId, 'POST', [
-            'source_type'       => 'employee_teacher',
-            'subject_person_id' => $this->studentPersonId,
-            'reasons'           => ['emotional_distress'],
-            'reasons_narrative' => 'Observed severe distress during exam week.',
-            'priority_hint'     => 'urgent',
-            'action'            => 'submit',
+            'source_type'        => 'employee_teacher',
+            'subject_person_ids' => [$this->studentPersonId, $this->secondStudentPersonId],
+            'reasons'            => ['emotional_distress'],
+            'reasons_narrative'  => 'Observed severe distress during exam week.',
+            'priority_hint'      => 'urgent',
+            'action'             => 'submit',
         ]);
         $submitted = $ctrl->portalStore();
         $this->assertSame(200, $submitted->getStatusCode());
 
-        $row = $this->db->table('guidance_intake_referrals')->orderBy('id', 'DESC')->get()->getRowArray();
-        $this->assertNotNull($row);
+        $rows = $this->db->table('guidance_intake_referrals')
+            ->where('id >', $beforeMaxId)
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+        $this->assertCount(2, $rows);
+        $this->assertSame(
+            [$this->studentPersonId, $this->secondStudentPersonId],
+            array_map(static fn (array $record): int => (int) $record['subject_person_id'], $rows)
+        );
+        foreach ($rows as $record) {
+            $this->assertSame('submitted', $record['status']);
+        }
+        $row = $rows[0];
         $refId = (int) $row['id'];
-        $this->assertSame('submitted', $row['status']);
 
         // 5. Guidance intake index & show render decrypted referral
         $indexHtml = $this->makeIntakeController($this->supervisorUserId, $this->facultyUserId, 'GET', [], [], false)->index();

@@ -14,7 +14,7 @@ final class SidebarRoleVisibilityTest extends CIUnitTestCase
 {
     public static function roles(): array
     {
-        $personal = ['Personal Health'];
+        $personal = ['My Health Portal'];
         $clinic = ['Clinic Workstation'];
         $guidance = ['Guidance Workstation'];
         $facilities = ['Facilities (BMG)'];
@@ -50,6 +50,7 @@ final class SidebarRoleVisibilityTest extends CIUnitTestCase
             session()->set(['tenant_id' => 1, 'user' => [
                 'id' => 1, 'person_id' => 1, 'tenant_id' => 1, 'logged_in' => true,
                 'name' => 'Role Fixture', 'username' => 'fixture', 'role' => $role,
+                'person_kind' => $role === 'student' ? 'student' : 'employee',
                 'permissions' => $permissions,
             ]]);
             foreach (['clinic', 'guidance', 'facilities', 'dashboard'] as $path) {
@@ -69,6 +70,13 @@ final class SidebarRoleVisibilityTest extends CIUnitTestCase
                 }
                 foreach ($denied as $link) {
                     $this->assertFalse($this->hasLink($hrefs, $link), "{$role} on /{$path} must not expose {$link}");
+                }
+                $this->assertSame(1, substr_count($html, '>My Surveys<'), "{$role} must have one consolidated My Surveys link");
+                $this->assertStringNotContainsString('>Multiple Intelligence<', $html, "{$role} must not have a separate student MI link");
+                if ($role === 'student') {
+                    $this->assertFalse($this->hasLink($hrefs, '/portal/referrals'), 'Students must not see employee Guidance referrals.');
+                } elseif ($role === 'employee') {
+                    $this->assertTrue($this->hasLink($hrefs, '/portal/referrals'), 'Employees must see Guidance referrals.');
                 }
             }
         } finally {

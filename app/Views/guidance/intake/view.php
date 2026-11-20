@@ -58,8 +58,6 @@ $priorityBadge = static fn (string $hint): string => match ($hint) {
 };
 
 $isTerminal = in_array($status, ['declined', 'closed', 'withdrawn', 'external_handoff'], true);
-$canWithdraw = in_array($status, ['draft', 'submitted', 'received'], true)
-    && (int) ($referral['referrer_user_id'] ?? 0) === (int) ($actor['id'] ?? 0);
 
 $assessments = $safetyHistory['assessments'] ?? [];
 $events      = $safetyHistory['events'] ?? [];
@@ -182,22 +180,6 @@ $events      = $safetyHistory['events'] ?? [];
                   <?= csrf_field() ?>
                   <button type="submit" class="btn btn-info btn-sm">
                     <i class="bi bi-check2-circle me-1" aria-hidden="true"></i> Mark Received
-                  </button>
-                </form>
-              <?php endif; ?>
-
-              <?php if ($canWithdraw): ?>
-                <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/withdraw'), 'attr') ?>"
-                      method="POST"
-                      data-background-submit
-                      data-confirm="Withdraw this referral prior to triage?"
-                      data-confirm-title="Withdraw Referral"
-                      data-confirm-label="Withdraw"
-                      data-confirm-tone="danger">
-                  <?= csrf_field() ?>
-                  <input type="hidden" name="confirmed" value="1">
-                  <button type="submit" class="btn btn-outline-danger btn-sm">
-                    <i class="bi bi-x-circle me-1" aria-hidden="true"></i> Withdraw Referral
                   </button>
                 </form>
               <?php endif; ?>

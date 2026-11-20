@@ -11,7 +11,7 @@ Default budgets, shared across portals and PHP workers using the same database:
 
 | Budget | Attempts | Window |
 |---|---:|---:|
-| Client IP | 60 | 60 seconds |
+| Client IP | 120 | 60 seconds |
 | Normalized identifier + client IP | 5 | 300 seconds |
 
 These count **all submissions**, not only incorrect passwords: successful logins
@@ -57,7 +57,7 @@ Keep application-server clocks synchronized when multiple servers share counters
 `Config\LoginSecurity` supports these environment overrides:
 
 ```ini
-loginsecurity.ipAttempts = 60
+loginsecurity.ipAttempts = 120
 loginsecurity.ipWindowSeconds = 60
 loginsecurity.identityAttempts = 5
 loginsecurity.identityWindowSeconds = 300

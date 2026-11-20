@@ -47,33 +47,23 @@ final class GuidanceIntakeController extends BaseController
     }
 
     // -------------------------------------------------------------------------
-    // Portal Referral Submission (Teachers / Staff / Self)
+    // Employee Portal Referral Submission
     // -------------------------------------------------------------------------
 
     /**
      * GET portal/referrals/create
-     * Renders the General Referral intake form for faculty, staff, and self-referrals.
+     * Renders the General Referral intake form for employees referring students.
      */
     public function portalCreate()
     {
         $this->response->setHeader('Cache-Control', 'private, no-store');
 
         try {
-            $user     = $this->portalActor();
+            $user     = $this->employeePortalActor();
             $tenantId = (int) $user['tenant_id'];
             $catalog  = $this->intakeService->getConcernCatalog();
             $gate     = $this->gateService->getGate(GuidanceActivationGateService::GATE_CANONICAL_FORMS, $tenantId);
             $gateOpen = $gate !== null && (int) ($gate['is_enabled'] ?? 0) === 1;
-
-            $selfPerson = null;
-            if (!empty($user['person_id'])) {
-                $selfPerson = $this->db->table('people')
-                    ->where('id', (int) $user['person_id'])
-                    ->where('tenant_id', $tenantId)
-                    ->where('deleted_at', null)
-                    ->get()
-                    ->getRowArray();
-            }
 
             // Referrer's own recent referrals (non-clinical metadata only)
             $myReferrals = $this->db->table('guidance_intake_referrals gir')
@@ -93,7 +83,6 @@ final class GuidanceIntakeController extends BaseController
                 'priorityHints'       => GuidanceIntakeService::PRIORITY_HINTS,
                 'canonicalFormsGate'  => $gate,
                 'canonicalFormsOpen'  => $gateOpen,
-                'selfPerson'          => $selfPerson,
                 'myReferrals'         => $myReferrals,
                 'user'                => $user,
                 'breadcrumbs'         => [
@@ -107,26 +96,45 @@ final class GuidanceIntakeController extends BaseController
     }
 
     /**
-     * POST portal/referrals/resolve-subject
-     * Resolves a subject strictly by exact MIS ID (no directory browsing or wildcards).
+     * POST portal/referrals/resolve-student
+     * Resolves an active student strictly by exact MIS ID.
+     */
+    public function resolveStudent()
+    {
+        $this->response->setHeader('Cache-Control', 'no-store');
+
+        try {
+            $user     = $this->employeePortalActor();
+            $tenantId = (int) $user['tenant_id'];
+            $person   = $this->intakeService->resolveStudent($this->postedMisId(), $tenantId);
+
+            return $this->response->setStatusCode(200)->setJSON([
+                'success' => true,
+                'person'  => $person,
+                'csrf'    => ['name' => csrf_token(), 'hash' => csrf_hash()],
+            ]);
+        } catch (Throwable $error) {
+            [$status, $message] = $this->safeFailure($error, 'resolveStudent');
+            return $this->response->setStatusCode($status)->setJSON([
+                'success' => false,
+                'message' => $message,
+                'csrf'    => ['name' => csrf_token(), 'hash' => csrf_hash()],
+            ]);
+        }
+    }
+
+    /**
+     * POST guidance/intake/resolve-subject
+     * Resolves a person for an authorized Guidance intake workstation.
      */
     public function resolveSubject()
     {
         $this->response->setHeader('Cache-Control', 'no-store');
 
         try {
-            $user     = $this->portalActor();
+            $user     = $this->freshActor('guidance.intake.process');
             $tenantId = (int) $user['tenant_id'];
-
-            $misId = (string) ($this->request->getPost('mis_id') ?? '');
-            if ($misId === '' && str_contains(strtolower($this->request->getHeaderLine('Content-Type')), 'application/json')) {
-                $json = $this->request->getJSON(true);
-                if (is_array($json)) {
-                    $misId = (string) ($json['mis_id'] ?? '');
-                }
-            }
-
-            $person = $this->intakeService->resolveSubject($misId, $tenantId);
+            $person   = $this->intakeService->resolveSubject($this->postedMisId(), $tenantId);
 
             return $this->response->setStatusCode(200)->setJSON([
                 'success' => true,
@@ -150,7 +158,7 @@ final class GuidanceIntakeController extends BaseController
     public function portalStore()
     {
         return $this->mutateWithActor(
-            fn (): array => $this->portalActor(),
+            fn (): array => $this->employeePortalActor(),
             function (array $actor): array {
                 $tenantId       = (int) $actor['tenant_id'];
                 $action         = strtolower(trim((string) ($this->request->getPost('action') ?? 'submit')));
@@ -172,40 +180,29 @@ final class GuidanceIntakeController extends BaseController
                     ];
                 }
 
-                [$sourceType, $subjectPersonId, $selections, $narrative, $priorActions, $priorityHint] = $this->parseValidatedIntakeInput(
-                    $actor,
-                    $tenantId,
-                    ['self', 'employee_teacher', 'staff_on_behalf', 'faculty', 'staff', 'peer'],
-                    'employee_teacher'
-                );
+                [$sourceType, $subjectPersonIds, $selections, $narrative, $priorActions, $priorityHint] = $this->parseValidatedEmployeeIntakeInput();
 
                 if (!$keepDraft) {
                     $this->gateService->assertGateEnabled(GuidanceActivationGateService::GATE_CANONICAL_FORMS, $tenantId);
                 }
 
-                $draft = $this->intakeService->createDraft(
-                    $subjectPersonId,
+                $referrals = $this->intakeService->createEmployeeReferrals(
+                    $subjectPersonIds,
                     $sourceType,
                     $selections,
                     $narrative,
                     $priorActions,
                     $priorityHint,
+                    !$keepDraft,
                     $actor
                 );
-
-                if ($keepDraft) {
-                    return [
-                        '/portal/referrals/create',
-                        "Draft referral {$draft['referral_number']} saved.",
-                        $this->workspaceRefresh('/portal/referrals/create', 'portal.referrals'),
-                    ];
-                }
-
-                $submitted = $this->intakeService->submitReferral((int) $draft['id'], $actor);
+                $count = count($referrals);
 
                 return [
                     '/portal/referrals/create',
-                    "Referral {$submitted['referral_number']} submitted to Guidance.",
+                    $keepDraft
+                        ? ($count === 1 ? 'Referral draft saved.' : "{$count} referral drafts saved.")
+                        : ($count === 1 ? 'Referral submitted to Guidance.' : "{$count} referrals submitted to Guidance."),
                     $this->workspaceRefresh('/portal/referrals/create', 'portal.referrals'),
                 ];
             },
@@ -227,7 +224,6 @@ final class GuidanceIntakeController extends BaseController
                 $keepDraft = $action === 'draft' || $this->request->getPost('keep_draft') === '1';
 
                 [$sourceType, $subjectPersonId, $selections, $narrative, $priorActions, $priorityHint] = $this->parseValidatedIntakeInput(
-                    $actor,
                     $tenantId,
                     ['staff_on_behalf', 'employee_teacher'],
                     'staff_on_behalf'
@@ -268,14 +264,48 @@ final class GuidanceIntakeController extends BaseController
     }
 
     /**
+     * Parses the employee portal form, including its bounded list of student subjects.
+     *
+     * @return array{0: string, 1: array<int, int>, 2: array<int|string, mixed>, 3: string, 4: ?string, 5: string}
+     */
+    private function parseValidatedEmployeeIntakeInput(): array
+    {
+        $sourceType = trim((string) ($this->request->getPost('source_type') ?? 'employee_teacher'));
+        if (!in_array($sourceType, ['employee_teacher', 'staff_on_behalf'], true)) {
+            throw new InvalidArgumentException('Select a valid employee referral type.', 422);
+        }
+
+        $rawSubjectIds = $this->request->getPost('subject_person_ids') ?? [];
+        if (!is_array($rawSubjectIds)) {
+            throw new InvalidArgumentException('Select at least one student for this referral.', 422);
+        }
+        $subjectPersonIds = [];
+        foreach ($rawSubjectIds as $rawId) {
+            if (!is_int($rawId) && !(is_string($rawId) && preg_match('/\A[1-9][0-9]*\z/D', $rawId) === 1)) {
+                throw new InvalidArgumentException('Selected students must use valid person identifiers.', 422);
+            }
+            $subjectPersonIds[(int) $rawId] = (int) $rawId;
+        }
+        $subjectPersonIds = array_values($subjectPersonIds);
+        if ($subjectPersonIds === []) {
+            throw new InvalidArgumentException('Select at least one student for this referral.', 422);
+        }
+        if (count($subjectPersonIds) > GuidanceIntakeService::MAX_PORTAL_STUDENTS) {
+            throw new InvalidArgumentException('Select no more than ' . GuidanceIntakeService::MAX_PORTAL_STUDENTS . ' students per referral form.', 422);
+        }
+
+        [$selections, $narrative, $priorActions, $priorityHint] = $this->parseSharedIntakeFields();
+
+        return [$sourceType, $subjectPersonIds, $selections, $narrative, $priorActions, $priorityHint];
+    }
+
+    /**
      * Parses and validates shared General Referral concern-catalog and subject fields.
      *
-     * @param array<string, mixed> $actor
      * @param array<int, string> $allowedSources
      * @return array{0: string, 1: int, 2: array<int|string, mixed>, 3: string, 4: ?string, 5: string}
      */
     private function parseValidatedIntakeInput(
-        array $actor,
         int $tenantId,
         array $allowedSources,
         string $defaultSource
@@ -286,12 +316,7 @@ final class GuidanceIntakeController extends BaseController
         }
 
         $subjectPersonId = (int) ($this->request->getPost('subject_person_id') ?? 0);
-        if ($sourceType === 'self') {
-            $subjectPersonId = (int) ($actor['person_id'] ?? 0);
-            if ($subjectPersonId <= 0) {
-                throw new InvalidArgumentException('Your account does not have a linked person profile for self-referral.', 422);
-            }
-        } elseif ($subjectPersonId <= 0) {
+        if ($subjectPersonId <= 0) {
             $misId = trim((string) ($this->request->getPost('mis_id') ?? ''));
             if ($misId === '') {
                 throw new InvalidArgumentException('Look up the student or employee using an exact MIS ID first.', 422);
@@ -300,6 +325,16 @@ final class GuidanceIntakeController extends BaseController
             $subjectPersonId = (int) $resolved['person_id'];
         }
 
+        [$selections, $narrative, $priorActions, $priorityHint] = $this->parseSharedIntakeFields();
+
+        return [$sourceType, $subjectPersonId, $selections, $narrative, $priorActions, $priorityHint];
+    }
+
+    /**
+     * @return array{0: array<int|string, mixed>, 1: string, 2: ?string, 3: string}
+     */
+    private function parseSharedIntakeFields(): array
+    {
         $catalog     = $this->intakeService->getConcernCatalog();
         $validCodes  = array_keys($catalog['checklist'] ?? []);
         $rawReasons  = $this->request->getPost('reasons') ?? $this->request->getPost('selections') ?? [];
@@ -334,7 +369,7 @@ final class GuidanceIntakeController extends BaseController
             throw new InvalidArgumentException('Select a valid priority attention hint.', 422);
         }
 
-        return [$sourceType, $subjectPersonId, $selections, $narrative, $priorActions, $priorityHint];
+        return [$selections, $narrative, $priorActions, $priorityHint];
     }
 
     // -------------------------------------------------------------------------
@@ -621,12 +656,12 @@ final class GuidanceIntakeController extends BaseController
 
     /**
      * POST guidance/intake/(:num)/withdraw
-     * Permitted only by the original referrer prior to triage.
+     * Permitted only by the original employee referrer prior to triage.
      */
     public function withdraw(int $id)
     {
         return $this->mutateWithActor(
-            fn (): array => $this->portalActor(),
+            fn (): array => $this->employeePortalActor(),
             function (array $actor) use ($id): array {
                 $this->requireConfirmation();
                 $this->intakeService->withdrawReferral($id, $actor);
@@ -641,6 +676,27 @@ final class GuidanceIntakeController extends BaseController
                 ];
             },
             '/portal/referrals/create'
+        );
+    }
+
+    /**
+     * Compatibility route for an original employee referrer using the Guidance-host URL.
+     */
+    public function withdrawGuidance(int $id)
+    {
+        return $this->mutateWithActor(
+            fn (): array => $this->employeePortalActor(),
+            function (array $actor) use ($id): array {
+                $this->requireConfirmation();
+                $this->intakeService->withdrawReferral($id, $actor);
+
+                return [
+                    '/guidance/intake/' . $id,
+                    'Referral withdrawn prior to triage.',
+                    $this->intakeRefresh($id),
+                ];
+            },
+            '/guidance/intake/' . $id
         );
     }
 
@@ -832,6 +888,23 @@ final class GuidanceIntakeController extends BaseController
     // Shared Helpers
     // -------------------------------------------------------------------------
 
+    private function employeePortalActor(): array
+    {
+        return $this->intakeService->authorizeEmployeeReferrer($this->portalActor());
+    }
+
+    private function postedMisId(): string
+    {
+        $misId = (string) ($this->request->getPost('mis_id') ?? '');
+        if ($misId === '' && str_contains(strtolower($this->request->getHeaderLine('Content-Type')), 'application/json')) {
+            $json = $this->request->getJSON(true);
+            if (is_array($json)) {
+                $misId = (string) ($json['mis_id'] ?? '');
+            }
+        }
+        return $misId;
+    }
+
     private function portalActor(): array
     {
         if ($this->portalActorResolver !== null) {
@@ -908,8 +981,9 @@ final class GuidanceIntakeController extends BaseController
             $msg = trim($error->getMessage());
             return [422, $msg !== '' ? $msg : 'Please check the required fields and try again.'];
         }
-        if ($status === 404 && $operation === 'resolveSubject') {
-            return [404, 'No matching person found for that exact MIS ID. Directory searches and wildcards are not permitted.'];
+        if ($status === 404 && in_array($operation, ['resolveSubject', 'resolveStudent'], true)) {
+            $noun = $operation === 'resolveStudent' ? 'student' : 'person';
+            return [404, "No matching {$noun} found for that exact MIS ID. Directory searches and wildcards are not permitted."];
         }
 
         return [$status, match ($status) {

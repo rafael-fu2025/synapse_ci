@@ -30,6 +30,8 @@ final class GuidanceIntakeService
     public const CATALOG_VERSION = '1.0.0';
     public const FORM_CODE = 'F-OGC-GRE-GGR-005-00';
 
+    public const MAX_PORTAL_STUDENTS = 25;
+
     public const SOURCE_TYPES = [
         'employee_teacher',
         'self',
@@ -123,6 +125,24 @@ final class GuidanceIntakeService
      */
     public function resolveSubject(string $misId, ?int $tenantId = null): array
     {
+        return $this->resolvePersonByMisId($misId, $tenantId);
+    }
+
+    /**
+     * Resolve one active student by exact MIS ID for the employee referral surface.
+     *
+     * @return array<string, mixed>
+     */
+    public function resolveStudent(string $misId, ?int $tenantId = null): array
+    {
+        return $this->resolvePersonByMisId($misId, $tenantId, 'student');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolvePersonByMisId(string $misId, ?int $tenantId = null, ?string $requiredKind = null): array
+    {
         $cleanMisId = trim($misId);
 
         // Reject empty or wildcard searches (%, *, ?)
@@ -132,12 +152,15 @@ final class GuidanceIntakeService
 
         $tid = $tenantId ?? CurrentTenant::id();
 
-        $person = $this->personModel->scoped($tid)
-            ->where('mis_id', $cleanMisId)
-            ->first();
+        $builder = $this->personModel->scoped($tid)->where('mis_id', $cleanMisId);
+        if ($requiredKind !== null) {
+            $builder->where('kind', $requiredKind);
+        }
+        $person = $builder->first();
 
         if ($person === null) {
-            throw new InvalidArgumentException("Subject not found for MIS ID '{$cleanMisId}'.", 404);
+            $label = $requiredKind === 'student' ? 'Student' : 'Subject';
+            throw new InvalidArgumentException("{$label} not found for MIS ID '{$cleanMisId}'.", 404);
         }
 
         $result = [
@@ -304,6 +327,111 @@ final class GuidanceIntakeService
     public function getChecklist(?int $tenantId = null): array
     {
         return $this->getConcernCatalog()['checklist'] ?? [];
+    }
+
+    /**
+     * Create one independently managed referral per selected student in a single transaction.
+     *
+     * @param array<int, int|string> $subjectPersonIds
+     * @param array<int|string, mixed> $selections
+     * @param array<string, mixed> $actor
+     * @return array<int, array<string, mixed>>
+     */
+    public function createEmployeeReferrals(
+        array $subjectPersonIds,
+        string $sourceType,
+        array $selections,
+        string $narrative,
+        ?string $priorActions,
+        string $priorityHint,
+        bool $submit,
+        array $actor
+    ): array {
+        if (!in_array($sourceType, ['employee_teacher', 'staff_on_behalf'], true)) {
+            throw new InvalidArgumentException('Select a valid employee referral type.', 422);
+        }
+        if (!in_array($priorityHint, self::PRIORITY_HINTS, true)) {
+            throw new InvalidArgumentException('Select a valid priority attention hint.', 422);
+        }
+        if (trim($narrative) === '') {
+            throw new InvalidArgumentException('Referral narrative is required.', 422);
+        }
+
+        $selectedCodes = isset($selections['items']) && is_array($selections['items'])
+            ? $selections['items']
+            : $selections;
+        $validCodes = array_keys($this->getChecklist());
+        if ($selectedCodes === [] || array_diff($selectedCodes, $validCodes) !== []) {
+            throw new InvalidArgumentException('Select at least one valid concern from the catalog.', 422);
+        }
+
+        $studentIds = [];
+        foreach ($subjectPersonIds as $rawId) {
+            if (!is_int($rawId) && !(is_string($rawId) && preg_match('/\A[1-9][0-9]*\z/D', $rawId) === 1)) {
+                throw new InvalidArgumentException('Selected students must use valid person identifiers.', 422);
+            }
+            $id = (int) $rawId;
+            if ($id <= 0) {
+                throw new InvalidArgumentException('Selected students must use valid person identifiers.', 422);
+            }
+            $studentIds[$id] = $id;
+        }
+        $studentIds = array_values($studentIds);
+        if ($studentIds === []) {
+            throw new InvalidArgumentException('Select at least one student for this referral.', 422);
+        }
+        if (count($studentIds) > self::MAX_PORTAL_STUDENTS) {
+            throw new InvalidArgumentException('Select no more than ' . self::MAX_PORTAL_STUDENTS . ' students per referral form.', 422);
+        }
+
+        return $this->transaction(function () use (
+            $studentIds,
+            $sourceType,
+            $selections,
+            $narrative,
+            $priorActions,
+            $priorityHint,
+            $submit,
+            $actor
+        ): array {
+            $authority = $this->authorizeEmployeeReferrer($actor);
+            $tenantId = (int) $authority['tenant_id'];
+
+            $students = $this->db->table('people')
+                ->select('id')
+                ->where('tenant_id', $tenantId)
+                ->where('kind', 'student')
+                ->where('deleted_at', null)
+                ->whereIn('id', $studentIds)
+                ->get()
+                ->getResultArray();
+            $foundIds = array_map(static fn (array $row): int => (int) $row['id'], $students);
+            sort($foundIds);
+            $expectedIds = $studentIds;
+            sort($expectedIds);
+            if ($foundIds !== $expectedIds) {
+                throw new InvalidArgumentException('Every selected referral subject must be an active student in your university.', 422);
+            }
+
+            $created = [];
+            foreach ($studentIds as $studentId) {
+                $referral = $this->createDraft(
+                    $studentId,
+                    $sourceType,
+                    $selections,
+                    $narrative,
+                    $priorActions,
+                    $priorityHint,
+                    $authority
+                );
+                if ($submit) {
+                    $referral = $this->submitReferral((int) $referral['id'], $authority);
+                }
+                $created[] = $referral;
+            }
+
+            return $created;
+        });
     }
 
     /**
@@ -838,31 +966,40 @@ final class GuidanceIntakeService
     {
         $authority = $this->resolveReferrerActor($actor);
         $tenantId = (int) $authority['tenant_id'];
-
-        $referral = $this->referralModel->scoped($tenantId)->find($referralId);
-        if ($referral === null) {
-            throw new InvalidArgumentException('Intake referral not found.', 404);
-        }
-
-        // Permitted only prior to triage (draft, submitted, received)
-        if (!in_array($referral['status'], ['draft', 'submitted', 'received'], true)) {
-            throw new DomainException('Referrals can only be withdrawn prior to triage.', 403);
-        }
-
-        // Permitted only by original referrer
         $actorId = (int) ($authority['id'] ?? 0);
-        $referrerId = (int) $referral['referrer_user_id'];
-        if ($actorId > 0 && $referrerId > 0 && $actorId !== $referrerId) {
-            throw new DomainException('Only the original referrer can withdraw this referral.', 403);
-        }
 
-        return $this->transaction(function () use ($referralId, $tenantId, $authority): array {
+        return $this->transaction(function () use ($referralId, $tenantId, $actorId, $authority): array {
+            $allowedStatuses = ['draft', 'submitted', 'received'];
+            $table = $this->db->protectIdentifiers($this->db->prefixTable('guidance_intake_referrals'));
+            $lockSql = $this->db->DBDriver === 'MySQLi' ? ' FOR UPDATE' : '';
+            $referral = $this->db->query(
+                "SELECT * FROM {$table} WHERE id = ? AND tenant_id = ?{$lockSql}",
+                [$referralId, $tenantId]
+            )->getRowArray();
+            if ($referral === null) {
+                throw new InvalidArgumentException('Intake referral not found.', 404);
+            }
+            if ((int) $referral['referrer_user_id'] !== $actorId) {
+                throw new DomainException('Only the original referrer can withdraw this referral.', 403);
+            }
+            if (!in_array($referral['status'], $allowedStatuses, true)) {
+                throw new DomainException('Referrals can only be withdrawn prior to triage.', 403);
+            }
+
             $now = date('Y-m-d H:i:s');
-            $this->referralModel->update($referralId, [
-                'status' => 'withdrawn',
-                'closed_at' => $now,
-                'updated_at' => $now,
-            ]);
+            $updated = $this->db->table('guidance_intake_referrals')
+                ->where('id', $referralId)
+                ->where('tenant_id', $tenantId)
+                ->where('referrer_user_id', $actorId)
+                ->whereIn('status', $allowedStatuses)
+                ->update([
+                    'status' => 'withdrawn',
+                    'closed_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            if (!$updated || $this->db->affectedRows() !== 1) {
+                throw new RuntimeException('Referral changed; reload before retrying.', 409);
+            }
 
             $record = $this->referralModel->scoped($tenantId)->find($referralId);
             $this->audit('guidance.intake.withdrawn', $referralId, $authority);
@@ -1162,6 +1299,51 @@ final class GuidanceIntakeService
         );
 
         return $decrypted;
+    }
+
+    /**
+     * Reload and verify an employee-backed referrer from the active tenant.
+     *
+     * @param array<string, mixed> $actor
+     * @return array<string, mixed>
+     */
+    public function authorizeEmployeeReferrer(array $actor): array
+    {
+        $tenantId = (int) ($actor['tenant_id'] ?? 0);
+        $actorId = (int) ($actor['id'] ?? 0);
+        if ($tenantId <= 0 || $actorId <= 0) {
+            throw new DomainException('An active employee account is required to create Guidance referrals.', 403);
+        }
+
+        $row = $this->db->table('users u')
+            ->select('u.id, u.tenant_id, u.person_id, u.username, u.email, u.role, p.first_name, p.last_name, ep.department, ep.position, ep.employment_status')
+            ->join('people p', 'p.id = u.person_id AND p.tenant_id = u.tenant_id AND p.deleted_at IS NULL')
+            ->join('employee_profiles ep', 'ep.person_id = p.id AND ep.tenant_id = p.tenant_id')
+            ->where('u.id', $actorId)
+            ->where('u.tenant_id', $tenantId)
+            ->where('u.status', 'active')
+            ->where('u.deleted_at', null)
+            ->where('p.kind', 'employee')
+            ->where('ep.employment_status', 'active')
+            ->get()
+            ->getRowArray();
+        if ($row === null) {
+            throw new DomainException('Guidance referrals are available only to employees.', 403);
+        }
+
+        $name = trim((string) ($row['first_name'] ?? '') . ' ' . (string) ($row['last_name'] ?? ''));
+        return [
+            'id' => (int) $row['id'],
+            'tenant_id' => (int) $row['tenant_id'],
+            'user_id' => (int) $row['id'],
+            'person_id' => (int) $row['person_id'],
+            'username' => (string) $row['username'],
+            'name' => $name !== '' ? $name : (string) $row['username'],
+            'designation' => (string) ($row['position'] ?: $row['role']),
+            'department' => (string) ($row['department'] ?: 'General'),
+            'contact' => $row['email'] ?? null,
+            'role' => (string) $row['role'],
+        ];
     }
 
     /**

@@ -100,6 +100,15 @@ final class HttpMisClient implements MisClientInterface
             return null;
         }
 
+        if ($status === 500) {
+            // The upstream answered and then failed while resolving the account. The live
+            // employee endpoint answers 500 for accounts whose state it cannot handle, so the
+            // credential cannot be judged from this response. Report an unverifiable account
+            // rather than a transport outage or a rejected password.
+            $this->logLoginFailure($path, 'upstream_account_error', $status, is_array($decoded) ? $decoded : null, secret: $body['password'] ?? null);
+            throw new MisAccountException();
+        }
+
         if ($status < 200 || $status >= 300
             || ! is_array($decoded) || $decoded === [] || array_is_list($decoded)) {
             $this->logLoginFailure($path, $status >= 200 && $status < 300 ? 'invalid_json_body' : 'http_error', $status, is_array($decoded) ? $decoded : null);
@@ -175,7 +184,7 @@ final class HttpMisClient implements MisClientInterface
     }
 
     /** Log only non-secret structural metadata (never keys, passwords, tokens, URLs, or payloads). */
-    private function logLoginFailure(string $path, string $stage, int $status, ?array $decoded = null, ?int $curlErrno = null): void
+    private function logLoginFailure(string $path, string $stage, int $status, ?array $decoded = null, ?int $curlErrno = null, ?string $secret = null): void
     {
         if (! function_exists('log_message')) {
             return;
@@ -189,16 +198,45 @@ final class HttpMisClient implements MisClientInterface
             }
         }
         try {
-            log_message('warning', 'MIS login unavailable [endpoint={endpoint}, stage={stage}, status={status}, curl_errno={curlErrno}, keys={keys}]', [
+            log_message('warning', 'MIS login unavailable [endpoint={endpoint}, stage={stage}, status={status}, curl_errno={curlErrno}, keys={keys}, detail={detail}]', [
                 'endpoint'  => $path,
                 'stage'     => $stage,
                 'status'    => $status,
                 'curlErrno' => $curlErrno ?? 0,
                 'keys'      => $keys === [] ? 'none' : implode(',', $keys),
+                'detail'    => $this->upstreamDetail($decoded, $secret),
             ]);
         } catch (\Throwable) {
             // Logging must never prevent fail-closed exception handling.
         }
+    }
+
+    /**
+     * Upstream message for support diagnostics: control characters stripped, whitespace collapsed,
+     * the submitted password removed and the text bounded. Carries no trace, path or line number.
+     */
+    private function upstreamDetail(?array $decoded, ?string $secret): string
+    {
+        if ($decoded === null) {
+            return 'none';
+        }
+        $detail = null;
+        foreach (['message', 'title'] as $key) {
+            $value = $decoded[$key] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                $detail = $value;
+                break;
+            }
+        }
+        if ($detail === null) {
+            return 'none';
+        }
+        $detail = preg_replace('/[\x00-\x1F\x7F]/', ' ', $detail) ?? '';
+        $detail = trim(preg_replace('/\s+/', ' ', $detail) ?? '');
+        if ($secret !== null && strlen($secret) >= 3) {
+            $detail = str_replace($secret, '[redacted]', $detail);
+        }
+        return mb_substr($detail, 0, 160);
     }
 
     /**

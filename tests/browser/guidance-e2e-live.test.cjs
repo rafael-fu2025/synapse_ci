@@ -223,13 +223,13 @@ test('Live E2E Guidance Walkthrough with Real Database Accounts', { timeout: 300
         // Narrow exact-ID lookup
         await page.locator('#exactMisIdInput').fill('HUMUS-TEST-STUDENT');
         const [resolveRes] = await Promise.all([
-          page.waitForResponse((r) => r.url().includes('/portal/referrals/resolve-subject') && r.request().method() === 'POST'),
+          page.waitForResponse((r) => r.url().includes('/portal/referrals/resolve-student') && r.request().method() === 'POST'),
           page.locator('#resolveSubjectBtn').click(),
         ]);
         assert.equal(resolveRes.status(), 200, 'Subject resolve should return 200');
         const resolveJson = await resolveRes.json();
         assert.equal(resolveJson.success, true, 'Exact-ID resolve must succeed');
-        await page.locator('#resolvedSubjectCard').waitFor({ state: 'visible' });
+        await page.locator('#selectedStudentsList input[name="subject_person_ids[]"]').waitFor();
 
         await page.locator('input[name="reasons[]"]').first().check();
         await page.locator('#reasonsNarrative').fill('Live E2E employee referral for attendance and advising support.');
@@ -318,10 +318,11 @@ test('Live E2E Guidance Walkthrough with Real Database Accounts', { timeout: 300
         const pdfBytes = await pdfRes.body();
         assert.equal(pdfBytes.subarray(0, 5).toString('utf8'), '%PDF-', 'Call slip output must start with %PDF-');
 
-        // Assign MI survey to HUMUS-TEST-STUDENT via exact MIS ID input
+        // Assign MI survey to HUMUS-TEST-STUDENT via searchable student checklist
         await assertCleanPage(page, '/guidance/assessments/mi', 'Multiple Intelligence');
         const miForm = page.locator('form[action*="/guidance/assessments/mi/assign"]');
-        await miForm.locator('input[name="mis_id"]').fill('HUMUS-TEST-STUDENT');
+        await miForm.locator('#mi-student-checklist-search').fill('HUMUS-TEST-STUDENT');
+        await miForm.locator('.mi-student-check-row:not(.d-none) .mi-student-checkbox').first().check();
         const miResPromise = page.waitForResponse(
           (r) => r.request().method() === 'POST' && r.url().includes('/guidance/assessments/mi/assign'),
           { timeout: 15000 }

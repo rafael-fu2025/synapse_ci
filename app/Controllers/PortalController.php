@@ -73,7 +73,9 @@ final class PortalController extends BaseController
                     ->get()
                     ->getResultArray();
             }
-            if ($db->tableExists('guidance_mi_assignments')) {
+            if ($db->tableExists('guidance_mi_assignments')
+                && (($user['role'] ?? '') === 'superadmin'
+                    || in_array('guidance.assessments.take', $user['permissions'] ?? [], true))) {
                 $activeMiAssignments = $db->table('guidance_mi_assignments')
                     ->where('tenant_id', $tenantId)
                     ->where('person_id', $personId)

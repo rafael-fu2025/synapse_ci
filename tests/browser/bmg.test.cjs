@@ -256,6 +256,12 @@ test('operators can manage batches but cannot configure drums or use hardware co
   await idle.locator('#batchInput').fill('100.25');
   await idle.locator('#startBatchModal button[type="submit"]').click(); await idle.waitForURL('**/facilities/unit/11/batch');
   assert.equal(posts.at(-1).fields.input_weight_kg, '100.25');
+  const hwOperator = await pageFor(t, '/facilities/unit/11?variant=operator-hardware');
+  assert.equal(await hwOperator.locator('[data-bmg-schedule], #unitModal, #deviceModal').count(), 0);
+  assert.equal(await hwOperator.getByRole('button', { name: 'Edit drum', exact: true }).count(), 0);
+  assert.equal(await hwOperator.getByRole('button', { name: 'Revoke device', exact: true }).count(), 0);
+  assert.equal(await hwOperator.getByRole('button', { name: 'Request run now', exact: true }).isEnabled(), true);
+  assert.equal(await hwOperator.getByRole('button', { name: 'Request web stop', exact: true }).isEnabled(), true);
 });
 test('configuration access does not require batch management access', async t => {
   const overview = await pageFor(t, '/facilities?variant=config-only');
@@ -264,7 +270,8 @@ test('configuration access does not require batch management access', async t =>
   assert.equal(await page.getByRole('button', { name: 'Edit drum', exact: true }).isEnabled(), true);
   assert.equal(await page.locator('[data-bmg-schedule], #unitModal, #deviceModal').count(), 3);
   assert.equal(await page.getByRole('button', { name: 'Revoke device', exact: true }).isEnabled(), true);
-  assert.equal(await page.getByRole('button', { name: 'Request run now', exact: true }).isEnabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Request run now', exact: true }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Request web stop', exact: true }).isDisabled(), true);
   assert.equal(await page.locator('#startBatchModal, #completeBatchModal, #cancelBatchModal').count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Complete batch', exact: true }).count(), 0);
 });
@@ -272,7 +279,7 @@ test('hardware and explicit permission gates fail closed', async t => {
   for (const variant of ['gate-off', 'controller-gate-off', 'detail-gate-off', 'no-hardware', 'reader', 'maintenance', 'unbound']) {
     const page = await pageFor(t, '/facilities/unit/11?variant=' + variant);
     assert.equal(await page.getByRole('button', { name: 'Request run now', exact: true }).isDisabled(), true);
-    assert.equal(await page.getByRole('button', { name: 'Request web stop', exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Request web stop', exact: true }).isDisabled(), variant !== 'maintenance');
     if (variant === 'reader') assert.equal(await page.locator('[data-bmg-schedule], #unitModal, #deviceModal, #cancelBatchModal').count(), 0);
     else {
       if (['maintenance', 'unbound'].includes(variant)) assert.equal(await page.locator('#scheduleEnabled').isDisabled(), true);
@@ -786,6 +793,18 @@ test('overview and drum layout adapt to both themes and narrow screens', async t
   }
 });
 
+test('batch timestamps render in Asia/Manila with explicit timezone labels', async t => {
+  const page = await pageFor(t);
+  const batchText = await page.locator('#bmg-batch').textContent();
+  assert.match(batchText, /Started \(Asia\/Manila\)/);
+  assert.match(batchText, /2026-10-17 15:00:00/);
+  assert.doesNotMatch(batchText, /2026-10-17 07:00:00/);
+  const historyText = await page.locator('#bmg-history').textContent();
+  assert.match(historyText, /Started \(Asia\/Manila\)/);
+  assert.match(historyText, /Completed \(Asia\/Manila\)/);
+  assert.match(historyText, /2026-10-17 15:00:00/);
+  assert.match(historyText, /2026-10-17 17:00:00/);
+});
 test('token is direct result only, escaped and cleared before page cache', async t => {
   const page = await pageFor(t, '/token');
   assert.equal(await page.locator('#deviceToken').inputValue(), 'fixture-secret-not-a-real-token');

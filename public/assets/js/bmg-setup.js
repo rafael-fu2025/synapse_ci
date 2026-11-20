@@ -152,7 +152,11 @@ static const char DEVICE_TOKEN[] = "REPLACE_WITH_NEW_64_LOWERCASE_HEX_DEVICE_TOK
         el('ca').closest('details').open = true;
       }
       if (!el('ssid').value || new TextEncoder().encode(el('ssid').value).length > 32) error = invalid('ssid', 'Enter a Wi-Fi SSID of 1–32 UTF-8 bytes.');
-      if (el('password').value.length < 8 || el('password').value.length > 64) error = invalid('password', 'Wi-Fi password must contain 8–64 characters.');
+      const password = el('password').value;
+      const passwordBytes = new TextEncoder().encode(password).length;
+      if (!((passwordBytes >= 8 && passwordBytes <= 63) || /^[0-9a-fA-F]{64}$/.test(password))) {
+        error = invalid('password', 'Wi-Fi password must be 8–63 UTF-8 bytes or a 64-character hex PSK (8–64 characters).');
+      }
       if (!/^[0-9a-f]{64}$/.test(el('token').value)) error = invalid('token', 'Device token must be exactly 64 lowercase hexadecimal characters.');
       el('validation').textContent = error;
       if (!el('form').reportValidity()) return null;

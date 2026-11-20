@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Integrations\Mis\MisAccountException;
 use App\Integrations\Mis\MisClientInterface;
+use App\Integrations\Mis\MisInactiveAccountException;
 use App\Integrations\Mis\MisProfileMapper;
 use App\Integrations\Mis\MisUnavailableException;
 use App\Models\EmployeeProfileModel;
@@ -12,6 +14,7 @@ use App\Models\PersonModel;
 use App\Models\StudentProfileModel;
 use App\Models\UserModel;
 use Config\Services;
+use Throwable;
 
 final class AuthService
 {
@@ -43,9 +46,9 @@ final class AuthService
      *
      * @return array<string, mixed>|null Returns session payload on success, null on failure.
      */
-    public function login(string $identifier, string $password): ?array
+    public function login(string $identifier, string $password, bool $allowStudentMis = true): ?array
     {
-        $sessionData = $this->authenticate($identifier, $password);
+        $sessionData = $this->authenticate($identifier, $password, $allowStudentMis);
         if ($sessionData === null) {
             return null;
         }
@@ -57,7 +60,7 @@ final class AuthService
      *
      * @return array<string, mixed>|null Returns identity payload on success, null on failure.
      */
-    public function authenticate(string $identifier, string $password): ?array
+    public function authenticate(string $identifier, string $password, bool $allowStudentMis = true): ?array
     {
         $id = trim($identifier);
         if ($id === '' || mb_strlen($id) > 100 || preg_match('/[\x00-\x1F\x7F]/', $id) || $password === '') {
@@ -65,8 +68,10 @@ final class AuthService
         }
 
         // Local credentials remain available for deliberately provisioned break-glass accounts.
-        $localUser = $this->userModel->withDeleted()->scoped()
-            ->groupStart()->where('username', $id)->orWhere('email', $id)->groupEnd()->first();
+        ['user' => $localUser, 'ambiguousEmail' => $ambiguousEmail] = $this->resolveLocalUser($id);
+        if ($ambiguousEmail) {
+            return null;
+        }
         if ($localUser !== null && (new AuthenticatedUser())->forIdentity((int) $localUser['id'], CurrentTenant::id()) === null) {
             return null;
         }
@@ -79,23 +84,112 @@ final class AuthService
 
         // Only a credential rejection (null) permits trying the other MIS namespace.
         // Transport/contract failures propagate instead of being reported as a bad password.
+        // Staff-only hosts skip the student namespace; on shared hosts, uniquely synced employees
+        // authenticate directly against the employee endpoint first.
         $misLookupId = $this->resolveMisLookupId($id, $localUser);
+        $namespaces = $allowStudentMis
+            ? ($this->shouldPreferEmployeeNamespace($misLookupId) ? ['employee', 'student'] : ['student', 'employee'])
+            : ['employee'];
 
-        $studentRes = $this->misClient->studentLogin($misLookupId, $password);
-        if ($studentRes !== null) {
-            $profile = $this->mapLoginProfile($studentRes, 'student');
-            $this->assertReturnedIdentifier($misLookupId, $profile['mis_id'], 'student');
-            return $this->provision($profile, 'student', $this->mapper->extractEmail($studentRes));
-        }
-
-        $employeeRes = $this->misClient->employeeLogin($misLookupId, $password);
-        if ($employeeRes !== null) {
-            $profile = $this->mapLoginProfile($employeeRes, 'employee');
-            $this->assertReturnedIdentifier($misLookupId, $profile['mis_id'], 'employee');
-            return $this->provision($profile, 'employee', $this->mapper->extractEmail($employeeRes));
+        foreach ($namespaces as $namespace) {
+            ['matched' => $matched, 'identity' => $identity] = $namespace === 'student'
+                ? $this->authenticateStudentMis($misLookupId, $password)
+                : $this->authenticateEmployeeMis($misLookupId, $password);
+            if ($matched) {
+                return $identity;
+            }
         }
 
         return null;
+    }
+
+    /**
+     * Resolves a local user unambiguously by exact username first, or by unique tenant email.
+     *
+     * @return array{user: ?array<string, mixed>, ambiguousEmail: bool}
+     */
+    private function resolveLocalUser(string $id): array
+    {
+        $byUsername = $this->userModel->withDeleted()->scoped()
+            ->where('username', $id)
+            ->first();
+        if ($byUsername !== null) {
+            return ['user' => $byUsername, 'ambiguousEmail' => false];
+        }
+
+        if (! str_contains($id, '@')) {
+            return ['user' => null, 'ambiguousEmail' => false];
+        }
+
+        $byEmail = $this->userModel->withDeleted()->scoped()
+            ->where('LOWER(email)', mb_strtolower($id, 'UTF-8'))
+            ->findAll(2);
+        if (count($byEmail) === 1) {
+            return ['user' => $byEmail[0], 'ambiguousEmail' => false];
+        }
+
+        return ['user' => null, 'ambiguousEmail' => count($byEmail) > 1];
+    }
+
+    /**
+     * True when active local directory records uniquely identify this MIS ID as an employee.
+     */
+    private function shouldPreferEmployeeNamespace(string $misLookupId): bool
+    {
+        $rows = $this->personModel->scoped()
+            ->select('kind')
+            ->where('mis_id', $misLookupId)
+            ->whereIn('kind', ['student', 'employee'])
+            ->findAll(2);
+        $kinds = array_values(array_unique(array_column($rows, 'kind')));
+
+        return $kinds === ['employee'];
+    }
+
+    /** @return array{matched: bool, identity: ?array<string, mixed>} */
+    private function authenticateStudentMis(string $misLookupId, string $password): array
+    {
+        $studentRes = $this->misClient->studentLogin($misLookupId, $password);
+        if ($studentRes === null) {
+            return ['matched' => false, 'identity' => null];
+        }
+        $profile = $this->mapLoginProfile($studentRes, 'student');
+        if (! $this->returnedIdentifierMatches($misLookupId, $profile['mis_id'], 'student')) {
+            // The upstream answered for a different identity than the one entered. Fail closed
+            // as a credential rejection without falling through to the sibling namespace.
+            return ['matched' => true, 'identity' => null];
+        }
+        return [
+            'matched'  => true,
+            'identity' => $this->provision($profile, 'student', $this->mapper->extractEmail($studentRes)),
+        ];
+    }
+
+    /** @return array{matched: bool, identity: ?array<string, mixed>} */
+    private function authenticateEmployeeMis(string $misLookupId, string $password): array
+    {
+        try {
+            $employeeRes = $this->misClient->employeeLogin($misLookupId, $password);
+        } catch (MisAccountException $e) {
+            // The upstream could not resolve the account. The employee directory lists the
+            // accounts MIS can authenticate, so an absent identifier means the account is not
+            // active in MIS; a listed one means the upstream failed for another reason.
+            if ($this->isListedEmployee($misLookupId) === false) {
+                throw new MisInactiveAccountException();
+            }
+            throw $e;
+        }
+        if ($employeeRes === null) {
+            return ['matched' => false, 'identity' => null];
+        }
+        $profile = $this->mapLoginProfile($employeeRes, 'employee');
+        if (! $this->returnedIdentifierMatches($misLookupId, $profile['mis_id'], 'employee')) {
+            return ['matched' => true, 'identity' => null];
+        }
+        return [
+            'matched'  => true,
+            'identity' => $this->provision($profile, 'employee', $this->mapper->extractEmail($employeeRes)),
+        ];
     }
 
     /** Identity payload with the same credential-version binding the session layer enforces. */
@@ -175,7 +269,10 @@ final class AuthService
     }
 
     /**
-     * Inserts or refreshes the canonical MIS person record and returns [personId, resolvedEmail].
+     * Inserts or refreshes the canonical MIS person record and returns [personId, authoritativeEmail].
+     *
+     * Derived UniversityEmail addresses remain display-only (computed on read by PersonModel and
+     * AuthenticatedUser) and are never persisted as login identifiers.
      *
      * @param array<string, mixed> $profile
      * @return array{0: int, 1: ?string}
@@ -186,10 +283,7 @@ final class AuthService
         $person = $this->provisionablePerson($profile['mis_id'], $kind);
         $this->assertRequiredNames($person, $profile, $kind);
 
-        $resolvedEmail = $this->clip(
-            $misEmail ?? UniversityEmail::derive($profile['first_name'] ?? null, $profile['last_name'] ?? null),
-            150
-        );
+        $persistedEmail = $this->clip($misEmail, 150);
 
         $personData = $this->provided([
             'tenant_id'        => CurrentTenant::id(),
@@ -198,7 +292,7 @@ final class AuthService
             'first_name'       => $this->clip($profile['first_name'], 100),
             'middle_name'      => $this->clip($profile['middle_name'], 100),
             'last_name'        => $this->clip($profile['last_name'], 100),
-            'email'            => $resolvedEmail,
+            'email'            => $persistedEmail,
             'mis_synced_at'    => $now,
             'mis_payload_hash' => $profile['raw_hash'],
         ]);
@@ -210,7 +304,7 @@ final class AuthService
             $this->personModel->update($personId, $personData);
         }
 
-        return [$personId, $resolvedEmail];
+        return [$personId, $persistedEmail];
     }
 
     /**
@@ -221,18 +315,21 @@ final class AuthService
         if (! str_contains($identifier, '@')) {
             return $identifier;
         }
+        $matches = $this->personModel->scoped()
+            ->where('LOWER(email)', mb_strtolower($identifier, 'UTF-8'))
+            ->findAll(2);
+        $misIds = array_values(array_unique(array_filter(array_column($matches, 'mis_id'), static fn (mixed $v): bool => is_string($v) && $v !== '')));
+        if (count($misIds) > 1) {
+            return $identifier;
+        }
+        if (count($misIds) === 1) {
+            return $misIds[0];
+        }
         if ($localUser !== null && ! empty($localUser['person_id'])) {
             $person = $this->personModel->scoped()->find((int) $localUser['person_id']);
             if ($person !== null && ! empty($person['mis_id'])) {
                 return (string) $person['mis_id'];
             }
-        }
-        $matches = $this->personModel->scoped()
-            ->where('LOWER(email)', mb_strtolower($identifier, 'UTF-8'))
-            ->findAll(2);
-        $misIds = array_values(array_unique(array_filter(array_column($matches, 'mis_id'), static fn (mixed $v): bool => is_string($v) && $v !== '')));
-        if (count($misIds) === 1) {
-            return $misIds[0];
         }
         return $identifier;
     }
@@ -298,17 +395,69 @@ final class AuthService
         return array_filter($values, static fn (mixed $value): bool => $value !== null);
     }
 
-    private function assertReturnedIdentifier(string $identifier, string $returned, string $kind = 'unknown'): void
+    /**
+     * True when the upstream identity is the identifier that was submitted.
+     *
+     * Numeric identifiers are compared by value, so zero padding on either side does not turn an
+     * authenticated sign-in into a rejection. A genuine difference is a failed authentication and
+     * is reported as such, never as a service outage.
+     */
+    private function returnedIdentifierMatches(string $identifier, string $returned, string $kind = 'unknown'): bool
     {
         $expected = mb_strtolower(trim($identifier), 'UTF-8');
         $actual = mb_strtolower(trim($returned), 'UTF-8');
-        if ($actual === '' || mb_strlen($returned, 'UTF-8') > 50 || preg_match('/[\x00-\x1F\x7F]/', $returned)
-            || !hash_equals($expected, $actual)) {
+        if ($actual === '' || mb_strlen($returned, 'UTF-8') > 50 || preg_match('/[\x00-\x1F\x7F]/', $returned)) {
             $this->logMisFailure('assert_' . $kind . '_id', null, [
-                'reason' => mb_strlen($returned, 'UTF-8') > 50 ? 'too_long' : 'mismatch',
+                'reason' => mb_strlen($returned, 'UTF-8') > 50 ? 'too_long' : 'malformed',
             ]);
-            throw new MisUnavailableException();
+            return false;
         }
+        if ($expected !== $actual && ! $this->sameNumericIdentifier($expected, $actual)) {
+            $this->logMisFailure('assert_' . $kind . '_id', null, ['reason' => 'mismatch']);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Whether the MIS employee directory lists this identifier.
+     *
+     * True when listed, false when the directory holds no such employee, and null when the
+     * directory could not be read. The distinction matters: an unreadable directory must not be
+     * reported as an inactive account.
+     */
+    private function isListedEmployee(string $misId): ?bool
+    {
+        try {
+            $response = $this->misClient->searchEmployees($misId);
+        } catch (Throwable) {
+            return null;
+        }
+        if (! is_array($response)) {
+            return null;
+        }
+        // The row list is present only on a trustworthy success envelope. The client answers an
+        // unreadable directory with an empty envelope that carries no rows, which is unknown.
+        $rows = $response['data']['data'] ?? null;
+        if (! is_array($rows)) {
+            return null;
+        }
+        foreach ($rows as $row) {
+            if (is_array($row) && (string) ($row['employee_id'] ?? '') === $misId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Numeric identifiers compare by value: 012345 and 12345 are the same employee. */
+    private function sameNumericIdentifier(string $left, string $right): bool
+    {
+        if (! ctype_digit($left) || ! ctype_digit($right)) {
+            return false;
+        }
+        $normalise = static fn (string $value): string => ltrim($value, '0') ?: '0';
+        return $normalise($left) === $normalise($right);
     }
 
     private function assertRequiredNames(?array $person, array $profile, string $kind = 'unknown'): void

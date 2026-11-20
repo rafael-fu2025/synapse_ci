@@ -106,7 +106,7 @@ $builder = $builder ?? [];
             <p id="setupWifiHelp" class="small text-muted">Use a 2.4 GHz Wi-Fi network accessible to the ESP32. SSID limit: 32 UTF-8 bytes (some characters use more than one byte).</p>
             <label for="setupPassword" class="form-label">Wi-Fi password</label>
             <input id="setupPassword" type="password" class="form-control mb-3" data-setup-password autocomplete="new-password" required minlength="8" maxlength="64" aria-describedby="setupPasswordHelp">
-            <p id="setupPasswordHelp" class="small text-muted">Required: 8–64 characters.</p>
+            <p id="setupPasswordHelp" class="small text-muted">Required: 8–63 UTF-8 bytes, or a 64-character hexadecimal PSK.</p>
             <label for="setupApi" class="form-label">Device API base URL</label>
             <input id="setupApi" type="url" class="form-control mb-2" data-setup-api required aria-describedby="setupApiHelp">
             <p id="setupApiHelp" class="small text-muted">Use the backend address reachable from the ESP32. localhost and 127.0.0.1 point to the ESP32 itself, not this server. No URL credentials, query or fragment.</p>

@@ -10,12 +10,12 @@
          data-refresh-owner="admin.access"
          data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <div class="card"><div class="card-body pt-3">
-<form data-table-filters action="<?= esc($baseUrl) ?>" method="GET" class="row g-2 mb-3" role="search">
-<div class="col-sm-6"><label for="employee-search" class="form-label">Find an employee</label><input id="employee-search" type="search" name="q" maxlength="100" value="<?= esc($search) ?>" class="form-control" placeholder="Name, employee ID or username"></div>
-<div class="col-sm-2"><label for="employee-per-page" class="form-label">Per page</label><select id="employee-per-page" name="per_page" class="form-select">
+<form data-table-filters action="<?= esc($baseUrl) ?>" method="GET" class="row g-2 align-items-end mb-3" role="search">
+<div class="col-12 col-md-6 col-lg-7"><label for="employee-search" class="form-label">Find an employee</label><input id="employee-search" type="search" name="q" maxlength="100" value="<?= esc($search) ?>" class="form-control" placeholder="Name, employee ID or username"></div>
+<div class="col-6 col-md-3 col-lg-2"><label for="employee-per-page" class="form-label">Per page</label><select id="employee-per-page" name="per_page" class="form-select">
 <?php foreach ([25, 50, 100] as $size): ?><option value="<?= $size ?>" <?= (int) ($perPage ?? 25) === $size ? 'selected' : '' ?>><?= $size ?></option><?php endforeach; ?>
 </select></div>
-<div class="col-sm-4 d-flex align-items-end gap-2"><button class="btn btn-primary" type="submit">Search</button><a class="btn btn-outline-secondary" href="<?= esc($baseUrl) ?>" data-table-reset>Clear</a></div>
+<div class="col-6 col-md-3 col-lg-3 d-flex flex-nowrap align-items-end gap-2"><button class="btn btn-primary flex-fill" type="submit">Search</button><a class="btn btn-outline-secondary flex-fill" href="<?= esc($baseUrl) ?>" data-table-reset>Clear</a></div>
 </form>
 <p data-table-status role="status" aria-live="polite" class="small text-muted"></p>
 <div data-table-error class="alert alert-danger" role="alert" hidden>

@@ -59,7 +59,7 @@ if (!empty($person['date_of_birth'])) {
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="guidance-ui guidance-client-record" data-refresh-owner="guidance.client.<?= (int) $person['id'] ?>">
+<div class="guidance-ui guidance-client-record" data-guidance-client-record data-endpoint="<?= esc($recordBaseUrl) ?>" data-refresh-owner="guidance.client.<?= (int) $person['id'] ?>">
   <div class="alert alert-light border small d-flex align-items-start gap-2 mb-3">
     <i class="bi bi-shield-lock text-primary mt-1" aria-hidden="true"></i>
     <div><strong>Confidential Guidance Record</strong> — Read-only cumulative history. Only permitted records are shown; clinical notes, safety plans, and form contents stay in their authorized workspaces. This access is logged. Clinic medical records and anonymous service evaluations are not included.</div>
@@ -100,7 +100,7 @@ if (!empty($person['date_of_birth'])) {
         ['Recorded sessions', $metrics['sessions_total'], 'Across visible cases', 'sessions'],
         ['Pending follow-ups', $metrics['followups_pending'], 'Check-ins for visible cases', 'sessions'],
     ] as [$label, $value, $hint, $tab]): ?>
-      <div class="col-6 col-xl-3"><a href="<?= esc($sectionUrl($tab)) ?>" class="card border-0 shadow-sm h-100 text-decoration-none text-body">
+      <div class="col-6 col-xl-3"><a href="<?= esc($sectionUrl($tab)) ?>" data-record-tab-link="<?= esc($tab) ?>" class="card border-0 shadow-sm h-100 text-decoration-none text-body">
         <div class="card-body p-3"><div class="small text-muted"><?= esc($label) ?></div><div class="h4 fw-bold my-1"><?= number_format((int) $value) ?></div><div class="small text-muted"><?= esc($hint) ?></div></div>
       </a></div>
     <?php endforeach; ?>
@@ -110,7 +110,7 @@ if (!empty($person['date_of_birth'])) {
     <div class="card-header bg-transparent p-0">
       <nav class="nav nav-tabs nav-tabs-bordered flex-wrap" aria-label="Guidance record sections">
         <?php foreach ($tabLabels as $key => [$label, $icon]): ?>
-          <a class="nav-link text-nowrap px-3 py-3 <?= $activeTab === $key ? 'active' : '' ?>" href="<?= esc($sectionUrl($key)) ?>" <?= $activeTab === $key ? 'aria-current="page"' : '' ?> aria-controls="guidance-record-section">
+          <a class="nav-link text-nowrap px-3 py-3 <?= $activeTab === $key ? 'active' : '' ?>" href="<?= esc($sectionUrl($key)) ?>" data-record-tab-link="<?= esc($key) ?>" <?= $activeTab === $key ? 'aria-current="page"' : '' ?> aria-controls="guidance-record-section">
             <i class="bi <?= esc($icon) ?> me-1" aria-hidden="true"></i><?= esc($label) ?>
           </a>
         <?php endforeach; ?>
@@ -120,7 +120,7 @@ if (!empty($person['date_of_birth'])) {
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
         <h3 class="h5 mb-0" data-refresh-heading tabindex="-1"><?= esc($tabLabels[$activeTab][0]) ?></h3>
         <?php if ($activeTab !== 'overview'): ?>
-          <form action="<?= esc($recordBaseUrl) ?>" method="GET" class="d-flex align-items-center gap-2 flex-wrap">
+          <form action="<?= esc($recordBaseUrl) ?>" method="GET" data-record-history-form class="d-flex align-items-center gap-2 flex-wrap">
             <input type="hidden" name="tab" value="<?= esc($activeTab) ?>">
             <label for="guidanceHistorySize" class="small text-muted mb-0 text-nowrap">Per history</label>
             <select id="guidanceHistorySize" name="per_page" class="form-select form-select-sm" style="width: 5.5rem;" aria-label="Rows per history" data-native-select>
@@ -146,4 +146,8 @@ if (!empty($person['date_of_birth'])) {
     </div>
   </div>
 </div>
+<?= $this->endSection() ?>
+
+<?= $this->section('scripts') ?>
+<script src="<?= esc(base_url('assets/js/guidance-client-record.js')) ?>"></script>
 <?= $this->endSection() ?>

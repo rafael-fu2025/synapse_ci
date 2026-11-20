@@ -29,7 +29,7 @@
           ['Call slips issued', $metrics['call_slips_issued'], $can['callSlips'], 'appointments'],
       ] as [$label, $value, $allowed, $tab]): ?>
         <?php if ($allowed): ?>
-          <div class="col-6 col-xl-4"><a href="<?= esc($sectionUrl($tab)) ?>" class="border rounded p-3 d-block h-100 text-body text-decoration-none">
+          <div class="col-6 col-xl-4"><a href="<?= esc($sectionUrl($tab)) ?>" data-record-tab-link="<?= esc($tab) ?>" class="border rounded p-3 d-block h-100 text-body text-decoration-none">
             <div class="small text-muted"><?= esc($label) ?></div><div class="h5 fw-bold mb-0 mt-1"><?= number_format((int) $value) ?></div>
           </a></div>
         <?php endif; ?>

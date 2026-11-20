@@ -23,16 +23,12 @@
       indicator.classList.add('visually-hidden');
       status.textContent = label;
     } else {
-      status.append(spinner, document.createTextNode(label));
+      const labelNode = document.createElement('span');
+      labelNode.className = 'app-loading-label visually-hidden';
+      labelNode.textContent = label;
+      status.append(spinner, labelNode);
     }
     indicator.append(status);
-    if (options.skeleton) {
-      const skeleton = document.createElement('div');
-      skeleton.className = 'app-loading-skeleton';
-      skeleton.setAttribute('aria-hidden', 'true');
-      for (let i = 0; i < 6; i++) skeleton.append(document.createElement('span'));
-      indicator.append(skeleton);
-    }
     target.classList.add('app-loading-region');
     target.setAttribute('aria-busy', 'true');
     target.append(indicator);

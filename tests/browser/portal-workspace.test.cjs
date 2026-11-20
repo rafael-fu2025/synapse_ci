@@ -96,7 +96,7 @@ before(async () => {
       if ([PHOTO, '/account/photo'].includes(url.pathname)) { res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }).end(png); return; }
       if (url.pathname === '/auth/login') { res.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><title>Sign in</title><h1>Sign in</h1>'); return; }
       if (url.pathname === '/notifications') { res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ success: true, notifications: [], unread_count: 0 })); return; }
-      if (['/portal', '/portal/settings', '/portal/announcements', '/portal/surveys', '/portal/surveys/1', '/portal/appointments/clinic/create'].includes(url.pathname)) {
+      if (['/portal', '/portal/settings', '/portal/announcements', '/portal/surveys', '/portal/surveys/1', '/portal/assessments/mi/7', '/portal/appointments/clinic/create'].includes(url.pathname)) {
         assert.ok(state, 'Every browser context uses a private synthetic session');
         const entry = { path: url.pathname, search: url.search, headers: req.headers };
         state.reads.push(entry);
@@ -301,6 +301,15 @@ test('optional shell authentication denial still replaces the document with the 
   assert.equal(documents.length, 2); assert.equal(await page.locator('#main').count(), 0);
 });
 
+test('MI detail routes activate the single My Surveys pane without a separate MI tile', { timeout: 20000 }, async t => {
+  const { page } = await pageFor(t, { start: '/portal/assessments/mi/7' });
+  assert.equal(await page.locator('.portal-app-dock [data-portal-pane-link="surveys"].is-active').count(), 1);
+  assert.equal(await page.locator('.portal-app-dock [data-portal-pane-link="mi"]').count(), 0);
+  assert.equal(await page.locator('.sidebar-nav a[href$="/portal/surveys"].active').count(), 1);
+  assert.equal(await page.locator('.sidebar-nav a[href*="/portal/assessments/mi"]').count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'My Surveys', exact: true }).first().getAttribute('href'), origin + '/portal/surveys');
+});
+
 test('a forbidden pane destination is still a strict full-document denial, not optional shell fallback', { timeout: 20000 }, async t => {
   const { page, state, documents } = await pageFor(t);
   state.readResponses.set('/portal/surveys', { status: 403 });
@@ -459,7 +468,7 @@ for (const operation of ['photo', 'contact', 'remove']) {
       await assertKept(page, state, before, reads);
     }
     await page.evaluate(() => history.back()); await page.waitForURL(before.url); await ready(page); await assertKept(page, state, before, reads);
-    await page.locator('#main .page-actions a[data-app-modal-open][href$="/portal/appointments/clinic/create"]').click();
+    await page.locator('#main .portal-request-actions a[data-app-modal-open][href$="/portal/appointments/clinic/create"]').click();
     await page.locator('#appFormModal form').waitFor();
     assert.equal(await navigate(page, '/portal/surveys', { bypassDirtyCheck: true }), false);
     await assertKept(page, state, before, reads);
@@ -482,7 +491,7 @@ for (const operation of ['photo', 'contact', 'remove']) {
 
 test('an independently open real form modal vetoes pane APIs and Back, then closes without a write or global teardown', { timeout: 30000 }, async t => {
   const { page, state } = await pageFor(t); await settings(page); const before = await entry(page), reads = paneReads(state).length;
-  await page.locator('#main .page-actions a[data-app-modal-open][href$="/portal/appointments/clinic/create"]').click(); await page.locator('#appFormModal form').waitFor();
+  await page.locator('#main .portal-request-actions a[data-app-modal-open][href$="/portal/appointments/clinic/create"]').click(); await page.locator('#appFormModal form').waitFor();
   await recordConfirm(page, [true]);
   for (const owner of ['SynapseNavigation', 'SynapsePortalWorkspace']) assert.equal(await navigate(page, '/portal/surveys', { bypassDirtyCheck: true }, owner), false);
   await page.evaluate(() => history.back()); await page.waitForURL(before.url); await ready(page); await assertKept(page, state, before, reads);
@@ -490,4 +499,70 @@ test('an independently open real form modal vetoes pane APIs and Back, then clos
   await page.locator('#appFormModal [data-app-modal-close]').first().click(); await page.locator('#appFormModal').waitFor({ state: 'detached' });
   assert.equal(await navigate(page, '/portal/surveys'), true); await ready(page);
   assert.equal(state.posts.length, 0); assert.equal(await page.evaluate(() => fixtureGlobalCleanups), 0);
+});
+
+test('portal shell places quick services in page actions, tickets above profile, and request buttons below profile', { timeout: 25000 }, async t => {
+  const { page } = await pageFor(t);
+  assert.equal(await page.locator('.portal-left-rail > [data-personal-queue]').count(), 1);
+  assert.equal(await page.locator('#main .page-actions .portal-app-dock').count(), 1);
+  assert.equal(await page.locator('#main .page-actions a[href$="/portal/visits"]').count(), 0, 'My Visit History header button removed');
+  assert.equal(await page.locator('#app-sidebar a[href$="/portal/visits"]').count(), 1, 'My Visit History remains in the sidebar');
+  assert.equal(await page.locator('.portal-left-rail .portal-request-actions a[data-app-modal-open]').count(), 2);
+  assert.equal(await page.locator('.portal-left-rail .portal-request-actions svg.portal-request-icon').count(), 2, 'Request buttons use Clinic and Guidance vector SVGs');
+  assert.equal(await page.locator('.portal-left-rail .portal-request-actions i').count(), 0, 'Calendar icon fonts replaced by vector SVGs');
+  const lightBtnColors = await page.locator('.portal-left-rail .portal-request-actions .portal-request-btn').evaluateAll(btns =>
+    btns.map(b => getComputedStyle(b).backgroundColor));
+  assert.deepEqual(lightBtnColors, ['rgb(128, 0, 0)', 'rgb(128, 0, 0)'], 'Both request buttons are maroon in light mode');
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+  await page.waitForFunction(() => {
+    const btns = [...document.querySelectorAll('.portal-left-rail .portal-request-actions .portal-request-btn')];
+    return btns.length === 2 && btns.every(b => getComputedStyle(b).backgroundColor === 'rgb(30, 30, 30)');
+  });
+  await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+  await page.waitForFunction(() => {
+    const btns = [...document.querySelectorAll('.portal-left-rail .portal-request-actions .portal-request-btn')];
+    return btns.length === 2 && btns.every(b => getComputedStyle(b).backgroundColor === 'rgb(128, 0, 0)');
+  });
+
+  const desktop = await page.evaluate(() => {
+    const q = document.querySelector('[data-personal-queue]').getBoundingClientRect();
+    const p = document.querySelector('.portal-profile-stack').getBoundingClientRect();
+    const r = document.querySelector('.portal-request-actions').getBoundingClientRect();
+    const w = document.querySelector('#portal-workspace-pane').getBoundingClientRect();
+    const dock = document.querySelector('#main .page-actions .portal-app-dock').getBoundingClientRect();
+    const tile = document.querySelector('#main .page-actions .portal-app-tile').getBoundingClientRect();
+    return { overflow: document.documentElement.scrollWidth > window.innerWidth, q, p, r, w, dock, tile };
+  });
+  assert.equal(desktop.overflow, false);
+  assert.ok(desktop.dock.bottom <= desktop.q.top + 2, 'Quick Services sits in the top header above the workspace row');
+  assert.ok(Math.abs(desktop.tile.width - desktop.tile.height) <= 2, 'Quick Services tiles remain square');
+  assert.ok(desktop.q.bottom <= desktop.p.top + 2, 'Tickets render directly above the profile card');
+  assert.ok(Math.abs(desktop.q.width - desktop.p.width) <= 2, 'Tickets match the 360px profile card width on desktop');
+  assert.ok(desktop.r.top >= desktop.p.bottom - 2, 'Request buttons sit directly below the profile card on desktop');
+  assert.ok(Math.abs(desktop.r.width - desktop.p.width) <= 2, 'Request buttons match the 360px profile card width on desktop');
+  assert.ok(Math.abs(desktop.w.top - desktop.q.top) <= 6, 'Workspace pane starts at the top alongside the ticket rail');
+  assert.ok(desktop.q.right <= desktop.w.left + 2, 'Tickets do not span above the workspace pane');
+
+  await page.setViewportSize({ width: 992, height: 900 });
+  const tablet = await page.evaluate(() => {
+    const q = document.querySelector('[data-personal-queue]').getBoundingClientRect();
+    const p = document.querySelector('.portal-profile-stack').getBoundingClientRect();
+    const r = document.querySelector('.portal-request-actions').getBoundingClientRect();
+    return { overflow: document.documentElement.scrollWidth > window.innerWidth, q, p, r };
+  });
+  assert.equal(tablet.overflow, false);
+  assert.ok(tablet.q.bottom <= tablet.p.top + 2, 'Tickets sit above profile card on tablet');
+  assert.ok(tablet.q.right <= tablet.r.left + 2, 'Request actions sit neatly in column 2 alongside Ticket/Profile on tablet');
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  const mobile = await page.evaluate(() => {
+    const q = document.querySelector('[data-personal-queue]').getBoundingClientRect();
+    const p = document.querySelector('.portal-profile-stack').getBoundingClientRect();
+    const r = document.querySelector('.portal-request-actions').getBoundingClientRect();
+    return { overflow: document.documentElement.scrollWidth > window.innerWidth, q, p, r };
+  });
+  assert.equal(mobile.overflow, false);
+  assert.ok(mobile.q.bottom <= mobile.p.top + 2, 'Tickets sit above profile card on mobile');
+  assert.ok(mobile.r.top >= mobile.p.bottom - 2, 'Request buttons sit below profile card on mobile');
+  assert.ok(Math.abs(mobile.q.width - mobile.p.width) <= 2, 'Tickets match profile width on mobile');
 });

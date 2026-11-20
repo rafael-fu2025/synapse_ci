@@ -633,7 +633,7 @@
         void restoreRegionalHistory(entry);
         return;
       }
-      const table = document.querySelector('#main [data-live-table]');
+      const table = document.querySelector('#main [data-live-table], #main [data-guidance-client-record]');
       const tableEndpoint = table?.dataset.endpoint ? urlFor(table.dataset.endpoint) : null;
       // /index.php/x and /x are the same route; the table fetches the canonical endpoint itself.
       const route = pathname => pathname.replace(/^\/index\.php(?=\/)/, '');

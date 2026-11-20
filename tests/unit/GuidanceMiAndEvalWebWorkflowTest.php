@@ -63,10 +63,17 @@ final class GuidanceMiAndEvalWebWorkflowTest extends FreshDatabaseTestCase
         $assignmentId = (int) ($assignJson['assignment']['id'] ?? 0);
         $this->assertGreaterThan(0, $assignmentId);
 
-        // Student views portal MI list and assessment runner
+        // Student sees the assignment inside the combined My Surveys hub; the old list redirects there.
+        $surveyHub = $this->withSession($this->sessionFor($this->studentUser))
+            ->get('portal/surveys');
+        $surveyHub->assertStatus(200);
+        $surveyHub->assertSee('Multiple Intelligence');
+        $surveyHub->assertSee('Start Assessment');
+
         $portalList = $this->withSession($this->sessionFor($this->studentUser))
             ->get('portal/assessments/mi');
-        $portalList->assertStatus(200);
+        $this->assertSame(302, $portalList->response()->getStatusCode());
+        $this->assertSame(site_url('/portal/surveys#multiple-intelligence'), $portalList->response()->getHeaderLine('Location'));
 
         $portalRunner = $this->withSession($this->sessionFor($this->studentUser))
             ->get("portal/assessments/mi/{$assignmentId}");
@@ -127,6 +134,110 @@ final class GuidanceMiAndEvalWebWorkflowTest extends FreshDatabaseTestCase
         $counselorResult = $this->withSession($this->sessionFor($this->counselorUser))
             ->get("guidance/assessments/mi/results/{$submissionId}");
         $counselorResult->assertStatus(200);
+    }
+
+    public function testMultipleIntelligenceMultiStudentAndCohortAssignment(): void
+    {
+        $cohortProgram = 'BSIT-' . $this->suffix;
+        $stuBsit1 = $this->createUserFixture('mibsit1', 'student');
+        $stuBsit2 = $this->createUserFixture('mibsit2', 'student');
+        $stuBsn1  = $this->createUserFixture('mibsn1', 'student');
+        $stuBsa4  = $this->createUserFixture('mibsa4', 'student');
+
+        $this->db->table('student_profiles')->where('person_id', $this->studentUser['person_id'])->update(['program' => $cohortProgram, 'year_level' => '3']);
+        $this->db->table('student_profiles')->where('person_id', $stuBsit1['person_id'])->update(['program' => $cohortProgram, 'year_level' => '1']);
+        $this->db->table('student_profiles')->where('person_id', $stuBsit2['person_id'])->update(['program' => $cohortProgram, 'year_level' => '2']);
+        $this->db->table('student_profiles')->where('person_id', $stuBsn1['person_id'])->update(['program' => 'BSN', 'year_level' => '1']);
+        $this->db->table('student_profiles')->where('person_id', $stuBsa4['person_id'])->update(['program' => 'BSA', 'year_level' => '4']);
+
+        $miIndex = $this->withSession($this->sessionFor($this->counselorUser))
+            ->get('guidance/assessments/mi');
+        $miIndex->assertStatus(200);
+        $miIndex->assertSee('Specific Students');
+        $miIndex->assertSee('Cohort / Group');
+        $miIndex->assertSee('person_ids[]');
+        $miIndex->assertSee('assign_all_students');
+        $miIndex->assertSee('target_programs[]');
+        $miIndex->assertSee('target_year_levels[]');
+
+        // 1. Multi-student assignment via person_ids[]
+        $multiAssign = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'assign_scope' => 'individual',
+            'person_ids'   => [$stuBsit1['person_id'], $stuBsit2['person_id']],
+            'academic_term'=> '1st Trimester',
+            'academic_year'=> '2026-2027',
+        ], true);
+        $multiAssign->assertStatus(201);
+        $multiJson = json_decode((string) $multiAssign->getJSON(), true);
+        $this->assertSame(2, (int) ($multiJson['assigned_count'] ?? 0));
+        $this->assertSame(0, (int) ($multiJson['skipped_active_count'] ?? -1));
+        $this->assertCount(2, $multiJson['assignments'] ?? []);
+
+        // 2. Multi-student assignment via comma-separated mis_id skips already-active student
+        $mis1 = 'MIS-' . strtoupper($stuBsit1['username']);
+        $misBsn1 = 'MIS-' . strtoupper($stuBsn1['username']);
+        $multiMisAssign = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'mis_id' => $mis1 . ', ' . $misBsn1,
+        ], true);
+        $multiMisAssign->assertStatus(201);
+        $multiMisJson = json_decode((string) $multiMisAssign->getJSON(), true);
+        $this->assertSame(1, (int) ($multiMisJson['assigned_count'] ?? 0));
+        $this->assertSame(1, (int) ($multiMisJson['skipped_active_count'] ?? 0));
+        $this->assertSame((int) $stuBsn1['person_id'], (int) ($multiMisJson['assignment']['person_id'] ?? 0));
+
+        // 3. Single-student duplicate active assignment still returns 409
+        $dupSingle = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'person_id' => $stuBsit1['person_id'],
+        ], true);
+        $this->assertSame(409, $dupSingle->response()->getStatusCode());
+
+        // 4. Unknown MIS ID in batch input returns 422
+        $badMis = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'mis_id' => $mis1 . ', UNKNOWN-MIS-' . $this->suffix,
+        ], true);
+        $this->assertSame(422, $badMis->response()->getStatusCode());
+
+        // 5. Cohort assignment by Program + Year Level targets only matching students (studentUser = BSIT-$suffix Year 3)
+        $cohortAssign = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'assign_scope'       => 'cohort',
+            'target_programs'    => [$cohortProgram],
+            'target_year_levels' => ['3'],
+        ], true);
+        $cohortAssign->assertStatus(201);
+        $cohortJson = json_decode((string) $cohortAssign->getJSON(), true);
+        $this->assertSame(1, (int) ($cohortJson['assigned_count'] ?? 0));
+        $this->assertSame((int) $this->studentUser['person_id'], (int) ($cohortJson['assignment']['person_id'] ?? 0));
+
+        // Confirm BSA Year 4 student was not assigned yet
+        $bsa4Existing = $this->db->table('guidance_mi_assignments')
+            ->where('tenant_id', 1)
+            ->where('person_id', $stuBsa4['person_id'])
+            ->countAllResults();
+        $this->assertSame(0, $bsa4Existing);
+
+        // 6. Cohort assignment for All Active Students assigns remaining student(s) and skips already-active ones
+        $allAssign = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'assign_scope'        => 'cohort',
+            'assign_all_students' => '1',
+        ], true);
+        $allAssign->assertStatus(201);
+        $allJson = json_decode((string) $allAssign->getJSON(), true);
+        $this->assertGreaterThanOrEqual(1, (int) ($allJson['assigned_count'] ?? 0));
+        $this->assertGreaterThanOrEqual(4, (int) ($allJson['skipped_active_count'] ?? 0));
+
+        $bsa4After = $this->db->table('guidance_mi_assignments')
+            ->where('tenant_id', 1)
+            ->where('person_id', $stuBsa4['person_id'])
+            ->whereIn('status', ['assigned', 'in_progress'])
+            ->countAllResults();
+        $this->assertSame(1, $bsa4After);
+
+        // 7. Re-running All Active Students when every student already has an active assignment returns 409
+        $allDup = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'assign_scope'        => 'cohort',
+            'assign_all_students' => '1',
+        ], true);
+        $this->assertSame(409, $allDup->response()->getStatusCode());
     }
 
     public function testServiceEvaluationCohortSuppressionModerationAndAggregatePdf(): void

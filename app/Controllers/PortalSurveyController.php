@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Services\AuthenticatedUser;
+use App\Services\Guidance\GuidanceActivationGateService;
+use App\Services\Guidance\GuidanceMultipleIntelligenceService;
 use App\Services\Guidance\SurveyService;
 use RuntimeException;
 use Throwable;
@@ -14,8 +17,33 @@ final class PortalSurveyController extends BaseController
     {
         try {
             $data = (new SurveyService())->available($this->request->getGet());
+            $miAssignments = [];
+            $miGateEnabled = false;
+            $actor = (new AuthenticatedUser())->current();
+            if ($actor !== null && (($actor['role'] ?? '') === 'superadmin'
+                || in_array('guidance.assessments.take', $actor['permissions'] ?? [], true))) {
+                try {
+                    $miAssignments = (new GuidanceMultipleIntelligenceService())->listPortalAssignments($actor);
+                    $miGateEnabled = (new GuidanceActivationGateService())->isGateEnabled(
+                        GuidanceActivationGateService::GATE_MI_REPRODUCTION,
+                        (int) $actor['tenant_id']
+                    );
+                } catch (Throwable $error) {
+                    log_message('error', 'Portal MI assignments unavailable: {class} code={code}', [
+                        'class' => get_class($error),
+                        'code'  => $error->getCode(),
+                    ]);
+                    $miAssignments = [];
+                    $data['miAssignmentsUnavailable'] = true;
+                }
+            }
             $this->response->setHeader('Cache-Control', 'private, no-store');
-            return view('surveys/portal_index', $data + ['title' => 'My Surveys', 'baseUrl' => site_url('portal/surveys')]);
+            return view('surveys/portal_index', $data + [
+                'title' => 'My Surveys',
+                'baseUrl' => site_url('portal/surveys'),
+                'miAssignments' => $miAssignments,
+                'miGateEnabled' => $miGateEnabled,
+            ]);
         } catch (Throwable $e) { return $this->failure($e); }
     }
 

@@ -98,8 +98,12 @@ final class BmgFirmwareService
         try {
             // Same tenant mutex as rotation configuration and command publication.
             $table = $db->protectIdentifiers($db->prefixTable('tenants'));
-            $lock = $db->DBDriver === 'SQLite3' ? '' : ' FOR UPDATE';
             $tenant = (int) $actor['tenant_id'];
+            if ($db->DBDriver === 'SQLite3') {
+                // SQLite has no row locks: acquire its writer lock before reading unit/device state.
+                $db->query('UPDATE ' . $table . ' SET id = id WHERE id = ?', [$tenant]);
+            }
+            $lock = $db->DBDriver === 'SQLite3' ? '' : ' FOR UPDATE';
             $row = $db->query('SELECT id FROM ' . $table . ' WHERE id = ? AND is_active = 1 AND deleted_at IS NULL' . $lock, [$tenant])->getRowArray();
             $fresh = $this->actor(true);
             if ($row === null || $fresh['id'] !== $actor['id'] || $fresh['tenant_id'] !== $actor['tenant_id']) {

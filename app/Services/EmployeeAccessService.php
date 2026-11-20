@@ -89,7 +89,7 @@ final class EmployeeAccessService
         }
         $query = $this->employees($actor);
         if ($search !== '') {
-            $terms = preg_split('/\s+/u', $search, -1, PREG_SPLIT_NO_EMPTY);
+            $terms = preg_split('/[\s,]+/u', $search, -1, PREG_SPLIT_NO_EMPTY);
             if ($terms === false) throw new RuntimeException('Search must contain valid text.', 422);
             foreach ($terms as $term) {
                 // Bindings quote SQL values; separately escape LIKE pattern metacharacters.

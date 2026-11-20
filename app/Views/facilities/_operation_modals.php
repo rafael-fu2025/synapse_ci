@@ -28,7 +28,7 @@
 <div class="modal fade" id="completeBatchModal" tabindex="-1" aria-labelledby="completeBatchTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 id="completeBatchTitle" class="modal-title fs-5">Complete batch</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-    <form action="<?= esc(site_url('/facilities/batch/' . (int) $activeBatch['id'] . '/release')) ?>" method="POST" data-bmg-submit data-confirm="Complete this batch record? This does not stop the motor or certify the material's quality or suitability for use." data-confirm-title="Complete batch" data-confirm-label="Complete batch" data-confirm-tone="warning">
+    <form action="<?= esc(site_url('/facilities/batch/' . (int) $activeBatch['id'] . '/release')) ?>" method="POST" data-bmg-submit>
       <?= csrf_field() ?>
       <div class="modal-body"><p>Batch <strong><?= esc($activeBatch['batch_code']) ?></strong> · <?= esc($activeBatch['total_input_weight_kg']) ?> kg input</p><div class="mb-3"><label for="batchOutput" class="form-label">Output weight (kg, optional)</label><input id="batchOutput" name="output_weight_kg" type="number" min="0" max="<?= esc($activeBatch['total_input_weight_kg']) ?>" step="0.01" class="form-control" aria-describedby="batchOutputHelp"><div id="batchOutputHelp" class="form-text">Leave blank if not measured. Entered output cannot exceed input weight.</div></div><label for="batchReleaseNotes" class="form-label">Completion notes (optional)</label><textarea id="batchReleaseNotes" name="release_notes" class="form-control" rows="3" maxlength="2000"></textarea></div>
       <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Back</button><button type="submit" class="btn btn-primary">Complete batch</button></div>
@@ -38,7 +38,7 @@
 <div class="modal fade" id="cancelBatchModal" tabindex="-1" aria-labelledby="cancelBatchTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 id="cancelBatchTitle" class="modal-title fs-5">Cancel batch</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
-    <form action="<?= esc(site_url('/facilities/batch/' . (int) $activeBatch['id'] . '/cancel')) ?>" method="POST" data-bmg-submit data-confirm="Cancel this batch record? History is retained. This does not stop the motor." data-confirm-title="Cancel batch" data-confirm-label="Cancel batch record" data-confirm-tone="danger">
+    <form action="<?= esc(site_url('/facilities/batch/' . (int) $activeBatch['id'] . '/cancel')) ?>" method="POST" data-bmg-submit>
       <?= csrf_field() ?>
       <div class="modal-body"><p>Cancel <strong><?= esc($activeBatch['batch_code']) ?></strong>. The batch history will be retained.</p><label for="batchCancelReason" class="form-label">Reason for cancellation</label><textarea id="batchCancelReason" name="reason" class="form-control" rows="3" maxlength="2000" required></textarea></div>
       <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Back</button><button type="submit" class="btn btn-danger">Cancel batch record</button></div>

@@ -101,7 +101,7 @@ final class ClinicEncounterModel extends TenantModel
         if ($q !== '') {
             $builder->groupStart();
             \App\Libraries\LikePattern::apply($builder->builder(), 'p.mis_id', $q);
-            $tokens = preg_split('/\s+/u', $q, -1, PREG_SPLIT_NO_EMPTY);
+            $tokens = preg_split('/[\s,]+/u', $q, -1, PREG_SPLIT_NO_EMPTY);
             if ($tokens !== []) {
                 $builder->orGroupStart();
                 foreach ($tokens as $token) {

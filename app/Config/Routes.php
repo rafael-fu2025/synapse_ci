@@ -94,7 +94,6 @@ $routes->group('api/v1', static function (RouteCollection $routes): void {
         // Student Guidance Mobile Self-Service V1 Contracts
         $routes->get('guidance/dashboard', 'Api\V1\GuidanceMobileController::dashboard');
         $routes->post('guidance/call-slips/(:num)/acknowledge', 'Api\V1\GuidanceMobileController::acknowledgeCallSlip/$1');
-        $routes->post('guidance/self-referral', 'Api\V1\GuidanceMobileController::submitSelfReferral');
         $routes->get('guidance/mi', 'Api\V1\GuidanceMobileController::miIndex');
         $routes->post('guidance/mi/(:num)/draft', 'Api\V1\GuidanceMobileController::miDraft/$1');
         $routes->post('guidance/mi/(:num)/finalize', 'Api\V1\GuidanceMobileController::miFinalize/$1');
@@ -364,6 +363,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
 
         // Guidance Intake & Safety Triage
         $routes->get('guidance/intake', 'GuidanceIntakeController::index');
+        $routes->post('guidance/intake/resolve-subject', 'GuidanceIntakeController::resolveSubject');
         $routes->post('guidance/intake/staff-create', 'GuidanceIntakeController::staffCreate');
         $routes->get('guidance/intake/(:num)', 'GuidanceIntakeController::show/$1');
         $routes->post('guidance/intake/(:num)/receive', 'GuidanceIntakeController::receive/$1');
@@ -371,6 +371,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('guidance/intake/(:num)/accept', 'GuidanceIntakeController::accept/$1');
         $routes->post('guidance/intake/(:num)/decline', 'GuidanceIntakeController::decline/$1');
         $routes->post('guidance/intake/(:num)/link-case', 'GuidanceIntakeController::linkCase/$1');
+        $routes->post('guidance/intake/(:num)/withdraw', 'GuidanceIntakeController::withdrawGuidance/$1');
         $routes->post('guidance/intake/(:num)/external-handoff', 'GuidanceIntakeController::externalHandoff/$1');
         $routes->post('guidance/intake/bridge-clinic/(:num)', 'GuidanceIntakeController::bridgeClinic/$1');
         $routes->post('guidance/safety/assess', 'GuidanceIntakeController::recordSafetyAssessment');
@@ -417,11 +418,11 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('guidance/evaluations/aggregate-pdf', 'GuidanceEvaluationController::aggregatePdf');
     });
 
-    // Guidance Portal Self-Service & General Referrals (authenticated students/employees/referrers)
+    // Employee Guidance Portal Referrals
     $routes->get('portal/referrals/create', 'GuidanceIntakeController::portalCreate');
-    $routes->post('portal/referrals/resolve-subject', 'GuidanceIntakeController::resolveSubject');
+    $routes->post('portal/referrals/resolve-student', 'GuidanceIntakeController::resolveStudent');
     $routes->post('portal/referrals/store', 'GuidanceIntakeController::portalStore');
-    $routes->post('guidance/intake/(:num)/withdraw', 'GuidanceIntakeController::withdraw/$1');
+    $routes->post('portal/referrals/(:num)/withdraw', 'GuidanceIntakeController::withdraw/$1');
     $routes->get('portal/call-slips', 'PortalController::callSlips');
     $routes->post('portal/guidance/call-slips/(:num)/acknowledge', 'GuidanceCallSlipController::portalAcknowledgeCallSlip/$1');
 

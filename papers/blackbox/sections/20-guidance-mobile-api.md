@@ -1,6 +1,6 @@
 # 20 — Guidance mobile API conditional annex
 
-All cases are conditional because native Guidance UI is not yet part of the mobile app even though V1 routes exist. Execute only after product/security approve the API campaign and resolve the self-referral/appointment policy decisions.
+All cases are conditional because native Guidance UI is not yet part of the mobile app even though several V1 routes exist. Execute only after product/security approve the remaining API campaign and resolve the appointment/student-identity policy decisions. GD-API-003 is the exception: it verifies that the retired self-referral route remains unavailable.
 
 ## GD-API-001 — Student dashboard is own-scope and clinically redacted
 - Lifecycle: `CONDITIONAL`
@@ -46,26 +46,26 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 - Evidence: Before/after slip/audit state and negative response matrix.
 - Verdict: `NOT_RUN`
 
-## GD-API-003 — Mobile self-referral binds subject to authenticated student
-- Lifecycle: `CONDITIONAL`
+## GD-API-003 — Retired mobile self-referral endpoint remains unavailable
+- Lifecycle: `READY`
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
-- Requirement: If mobile self-referral policy is approved, API must accept validated concern selections, nonblank narrative, optional prior actions, and allowed priority hint, create then submit an own `self` referral using current concern-catalog version, and accept no subject/referrer override.
-- Surface: Guidance Mobile API V1.
-- Route/API: `POST /api/v1/guidance/self-referral`.
-- Actor/grants: Active identified student; policy gate approved.
-- Preconditions: Decision resolves web/mobile self-referral gates; disposable concern catalog and student.
+- Requirement: Student self-referral is retired; the V1 API must not expose a route or controller action that creates `self` intake referrals.
+- Surface: Guidance Mobile API V1 (no native UI).
+- Route/API: legacy `POST /api/v1/guidance/self-referral` (retired).
+- Actor/grants: Student, employee, counselor, and superadmin bearer variants.
+- Preconditions: Disposable API tokens and a before-state digest of intake/audit tables.
 
 **Steps**
-1. Submit valid own referral and reconcile returned/source type, subject, catalog version, selections, narrative, status, timestamps, and notifications.
-2. Retry/duplicate as defined by policy and test missing/oversized/invalid fields plus urgent/crisis hints.
-3. Add subject/person/tenant/referrer/action fields, including workstation-only action names, and try another identity.
+1. Attempt the retired route with every bearer role and a formerly valid self-referral payload.
+2. Verify route discovery/source does not advertise a handler and inspect the HTTP routing response according to the framework's ordinary missing-route behavior.
+3. Reconcile intake and audit tables before and after.
 
-- Expected: One valid referral is bound to bearer’s person and submitted under current catalog; invalid/blocked/override attempts reject atomically; urgency is a hint, not self-triage conclusion.
-- Negative/non-disclosure: Client cannot refer another person, author safety assessment/triage, choose receiving staff, expose internal notes, or bypass policy gate.
-- Cleanup: Withdraw/delete fixture through approved disposable workflow and retire DB.
-- Source: `app/Controllers/Api/V1/GuidanceMobileController.php:83-149`; `app/Controllers/Api/V1/GuidanceMobileController.php:374-389`
-- Evidence: Submitted-row/notification reconciliation, validation/override matrix, and policy-decision reference.
+- Expected: The retired endpoint is unavailable for every role and creates no intake or audit record; no replacement student self-referral route exists.
+- Negative/non-disclosure: Response does not reveal person, intake, safety, or internal workflow details and cannot be converted into another-subject referral through payload fields.
+- Cleanup: Revoke tokens and retire the disposable DB.
+- Source: `app/Config/Routes.php:94-101`; `app/Controllers/Api/V1/GuidanceMobileController.php`
+- Evidence: Route table/source assertion, role/status matrix, and unchanged table digests.
 - Verdict: `NOT_RUN`
 
 ## GD-API-004 — MI draft, finalization, and results are own-assignment contracts
@@ -124,7 +124,7 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 
 **Steps**
 1. Send every method that is explicitly routed at each wildcard boundary and GET at the `/guidance/cases` root using each role variant and valid-looking payloads/IDs; record unrouted root methods separately as 404/405 routing behavior, not as promised 403 denials.
-2. Send blocked action names inside self-referral, MI draft/final, and evaluation payloads.
+2. Send blocked action names inside MI draft/final and evaluation payloads.
 3. Compare every clinical/case/safety/form/transfer/audit row before and after and inspect responses.
 
 - Expected: Every explicitly routed workstation-only attempt is `403` with a generic boundary message and zero writes; unrouted root methods remain ordinary 404/405 routing outcomes; allowed student-safe actions remain separately routable under their rules.

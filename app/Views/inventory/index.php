@@ -52,11 +52,11 @@ $inventoryFilters = ($filters ?? []) + ['q' => '', 'status' => 'all', 'per_page'
   <div class="card mb-4">
     <div class="card-body pt-3">
       <form data-table-filters action="<?= esc($inventoryBaseUrl) ?>" method="GET" class="row g-2 g-md-3 align-items-end inventory-filters" role="search">
-        <div class="col-12 col-md-5">
+        <div class="col-12 col-md-4 col-lg-5">
           <label for="inventorySearch" class="form-label">Search medicines</label>
           <input type="search" name="q" id="inventorySearch" class="form-control" value="<?= esc($inventoryFilters['q']) ?>" placeholder="Medicine or generic name" maxlength="150">
         </div>
-        <div class="col-7 col-md-3">
+        <div class="col-7 col-md-3 col-lg-3">
           <label for="inventoryFilter" class="form-label">Catalog filter</label>
           <select name="status" id="inventoryFilter" class="form-select">
             <?php foreach ([
@@ -71,7 +71,7 @@ $inventoryFilters = ($filters ?? []) + ['q' => '', 'status' => 'all', 'per_page'
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-5 col-md-2">
+        <div class="col-5 col-md-2 col-lg-2">
           <label for="inventoryPerPage" class="form-label">Per page</label>
           <select name="per_page" id="inventoryPerPage" class="form-select">
             <?php foreach ([25, 50, 100] as $size): ?>
@@ -79,9 +79,9 @@ $inventoryFilters = ($filters ?? []) + ['q' => '', 'status' => 'all', 'per_page'
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-12 col-md-2 d-flex flex-wrap gap-2">
-          <button type="submit" class="btn btn-primary flex-grow-1 flex-md-grow-0">Filter</button>
-          <a href="<?= esc($inventoryBaseUrl) ?>" class="btn btn-outline-secondary flex-grow-1 flex-md-grow-0" data-table-reset>Reset</a>
+        <div class="col-12 col-md-3 col-lg-2 d-flex flex-nowrap gap-2">
+          <button type="submit" class="btn btn-primary flex-fill">Filter</button>
+          <a href="<?= esc($inventoryBaseUrl) ?>" class="btn btn-outline-secondary flex-fill" data-table-reset>Reset</a>
         </div>
       </form>
     </div>

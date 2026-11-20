@@ -1,38 +1,40 @@
 # Guidance intake, governance, and practitioner controls
 
-## GD-INT-001 — Portal referrer resolves only an exact MIS subject
+## GD-INT-001 — Employee portal resolves only exact active students; Guidance resolver remains staff-scoped
 - **Lifecycle:** `READY`
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.EXACT_SUBJECT`
-- **Surface:** Portal Guidance referral
-- **Route/API:** POST /portal/referrals/resolve-subject
-- **Actor/grants:** Authenticated permitted referrer
-- **Preconditions:** Known same-tenant synthetic MIS ID; wildcard/name fragments; foreign-tenant sentinel ID.
+- **Surface:** Employee Portal Guidance referral and Guidance intake workstation
+- **Route/API:** POST /portal/referrals/resolve-student; POST /guidance/intake/resolve-subject
+- **Actor/grants:** Active employee for the portal route; Guidance actor with guidance.intake.process for the workstation route
+- **Preconditions:** Known same-tenant student MIS ID; employee MIS ID; wildcard/name fragments; foreign-tenant sentinel ID.
 **Steps**
-1. Resolve the exact synthetic MIS ID and inspect the minimal subject confirmation.
-2. Submit blank, wildcard, name-fragment, unknown, and foreign-tenant values.
-- **Expected:** Exact same-tenant lookup returns only minimal identity/program confirmation; all directory-like queries fail.
-- **Negative/non-disclosure:** No broad patient directory, case count/title, note, safety plan, contact details, or foreign tenant person is disclosed.
+1. As an active employee, resolve the exact synthetic student MIS ID and inspect the minimal student confirmation.
+2. Attempt the employee portal route as a student, with an employee MIS ID, blank, wildcard, name-fragment, unknown, and foreign-tenant values.
+3. As authorized Guidance staff, use the workstation resolver for its broader intake subject lookup; deny an actor without guidance.intake.process.
+- **Expected:** Employee lookup returns only an active same-tenant student; student actors and directory-like/nonstudent queries fail. Guidance lookup remains permission-gated and may resolve the person kinds supported by intake.
+- **Negative/non-disclosure:** No broad patient directory, case count/title, note, safety plan, contact details, employee record through the portal resolver, or foreign tenant person is disclosed.
 - **Cleanup:** No state change; clear session and captured synthetic identifiers.
 - **Source:** app/Services/Guidance/GuidanceIntakeService.php:112-184; app/Config/Routes.php:420-424
 - **Evidence:** Exact confirmation and negative query/status matrix with minimal response fields.
 - **Verdict:** `NOT_RUN`
 
-## GD-INT-002 — Portal self-referral submits encrypted intake content
+## GD-INT-002 — Employee multi-student referral fans out encrypted intake records atomically
 - **Lifecycle:** `READY`
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.PORTAL_SUBMIT`
-- **Surface:** Portal Guidance referral
+- **Surface:** Employee Portal Guidance referral
 - **Route/API:** GET /portal/referrals/create; POST /portal/referrals/store
-- **Actor/grants:** Student/employee referrer using supported self/general-referral workflow
-- **Preconditions:** Synthetic caller/subject permitted by current portal flow; reviewed concern catalog; non-sensitive narrative/prior-action sentinels; activation prerequisites satisfied for web flow.
+- **Actor/grants:** Active employee-backed referrer; student actors denied
+- **Preconditions:** Two or more same-tenant synthetic students; reviewed concern catalog; non-sensitive shared narrative/prior-action sentinels; activation prerequisites satisfied for live submission.
 **Steps**
-1. Create a draft/select concerns, narrative, prior actions, and priority hint, then submit.
-2. Open the caller's available status view and the authorized Guidance intake list; inspect stored/audit representations.
-- **Expected:** A numbered submitted intake appears with encrypted selections/narrative/prior actions and referrer snapshots.
-- **Negative/non-disclosure:** Priority is only a referrer attention hint, not clinical risk; plaintext and other referrals are absent from logs/audit/list summaries.
+1. Add multiple students by exact MIS ID, select shared concerns, narrative, prior actions, and priority hint, then submit.
+2. Verify one independently numbered intake row per selected student and inspect encrypted/audit representations.
+3. Attempt the form as a student, include a nonstudent/foreign subject, exceed the batch cap, and force a later-child failure to prove full rollback.
+- **Expected:** One atomic form submission creates a separate encrypted referral lifecycle per selected student; duplicates are normalized and any invalid/failing child rolls back the whole batch.
+- **Negative/non-disclosure:** Students and inactive employees cannot use the surface; priority is only a referrer attention hint; plaintext and other referrals are absent from logs/audit/list summaries.
 - **Cleanup:** Withdraw/close and delete the synthetic intake via disposable teardown.
 - **Source:** app/Services/Guidance/GuidanceIntakeService.php:298-520; app/Config/Routes.php:420-424
 - **Evidence:** Portal submission/status, Guidance receipt row, cipher-vs-sentinel check, and metadata-only audit evidence.

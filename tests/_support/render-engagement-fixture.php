@@ -82,7 +82,7 @@ if ($kind === 'announcements') {
         ['type' => 'text', 'label' => 'Your feedback', 'required' => true, 'options' => []],
         ['type' => 'single', 'label' => 'Preferred time', 'required' => true, 'options' => ['Morning', 'Afternoon']],
         ['type' => 'multiple', 'label' => 'Support topics', 'required' => true, 'options' => ['Study', 'Wellbeing', 'Career']],
-        ['type' => 'rating', 'label' => 'Overall rating', 'required' => true, 'options' => []],
+        ['type' => 'rating', 'label' => 'Overall rating', 'required' => true, 'options' => [], 'scale_min_label' => 'Strongly Disagree', 'scale_max_label' => 'Strongly Agree'],
     ]];
     $survey = array_replace($survey, $fixture['savedTarget'] ?? []);
     if (preg_match('~/(create|1/edit)$~', $path)) {

@@ -127,12 +127,9 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
         <?php endif; ?>
         <li class="nav-item"><a class="nav-link <?= $isActive('portal/announcements') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/announcements')) ?>"><span class="nav-icon"><i class="bi bi-megaphone"></i></span><span class="nav-text">Announcements</span></a></li>
         <?php if (!empty($currentUser['person_id'])): ?>
-          <li class="nav-item"><a class="nav-link <?= $isActive('portal/surveys') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/surveys')) ?>"><span class="nav-icon"><i class="bi bi-clipboard-check"></i></span><span class="nav-text">My Surveys</span></a></li>
-          <?php if ($role !== 'guest'): ?>
+          <li class="nav-item"><a class="nav-link <?= $isActive('portal/surveys') || $isActive('portal/assessments/mi') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/surveys')) ?>"><span class="nav-icon"><i class="bi bi-clipboard-check"></i></span><span class="nav-text">My Surveys</span></a></li>
+          <?php if ($role !== 'guest' && in_array(($currentUser['person_kind'] ?? ($role === 'employee' ? 'employee' : null)), ['employee'], true)): ?>
             <li class="nav-item"><a class="nav-link <?= $isActive('portal/referrals') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/referrals/create')) ?>"><span class="nav-icon"><i class="bi bi-envelope-paper"></i></span><span class="nav-text">Guidance Referral</span></a></li>
-          <?php endif; ?>
-          <?php if ($canContent('guidance.assessments.take')): ?>
-            <li class="nav-item"><a class="nav-link <?= $isActive('portal/assessments/mi') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/assessments/mi')) ?>"><span class="nav-icon"><i class="bi bi-stars"></i></span><span class="nav-text">Multiple Intelligence</span></a></li>
           <?php endif; ?>
           <?php if ($canContent('guidance.evaluations.submit')): ?>
             <li class="nav-item"><a class="nav-link <?= $isActive('portal/evaluations') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/evaluations/redeem')) ?>"><span class="nav-icon"><i class="bi bi-chat-square-heart"></i></span><span class="nav-text">Service Evaluation</span></a></li>

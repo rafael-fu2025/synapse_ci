@@ -202,13 +202,57 @@ for (const theme of ['light', 'dark']) {
     assert.ok(fields.some(field => field.name === csrfName && field.value === csrfHash), 'CSRF hidden field agrees with the framework metadata');
     await page.locator('#identifier').fill('STUDENT-456');
     await page.locator('#password').fill('fixture-password');
-    for (const type of ['text', 'password']) {
-      await page.locator('[data-toggle-password]').click();
+    const toggleBtn = page.locator('[data-toggle-password]');
+    assert.equal(await toggleBtn.getAttribute('aria-pressed'), 'false');
+    assert.equal(await toggleBtn.getAttribute('aria-label'), 'Show password');
+    for (const [type, pressed, label] of [['text', 'true', 'Hide password'], ['password', 'false', 'Show password']]) {
+      await toggleBtn.click();
       assert.equal(await page.locator('#password').getAttribute('type'), type);
+      assert.equal(await toggleBtn.getAttribute('aria-pressed'), pressed);
+      assert.equal(await toggleBtn.getAttribute('aria-label'), label);
       assert.equal(await page.locator('#password').inputValue(), 'fixture-password');
       assert.equal(await page.locator('#identifier').inputValue(), 'STUDENT-456');
       const data = await form.evaluate(el => Object.fromEntries(new FormData(el)));
       assert.deepEqual(data, { [csrfName]: csrfHash, identifier: 'STUDENT-456', password: 'fixture-password' });
+    }
+    // Verify CSP readiness (no inline scripts or inline oncontextmenu handlers) and trimmed login assets.
+    assert.equal(await page.locator('script:not([src])').count(), 0, 'Login page must not emit inline <script> blocks');
+    assert.equal(await page.locator('[oncontextmenu]').count(), 0, 'Login page must not emit inline oncontextmenu handlers');
+    const scriptSrcs = await page.locator('script[src]').evaluateAll(nodes => nodes.map(n => n.getAttribute('src') || ''));
+    assert.ok(!scriptSrcs.some(src => src.includes('datepicker.js') || src.includes('custom-dropdown.js')),
+      `Unused scripts must not load on login: ${JSON.stringify(scriptSrcs)}`);
+    assert.equal((await page.locator('label[for="identifier"]').textContent()).trim(), 'Student or Employee ID Number');
+    assert.equal((await page.locator('.auth-help').textContent()).trim(), 'Trouble signing in? Contact your system administrator.');
+    assert.equal(await page.locator('a[href*="eis.foundationu.com"]').count(), 0);
+    // "Connect with us" sits directly below the Sign in button inside the form container, above help text.
+    const order = await page.evaluate(() => {
+      const submit = document.querySelector('.auth-pane button[type="submit"]').getBoundingClientRect();
+      const socials = document.querySelector('.auth-pane nav[aria-label="Socials"]').getBoundingClientRect();
+      const help = document.querySelector('.auth-pane .auth-help').getBoundingClientRect();
+      return { submitBottom: submit.bottom, socialsTop: socials.top, socialsBottom: socials.bottom, helpTop: help.top };
+    });
+    assert.ok(order.socialsTop >= order.submitBottom, `Socials must sit below Sign in button: ${JSON.stringify(order)}`);
+    assert.ok(order.helpTop >= order.socialsBottom, `Help copy must sit below Socials: ${JSON.stringify(order)}`);
+    // Typed, placeholder, and autofilled font sizes must match cleanly on both login inputs.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('DOM.enable');
+    await cdp.send('CSS.enable');
+    const { root: doc } = await cdp.send('DOM.getDocument', { depth: -1 });
+    for (const selector of ['#identifier', '#password']) {
+      const normal = await page.locator(selector).evaluate(el => ({
+        input: getComputedStyle(el).fontSize,
+        placeholder: getComputedStyle(el, '::placeholder').fontSize,
+      }));
+      assert.equal(normal.input, normal.placeholder, `${selector} typed and placeholder font sizes must match`);
+      const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: doc.nodeId, selector });
+      await cdp.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: ['autofill'] });
+      const autofilled = await page.locator(selector).evaluate(el => ({
+        input: getComputedStyle(el).fontSize,
+        firstLine: getComputedStyle(el, '::first-line').fontSize,
+      }));
+      await cdp.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses: [] });
+      assert.equal(autofilled.input, normal.input, `${selector} autofill font size must match typed font size`);
+      assert.equal(autofilled.firstLine, normal.input, `${selector} autofill ::first-line font size must match typed font size`);
     }
     await page.locator('#authThemeToggle').click();
     assert.equal(await page.locator('html').getAttribute('data-theme'), theme === 'dark' ? 'light' : 'dark');

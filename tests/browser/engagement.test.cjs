@@ -458,7 +458,53 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     await page.getByLabel('Morning', { exact: true }).check();
     await page.getByLabel('Study', { exact: true }).check();
     await page.getByLabel('Career', { exact: true }).check();
-    await choose(page.locator('[data-survey-submit]'), 'Overall rating', '5');
+    const ratingFieldset = page.locator('[data-survey-submit] fieldset', { hasText: 'Overall rating' });
+    assert.equal(await ratingFieldset.locator('select').count(), 0);
+    assert.equal(await ratingFieldset.locator('.pe-linear-scale input[type="radio"]').count(), 5);
+    const scaleGeometry = await ratingFieldset.locator('.pe-linear-scale').evaluate(scale => {
+      const options = [...scale.querySelectorAll('.pe-linear-scale-option')].map(option => {
+        const num = option.querySelector('.pe-linear-scale-number').getBoundingClientRect();
+        const radio = option.querySelector('input[type="radio"]').getBoundingClientRect();
+        return {
+          numBottom: num.bottom,
+          numCenterX: num.left + num.width / 2,
+          radioTop: radio.top,
+          radioBottom: radio.bottom,
+          radioCenterX: radio.left + radio.width / 2,
+          radioCenterY: radio.top + radio.height / 2,
+        };
+      });
+      const minRect = scale.querySelector('.pe-linear-scale-anchor--min')?.getBoundingClientRect() || null;
+      const maxRect = scale.querySelector('.pe-linear-scale-anchor--max')?.getBoundingClientRect() || null;
+      return { options, minRect, maxRect };
+    });
+    for (const opt of scaleGeometry.options) {
+      assert.ok(opt.numBottom <= opt.radioTop + 2, `Number sits above radio: ${JSON.stringify(opt)}`);
+      assert.ok(Math.abs(opt.numCenterX - opt.radioCenterX) <= 3, `Number horizontally centered over radio: ${JSON.stringify(opt)}`);
+    }
+    const firstOpt = scaleGeometry.options[0], lastOpt = scaleGeometry.options[4];
+    if (!mobile) {
+      assert.ok(scaleGeometry.minRect.right <= firstOpt.radioCenterX, 'Min anchor sits left of option 1 on desktop');
+      assert.ok(scaleGeometry.maxRect.left >= lastOpt.radioCenterX, 'Max anchor sits right of option 5 on desktop');
+      const minCenterY = scaleGeometry.minRect.top + scaleGeometry.minRect.height / 2;
+      const maxCenterY = scaleGeometry.maxRect.top + scaleGeometry.maxRect.height / 2;
+      assert.ok(Math.abs(minCenterY - firstOpt.radioCenterY) <= 4, 'Min anchor vertically aligns with radio row');
+      assert.ok(Math.abs(maxCenterY - lastOpt.radioCenterY) <= 4, 'Max anchor vertically aligns with radio row');
+    } else {
+      assert.ok(scaleGeometry.minRect.top >= firstOpt.radioBottom - 2, 'Min anchor wraps cleanly below radios on mobile');
+      assert.ok(scaleGeometry.maxRect.top >= lastOpt.radioBottom - 2, 'Max anchor wraps cleanly below radios on mobile');
+      assert.ok(scaleGeometry.minRect.right <= scaleGeometry.maxRect.left + 2, 'Anchors do not overlap on mobile');
+    }
+    const ratingFive = ratingFieldset.getByRole('radio', { name: '5', exact: true });
+    await ratingFive.check();
+    const checkedStyle = await ratingFive.evaluate(el => {
+      const css = getComputedStyle(el);
+      return { width: css.width, height: css.height, bgColor: css.backgroundColor, bgImage: css.backgroundImage };
+    });
+    assert.equal(checkedStyle.width, '20px');
+    assert.equal(checkedStyle.height, '20px');
+    assert.equal(checkedStyle.bgColor, 'rgba(0, 0, 0, 0)');
+    assert.match(checkedStyle.bgImage, /^radial-gradient\(/);
     const before = engagementPosts().length;
     await page.getByRole('button', { name: 'Submit identified response' }).click();
     await cancelConfirm(page); assert.equal(engagementPosts().length, before);
@@ -481,10 +527,10 @@ for (const theme of ['light', 'dark']) for (const mobile of [false, true]) {
     assert.equal(engagementPosts().length, before + 2);
     assert.equal(Object.fromEntries(engagementPosts().at(-1).fields).csrf_test_name, 'retry-token');
     assert.equal(await page.locator('#main .pe-survey-card').first().locator('.pe-state').innerText(), 'Submitted');
-    await page.getByRole('link', { name: 'View status', exact: true }).first().click();
+    await page.getByRole('link', { name: 'View submitted answers', exact: true }).first().click();
     await page.waitForURL(origin + '/portal/surveys/1');
-    await page.getByText('Your completion has been recorded.', { exact: false }).waitFor();
-    assert.match(await page.locator('#main').innerText(), /Your completion has been recorded/);
+    await page.getByText('Your identified completion', { exact: false }).waitFor();
+    assert.match(await page.locator('#main').innerText(), /Your identified completion.*has been recorded/);
     assert.equal(await page.locator('[data-survey-submit]').count(), 0);
     assert.equal(await page.evaluate(() => window.fixtureXss), undefined);
     await noOverflow(page);

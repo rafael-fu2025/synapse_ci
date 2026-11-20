@@ -54,12 +54,8 @@ final class BmgBuildService
         $coreRoot = $this->ready();
         $this->directory($this->root);
         // Serialize retention and compilation across workers, without holding a database lock for 180s.
-        $lock = $this->root . '/.build-lock';
-        if (is_link($lock)) { $this->fail(); }
-        $handle = @fopen($lock, 'c');
-        if ($handle === false) { $this->fail(); }
-        @chmod($lock, 0600);
-        if (!flock($handle, LOCK_EX | LOCK_NB)) { fclose($handle); throw new RuntimeException('A commissioning build is already running. Try again later.', 409); }
+        $handle = $this->acquireBuildLock();
+        if ($handle === null) { throw new RuntimeException('A commissioning build is already running. Try again later.', 409); }
         $job = null;
         try {
             $this->cleanup();
@@ -148,6 +144,43 @@ final class BmgBuildService
         $binding = $this->binding($unit, $actor, $payload['schedule_version'] ?? null, $payload['token_hash'] ?? null);
         if ($binding['device'] !== ($payload['device'] ?? null)) { throw new RuntimeException('Device binding changed. Rebuild required.', 409); }
         return $payload['release'];
+    }
+
+    /**
+     * Proactively remove expired or invalid private build directories.
+     *
+     * @return array{removed: int, busy: bool}
+     */
+    public function purgeExpired(): array
+    {
+        if (!is_dir($this->root)) {
+            return ['removed' => 0, 'busy' => false];
+        }
+        $this->safePath($this->root);
+        $handle = $this->acquireBuildLock();
+        if ($handle === null) {
+            return ['removed' => 0, 'busy' => true];
+        }
+        try {
+            return ['removed' => $this->cleanup(), 'busy' => false];
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
+
+    private function acquireBuildLock(): mixed
+    {
+        $lock = $this->root . '/.build-lock';
+        if (is_link($lock)) { $this->fail(); }
+        $handle = @fopen($lock, 'c');
+        if ($handle === false) { $this->fail(); }
+        @chmod($lock, 0600);
+        if (!flock($handle, LOCK_EX | LOCK_NB)) {
+            fclose($handle);
+            return null;
+        }
+        return $handle;
     }
 
     private function database(): BaseConnection { return $this->db ??= Database::connect(); }
@@ -552,13 +585,18 @@ final class BmgBuildService
             && $payload['created'] <= time() && $payload['expires'] === $payload['created'] + BmgBuild::TTL && $payload['expires'] > time();
     }
 
-    private function cleanup(): void
+    private function cleanup(): int
     {
+        $removed = 0;
         foreach (glob($this->root . '/build-*', GLOB_ONLYDIR) ?: [] as $dir) {
             if (!preg_match('/\Abuild-[0-9a-f]{32}\z/D', basename($dir))) { continue; }
             $payload = $this->manifest($dir);
-            if ($payload === null || !$this->validTime($payload)) { $this->remove($dir); }
+            if ($payload === null || !$this->validTime($payload)) {
+                $this->remove($dir);
+                ++$removed;
+            }
         }
+        return $removed;
     }
 
     private function normalize(string $path): string

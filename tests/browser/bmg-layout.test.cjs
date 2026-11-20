@@ -314,7 +314,7 @@ test('permission variants keep registration clickable while commands fail closed
   for (const variant of ['gate-off', 'controller-gate-off', 'detail-gate-off', 'no-hardware', 'reader', 'operator', 'config-only']) {
     const { page } = await pageFor(t, 'detail', { variant });
     const configurable = !['reader', 'operator'].includes(variant);
-    for (const name of ['Request run now', 'Request web stop']) assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), variant !== 'config-only', variant + ': ' + name);
+    for (const name of ['Request run now', 'Request web stop']) assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true, variant + ': ' + name);
     assert.equal(await page.locator('[data-bs-target="#deviceModal"]').count(), configurable ? 1 : 0, variant);
     if (configurable) {
       if (variant === 'config-only') assert.ok(await page.locator('#scheduleEnabled').isEnabled());
@@ -327,6 +327,9 @@ test('permission variants keep registration clickable while commands fail closed
       assert.ok(await page.locator('[data-confirm-accept]').isEnabled(), 'Registration reaches shared confirmation without enabling hardware');
     }
   }
+  const { page: hwOp } = await pageFor(t, 'detail', { variant: 'operator-hardware' });
+  for (const name of ['Request run now', 'Request web stop']) assert.equal(await hwOp.getByRole('button', { name, exact: true }).isEnabled(), true, 'operator-hardware: ' + name);
+  assert.equal(await hwOp.locator('[data-bs-target="#deviceModal"], [data-bmg-schedule], #scheduleEnabled').count(), 0);
 });
 
 test('detail retains button, form, CSRF and version hooks including modal labels', { timeout: 60000 }, async t => {

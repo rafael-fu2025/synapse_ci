@@ -1,18 +1,4 @@
 <?= $this->extend('layouts/app') ?>
-
-<?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2">
-  <a href="<?= esc(site_url('portal/visits')) ?>" class="btn btn-outline-secondary btn-sm" data-portal-pane-target="visits"><i class="bi bi-clock-history me-1" aria-hidden="true"></i>My Visit History</a>
-  <a href="<?= site_url('/portal/appointments/clinic/create') ?>" class="btn btn-outline-primary btn-sm" data-app-modal-open>
-    <i class="bi bi-calendar-plus me-1"></i> Request Clinic Visit
-  </a>
-  <a href="<?= site_url('/portal/appointments/guidance/create') ?>" class="btn btn-outline-info btn-sm" data-app-modal-open>
-    <i class="bi bi-calendar-check me-1"></i> Request Guidance Session
-  </a>
-</div>
-<?= $this->endSection() ?>
-
-<?= $this->section('content') ?>
 <?php
 $user = session()->get('user');
 $role = $user['role'] ?? 'student';
@@ -52,7 +38,145 @@ $fullName = !empty($person['first_name'])
     ? trim($person['first_name'] . ' ' . (!empty($person['middle_name']) ? $person['middle_name'] . ' ' : '') . $person['last_name'])
     : ($user['name'] ?? 'University Member');
 $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
+
+$unreadAnnouncementsCount = max(0, (int) ($unreadAnnouncementsCount ?? 0));
+$availableSurveysCount = max(0, (int) ($availableSurveysCount ?? 0));
+$miOpenCount = is_array($activeMiAssignments ?? null) ? count($activeMiAssignments) : 0;
+$surveysBadgeCount = $availableSurveysCount + $miOpenCount;
+$callSlipsList = is_array($pendingCallSlips ?? null) ? $pendingCallSlips : [];
+$callSlipsCount = count($callSlipsList);
+$unacknowledgedCallSlipsCount = 0;
+foreach ($callSlipsList as $csItem) {
+    if (($csItem['attendance_status'] ?? 'pending') === 'pending') {
+        $unacknowledgedCallSlipsCount++;
+    }
+}
+$callSlipsBadgeCount = $unacknowledgedCallSlipsCount > 0 ? $unacknowledgedCallSlipsCount : $callSlipsCount;
+$appointmentsTooltip = 'My appointments: View and filter your Clinic and Guidance appointment schedule.';
+$announcementsTooltip = 'Campus announcements: Read current notices from the Clinic and Guidance teams.'
+    . ($unreadAnnouncementsCount > 0 ? ' (' . $unreadAnnouncementsCount . ' unread)' : '');
+$surveysTooltip = 'My surveys: View eligible Guidance surveys, assigned Multiple Intelligence assessments, and your submission status.'
+    . ($surveysBadgeCount > 0 ? ' (' . $surveysBadgeCount . ' available or assigned)' : '');
+$referralTooltip = 'Guidance referral: Submit confidential referrals for one or more students without leaving the portal.';
+$evaluationTooltip = 'Service evaluation: Redeem a pseudonymous Guidance evaluation token to share confidential feedback.';
+$settingsTooltip = 'Profile & settings: Manage your account photo, emergency contact, and personal settings.';
+$callSlipsTooltip = $unacknowledgedCallSlipsCount > 0
+    ? 'Guidance Call Slips: ' . $unacknowledgedCallSlipsCount . ' call slip(s) awaiting acknowledgment. Click to view call slips.'
+    : ($callSlipsCount > 0
+        ? 'Guidance Call Slips: ' . $callSlipsCount . ' active call slip(s). Click to view all call slips.'
+        : 'Guidance Call Slips: View active and past Guidance Office call slips.');
 ?>
+
+<?= $this->section('page_actions') ?>
+<nav class="portal-app-dock" aria-label="Student and Employee quick services">
+  <a href="<?= esc(site_url('/portal')) ?>"
+     class="portal-app-tile is-active"
+     data-portal-pane-link="appointments"
+     data-app-tooltip="<?= esc($appointmentsTooltip, 'attr') ?>"
+     aria-label="<?= esc($appointmentsTooltip, 'attr') ?>"
+     aria-current="page">
+    <span class="portal-app-icon" aria-hidden="true">
+      <i class="bi bi-calendar2-check-fill"></i>
+    </span>
+    <span class="portal-app-label">Appointments</span>
+    <span class="visually-hidden">My Appointments</span>
+  </a>
+
+  <a href="<?= esc(site_url('/portal/announcements')) ?>"
+     class="portal-app-tile"
+     data-portal-pane-link="announcements"
+     data-app-tooltip="<?= esc($announcementsTooltip, 'attr') ?>"
+     aria-label="<?= esc($announcementsTooltip, 'attr') ?>">
+    <?php if ($unreadAnnouncementsCount > 0): ?>
+      <span class="portal-app-badge" data-portal-badge="announcements" aria-label="<?= esc((string) $unreadAnnouncementsCount, 'attr') ?> unread announcements">
+        <?= $unreadAnnouncementsCount > 99 ? '99+' : $unreadAnnouncementsCount ?>
+      </span>
+    <?php endif; ?>
+    <span class="portal-app-icon" aria-hidden="true">
+      <i class="bi bi-megaphone-fill"></i>
+    </span>
+    <span class="portal-app-label">Announcements</span>
+    <span class="visually-hidden">Campus announcements</span>
+  </a>
+
+  <a href="<?= esc(site_url('/portal/surveys')) ?>"
+     class="portal-app-tile"
+     data-portal-pane-link="surveys"
+     data-app-tooltip="<?= esc($surveysTooltip, 'attr') ?>"
+     aria-label="<?= esc($surveysTooltip, 'attr') ?>">
+    <?php if ($surveysBadgeCount > 0): ?>
+      <span class="portal-app-badge" data-portal-badge="surveys" aria-label="<?= esc((string) $surveysBadgeCount, 'attr') ?> available or assigned surveys">
+        <?= $surveysBadgeCount > 99 ? '99+' : $surveysBadgeCount ?>
+      </span>
+    <?php endif; ?>
+    <span class="portal-app-icon" aria-hidden="true">
+      <i class="bi bi-clipboard2-check-fill"></i>
+    </span>
+    <span class="portal-app-label">My Surveys</span>
+  </a>
+
+  <?php if ($isEmployee): ?>
+    <a href="<?= esc(site_url('/portal/referrals/create')) ?>"
+       class="portal-app-tile"
+       data-portal-pane-link="referrals"
+       data-app-tooltip="<?= esc($referralTooltip, 'attr') ?>"
+       aria-label="<?= esc($referralTooltip, 'attr') ?>">
+      <span class="portal-app-icon" aria-hidden="true">
+        <i class="bi bi-envelope-paper-heart-fill"></i>
+      </span>
+      <span class="portal-app-label">Referral</span>
+      <span class="visually-hidden">Guidance referral</span>
+    </a>
+  <?php endif; ?>
+
+  <a href="<?= esc(site_url('/portal/evaluations/redeem')) ?>"
+     class="portal-app-tile"
+     data-portal-pane-link="evaluations"
+     data-app-tooltip="<?= esc($evaluationTooltip, 'attr') ?>"
+     aria-label="<?= esc($evaluationTooltip, 'attr') ?>">
+    <span class="portal-app-icon" aria-hidden="true">
+      <i class="bi bi-chat-square-heart-fill"></i>
+    </span>
+    <span class="portal-app-label">Evaluation</span>
+    <span class="visually-hidden">Service evaluation</span>
+  </a>
+
+  <?php if (!empty($person['id']) || !empty($user['person_id'])): ?>
+    <a href="<?= esc(site_url('/portal/settings')) ?>"
+       class="portal-app-tile"
+       data-portal-pane-link="settings"
+       data-app-tooltip="<?= esc($settingsTooltip, 'attr') ?>"
+       aria-label="<?= esc($settingsTooltip, 'attr') ?>">
+      <span class="portal-app-icon" aria-hidden="true">
+        <i class="bi bi-person-gear"></i>
+      </span>
+      <span class="portal-app-label">Settings</span>
+      <span class="visually-hidden">Profile and settings</span>
+    </a>
+  <?php endif; ?>
+
+  <a href="<?= esc(site_url('/portal/call-slips')) ?>"
+     class="portal-app-tile"
+     data-portal-pane-link="callslips"
+     data-portal-callslips-tile
+     data-app-tooltip="<?= esc($callSlipsTooltip, 'attr') ?>"
+     aria-label="<?= esc($callSlipsTooltip, 'attr') ?>">
+    <?php if ($unacknowledgedCallSlipsCount > 0): ?>
+      <span class="portal-app-badge" data-portal-badge="callslips"
+            aria-label="<?= esc((string) $unacknowledgedCallSlipsCount, 'attr') ?> unacknowledged guidance call slips">
+        <?= $unacknowledgedCallSlipsCount > 99 ? '99+' : $unacknowledgedCallSlipsCount ?>
+      </span>
+    <?php endif; ?>
+    <span class="portal-app-icon" aria-hidden="true">
+      <i class="bi bi-ticket-perforated-fill"></i>
+    </span>
+    <span class="portal-app-label">Call Slips</span>
+    <span class="visually-hidden">Guidance Call Slips</span>
+  </a>
+</nav>
+<?= $this->endSection() ?>
+
+<?= $this->section('content') ?>
 
 <!-- Staff Role Console Switcher Banner (Shown only if staff logs into personal account) -->
 <?php if (in_array($role, ['superadmin', 'clinic_admin', 'clinic_staff', 'guidance_admin', 'guidance_supervisor', 'counsellor', 'bmg_admin', 'facilities_op'], true)): ?>
@@ -101,12 +225,12 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
   </div>
 <?php endif; ?>
 
-<?= view('portal/_queue_tickets', ['activeTickets' => $activeTickets ?? (!empty($activeTicket) ? [$activeTicket] : [])]) ?>
-
 <div class="row g-4 align-items-start portal-main-row">
-  <!-- Left Column: Student / Employee ATM Profile Card (Fixed ATM dimensions, never stretches) -->
+  <!-- Left Column: Live Waiting Room Tickets, Student / Employee ATM Profile Card, and Request Actions -->
   <div class="col-12 col-xl-auto portal-left-rail">
-    <div class="portal-profile-stack mb-4" data-portal-profile-stack>
+    <?= view('portal/_queue_tickets', ['activeTickets' => $activeTickets ?? (!empty($activeTicket) ? [$activeTicket] : [])]) ?>
+
+    <div class="portal-profile-stack mb-3" data-portal-profile-stack>
       <div class="portal-profile-card" title="Medical Flags and University Profile">
         <!-- Hidden hook for automated tests & screen readers expecting Medical Flags -->
         <span class="visually-hidden">Medical Flags</span>
@@ -242,165 +366,15 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
       </div>
     </div>
 
-    <?php
-    $unreadAnnouncementsCount = max(0, (int) ($unreadAnnouncementsCount ?? 0));
-    $availableSurveysCount = max(0, (int) ($availableSurveysCount ?? 0));
-    $miOpenCount = is_array($activeMiAssignments ?? null) ? count($activeMiAssignments) : 0;
-    $callSlipsList = is_array($pendingCallSlips ?? null) ? $pendingCallSlips : [];
-    $callSlipsCount = count($callSlipsList);
-    $unacknowledgedCallSlipsCount = 0;
-    foreach ($callSlipsList as $csItem) {
-        if (($csItem['attendance_status'] ?? 'pending') === 'pending') {
-            $unacknowledgedCallSlipsCount++;
-        }
-    }
-    $callSlipsBadgeCount = $unacknowledgedCallSlipsCount > 0 ? $unacknowledgedCallSlipsCount : $callSlipsCount;
-    $appointmentsTooltip = 'My appointments: View and filter your Clinic and Guidance appointment schedule.';
-    $announcementsTooltip = 'Campus announcements: Read current notices from the Clinic and Guidance teams.'
-        . ($unreadAnnouncementsCount > 0 ? ' (' . $unreadAnnouncementsCount . ' unread)' : '');
-    $surveysTooltip = 'My surveys: View eligible Guidance surveys and your submission status (identified, not anonymous).'
-        . ($availableSurveysCount > 0 ? ' (' . $availableSurveysCount . ' available)' : '');
-    $referralTooltip = 'Guidance referral: Submit a confidential Guidance referral or self-referral without leaving the portal.';
-    $miTooltip = 'Multiple Intelligence: ' . ($miOpenCount > 0
-        ? $miOpenCount . ' active Multiple Intelligence survey(s) assigned.'
-        : 'Complete assigned Multiple Intelligence inventories and view your domain scores.');
-    $evaluationTooltip = 'Service evaluation: Redeem a pseudonymous Guidance evaluation token to share confidential feedback.';
-    $settingsTooltip = 'Profile & settings: Manage your account photo, emergency contact, and personal settings.';
-    $callSlipsTooltip = $unacknowledgedCallSlipsCount > 0
-        ? 'Guidance Call Slips: ' . $unacknowledgedCallSlipsCount . ' call slip(s) awaiting acknowledgment. Click to view call slips.'
-        : ($callSlipsCount > 0
-            ? 'Guidance Call Slips: ' . $callSlipsCount . ' active call slip(s). Click to view all call slips.'
-            : 'Guidance Call Slips: View active and past Guidance Office call slips.');
-    ?>
-
-    <section class="card border-0 shadow-sm p-3 mb-0 portal-quick-dock-card" aria-label="Portal Quick Services">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <span class="small fw-semibold text-uppercase text-muted portal-dock-heading">
-          <i class="bi bi-grid-fill me-1" aria-hidden="true"></i>Quick Services
-        </span>
-      </div>
-
-      <nav class="portal-app-dock" aria-label="Student and Employee quick services">
-        <a href="<?= esc(site_url('/portal')) ?>"
-           class="portal-app-tile is-active"
-           data-portal-pane-link="appointments"
-           data-app-tooltip="<?= esc($appointmentsTooltip, 'attr') ?>"
-           aria-label="<?= esc($appointmentsTooltip, 'attr') ?>"
-           aria-current="page">
-          <span class="portal-app-icon" aria-hidden="true">
-            <i class="bi bi-calendar2-check-fill"></i>
-          </span>
-          <span class="portal-app-label">Appointments</span>
-          <span class="visually-hidden">My Appointments</span>
-        </a>
-
-        <a href="<?= esc(site_url('/portal/announcements')) ?>"
-           class="portal-app-tile"
-           data-portal-pane-link="announcements"
-           data-app-tooltip="<?= esc($announcementsTooltip, 'attr') ?>"
-           aria-label="<?= esc($announcementsTooltip, 'attr') ?>">
-          <?php if ($unreadAnnouncementsCount > 0): ?>
-            <span class="portal-app-badge" data-portal-badge="announcements" aria-label="<?= esc((string) $unreadAnnouncementsCount, 'attr') ?> unread announcements">
-              <?= $unreadAnnouncementsCount > 99 ? '99+' : $unreadAnnouncementsCount ?>
-            </span>
-          <?php endif; ?>
-          <span class="portal-app-icon" aria-hidden="true">
-            <i class="bi bi-megaphone-fill"></i>
-          </span>
-          <span class="portal-app-label">Announcements</span>
-          <span class="visually-hidden">Campus announcements</span>
-        </a>
-
-        <a href="<?= esc(site_url('/portal/surveys')) ?>"
-           class="portal-app-tile"
-           data-portal-pane-link="surveys"
-           data-app-tooltip="<?= esc($surveysTooltip, 'attr') ?>"
-           aria-label="<?= esc($surveysTooltip, 'attr') ?>">
-          <?php if ($availableSurveysCount > 0): ?>
-            <span class="portal-app-badge" data-portal-badge="surveys" aria-label="<?= esc((string) $availableSurveysCount, 'attr') ?> available surveys">
-              <?= $availableSurveysCount > 99 ? '99+' : $availableSurveysCount ?>
-            </span>
-          <?php endif; ?>
-          <span class="portal-app-icon" aria-hidden="true">
-            <i class="bi bi-clipboard2-check-fill"></i>
-          </span>
-          <span class="portal-app-label">My Surveys</span>
-        </a>
-
-        <a href="<?= esc(site_url('/portal/referrals/create')) ?>"
-           class="portal-app-tile"
-           data-portal-pane-link="referrals"
-           data-app-tooltip="<?= esc($referralTooltip, 'attr') ?>"
-           aria-label="<?= esc($referralTooltip, 'attr') ?>">
-          <span class="portal-app-icon" aria-hidden="true">
-            <i class="bi bi-envelope-paper-heart-fill"></i>
-          </span>
-          <span class="portal-app-label">Referral</span>
-          <span class="visually-hidden">Guidance referral</span>
-        </a>
-
-        <a href="<?= esc(site_url('/portal/assessments/mi')) ?>"
-           class="portal-app-tile"
-           data-portal-pane-link="mi"
-           data-app-tooltip="<?= esc($miTooltip, 'attr') ?>"
-           aria-label="<?= esc($miTooltip, 'attr') ?>">
-          <?php if ($miOpenCount > 0): ?>
-            <span class="portal-app-badge" data-portal-badge="mi" aria-label="<?= esc((string) $miOpenCount, 'attr') ?> assigned MI inventories">
-              <?= $miOpenCount > 99 ? '99+' : $miOpenCount ?>
-            </span>
-          <?php endif; ?>
-          <span class="portal-app-icon" aria-hidden="true">
-            <i class="bi bi-stars"></i>
-          </span>
-          <span class="portal-app-label">MI Survey</span>
-          <span class="visually-hidden">Multiple Intelligence</span>
-        </a>
-
-        <a href="<?= esc(site_url('/portal/evaluations/redeem')) ?>"
-           class="portal-app-tile"
-           data-portal-pane-link="evaluations"
-           data-app-tooltip="<?= esc($evaluationTooltip, 'attr') ?>"
-           aria-label="<?= esc($evaluationTooltip, 'attr') ?>">
-          <span class="portal-app-icon" aria-hidden="true">
-            <i class="bi bi-chat-square-heart-fill"></i>
-          </span>
-          <span class="portal-app-label">Evaluation</span>
-          <span class="visually-hidden">Service evaluation</span>
-        </a>
-
-        <?php if (!empty($person['id']) || !empty($user['person_id'])): ?>
-          <a href="<?= esc(site_url('/portal/settings')) ?>"
-             class="portal-app-tile"
-             data-portal-pane-link="settings"
-             data-app-tooltip="<?= esc($settingsTooltip, 'attr') ?>"
-             aria-label="<?= esc($settingsTooltip, 'attr') ?>">
-            <span class="portal-app-icon" aria-hidden="true">
-              <i class="bi bi-person-gear"></i>
-            </span>
-            <span class="portal-app-label">Settings</span>
-            <span class="visually-hidden">Profile and settings</span>
-          </a>
-        <?php endif; ?>
-
-        <a href="<?= esc(site_url('/portal/call-slips')) ?>"
-           class="portal-app-tile"
-           data-portal-pane-link="callslips"
-           data-portal-callslips-tile
-           data-app-tooltip="<?= esc($callSlipsTooltip, 'attr') ?>"
-           aria-label="<?= esc($callSlipsTooltip, 'attr') ?>">
-          <?php if ($unacknowledgedCallSlipsCount > 0): ?>
-            <span class="portal-app-badge" data-portal-badge="callslips"
-                  aria-label="<?= esc((string) $unacknowledgedCallSlipsCount, 'attr') ?> unacknowledged guidance call slips">
-              <?= $unacknowledgedCallSlipsCount > 99 ? '99+' : $unacknowledgedCallSlipsCount ?>
-            </span>
-          <?php endif; ?>
-          <span class="portal-app-icon" aria-hidden="true">
-            <i class="bi bi-ticket-perforated-fill"></i>
-          </span>
-          <span class="portal-app-label">Call Slips</span>
-          <span class="visually-hidden">Guidance Call Slips</span>
-        </a>
-      </nav>
+    <section class="portal-request-actions" aria-label="Request a campus visit">
+      <a href="<?= esc(site_url('/portal/appointments/clinic/create'), 'attr') ?>" class="btn btn-primary portal-request-btn" data-app-modal-open>
+        <?= view('partials/unit_vector_icon', ['unit' => 'clinic', 'class' => 'portal-request-icon']) ?>
+        <span>Request Clinic Visit</span>
+      </a>
+      <a href="<?= esc(site_url('/portal/appointments/guidance/create'), 'attr') ?>" class="btn btn-primary portal-request-btn" data-app-modal-open>
+        <?= view('partials/unit_vector_icon', ['unit' => 'guidance', 'class' => 'portal-request-icon']) ?>
+        <span>Request Guidance Session</span>
+      </a>
     </section>
   </div>
 
@@ -565,7 +539,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
                         <p class="mb-2">No appointments match these filters.</p>
                         <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-primary btn-sm" data-filter-reset>Clear filters</a>
                       <?php else: ?>
-                        You have no appointments or requests. Use the buttons above to request a visit.
+                        You have no appointments or requests. Use the Request Clinic Visit or Request Guidance Session buttons to book a visit.
                       <?php endif; ?>
                     </td>
                   </tr>
@@ -663,7 +637,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
       align-self: flex-start;
       z-index: 10;
     }
-    .portal-quick-dock-card {
+    .portal-request-actions {
       max-width: 360px;
     }
   }
@@ -827,38 +801,71 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
       transition-duration: 0.01ms !important;
     }
   }
-  .portal-quick-dock-card {
-    position: relative;
-    z-index: 5;
+  .portal-request-actions {
+    width: 360px;
+    max-width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+  .portal-request-actions .portal-request-btn {
+    --action-color: #ffffff;
+    --action-bg: var(--fu-brand, #800000);
+    --action-hover-bg: var(--fu-brand-hover, #6b0000);
+    --action-active-bg: var(--fu-brand-active, #5a0000);
+    width: 100%;
+    gap: 0.55rem;
+    min-height: 42px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+  .portal-request-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+  :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-request-actions .portal-request-btn {
+    --action-color: #f0f0f0;
+    --action-bg: #1e1e1e;
+    --action-hover-bg: #2a2a2a;
+    --action-active-bg: #333333;
+    --bs-btn-border-color: rgba(255, 255, 255, 0.14);
+    --bs-btn-hover-border-color: rgba(255, 255, 255, 0.28);
+    --bs-btn-active-border-color: rgba(255, 255, 255, 0.34);
+  }
+  #main .page-actions:has(.portal-app-dock) {
     overflow: visible;
   }
-  .portal-dock-heading {
-    letter-spacing: 0.05em;
-    font-size: 0.72rem;
-  }
   .portal-app-dock {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.65rem;
+    position: relative;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.4rem;
   }
   .portal-app-tile {
     position: relative;
-    width: 100%;
-    height: auto;
+    width: 76px;
+    height: 76px;
     aspect-ratio: 1 / 1;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
-    padding: 0.45rem 0.25rem;
+    gap: 0.3rem;
+    padding: 0.35rem 0.15rem;
     border-radius: 8px;
     border: 1px solid var(--na-border, #e5e7ef);
-    background: var(--na-surface-2, #fafbfc);
+    background: var(--surface-color, #ffffff);
     color: var(--default-color, #2d3a4e);
     text-decoration: none;
     cursor: pointer;
-    box-shadow: none;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
     transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background-color 0.16s ease;
   }
   .portal-app-tile:hover,
@@ -901,12 +908,12 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.35rem;
+    font-size: 1.15rem;
     line-height: 1;
   }
 
   .portal-app-label {
-    font-size: 0.67rem;
+    font-size: 0.6rem;
     font-weight: 600;
     line-height: 1.1;
     max-width: 100%;
@@ -917,16 +924,16 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
   }
   .portal-app-badge {
     position: absolute;
-    top: -6px;
-    right: -6px;
-    min-width: 22px;
-    height: 22px;
-    padding: 0 5px;
+    top: -5px;
+    right: -5px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 4px;
     border-radius: 999px;
     background: var(--fu-maroon, #800000);
     color: #ffffff;
     border: 2px solid var(--card-bg, #ffffff);
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 700;
     line-height: 1;
     display: inline-flex;
@@ -936,7 +943,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
     z-index: 2;
   }
 
-  /* Hover / keyboard-focus tooltip for 1:1 app containers */
+  /* Hover / keyboard-focus tooltip opening downward so the fixed header never clips it */
   .portal-app-tile[data-app-tooltip]::before,
   .portal-app-tile[data-app-tooltip]::after {
     opacity: 0;
@@ -948,15 +955,15 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
   }
   .portal-app-tile[data-app-tooltip]::before {
     content: "";
-    bottom: calc(100% + 4px);
-    transform: translateX(-50%) translateY(4px);
+    top: calc(100% + 2px);
+    transform: translateX(-50%) translateY(-4px);
     border: 5px solid transparent;
-    border-top-color: #181818;
+    border-bottom-color: #181818;
   }
   .portal-app-tile[data-app-tooltip]::after {
     content: attr(data-app-tooltip);
-    bottom: calc(100% + 14px);
-    transform: translateX(-50%) translateY(4px);
+    top: calc(100% + 12px);
+    transform: translateX(-50%) translateY(-4px);
     width: max-content;
     max-width: 240px;
     padding: 0.42rem 0.62rem;
@@ -977,6 +984,16 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+  .portal-app-tile:nth-last-child(-n+2)[data-app-tooltip]::after {
+    left: auto;
+    right: 0;
+    transform: translateX(0) translateY(-4px);
+    text-align: right;
+  }
+  .portal-app-tile:nth-last-child(-n+2)[data-app-tooltip]:hover::after,
+  .portal-app-tile:nth-last-child(-n+2)[data-app-tooltip]:focus-visible::after {
+    transform: translateX(0) translateY(0);
+  }
 
   .portal-callslip-item {
     background: transparent;
@@ -984,7 +1001,7 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
 
   [data-theme="dark"] .portal-app-tile {
     border-color: rgba(255, 255, 255, 0.12);
-    background: var(--na-surface-2, #222222);
+    background: var(--surface-color, #1c1c1c);
     color: var(--default-color, #f0f0f0);
     box-shadow: none;
   }
@@ -1007,76 +1024,53 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
     border-color: var(--card-bg, #1c1c1c);
   }
   [data-theme="dark"] .portal-app-tile[data-app-tooltip]::before {
-    border-top-color: #2a2a2a;
+    border-bottom-color: #2a2a2a;
   }
   [data-theme="dark"] .portal-app-tile[data-app-tooltip]::after {
     background: #2a2a2a;
     border: 1px solid rgba(255, 255, 255, 0.12);
   }
 
-  @media (min-width: 1200px) {
-    .portal-app-tile:nth-child(3n+1)[data-app-tooltip]::after {
-      left: 0;
-      transform: translateX(0) translateY(4px);
-      text-align: left;
-    }
-    .portal-app-tile:nth-child(3n+1)[data-app-tooltip]:hover::after,
-    .portal-app-tile:nth-child(3n+1)[data-app-tooltip]:focus-visible::after {
-      transform: translateX(0) translateY(0);
-    }
-    .portal-app-tile:nth-child(3n)[data-app-tooltip]::after {
-      left: auto;
-      right: 0;
-      transform: translateX(0) translateY(4px);
-      text-align: left;
-    }
-    .portal-app-tile:nth-child(3n)[data-app-tooltip]:hover::after,
-    .portal-app-tile:nth-child(3n)[data-app-tooltip]:focus-visible::after {
-      transform: translateX(0) translateY(0);
-    }
-  }
-
-  /* Tablet / compact desktop: arrange Profile Card + Quick Services side-by-side above workspace. */
+  /* Tablet / compact desktop: stack Tickets above Profile Card in col 1, Request actions alongside in col 2. */
   @media (min-width: 768px) and (max-width: 1199.98px) {
     .portal-left-rail {
       display: grid;
       grid-template-columns: 360px minmax(0, 1fr);
-      gap: 1rem;
+      column-gap: 1rem;
+      row-gap: 0.75rem;
       align-items: start;
     }
-    .portal-profile-stack {
+    .portal-left-rail > [data-personal-queue] {
+      grid-column: 1;
+      grid-row: 1;
+      width: 360px;
+      max-width: 100%;
       margin-bottom: 0 !important;
     }
-    .portal-quick-dock-card {
+    .portal-profile-stack {
+      grid-column: 1;
+      grid-row: 2;
+      margin-bottom: 0 !important;
+    }
+    .portal-request-actions {
+      grid-column: 2;
+      grid-row: 1 / span 2;
       max-width: none;
       width: 100%;
     }
-    .portal-app-dock {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 0.55rem;
-    }
-    .portal-app-tile:nth-child(4n+1)[data-app-tooltip]::after {
+    .portal-app-tile:first-child[data-app-tooltip]::after {
       left: 0;
-      transform: translateX(0) translateY(4px);
+      right: auto;
+      transform: translateX(0) translateY(-4px);
       text-align: left;
     }
-    .portal-app-tile:nth-child(4n+1)[data-app-tooltip]:hover::after,
-    .portal-app-tile:nth-child(4n+1)[data-app-tooltip]:focus-visible::after {
-      transform: translateX(0) translateY(0);
-    }
-    .portal-app-tile:nth-child(4n)[data-app-tooltip]::after {
-      left: auto;
-      right: 0;
-      transform: translateX(0) translateY(4px);
-      text-align: left;
-    }
-    .portal-app-tile:nth-child(4n)[data-app-tooltip]:hover::after,
-    .portal-app-tile:nth-child(4n)[data-app-tooltip]:focus-visible::after {
+    .portal-app-tile:first-child[data-app-tooltip]:hover::after,
+    .portal-app-tile:first-child[data-app-tooltip]:focus-visible::after {
       transform: translateX(0) translateY(0);
     }
   }
 
-  /* Mobile layout (< 768px): full-width cards, compact 4-column Quick Services dock, tighter spacing. */
+  /* Mobile layout (< 768px): full-width cards, compact 4-column Quick Services square grid in header. */
   @media (max-width: 767.98px) {
     .portal-main-row {
       --bs-gutter-y: 0.85rem;
@@ -1085,8 +1079,9 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
     [data-personal-queue] {
       margin-bottom: 0.85rem !important;
     }
-    [data-personal-queue] .card.p-4 {
-      padding: 1rem !important;
+    [data-personal-queue] {
+      width: 100%;
+      max-width: 100%;
     }
     .portal-profile-stack {
       width: 100%;
@@ -1099,32 +1094,20 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
       aspect-ratio: auto;
       min-height: 0;
     }
-    .portal-quick-dock-card {
+    .portal-request-actions {
       max-width: none;
       width: 100%;
     }
     .portal-app-dock {
+      display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 0.5rem;
+      width: 100%;
+      gap: 0.45rem;
     }
-    .portal-app-tile:nth-child(4n+1)[data-app-tooltip]::after {
-      left: 0;
-      transform: translateX(0) translateY(4px);
-      text-align: left;
-    }
-    .portal-app-tile:nth-child(4n+1)[data-app-tooltip]:hover::after,
-    .portal-app-tile:nth-child(4n+1)[data-app-tooltip]:focus-visible::after {
-      transform: translateX(0) translateY(0);
-    }
-    .portal-app-tile:nth-child(4n)[data-app-tooltip]::after {
-      left: auto;
-      right: 0;
-      transform: translateX(0) translateY(4px);
-      text-align: left;
-    }
-    .portal-app-tile:nth-child(4n)[data-app-tooltip]:hover::after,
-    .portal-app-tile:nth-child(4n)[data-app-tooltip]:focus-visible::after {
-      transform: translateX(0) translateY(0);
+    .portal-app-tile {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1 / 1;
     }
   }
 
@@ -1159,33 +1142,27 @@ $idNumber = $person['mis_id'] ?? ($user['identifier'] ?? '—');
       padding: calc(0.85rem + 12px) 1rem 0.9rem !important;
       border-radius: 0 0 12px 12px !important;
     }
-    .portal-quick-dock-card {
-      padding: 0.75rem !important;
-    }
-    .portal-quick-dock-card > div:first-child {
-      margin-bottom: 0.55rem !important;
-    }
     .portal-app-dock {
-      gap: 0.45rem;
+      gap: 0.4rem;
     }
     .portal-app-tile {
       border-radius: 6px;
-      padding: 0.35rem 0.2rem;
-      gap: 0.25rem;
+      padding: 0.3rem 0.2rem;
+      gap: 0.22rem;
     }
     .portal-app-icon {
-      font-size: 1.15rem;
+      font-size: 1.1rem;
     }
     .portal-app-label {
-      font-size: 0.63rem;
+      font-size: 0.6rem;
     }
     .portal-app-badge {
       top: -5px;
       right: -5px;
-      min-width: 19px;
-      height: 19px;
+      min-width: 18px;
+      height: 18px;
       padding: 0 4px;
-      font-size: 0.62rem;
+      font-size: 0.6rem;
     }
     .portal-app-tile[data-app-tooltip]::after {
       max-width: 200px;

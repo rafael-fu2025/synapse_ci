@@ -87,16 +87,17 @@ test('API adds accessible skeleton, preserves content, and restores absent aria-
     window.original = target.firstElementChild;
     window.finish = SynapseLoading.begin(target, { skeleton: true, label: 'Loading records…' });
     const overlay = target.querySelector('.app-loading-overlay');
+    const labelNode = overlay.querySelector('.app-loading-label');
     return {
       busy: target.getAttribute('aria-busy'), region: target.classList.contains('app-loading-region'),
       role: overlay.getAttribute('role'), live: overlay.getAttribute('aria-live'),
-      label: overlay.textContent, skeletonHidden: overlay.lastElementChild.getAttribute('aria-hidden'),
-      bars: overlay.querySelectorAll('.app-loading-skeleton > span').length,
+      label: overlay.textContent, labelHidden: Boolean(labelNode?.classList.contains('visually-hidden')),
+      skeletons: overlay.querySelectorAll('.app-loading-skeleton').length,
       spinnerHidden: overlay.querySelector('.app-loading-spinner').getAttribute('aria-hidden'),
       retained: target.firstElementChild === original
     };
   }), { busy: 'true', region: true, role: 'status', live: 'polite', label: 'Loading records…',
-    skeletonHidden: 'true', bars: 6, spinnerHidden: 'true', retained: true });
+    labelHidden: true, skeletons: 0, spinnerHidden: 'true', retained: true });
   await page.evaluate(() => { finish(); finish(); });
   await loading(page, '#region', 0);
   assert.deepEqual(await page.locator('#region').evaluate(target => ({
@@ -198,12 +199,12 @@ test('real loading CSS disables spinner and skeleton animations under reduced mo
   const page = await fixture(t);
   await page.addStyleTag({ path: path.join(root, 'public/assets/css/loading.css') });
   await page.evaluate(() => SynapseLoading.begin(document.querySelector('#region'), { skeleton: true }));
-  const animations = () => page.locator('.app-loading-spinner, .app-loading-skeleton > span')
+  const animations = () => page.locator('.app-loading-spinner')
     .evaluateAll(nodes => nodes.map(node => getComputedStyle(node).animationName));
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  assert.deepEqual(await animations(), ['app-loading-spin', ...Array(6).fill('app-loading-pulse')]);
+  assert.deepEqual(await animations(), ['app-loading-spin']);
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  assert.deepEqual(await animations(), Array(7).fill('none'));
+  assert.deepEqual(await animations(), ['none']);
   await loading(page);
 });
 
@@ -493,7 +494,8 @@ test('live-table skeleton lasts through held response body and clears on success
   await search(page, 1);
   await headers(page, 0);
   assert.match(await page.locator('#region').textContent(), /Original results/);
-  assert.equal(await page.locator('.app-loading-skeleton > span').count(), 6);
+  assert.equal(await page.locator('.app-loading-overlay .app-loading-spinner').count(), 1);
+  assert.equal(await page.locator('.app-loading-skeleton').count(), 0);
   await page.evaluate(html => requests[0].body(html), fragment('Fresh results'));
   await settled(page);
   assert.match(await page.locator('#region').textContent(), /Fresh results/);

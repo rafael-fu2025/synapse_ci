@@ -86,6 +86,12 @@ final class PortalContext
         return $host === null || self::isRolePermitted($role, $host);
     }
 
+    /** Whether the active host allows student accounts to sign in. */
+    public static function allowsStudentLogin(): bool
+    {
+        return self::compatibleHost('student');
+    }
+
     public static function landing(string $role): string
     {
         $host = self::hostPortal();

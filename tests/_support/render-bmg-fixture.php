@@ -51,7 +51,7 @@ $runs = [['occurred_at' => '2026-10-17 08:00:00', 'motor_state' => 'turned_norma
 $commands = [['created_at' => '2026-10-17 07:59:00', 'command' => 'run_now', 'duration_seconds' => 60, 'status' => 'acknowledged', 'ack_status' => 'accepted', 'ack_message' => $variant === 'malicious' ? $literal : 'Accepted by device', 'acknowledged_at' => '2026-10-17 08:00:00', 'expires_at' => '2026-10-17 08:00:00']];
 $detail = compact('unit', 'schedule', 'device', 'hardware_enabled', 'runs', 'commands');
 $batch = ['id' => 31, 'batch_code' => 'BATCH-31', 'status' => 'processing', 'started_at' => '2026-10-17 07:00:00', 'total_input_weight_kg' => '120.000', 'output_weight_kg' => null, 'completed_at' => null, 'notes' => $variant === 'malicious' ? $literal : 'Operator notes'];
-$data = ['title' => 'Mechanized drum rotation', 'canManage' => !in_array($variant, ['reader', 'config-only'], true), 'canConfigure' => !in_array($variant, ['reader', 'operator', 'operator-idle'], true), 'canHardware' => !in_array($variant, ['reader', 'no-hardware'], true), 'hardwareEnabled' => !in_array($variant, ['gate-off', 'controller-gate-off'], true)];
+$data = ['title' => 'Mechanized drum rotation', 'canManage' => !in_array($variant, ['reader', 'config-only'], true), 'canConfigure' => !in_array($variant, ['reader', 'operator', 'operator-idle', 'operator-hardware'], true), 'canHardware' => !in_array($variant, ['reader', 'no-hardware', 'operator', 'operator-idle'], true), 'hardwareEnabled' => !in_array($variant, ['gate-off', 'controller-gate-off'], true)];
 $kind = $fixture['kind'];
 if ($kind === 'index') {
     $data['archivedView'] = ($_GET['view'] ?? '') === 'archived';

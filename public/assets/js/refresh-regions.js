@@ -286,7 +286,7 @@
     const startedVersion = editSnapshot(current.root, request.regions);
     const snapshot = { window: [window.scrollX, window.scrollY], scrolls: scrollSnapshots(current.root),
       focus: focusSnapshot(current.root, currentRegions), tabs: tabSnapshot(current.root) };
-    const finishes = currentRegions.map(region => window.SynapseLoading?.begin(region, { label: 'Updating…' }) || (() => {}));
+    const finishes = currentRegions.map(region => window.SynapseLoading?.begin(region, { label: 'Updating…', skeleton: true }) || (() => {}));
     const correlationId = window.crypto?.randomUUID?.() || `${Date.now()}-${token}`;
     request = { ...request, correlationId, startedAt: performance.now() };
     telemetry('refresh_claimed', { ...request, status: 'claimed' });

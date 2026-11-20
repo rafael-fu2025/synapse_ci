@@ -40,7 +40,11 @@
     const events = new AbortController();
     const options = { signal: events.signal };
     const dirty = new Set();
-    let sequence = 0, edits = 0, timer = null, pending = null, composing = false, asking = false, syncing = false, retry = null, live = null, unregisterRegional = null;
+    const primaryRegion = currentRegions.get('results')
+      || currentRegions.get('list')
+      || currentRegions.get('schedule')
+      || (currentRegions.size === 1 ? [...currentRegions.values()][0] : null);
+    let sequence = 0, edits = 0, timer = null, pending = null, finishLoading = null, composing = false, asking = false, syncing = false, retry = null, live = null, unregisterRegional = null;
 
     function queryUrl(source = form) {
       const url = new URL(endpoint);
@@ -57,6 +61,7 @@
     function invalidate() {
       clearTimeout(timer); timer = null; ++sequence;
       pending?.abort(); pending = null;
+      finishLoading?.(); finishLoading = null;
       root.removeAttribute('aria-busy');
     }
     function paused(message = 'Unsaved edits are kept. Submit the filters to review before replacing them.') { status.textContent = message; }
@@ -143,6 +148,7 @@
         errorBox.hidden = true;
         root.setAttribute('aria-busy', 'true');
         status.textContent = 'Updating results…';
+        finishLoading = window.SynapseLoading?.begin(primaryRegion, { label: 'Updating results…', skeleton: true }) || null;
       }
       try {
         const response = await fetch(url.href, { method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
@@ -185,6 +191,7 @@
             if (!window.SynapseNavigation.updateHistory(canonical.href, mode, regional)) throw new Error('Another navigation interrupted filtering. Please retry.');
           } else history[mode === 'push' ? 'pushState' : 'replaceState'](history.state, '', canonical.href);
         }
+        finishLoading?.(); finishLoading = null;
         for (const [name, region] of currentRegions) {
           window.SynapsePageLifecycle?.destroy(region);
           region.querySelectorAll('.modal').forEach(modal => window.bootstrap?.Modal.getInstance(modal)?.dispose());
@@ -217,7 +224,7 @@
         status.textContent = 'Filters were not applied. Previous results and edits are still displayed.';
       } finally {
         clearTimeout(timeout);
-        if (token === sequence) { pending = null; root.removeAttribute('aria-busy'); }
+        if (token === sequence) { finishLoading?.(); finishLoading = null; pending = null; root.removeAttribute('aria-busy'); }
       }
     }
     function changed(event) {

@@ -50,11 +50,11 @@ $patientFilters = ($filters ?? []) + ['q' => $searchQuery ?? '', 'kind' => 'all'
   <div class="card border-0 shadow-sm mb-3">
     <div class="card-body pt-3">
       <form data-table-filters method="GET" action="<?= esc($patientBaseUrl) ?>" class="row g-2 g-md-3 align-items-end clinic-patients-filters" role="search">
-        <div class="col-12 col-md-5">
+        <div class="col-12 col-md-4 col-lg-5">
           <label for="patientSearch" class="form-label">Search patients</label>
           <input type="search" name="q" id="patientSearch" class="form-control" value="<?= esc($patientFilters['q']) ?>" placeholder="Search by ID or name" maxlength="150">
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md-3 col-lg-3">
           <label for="patientKind" class="form-label">Patient type</label>
           <select name="kind" id="patientKind" class="form-select">
             <?php foreach (['all' => 'All patients', 'student' => 'Student', 'employee' => 'Employee', 'guest' => 'Guest'] as $key => $label): ?>
@@ -62,7 +62,7 @@ $patientFilters = ($filters ?? []) + ['q' => $searchQuery ?? '', 'kind' => 'all'
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-6 col-md-2">
+        <div class="col-6 col-md-2 col-lg-2">
           <label for="patientPerPage" class="form-label">Per page</label>
           <select name="per_page" id="patientPerPage" class="form-select">
             <?php foreach ([25, 50, 100] as $size): ?>
@@ -70,9 +70,9 @@ $patientFilters = ($filters ?? []) + ['q' => $searchQuery ?? '', 'kind' => 'all'
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="col-12 col-md-2 d-flex flex-wrap gap-2">
-          <button type="submit" class="btn btn-primary flex-grow-1 flex-md-grow-0">Search</button>
-          <a href="<?= esc($patientBaseUrl) ?>" class="btn btn-outline-secondary flex-grow-1 flex-md-grow-0" data-table-reset>Reset</a>
+        <div class="col-12 col-md-3 col-lg-2 d-flex flex-nowrap gap-2">
+          <button type="submit" class="btn btn-primary flex-fill">Search</button>
+          <a href="<?= esc($patientBaseUrl) ?>" class="btn btn-outline-secondary flex-fill" data-table-reset>Reset</a>
         </div>
       </form>
     </div>
