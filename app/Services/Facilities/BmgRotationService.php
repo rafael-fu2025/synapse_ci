@@ -42,12 +42,17 @@ final class BmgRotationService
         $this->db = $db ?? Database::connect();
     }
 
+    public function authorizeRead(): array
+    {
+        return $this->actor('facilities.read');
+    }
+
     public function overview(bool $archived = false): array
     {
         $actor = $archived ? $this->configurationActor() : $this->actor('facilities.read');
         $units = $this->db->table('bmg_units')->where('tenant_id', $actor['tenant_id'])
             ->where($archived ? 'deleted_at !=' : 'deleted_at', null)->orderBy('id')->limit(200)->get()->getResultArray();
-        return array_map(fn (array $unit): array => $this->detail($unit), $units);
+        return $this->summaries((int) $actor['tenant_id'], $units);
     }
 
     /** Count before clamping and hydrate only the requested directory page. */
@@ -60,7 +65,7 @@ final class BmgRotationService
         $units = $this->db->table('bmg_units')->where('tenant_id', $actor['tenant_id'])
             ->where($archived ? 'deleted_at !=' : 'deleted_at', null)->orderBy('id')
             ->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage)->get()->getResultArray();
-        return ['units' => array_map(fn (array $unit): array => $this->detail($unit), $units),
+        return ['units' => $this->summaries((int) $actor['tenant_id'], $units),
             'pagination' => $pagination, 'stats' => $stats];
     }
 
@@ -325,7 +330,8 @@ final class BmgRotationService
                 ->update(['status' => 'revoked', 'unit_id' => null, 'revoked_at' => $this->now(), 'updated_at' => $this->now()]);
             if ($device['unit_id'] !== null) { $this->disable($tenant, (int) $device['unit_id'], (int) $actor['id']); }
             $this->audit($actor, 'bmg_device', $deviceId, 'revoke', ['unit_id' => $device['unit_id']]);
-            return ['status' => 'revoked', 'device_id' => $deviceId];
+            return ['status' => 'revoked', 'device_id' => $deviceId,
+                'unit_id' => $device['unit_id'] === null ? null : (int) $device['unit_id']];
         });
     }
 
@@ -549,19 +555,55 @@ final class BmgRotationService
         $tenant = (int) $unit['tenant_id'];
         $id = (int) $unit['id'];
         $device = $this->boundDevice($tenant, $id);
-        if ($device !== null) {
-            $device = array_intersect_key($device, array_flip(['id', 'unit_id', 'chip_mac', 'reported_firmware_version', 'status',
-                'last_seen_at', 'rtc_valid', 'applied_schedule_version', 'rotation_bound_at',
-                'firmware_reported_at', 'rtc_reported_at', 'schedule_reported_at']));
-            $device['firmware_version'] = $device['reported_firmware_version'];
-            unset($device['reported_firmware_version']);
-            $device['rtc_valid'] = $device['rtc_valid'] === null ? null : (bool) $device['rtc_valid'];
-            $device['applied_schedule_version'] = $device['applied_schedule_version'] === null ? null : (int) $device['applied_schedule_version'];
-        }
-        return ['unit' => $unit, 'schedule' => $this->scheduleView($tenant, $id), 'device' => $device,
+        return ['unit' => $unit, 'schedule' => $this->scheduleView($tenant, $id),
+            'device' => $device === null ? null : $this->formatDevice($device),
             'hardware_enabled' => $this->hardwareEnabled(),
             'runs' => $this->db->table('bmg_rotation_runs')->where('tenant_id', $tenant)->where('unit_id', $id)->orderBy('id', 'DESC')->limit(20)->get()->getResultArray(),
             'commands' => $this->db->table('bmg_rotation_commands')->where('tenant_id', $tenant)->where('unit_id', $id)->orderBy('id', 'DESC')->limit(20)->get()->getResultArray()];
+    }
+
+    /** Batch-hydrate directory items without per-unit N+1 queries or unused run/command histories. */
+    private function summaries(int $tenant, array $units): array
+    {
+        if ($units === []) {
+            return [];
+        }
+        $ids = array_map(static fn (array $unit): int => (int) $unit['id'], $units);
+        $schedulesByUnit = [];
+        foreach ($this->db->table('bmg_rotation_schedules')->where('tenant_id', $tenant)->whereIn('unit_id', $ids)->get()->getResultArray() as $row) {
+            $schedulesByUnit[(int) $row['unit_id']] = $row;
+        }
+        $devicesByUnit = [];
+        foreach ($this->db->table('bmg_devices')->where('tenant_id', $tenant)->whereIn('unit_id', $ids)
+            ->where('status', 'active')->where('revoked_at', null)->where('rotation_bound_at !=', null)->get()->getResultArray() as $row) {
+            $devicesByUnit[(int) $row['unit_id']][] = $row;
+        }
+        $hardwareEnabled = $this->hardwareEnabled();
+        $result = [];
+        foreach ($units as $unit) {
+            $id = (int) $unit['id'];
+            $bound = isset($devicesByUnit[$id]) && count($devicesByUnit[$id]) === 1
+                ? $this->formatDevice($devicesByUnit[$id][0]) : null;
+            $result[] = [
+                'unit' => $unit,
+                'schedule' => $this->formatSchedule($schedulesByUnit[$id] ?? null),
+                'device' => $bound,
+                'hardware_enabled' => $hardwareEnabled,
+            ];
+        }
+        return $result;
+    }
+
+    private function formatDevice(array $device): array
+    {
+        $device = array_intersect_key($device, array_flip(['id', 'unit_id', 'chip_mac', 'reported_firmware_version', 'status',
+            'last_seen_at', 'rtc_valid', 'applied_schedule_version', 'rotation_bound_at',
+            'firmware_reported_at', 'rtc_reported_at', 'schedule_reported_at']));
+        $device['firmware_version'] = $device['reported_firmware_version'];
+        unset($device['reported_firmware_version']);
+        $device['rtc_valid'] = $device['rtc_valid'] === null ? null : (bool) $device['rtc_valid'];
+        $device['applied_schedule_version'] = $device['applied_schedule_version'] === null ? null : (int) $device['applied_schedule_version'];
+        return $device;
     }
 
     private function defaultSchedule(): array
@@ -573,6 +615,11 @@ final class BmgRotationService
     private function scheduleView(int $tenant, int $unit): array
     {
         $row = $this->db->table('bmg_rotation_schedules')->where('tenant_id', $tenant)->where('unit_id', $unit)->get()->getRowArray();
+        return $this->formatSchedule($row);
+    }
+
+    private function formatSchedule(?array $row): array
+    {
         if ($row === null) { return $this->defaultSchedule(); }
         return ['version' => (int) $row['version'], 'enabled' => (bool) $row['enabled'], 'timezone' => 'Asia/Manila',
             'times' => json_decode($row['times_json'], true, 16, JSON_THROW_ON_ERROR),
@@ -670,6 +717,10 @@ final class BmgRotationService
         if (!$this->db->transBegin()) { throw new RuntimeException('Rotation transaction unavailable.', 503); }
         try {
             $table = $this->db->protectIdentifiers($this->db->prefixTable('tenants'));
+            if ($this->db->DBDriver === 'SQLite3') {
+                // SQLite has no row locks: acquire its writer lock before reading rotation state.
+                $this->db->query('UPDATE ' . $table . ' SET id = id WHERE id = ?', [$tenant]);
+            }
             $lock = $this->db->DBDriver === 'SQLite3' ? '' : ' FOR UPDATE';
             $row = $this->db->query('SELECT id FROM ' . $table . ' WHERE id = ? AND is_active = 1 AND deleted_at IS NULL' . $lock, [$tenant])->getRowArray();
             if ($row === null) { throw new RuntimeException('Tenant unavailable.', 401); }

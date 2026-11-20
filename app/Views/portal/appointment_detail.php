@@ -94,14 +94,26 @@ $confirmedAt = $formatDateTime($appointment['confirmed_at'] ?? null, \App\Servic
 </dl>
 
 <?php if (in_array($status, ['requested', 'scheduled', 'confirmed'], true)): ?>
-  <p class="small text-muted mt-4 mb-0">To change or cancel this appointment, use the Cancel button on My Health Portal.</p>
+  <p class="small text-muted mt-4 mb-0">You can cancel this appointment below or from My Health Portal.</p>
 <?php elseif ($status === 'completed'): ?>
   <p class="small text-muted mt-4 mb-0">This visit is complete. Contact the department if you need a follow-up appointment.</p>
 <?php elseif (in_array($status, ['cancelled', 'no_show'], true)): ?>
   <p class="small text-muted mt-4 mb-0">This appointment is no longer active. You can request a new appointment from My Health Portal.</p>
 <?php endif; ?>
 
-<div class="d-flex justify-content-end mt-4">
+<div class="d-flex justify-content-end gap-2 mt-4">
+  <?php if (in_array($status, ['requested', 'scheduled', 'confirmed'], true)): ?>
+    <form action="<?= site_url('/portal/appointments/' . $unit . '/cancel/' . (int) $appointment['id']) ?>" method="POST" class="d-inline" data-background-submit
+          data-confirm-reason
+          data-confirm="Cancel this appointment or pending request? Any reserved slot will be released."
+          data-confirm-title="Cancel appointment"
+          data-confirm-label="Cancel appointment"
+          data-confirm-tone="danger">
+      <?= csrf_field() ?>
+      <input type="hidden" name="reason" value="">
+      <button type="submit" class="btn btn-outline-danger">Cancel appointment</button>
+    </form>
+  <?php endif; ?>
   <button type="button" class="btn btn-outline-secondary" data-app-modal-close>Close</button>
 </div>
 <?= $this->endSection() ?>

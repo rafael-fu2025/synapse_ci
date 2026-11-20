@@ -117,6 +117,9 @@ final class AuthenticatedUser
             'id' => (int) $user['id'],
             'auth_version' => (int) $user['auth_version'],
             'person_id' => $person !== null ? (int) $person['id'] : null,
+            'person_kind' => $person !== null
+                ? (string) ($person['kind'] ?? ($user['role'] === 'student' ? 'student' : 'employee'))
+                : null,
             'tenant_id' => $tenantId,
             'username' => $user['username'],
             'email' => $email,
@@ -144,10 +147,18 @@ final class AuthenticatedUser
         if (!$authenticated && $age !== null && $age >= 0 && $age <= self::ROTATION_HANDOFF_SECONDS) {
             // This ID stays anonymous. Only safe reads may be retried with the browser's current cookie.
             $response = service('response')->setStatusCode(409)->setHeader('Cache-Control', 'no-store')
-                ->setHeader('X-Synapse-Session', 'rotated')->setHeader('Retry-After', '1')
-                ->setJSON(['message' => 'Your session is being renewed. Please retry this request.']);
+                ->setHeader('X-Synapse-Session', 'rotated')->setHeader('Retry-After', '1');
             foreach (['X-Synapse-Auth', 'X-Synapse-Login', 'Location'] as $header) $response->removeHeader($header);
-            return $response;
+            if (!self::isBackgroundRequest($request) && strtoupper($request->getMethod()) === 'GET') {
+                $retryUrl = esc(current_url(true)->__toString(), 'attr');
+                return $response->setContentType('text/html', 'UTF-8')->setBody(
+                    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="1">'
+                    . '<title>Renewing Session</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;">'
+                    . '<p>Your session is being renewed. Redirecting…</p>'
+                    . '<p><a href="' . $retryUrl . '">Continue</a></p></body></html>'
+                );
+            }
+            return $response->setJSON(['message' => 'Your session is being renewed. Please retry this request.']);
         }
         $reason = $authenticated ? null : self::noticeReason();
         if (!$authenticated) {

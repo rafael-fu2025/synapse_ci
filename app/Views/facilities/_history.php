@@ -1,3 +1,15 @@
+<?php
+$formatBatchTime ??= static function (?string $utc): string {
+    if ($utc === null || $utc === '') {
+        return 'Not recorded';
+    }
+    $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $utc, new \DateTimeZone('UTC'));
+    if ($parsed === false || $parsed->format('Y-m-d H:i:s') !== $utc) {
+        return $utc;
+    }
+    return \App\Services\Scheduling\SchedulingClock::formatManila($utc, 'Y-m-d H:i:s');
+};
+?>
 <div class="bmg-history-grid" id="bmg-history">
 <section class="card bmg-panel mb-4" aria-labelledby="bmg-command-history-title">
   <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading"><h2 class="card-title mb-0 p-0" id="bmg-command-history-title"><i class="bi bi-terminal" aria-hidden="true"></i> Recent command requests</h2><span class="badge bg-light text-dark border"><?= count($commands) ?> shown</span></div>
@@ -18,9 +30,9 @@
 <section class="card bmg-panel mb-4" aria-labelledby="bmg-batch-history-title">
   <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading"><h2 class="card-title mb-0 p-0" id="bmg-batch-history-title"><i class="bi bi-archive" aria-hidden="true"></i> Past batches</h2><span class="badge bg-light text-dark border"><?= count($pastBatches) ?> shown</span></div>
   <div class="card-body pt-3 bmg-panel-body pb-0"><p class="small text-muted">Latest 50 operator-entered batch records. Completion does not certify the material's quality or suitability for use.</p>
-  <div class="bmg-table-wrap table-responsive"><table class="table table-hover align-middle small mb-0"><caption class="visually-hidden">Latest 50 past batch records for this drum</caption><thead><tr><th scope="col">Batch</th><th scope="col">Status</th><th scope="col">Started</th><th scope="col">Completed</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Notes</th></tr></thead><tbody>
+  <div class="bmg-table-wrap table-responsive"><table class="table table-hover align-middle small mb-0"><caption class="visually-hidden">Latest 50 past batch records for this drum</caption><thead><tr><th scope="col">Batch</th><th scope="col">Status</th><th scope="col">Started (Asia/Manila)</th><th scope="col">Completed (Asia/Manila)</th><th scope="col">Input</th><th scope="col">Output</th><th scope="col">Notes</th></tr></thead><tbody>
     <?php if ($pastBatches === []): ?><tr><td colspan="7" class="bmg-empty text-muted py-4">No past batch records yet.</td></tr><?php endif; ?>
-    <?php foreach ($pastBatches as $batch): ?><tr><th scope="row"><?= esc($batch['batch_code']) ?></th><td><?= esc($batch['status']) ?></td><td><?= esc($batch['started_at']) ?></td><td><?= esc($batch['completed_at'] ?? 'Not recorded') ?></td><td><?= esc($batch['total_input_weight_kg']) ?> kg</td><td><?= isset($batch['output_weight_kg']) ? esc($batch['output_weight_kg']) . ' kg' : 'Not recorded' ?></td><td class="text-break"><strong>Creation:</strong> <?= nl2br(esc($batch['notes'] ?? 'Not recorded')) ?><br><strong>Completion / cancellation:</strong> <?= nl2br(esc($batch['release_notes'] ?? 'Not recorded')) ?></td></tr><?php endforeach; ?>
+    <?php foreach ($pastBatches as $batch): ?><tr><th scope="row"><?= esc($batch['batch_code']) ?></th><td><?= esc($batch['status']) ?></td><td><?= esc($formatBatchTime($batch['started_at'] ?? null)) ?></td><td><?= esc($formatBatchTime($batch['completed_at'] ?? null)) ?></td><td><?= esc($batch['total_input_weight_kg']) ?> kg</td><td><?= isset($batch['output_weight_kg']) ? esc($batch['output_weight_kg']) . ' kg' : 'Not recorded' ?></td><td class="text-break"><strong>Creation:</strong> <?= nl2br(esc($batch['notes'] ?? 'Not recorded')) ?><br><strong>Completion / cancellation:</strong> <?= nl2br(esc($batch['release_notes'] ?? 'Not recorded')) ?></td></tr><?php endforeach; ?>
   </tbody></table></div>
 </div></section>
 </div>

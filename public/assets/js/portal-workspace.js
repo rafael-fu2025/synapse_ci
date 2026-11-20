@@ -125,7 +125,7 @@
     if (sub === 'announcements' || sub.startsWith('announcements/')) return 'announcements';
     if (sub === 'surveys' || sub.startsWith('surveys/')) return 'surveys';
     if (sub === 'referrals' || sub.startsWith('referrals/')) return 'referrals';
-    if (sub === 'assessments/mi' || sub.startsWith('assessments/mi/')) return 'mi';
+    if (sub === 'assessments/mi' || sub.startsWith('assessments/mi/')) return 'surveys';
     if (sub === 'evaluations' || sub.startsWith('evaluations/')) return 'evaluations';
     if (sub === 'visits' || sub.startsWith('visits/')) return 'visits';
     if (sub === 'call-slips' || sub.startsWith('call-slips/')) return 'callslips';

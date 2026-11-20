@@ -136,17 +136,11 @@ final class GuidanceMobileApiV1Test extends FreshDatabaseTestCase
         $ackedSlip = $this->db->table('guidance_call_slips')->where('id', $callSlipId)->get()->getRowArray();
         $this->assertNotEmpty($ackedSlip['acknowledged_at']);
 
-        // 3. POST api/v1/guidance/self-referral
-        $this->enableGate(GuidanceActivationGateService::GATE_CANONICAL_FORMS);
-        AuthenticatedUser::clear();
-        $refResp = $this->apiPost($this->studentToken, 'api/v1/guidance/self-referral', [
-            'selections'    => ['emotional_distress'],
-            'narrative'     => 'Requesting guidance check-in for workload balance.',
-            'priority_hint' => 'routine',
-        ]);
-        $this->assertSame(201, $refResp->response()->getStatusCode(), 'self-referral response: ' . (string) $refResp->getJSON());
-        $refJson = json_decode((string) $refResp->getJSON(), true);
-        $this->assertNotEmpty($refJson['data']['id'] ?? null);
+        // 3. Mobile self-referral is unavailable; referrals are employee-only on the web portal.
+        $routes = service('routes');
+        $routes->loadRoutes();
+        $this->assertArrayNotHasKey('api/v1/guidance/self-referral', $routes->getRoutes('POST'));
+        $this->assertArrayNotHasKey('api/v1/guidance/self-referral', $routes->getRoutes('GET'));
 
         // 4. GET api/v1/guidance/mi, POST draft, POST finalize, GET results
         $miListResp = $this->apiGet($this->studentToken, 'api/v1/guidance/mi');

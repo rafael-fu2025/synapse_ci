@@ -14,6 +14,12 @@ $tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query
   <header class="pe-header"><span class="pe-header-icon" aria-hidden="true"><i class="bi bi-clipboard-check"></i></span><div><p class="pe-eyebrow">CAMPUS VOICES</p><h2 id="campus-surveys-title">Your voice matters</h2><p class="text-muted mb-0">Share your perspective, track what you’ve submitted, and see when surveys close.</p></div></header>
   <?php if (!($hasProfile ?? false)): ?><div class="alert alert-warning"><i class="bi bi-shield-exclamation me-1" aria-hidden="true"></i><strong>University profile required.</strong> Personal surveys are addressed to linked student and employee profiles. An administrative account without one cannot participate.</div><?php endif; ?>
   <div class="pe-privacy"><i class="bi bi-shield-lock" aria-hidden="true"></i><p class="mb-0"><strong>These surveys are identified, not anonymous.</strong> Your name and answers may be read by authorized Guidance administrators and supervisors. You can submit each survey once.</p></div>
+  <?php if (!empty($miAssignmentsUnavailable)): ?>
+    <div class="alert alert-warning" role="status"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>Assigned assessments are temporarily unavailable. Your general surveys remain accessible below.</div>
+  <?php endif; ?>
+  <?php if (!empty($miAssignments)): ?>
+    <?= view('surveys/_mi_assignments', ['assignments' => $miAssignments, 'miGateEnabled' => $miGateEnabled ?? false]) ?>
+  <?php endif; ?>
   <div class="card pe-toolbar"><div class="card-body p-3 p-lg-4">
     <form method="get" action="<?= esc($baseUrl) ?>" class="row g-3 align-items-end" role="search" aria-label="Search surveys" data-filter-form>
       <input type="hidden" name="status" value="<?= esc($filters['status']) ?>">

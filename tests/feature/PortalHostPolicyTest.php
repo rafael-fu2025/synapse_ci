@@ -283,4 +283,78 @@ final class PortalHostPolicyTest extends CIUnitTestCase
         $this->assertSame('main', PortalContext::routePortal('portal/appointments/clinic/create'));
         $this->assertNull(PortalContext::routePortal('clinicish'));
     }
+
+    public function testStaffHostAllowsStudentLoginMatrixAndSkipsStudentMisEndpoint(): void
+    {
+        $this->request('synapse.localhost', 'auth/login');
+        $this->assertTrue(PortalContext::allowsStudentLogin());
+        $this->request('localhost', 'auth/login');
+        $this->assertTrue(PortalContext::allowsStudentLogin());
+        foreach (['clinic.localhost', 'guidance.localhost', 'bmg.localhost', 'facilities.localhost'] as $staffHost) {
+            $this->request($staffHost, 'auth/login');
+            $this->assertFalse(PortalContext::allowsStudentLogin(), $staffHost . ' must not allow student login');
+        }
+
+        // Verify AuthController skips studentLogin() completely on clinic.localhost.
+        CurrentTenant::set(1);
+        session()->set('tenant_id', 1);
+        $this->db->query('ALTER TABLE host_people ADD COLUMN kind TEXT');
+        $this->db->query('ALTER TABLE host_people ADD COLUMN middle_name TEXT');
+        $this->db->query('ALTER TABLE host_people ADD COLUMN mis_synced_at TEXT');
+        $this->db->query('ALTER TABLE host_people ADD COLUMN mis_payload_hash TEXT');
+        $this->db->query('ALTER TABLE host_people ADD COLUMN created_at TEXT');
+        $this->db->query('ALTER TABLE host_people ADD COLUMN updated_at TEXT');
+        $this->db->query('DROP TABLE host_employee_profiles');
+        $this->db->query('CREATE TABLE host_employee_profiles (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id INTEGER, tenant_id INTEGER, department TEXT, position TEXT, employment_status TEXT, is_teaching INTEGER, created_at TEXT, updated_at TEXT)');
+        $this->db->query('ALTER TABLE host_users ADD COLUMN created_at TEXT');
+
+        $staffUser = $this->db->table('users')->where('role', 'clinic_staff')->get()->getRowArray();
+        $this->db->table('people')->where('id', $staffUser['person_id'])->update(['kind' => 'employee', 'mis_id' => 'MIS-CLINIC-03']);
+        $this->db->table('users')->where('id', $staffUser['id'])->update(['password_hash' => null, 'username' => 'MIS-CLINIC-03']);
+
+        $client = $this->createMock(\App\Integrations\Mis\MisClientInterface::class);
+        $client->expects($this->never())->method('studentLogin');
+        $client->expects($this->once())->method('employeeLogin')
+            ->with('MIS-CLINIC-03', 'mis-secret')
+            ->willReturn([
+                'data' => [
+                    'employee_id' => 'MIS-CLINIC-03',
+                    'first_name'  => 'Test',
+                    'last_name'   => 'Clinician',
+                ],
+            ]);
+        Services::injectMock('misClient', $client);
+
+        try {
+            $request = $this->request('clinic.localhost', 'auth/login', 'POST');
+            $request->setGlobal('post', ['identifier' => 'MIS-CLINIC-03', 'password' => 'mis-secret']);
+            $controller = new AuthController();
+            $controller->initController($request, service('response'), service('logger'));
+            $result = $controller->attemptLogin();
+            $this->assertSame('http://clinic.localhost:8080/base/index.php/clinic', $result->getHeaderLine('Location'));
+            $this->assertSame('clinic_staff', session('user')['role']);
+        } finally {
+            Services::resetSingle('misClient');
+        }
+    }
+
+    public function testEmptySubmissionFlashesPortalAwareFieldErrors(): void
+    {
+        foreach ([
+            ['synapse.localhost', 'Please enter your student or employee ID number and password.', 'Enter your student or employee ID number.'],
+            ['clinic.localhost', 'Please enter your employee ID number and password.', 'Enter your employee ID number.'],
+        ] as [$host, $expectedError, $expectedField]) {
+            session()->remove(['error', 'auth_field_errors']);
+            $request = $this->request($host, 'auth/login', 'POST');
+            $request->setGlobal('post', ['identifier' => '', 'password' => '']);
+            $controller = new AuthController();
+            $controller->initController($request, service('response'), service('logger'));
+            $controller->attemptLogin();
+            $this->assertSame($expectedError, session()->getFlashdata('error'));
+            $this->assertSame([
+                'identifier' => $expectedField,
+                'password'   => 'Enter your password.',
+            ], session()->getFlashdata('auth_field_errors'));
+        }
+    }
 }

@@ -27,7 +27,8 @@ final class FacilitiesController extends BaseController
     public function dashboard()
     {
         return $this->respond(function () {
-            $tenantId = \App\Services\CurrentTenant::id();
+            $actor = $this->rotation->authorizeRead();
+            $tenantId = (int) $actor['tenant_id'];
             $db = \Config\Database::connect();
 
             $metrics = DashboardCache::remember('facilities.dashboard', DashboardCache::TTL, function () use ($tenantId, $db): array {
@@ -73,12 +74,10 @@ final class FacilitiesController extends BaseController
                 ];
             });
 
-            $user = session()->get('user') ?? [];
-
             return view('facilities/dashboard', $this->access() + $metrics + [
                 'title'       => 'Facilities Dashboard',
                 'pageTitle'   => 'Facilities & BMG Dashboard',
-                'user'        => $user,
+                'user'        => $actor,
                 'breadcrumbs' => [
                     ['label' => 'Facilities', 'url' => site_url('/facilities/dashboard')],
                     ['label' => 'Dashboard', 'url' => ''],
@@ -156,6 +155,7 @@ final class FacilitiesController extends BaseController
     {
         return $this->respond(function () use ($id) {
             $token = $this->rotation->registerDevice($id, $this->input(['chip_mac', 'device_id', 'expected_version']));
+            DashboardCache::forget('facilities.dashboard');
             // Never redirect or flash credentials: this no-store response is their only disclosure.
             $this->response->setHeader('Referrer-Policy', 'no-referrer')->setHeader('X-Robots-Tag', 'noindex, nofollow');
             return view('facilities/device_token', ['tokenResult' => $token, 'title' => 'Controller Credential']);
@@ -165,8 +165,8 @@ final class FacilitiesController extends BaseController
     public function revokeDevice(int $id)
     {
         return $this->respond(function () use ($id) {
-            $this->rotation->revokeDevice($id, $this->request->getPost('expected_version'));
-            return $this->success('Controller credential revoked. This is not proof that its motor has stopped.', 0);
+            $result = $this->rotation->revokeDevice($id, $this->request->getPost('expected_version'));
+            return $this->success('Controller credential revoked. This is not proof that its motor has stopped.', (int) ($result['unit_id'] ?? 0));
         });
     }
 
@@ -230,6 +230,7 @@ final class FacilitiesController extends BaseController
 
     private function success(string $message, int $unit, string $scope = 'unit')
     {
+        DashboardCache::forget('facilities.dashboard');
         $listOwner = $scope === 'list' && $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === 'facilities.list';
         $target = site_url($listOwner || $unit < 1 ? '/facilities' : '/facilities/unit/' . $unit);
         if ($this->json()) {

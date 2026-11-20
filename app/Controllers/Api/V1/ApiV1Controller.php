@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Controllers\Api\V1;
 
 use App\Controllers\BaseController;
+use App\Integrations\Mis\MisAccountException;
+use App\Integrations\Mis\MisInactiveAccountException;
 use App\Integrations\Mis\MisUnavailableException;
 use App\Services\Api\ApiContext;
 use CodeIgniter\HTTP\ResponseInterface;
@@ -61,6 +63,13 @@ abstract class ApiV1Controller extends BaseController
     {
         try {
             return $operation();
+        } catch (MisInactiveAccountException $error) {
+            // The MIS directory does not list this account as active.
+            return $this->fail(409, 'account_inactive', $error->getMessage());
+        } catch (MisAccountException) {
+            // The upstream answered and could not verify the account: not a network outage.
+            return $this->fail(409, 'account_not_verifiable',
+                'MIS could not verify this account. If your MIS account is inactive or not yet registered, contact the HR Department.');
         } catch (MisUnavailableException) {
             // Never expose upstream bodies, credentials, API keys, or transport details.
             return $this->fail(503, 'service_unavailable',

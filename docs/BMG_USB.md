@@ -84,8 +84,10 @@ logs and intermediates are removed; the binaries **still contain the credentials
 At most two current builds per user/unit are retained. Signed private artifacts
 expire after 30 minutes and require the same current owner, tenant, unit, bound
 device credential, disabled schedule version and commissioning state. They are not
-added to the shared release catalog. Cleanup occurs during subsequent builds;
-expiry denies access but is not a background secure-erasure guarantee.
+added to the shared release catalog. Cleanup occurs during subsequent builds, and
+operators or cron can also run `php spark bmg:purge-builds` to remove expired build
+directories proactively; expiry denies access but is not a background secure-erasure
+guarantee.
 
 The backend derives sparse flash parts from the actual expanded pinned-core upload
 recipe, verifies their trusted locations and reuses catalog integrity/range checks.

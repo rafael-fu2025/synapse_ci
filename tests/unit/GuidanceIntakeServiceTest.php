@@ -45,6 +45,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
     private int $otherReferrerUserId;
     private int $counsellorUserId;
     private int $studentPersonId;
+    private int $secondStudentPersonId;
     private string $studentMisId;
 
     protected function setUp(): void
@@ -107,6 +108,22 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
             'department' => 'College of Computer Studies',
         ]);
 
+        $this->secondStudentPersonId = (int) $this->personModel->insert([
+            'tenant_id'  => 1,
+            'kind'       => 'student',
+            'mis_id'     => 'STU_INT_SECOND_' . $unique,
+            'first_name' => 'Nina',
+            'last_name'  => 'Lopez',
+        ]);
+        $this->studentProfileModel->insert([
+            'tenant_id'  => 1,
+            'person_id'  => $this->secondStudentPersonId,
+            'program'    => 'BS Education',
+            'year_level' => 2,
+            'section'    => '2-B',
+            'department' => 'College of Education',
+        ]);
+
         // 2. Referrer User (Teacher / Faculty)
         $teacherPersonId = (int) $this->personModel->insert([
             'tenant_id'  => 1,
@@ -122,6 +139,16 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
             'username'  => 'prof_oak_' . $unique,
             'role'      => 'employee',
             'status'    => 'active',
+        ]);
+        $this->db->table('employee_profiles')->insert([
+            'tenant_id' => 1,
+            'person_id' => $teacherPersonId,
+            'department' => 'Faculty',
+            'position' => 'Professor',
+            'employment_status' => 'active',
+            'is_teaching' => 1,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
         ]);
 
         // 3. Other Referrer User (for unauthorized withdrawal check)
@@ -139,6 +166,16 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
             'username'  => 'prof_birch_' . $unique,
             'role'      => 'employee',
             'status'    => 'active',
+        ]);
+        $this->db->table('employee_profiles')->insert([
+            'tenant_id' => 1,
+            'person_id' => $otherPersonId,
+            'department' => 'Faculty',
+            'position' => 'Instructor',
+            'employment_status' => 'active',
+            'is_teaching' => 1,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
         ]);
 
         // 4. Counselor User
@@ -256,6 +293,119 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         // Verify getActiveCatalog helper
         $activeCatalog = $this->intakeService->getActiveCatalog();
         $this->assertSame($catalog['version'], $activeCatalog['version']);
+    }
+
+    public function testEmployeeBatchCreatesOneIndependentReferralPerStudent(): void
+    {
+        $actor = $this->signInUser($this->referrerUserId);
+
+        $created = $this->intakeService->createEmployeeReferrals(
+            [$this->studentPersonId, (string) $this->secondStudentPersonId, $this->studentPersonId],
+            'employee_teacher',
+            ['emotional_distress'],
+            'Observed the same classroom concern for both selected students.',
+            null,
+            'urgent',
+            true,
+            $actor
+        );
+
+        $this->assertCount(2, $created);
+        $this->assertSame(
+            [$this->studentPersonId, $this->secondStudentPersonId],
+            array_map(static fn (array $row): int => (int) $row['subject_person_id'], $created)
+        );
+        $this->assertNotSame($created[0]['referral_number'], $created[1]['referral_number']);
+        foreach ($created as $row) {
+            $this->assertSame('submitted', $row['status']);
+            $this->assertSame('Observed the same classroom concern for both selected students.', $row['narrative']);
+        }
+    }
+
+    public function testEmployeeBatchRollsBackEveryReferralWhenSecondStudentInsertFails(): void
+    {
+        $actor = $this->signInUser($this->referrerUserId);
+        $before = $this->db->table('guidance_intake_referrals')->countAllResults();
+        $triggerName = 'guidance_batch_fail_' . bin2hex(random_bytes(6));
+        $trigger = $this->db->protectIdentifiers($triggerName);
+        $table = $this->db->protectIdentifiers($this->db->prefixTable('guidance_intake_referrals'));
+        $secondStudentId = $this->secondStudentPersonId;
+        $this->assertNotFalse($this->db->query("CREATE TRIGGER {$trigger} BEFORE INSERT ON {$table} FOR EACH ROW
+            BEGIN IF NEW.subject_person_id = {$secondStudentId} THEN SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Referral fan-out fixture failure'; END IF; END"));
+
+        $failure = null;
+        try {
+            $this->intakeService->createEmployeeReferrals(
+                [$this->studentPersonId, $this->secondStudentPersonId],
+                'employee_teacher',
+                ['emotional_distress'],
+                'Both records must roll back if either student referral cannot be created.',
+                null,
+                'routine',
+                true,
+                $actor
+            );
+        } catch (\Throwable $error) {
+            $failure = $error;
+        } finally {
+            $this->db->query("DROP TRIGGER IF EXISTS {$trigger}");
+        }
+
+        $this->assertNotNull($failure, 'The injected second-student failure must escape the batch operation.');
+        $this->assertSame($before, $this->db->table('guidance_intake_referrals')->countAllResults());
+        $this->assertSame(0, $this->db->transDepth);
+        $this->assertTrue($this->db->transStatus());
+
+        $created = $this->intakeService->createEmployeeReferrals(
+            [$this->studentPersonId, $this->secondStudentPersonId],
+            'employee_teacher',
+            ['emotional_distress'],
+            'Retry after the injected failure.',
+            null,
+            'routine',
+            false,
+            $actor
+        );
+        $this->assertCount(2, $created);
+    }
+
+    public function testEmployeeBatchRejectsAnyNonStudentBeforeWriting(): void
+    {
+        $actor = $this->signInUser($this->referrerUserId);
+        $employeePersonId = (int) $actor['person_id'];
+
+        $before = $this->db->table('guidance_intake_referrals')->countAllResults();
+        try {
+            $this->intakeService->createEmployeeReferrals(
+                [$this->studentPersonId, $employeePersonId],
+                'employee_teacher',
+                ['emotional_distress'],
+                'This batch must fail before creating either record.',
+                null,
+                'routine',
+                false,
+                $actor
+            );
+            $this->fail('Employee subjects must be rejected on the student referral surface.');
+        } catch (InvalidArgumentException $error) {
+            $this->assertSame(422, $error->getCode());
+        }
+
+        $this->assertSame($before, $this->db->table('guidance_intake_referrals')->countAllResults());
+    }
+
+    public function testInactiveEmployeeCannotUsePortalReferralAuthorizer(): void
+    {
+        $actor = $this->signInUser($this->referrerUserId);
+        $this->db->table('employee_profiles')
+            ->where('tenant_id', 1)
+            ->where('person_id', (int) $actor['person_id'])
+            ->update(['employment_status' => 'inactive']);
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionCode(403);
+        $this->intakeService->authorizeEmployeeReferrer($actor);
     }
 
     /**

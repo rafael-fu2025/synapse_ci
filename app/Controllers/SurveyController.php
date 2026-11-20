@@ -281,6 +281,12 @@ final class SurveyController extends BaseController
         log_message('error', 'SurveyController exception: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
         $status = $e instanceof RuntimeException && in_array($e->getCode(), [401, 403, 404, 409, 422, 429, 503], true) ? $e->getCode() : 503;
         $message = $status === 503 ? 'Surveys are temporarily unavailable. Contact the administrator.' : $e->getMessage();
+        if (!$this->request->isAJAX()
+            && !str_contains($this->request->getHeaderLine('Accept'), 'application/json')
+            && strtoupper($this->request->getMethod()) === 'GET') {
+            return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'private, no-store')
+                ->setBody(view('errors/html/error_400', ['message' => $message]));
+        }
         return $this->response->setStatusCode($status)->setHeader('Cache-Control', 'private, no-store')->setJSON([
             'success' => false, 'message' => $message, 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()],
         ]);

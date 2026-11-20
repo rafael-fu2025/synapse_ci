@@ -386,11 +386,11 @@
     root.tabIndex = -1;
     root.setAttribute('aria-labelledby', 'appFormModalTitle');
     root.innerHTML = '<div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">' +
-      '<div class="modal-header"><h5 id="appFormModalTitle" class="modal-title fs-6 fw-bold">Loading form…</h5>' +
+      '<div class="modal-header"><h5 id="appFormModalTitle" class="modal-title fs-6 fw-bold"><span class="app-loading-label visually-hidden">Loading form…</span></h5>' +
       '<button type="button" class="btn-close" aria-label="Close" data-app-modal-close></button></div>' +
       '<div class="modal-body"><div class="alert alert-danger d-none" role="alert" data-modal-error></div>' +
-      '<div data-modal-loading><p role="status"><span class="app-loading-spinner" aria-hidden="true"></span>Loading form…</p>' +
-      '<div class="app-loading-skeleton mb-3" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div></div>' +
+      '<div data-modal-loading><p role="status"><span class="app-loading-spinner" aria-hidden="true"></span><span class="app-loading-label visually-hidden">Loading form…</span></p>' +
+      '</div></div>' +
       '<div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-app-modal-close>Cancel</button></div></div></div>';
     document.body.appendChild(root);
     return root;

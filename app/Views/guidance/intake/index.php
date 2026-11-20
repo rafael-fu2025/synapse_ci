@@ -136,7 +136,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
         <form method="GET" action="<?= esc(site_url('/guidance/intake'), 'attr') ?>" class="row g-2 align-items-end">
           <div class="col-md-4">
             <label for="intakeStatusFilter" class="form-label small fw-semibold mb-1">Status</label>
-            <select id="intakeStatusFilter" name="status" class="form-select form-select-sm">
+            <select id="intakeStatusFilter" name="status" class="form-select">
               <option value="">All Statuses</option>
               <?php foreach ($statuses as $st): ?>
                 <option value="<?= esc($st, 'attr') ?>" <?= $statusFilter === $st ? 'selected' : '' ?>>
@@ -147,7 +147,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
           </div>
           <div class="col-md-4">
             <label for="intakePriorityFilter" class="form-label small fw-semibold mb-1">Referrer Priority Hint</label>
-            <select id="intakePriorityFilter" name="priority_hint" class="form-select form-select-sm">
+            <select id="intakePriorityFilter" name="priority_hint" class="form-select">
               <option value="">All Hints</option>
               <?php foreach ($priorityHints as $hint): ?>
                 <option value="<?= esc($hint, 'attr') ?>" <?= $priorityFilter === $hint ? 'selected' : '' ?>>
@@ -156,9 +156,9 @@ $statusBadge = static fn (string $status): string => match ($status) {
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="col-md-4 d-flex flex-wrap gap-2">
-            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
-            <a href="<?= esc(site_url('/guidance/intake')) ?>" class="btn btn-outline-secondary btn-sm">Reset</a>
+          <div class="col-12 col-md-4 d-flex flex-nowrap gap-2">
+            <button type="submit" class="btn btn-primary flex-fill">Filter</button>
+            <a href="<?= esc(site_url('/guidance/intake')) ?>" class="btn btn-outline-secondary flex-fill">Reset</a>
           </div>
         </form>
       </div>
@@ -382,7 +382,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
         var payload = { mis_id: misId };
         if (csrfInput) { payload[csrfInput.name] = csrfInput.value; }
         status.textContent = 'Resolving...';
-        fetch(<?= json_encode(site_url('/portal/referrals/resolve-subject')) ?>, {
+        fetch(<?= json_encode(site_url('/guidance/intake/resolve-subject')) ?>, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
           body: JSON.stringify(payload)

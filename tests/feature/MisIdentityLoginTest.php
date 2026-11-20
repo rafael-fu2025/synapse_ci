@@ -123,23 +123,54 @@ final class MisIdentityLoginTest extends CIUnitTestCase
     {
         $client = $this->createMock(MisClientInterface::class);
         $calls = [];
-        $client->expects($this->once())->method('studentLogin')->willReturnCallback(function (string $id, string $password) use (&$calls, $student, $unavailableAt) {
-            $this->assertSame($this->misId, $id);
-            $this->assertSame(self::PASSWORD, $password);
-            $calls[] = 'student';
-            if ($unavailableAt === 'student') throw new MisUnavailableException();
-            return $student;
-        });
-        $client->method('employeeLogin')->willReturnCallback(function (string $id, string $password) use (&$calls, $employee, $student, $unavailableAt) {
-            $this->assertSame(['student'], $calls, 'Student authentication must run first and only once.');
-            $this->assertNull($student, 'Employee fallback is only allowed for invalid student credentials.');
-            $this->assertSame($this->misId, $id);
-            $this->assertSame(self::PASSWORD, $password);
-            $calls[] = 'employee';
-            if ($unavailableAt === 'employee') throw new MisUnavailableException();
-            return $employee;
-        });
-        $client->expects($student !== null || $unavailableAt === 'student' ? $this->never() : $this->once())->method('employeeLogin');
+        $activeKinds = array_values(array_unique(array_column(
+            $this->db->table('people')->select('kind')
+                ->where('tenant_id', $this->tenantId)
+                ->where('mis_id', $this->misId)
+                ->where('deleted_at', null)
+                ->whereIn('kind', ['student', 'employee'])
+                ->get()->getResultArray(),
+            'kind'
+        )));
+        $preferEmployee = ($activeKinds === ['employee']);
+
+        if ($preferEmployee) {
+            $client->expects($this->once())->method('employeeLogin')->willReturnCallback(function (string $id, string $password) use (&$calls, $employee, $unavailableAt) {
+                $this->assertSame($this->misId, $id);
+                $this->assertSame(self::PASSWORD, $password);
+                $calls[] = 'employee';
+                if ($unavailableAt === 'employee') throw new MisUnavailableException();
+                return $employee;
+            });
+            $client->method('studentLogin')->willReturnCallback(function (string $id, string $password) use (&$calls, $student, $employee, $unavailableAt) {
+                $this->assertSame(['employee'], $calls, 'Unique synced employee must run first and only once.');
+                $this->assertNull($employee, 'Student fallback is only allowed for invalid employee credentials.');
+                $this->assertSame($this->misId, $id);
+                $this->assertSame(self::PASSWORD, $password);
+                $calls[] = 'student';
+                if ($unavailableAt === 'student') throw new MisUnavailableException();
+                return $student;
+            });
+            $client->expects($employee !== null || $unavailableAt === 'employee' ? $this->never() : $this->once())->method('studentLogin');
+        } else {
+            $client->expects($this->once())->method('studentLogin')->willReturnCallback(function (string $id, string $password) use (&$calls, $student, $unavailableAt) {
+                $this->assertSame($this->misId, $id);
+                $this->assertSame(self::PASSWORD, $password);
+                $calls[] = 'student';
+                if ($unavailableAt === 'student') throw new MisUnavailableException();
+                return $student;
+            });
+            $client->method('employeeLogin')->willReturnCallback(function (string $id, string $password) use (&$calls, $employee, $student, $unavailableAt) {
+                $this->assertSame(['student'], $calls, 'Student authentication must run first and only once.');
+                $this->assertNull($student, 'Employee fallback is only allowed for invalid student credentials.');
+                $this->assertSame($this->misId, $id);
+                $this->assertSame(self::PASSWORD, $password);
+                $calls[] = 'employee';
+                if ($unavailableAt === 'employee') throw new MisUnavailableException();
+                return $employee;
+            });
+            $client->expects($student !== null || $unavailableAt === 'student' ? $this->never() : $this->once())->method('employeeLogin');
+        }
         Services::injectMock('misClient', $client);
         return $client;
     }

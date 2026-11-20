@@ -101,29 +101,45 @@ $externalHost = $externalUrl !== '' ? (string) (parse_url($externalUrl, PHP_URL_
           <?php
             $minAnchor = trim((string) ($question['scale_min_label'] ?? ''));
             $maxAnchor = trim((string) ($question['scale_max_label'] ?? ''));
+            $minAnchorId = 'survey-scale-min-' . $index;
+            $maxAnchorId = 'survey-scale-max-' . $index;
+            $hasAnchors = $minAnchor !== '' || $maxAnchor !== '';
           ?>
-          <?php if ($minAnchor !== '' || $maxAnchor !== ''): ?>
-            <div class="small text-muted mb-2">
-              Scale guide:
-              <?php if ($minAnchor !== ''): ?><strong>1</strong> = <?= esc($minAnchor) ?><?php endif; ?>
-              <?php if ($minAnchor !== '' && $maxAnchor !== ''): ?> · <?php endif; ?>
-              <?php if ($maxAnchor !== ''): ?><strong>5</strong> = <?= esc($maxAnchor) ?><?php endif; ?>
+          <div class="pe-linear-scale<?= $hasAnchors ? ' has-anchors' : '' ?>" data-rating-scale>
+            <?php if ($minAnchor !== ''): ?>
+              <span class="pe-linear-scale-anchor pe-linear-scale-anchor--min" id="<?= $minAnchorId ?>">
+                <span class="pe-linear-scale-anchor-num" aria-hidden="true">1 — </span><?= esc($minAnchor) ?>
+              </span>
+            <?php endif; ?>
+            <div class="pe-linear-scale-options">
+              <?php for ($rating = 1; $rating <= 5; $rating++): ?>
+                <?php
+                  $describedBy = '';
+                  if ($rating === 1 && $minAnchor !== '') {
+                      $describedBy = $minAnchorId;
+                  } elseif ($rating === 5 && $maxAnchor !== '') {
+                      $describedBy = $maxAnchorId;
+                  }
+                ?>
+                <label class="pe-linear-scale-option">
+                  <span class="pe-linear-scale-number"><?= $rating ?></span>
+                  <span class="pe-linear-scale-control">
+                    <input type="radio"
+                           class="pe-linear-scale-radio"
+                           name="answers[<?= $index ?>]"
+                           value="<?= $rating ?>"
+                           <?= $describedBy !== '' ? 'aria-describedby="' . $describedBy . '"' : '' ?>
+                           <?= $question['required'] ? 'required' : '' ?>>
+                  </span>
+                </label>
+              <?php endfor; ?>
             </div>
-          <?php endif; ?>
-          <select name="answers[<?= $index ?>]" class="form-select" aria-label="<?= esc($question['label']) ?>" <?= $question['required'] ? 'required' : '' ?>>
-            <option value="">Select a rating</option>
-            <?php for ($rating = 1; $rating <= 5; $rating++): ?>
-              <?php
-                $ratingText = (string) $rating;
-                if ($rating === 1 && $minAnchor !== '') {
-                    $ratingText .= ' — ' . $minAnchor;
-                } elseif ($rating === 5 && $maxAnchor !== '') {
-                    $ratingText .= ' — ' . $maxAnchor;
-                }
-              ?>
-              <option value="<?= $rating ?>"><?= esc($ratingText) ?></option>
-            <?php endfor; ?>
-          </select>
+            <?php if ($maxAnchor !== ''): ?>
+              <span class="pe-linear-scale-anchor pe-linear-scale-anchor--max" id="<?= $maxAnchorId ?>">
+                <span class="pe-linear-scale-anchor-num" aria-hidden="true">5 — </span><?= esc($maxAnchor) ?>
+              </span>
+            <?php endif; ?>
+          </div>
         <?php else: ?>
           <?php
             $otherIndex = \App\Services\Guidance\SurveyQuestion::otherOptionIndex($question);

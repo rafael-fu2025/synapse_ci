@@ -276,6 +276,159 @@ final class FacilitiesAuditTest extends CIUnitTestCase
         $this->assertStringNotContainsString('<script>creation', $html);
     }
 
+    public function testDashboardAuthorizesBeforeCacheInvalidatesOnWriteAndRevokeRedirectsToUnit(): void
+    {
+        $this->addNotesFixtureColumn();
+        foreach ([
+            'CREATE TABLE bmg_devices (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, chip_mac TEXT, device_token_hash TEXT, status TEXT, revoked_at TEXT, rotation_bound_at TEXT, reported_firmware_version TEXT, rtc_valid INTEGER, applied_schedule_version INTEGER, last_seen_at TEXT, firmware_reported_at TEXT, rtc_reported_at TEXT, schedule_reported_at TEXT, created_at TEXT, updated_at TEXT)',
+            'CREATE TABLE bmg_rotation_schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, enabled INTEGER, version INTEGER, times_json TEXT, duration_seconds INTEGER, pwm INTEGER, updated_by_user_id INTEGER, created_at TEXT, updated_at TEXT)',
+            'CREATE TABLE bmg_rotation_commands (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, device_id INTEGER, command TEXT, duration_seconds INTEGER, pwm INTEGER, status TEXT, ack_status TEXT, ack_message TEXT, created_by_user_id INTEGER, created_at TEXT, expires_at TEXT, acknowledged_at TEXT)',
+            'CREATE TABLE bmg_rotation_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, device_id INTEGER, run_uid TEXT, motor_state TEXT, duration_seconds INTEGER, occurred_at TEXT, created_at TEXT)',
+        ] as $sql) {
+            $this->auditDb->query($sql);
+        }
+        $this->auditDb->table('role_permissions')->insert(['role' => 'facilities_op', 'permission_id' => 3]);
+        $this->auditDb->table('bmg_devices')->insert([
+            'id' => 5, 'tenant_id' => 1, 'unit_id' => 1, 'chip_mac' => 'aa:bb:cc:dd:ee:01',
+            'device_token_hash' => hash('sha256', 'secret-token'), 'status' => 'active',
+            'rotation_bound_at' => '2026-10-17 08:00:00',
+            'created_at' => '2026-10-17 08:00:00', 'updated_at' => '2026-10-17 08:00:00',
+        ]);
+
+        $renderer = new class(config('View'), APPPATH . 'Views/', service('locator'), false) extends \CodeIgniter\View\View {
+            public array $captured = [];
+            public function setData(array $data = [], ?string $context = null): \CodeIgniter\View\RendererInterface
+            {
+                $this->captured = $data;
+                return parent::setData($data, $context);
+            }
+            public function render(string $view, ?array $options = null, ?bool $saveData = null): string
+            {
+                return $view;
+            }
+        };
+        \Config\Services::injectMock('renderer', $renderer);
+
+        $request = service('request');
+        $request->setHeader('Accept', 'application/json');
+        $request->setHeader('X-Requested-With', 'XMLHttpRequest');
+        $controller = new FacilitiesController();
+        $controller->initController($request, service('response'), service('logger'));
+
+        \App\Services\CurrentTenant::set(1);
+        \App\Services\DashboardCache::enable(true);
+        \App\Services\DashboardCache::forget('facilities.dashboard');
+        try {
+            $this->assertSame('facilities/dashboard', $controller->dashboard());
+            $this->assertSame(0, $renderer->captured['totalBatches']);
+            $this->assertSame(1, $renderer->captured['boundDevices']);
+            $this->assertNotNull(cache()->get(\App\Services\DashboardCache::key('facilities.dashboard')));
+
+            $request->setHeader('X-Device-Token', 'secret-token');
+            $deniedToken = $controller->dashboard();
+            $this->assertSame(403, $deniedToken->getStatusCode());
+            $request->removeHeader('X-Device-Token');
+
+            $request->setHeader('Authorization', 'Bearer token');
+            $deniedBearer = $controller->dashboard();
+            $this->assertSame(403, $deniedBearer->getStatusCode());
+            $request->removeHeader('Authorization');
+
+            $this->auditDb->table('users')->where('id', 7)->update(['role' => 'superadmin']);
+            $deniedRole = $controller->dashboard();
+            $this->assertSame(403, $deniedRole->getStatusCode());
+
+            $this->auditDb->table('users')->where('id', 7)->update(['role' => 'facilities_op']);
+            $request->setGlobal('post', ['input_weight_kg' => '25.00']);
+            $started = json_decode($controller->startBatch(1)->getBody(), true);
+            $this->assertTrue($started['success']);
+            $this->assertNull(cache()->get(\App\Services\DashboardCache::key('facilities.dashboard')));
+
+            $this->assertSame('facilities/dashboard', $controller->dashboard());
+            $this->assertSame(1, $renderer->captured['totalBatches']);
+
+            $request->setGlobal('post', ['expected_version' => '0']);
+            $revoked = json_decode($controller->revokeDevice(5)->getBody(), true);
+            $this->assertTrue($revoked['success']);
+            $this->assertSame(site_url('/facilities/unit/1'), $revoked['redirect']);
+            $this->assertNull(cache()->get(\App\Services\DashboardCache::key('facilities.dashboard')));
+
+            $this->assertSame('facilities/dashboard', $controller->dashboard());
+            $this->assertSame(0, $renderer->captured['boundDevices']);
+        } finally {
+            \App\Services\DashboardCache::forget('facilities.dashboard');
+            \App\Services\DashboardCache::enable(null);
+            \App\Services\CurrentTenant::reset();
+            \Config\Services::resetSingle('renderer');
+            $request->removeHeader('X-Device-Token');
+            $request->removeHeader('Authorization');
+        }
+    }
+
+    public function testDashboardWordingAndUnitDetailBatchTimestampsAreAccurate(): void
+    {
+        $offlineUnit = ['id' => 2, 'unit_code' => 'off-2', 'name' => 'Offline drum', 'status' => 'offline', 'drum_capacity_kg' => '300.00'];
+        $html = $this->render('dashboard', [
+            'totalUnits' => 2, 'activeUnits' => 1, 'maintenanceUnits' => 0, 'boundDevices' => 1,
+            'totalTreatedKg' => 42.5,
+            'units' => [
+                ['unit' => ['id' => 1, 'unit_code' => 'audit', 'name' => 'Audit drum', 'status' => 'active', 'drum_capacity_kg' => '500.00'],
+                    'schedule' => $this->schedule(), 'device' => ['id' => 1, 'chip_mac' => 'aa:bb:cc:dd:ee:01']],
+                ['unit' => $offlineUnit, 'schedule' => ['enabled' => false, 'times' => []], 'device' => null],
+            ],
+        ]);
+        foreach ([
+            'Biomechanical Goat (BMG) Console',
+            \App\Services\Scheduling\SchedulingClock::now()->format('l, F j, Y'),
+            'Released Batch Input',
+            'Recorded input weight (bookkeeping)',
+            'Registered bindings (not liveness)',
+            'Saved enabled (1 times)',
+            'Saved disabled',
+            'Active (Configured)',
+            'Offline',
+            'USB Serial Firmware Commissioning',
+            'bg-secondary',
+        ] as $expected) {
+            $this->assertStringContainsString($expected, $html);
+        }
+        foreach (['Bioreactor Mechanized Gearing', 'Organic Waste Treated', 'Composted output', 'WebUSB', 'Active (1 runs)', 'Idle / Unconfigured'] as $forbidden) {
+            $this->assertStringNotContainsString($forbidden, $html);
+        }
+
+        $detailHtml = $this->render('unit_detail', [
+            'activeBatch' => ['id' => 1, 'batch_code' => 'BATCH-UTC', 'status' => 'processing',
+                'started_at' => '2026-10-17 07:00:00', 'total_input_weight_kg' => '10.00', 'notes' => 'Morning'],
+            'pastBatches' => [
+                ['id' => 2, 'batch_code' => 'BATCH-PAST', 'status' => 'released', 'started_at' => '2026-10-17 07:00:00',
+                    'completed_at' => '2026-10-17 09:00:00', 'total_input_weight_kg' => '10.00', 'output_weight_kg' => '8.00'],
+                ['id' => 3, 'batch_code' => 'BATCH-NONSTD', 'status' => 'voided', 'started_at' => '2026-10-19',
+                    'completed_at' => null, 'total_input_weight_kg' => '10.00'],
+            ],
+        ]);
+        $this->assertStringContainsString('Started (Asia/Manila)', $detailHtml);
+        $this->assertStringContainsString('Completed (Asia/Manila)', $detailHtml);
+        $this->assertStringContainsString('2026-10-17 15:00:00', $detailHtml);
+        $this->assertStringContainsString('2026-10-17 17:00:00', $detailHtml);
+        $this->assertStringContainsString('2026-10-19', $detailHtml);
+        $this->assertStringNotContainsString('2026-10-17 07:00:00', $detailHtml);
+        $this->assertStringNotContainsString('2026-10-17 09:00:00', $detailHtml);
+
+        $maintXpath = $this->xpath($this->render('unit_detail', [
+            'unit' => ['id' => 1, 'unit_code' => 'audit', 'name' => 'Audit drum', 'status' => 'maintenance', 'drum_capacity_kg' => '500.00'],
+        ]));
+        $this->assertSame(1, $maintXpath->query('//button[contains(., "Request run now") and @disabled]')->length);
+        $this->assertSame(0, $maintXpath->query('//button[contains(., "Request web stop") and @disabled]')->length);
+
+        $opHwXpath = $this->xpath($this->render('unit_detail', ['canConfigure' => false, 'canManage' => true, 'canHardware' => true]));
+        $this->assertSame(0, $opHwXpath->query('//button[contains(., "Request run now") and @disabled]')->length);
+        $this->assertSame(0, $opHwXpath->query('//button[contains(., "Request web stop") and @disabled]')->length);
+
+        $cfgOnlyXpath = $this->xpath($this->render('unit_detail', ['canConfigure' => true, 'canManage' => false, 'canHardware' => true]));
+        $this->assertSame(1, $cfgOnlyXpath->query('//button[contains(., "Request run now") and @disabled]')->length);
+        $this->assertSame(1, $cfgOnlyXpath->query('//button[contains(., "Request web stop") and @disabled]')->length);
+    }
+
     private function migrateNotes(): void
     {
         (new AddBmgBatchNotes(Database::forge($this->auditDb)))->up();

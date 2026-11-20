@@ -84,34 +84,62 @@
       if (personal) {
         const fragment = document.createDocumentFragment();
         for (const ticket of payload.tickets) {
-          const card = node('div', 'card border-0 shadow-sm bg-primary text-white p-4 mb-2');
-          const row = node('div', 'd-flex flex-wrap justify-content-between align-items-center gap-3');
-          const copy = node('div', '');
-          copy.append(node('span', 'badge bg-white text-primary text-uppercase mb-2', 'Live Waiting Room Ticket'));
-          copy.append(node('h3', 'fw-bold mb-1 display-6 text-white', ticket.ticket_code));
-          const line = node('p', 'mb-0 opacity-75', (ticket.unit === 'clinic' ? 'University Clinic' : 'Guidance & Counseling Center') + ' · Status: ');
+          const unitKey = ticket.unit === 'guidance' ? 'guidance' : 'clinic';
+          const card = node('div', `portal-queue-card portal-queue-card--${unitKey} portal-queue-card--${ticket.status}`);
+          card.setAttribute('data-queue-unit', unitKey);
+          card.setAttribute('data-queue-status', ticket.status);
+          const row = node('div', 'portal-queue-head');
+          const copy = node('div', 'portal-queue-copy');
+          copy.append(node('span', 'portal-queue-pill', 'Live waiting ticket'));
+          copy.append(node('h3', 'portal-queue-code', ticket.ticket_code));
+          const priority = node('div', 'portal-queue-priority');
+          priority.append(
+            node('span', 'portal-queue-priority-label', 'Priority'),
+            node('span', 'portal-queue-priority-value', ticket.priority[0].toUpperCase() + ticket.priority.slice(1))
+          );
+          row.append(copy, priority);
+          card.append(row);
+          const line = node('p', 'portal-queue-meta', (unitKey === 'clinic' ? 'University Clinic' : 'Guidance & Counseling Center') + ' · Status: ');
           const status = { waiting: 'Waiting', called: 'Called', in_consultation: 'In Consultation', skipped: 'Skipped' }[ticket.status];
           line.append(node('strong', '', status));
-          copy.append(line);
-          row.append(copy, node('span', 'badge bg-light text-dark px-3 py-2 fw-semibold', 'Priority: ' + ticket.priority[0].toUpperCase() + ticket.priority.slice(1)));
-          card.append(row);
-          const progress = node('dl', 'row g-3 mt-2 mb-0'); progress.setAttribute('data-personal-queue-progress', '');
+          card.append(line);
+          const progress = node('dl', 'portal-queue-stats'); progress.setAttribute('data-personal-queue-progress', '');
           const positionLabel = ticket.status === 'called' ? 'Your turn' : ticket.status === 'in_consultation' ? 'In progress'
             : ticket.status === 'skipped' ? 'On hold' : ticket.position === null ? '—' : `#${ticket.position}`;
           const aheadLabel = ticket.people_ahead === null ? '—' : String(ticket.people_ahead);
           const waitLabel = ticket.status === 'called' ? 'Now' : ticket.status === 'in_consultation' ? 'In progress'
             : ticket.status === 'skipped' ? 'Ask reception' : ticket.estimated_wait_minutes === null ? 'Not enough recent data'
             : ticket.estimated_wait_minutes === 0 ? 'You’re next' : `~${ticket.estimated_wait_minutes} min`;
-          for (const [label, value, hook] of [['Your place in line', positionLabel, 'data-queue-position'], ['People ahead', aheadLabel, 'data-queue-ahead'], ['Estimated wait', waitLabel, 'data-queue-wait']]) {
-            const metric = node('div', 'col-12 col-sm-4'), result = node('dd', 'fs-5 fw-bold mb-0', value);
-            result.setAttribute(hook, ''); metric.append(node('dt', 'small fw-normal opacity-75', label), result); progress.append(metric);
+          for (const [label, value, hook, divided] of [
+            ['Your place in line', positionLabel, 'data-queue-position', false],
+            ['People ahead', aheadLabel, 'data-queue-ahead', true],
+            ['Estimated wait', waitLabel, 'data-queue-wait', true],
+          ]) {
+            const stat = node('div', divided ? 'portal-queue-stat portal-queue-stat--divided' : 'portal-queue-stat');
+            const result = node('dd', value.length > 14 ? 'portal-queue-stat-val is-long' : 'portal-queue-stat-val', value);
+            result.setAttribute(hook, '');
+            stat.append(node('dt', 'portal-queue-stat-label', label), result);
+            progress.append(stat);
           }
           card.append(progress);
-          if (ticket.status === 'waiting') card.append(node('p', 'small opacity-75 mt-3 mb-0', 'Position includes people already called or being seen ahead of you. Wait estimates use recent consultations; urgent cases and staff availability may change the order and waiting time.'));
-          else if (ticket.status === 'skipped') card.append(node('p', 'small opacity-75 mt-3 mb-0', 'Your ticket is on hold. Please speak to reception to rejoin the waiting line.'));
+          if (ticket.status === 'waiting') card.append(node('p', 'portal-queue-note', 'Position includes people already called or being seen ahead of you. Wait estimates use recent consultations; urgent cases and staff availability may change the order and waiting time.'));
+          else if (ticket.status === 'skipped') card.append(node('p', 'portal-queue-note', 'Your ticket is on hold. Please speak to reception to rejoin the waiting line.'));
           fragment.append(card);
         }
-        if (!payload.tickets.length) fragment.append(node('div', 'alert alert-light border mb-0', 'No active waiting room tickets today.'));
+        if (!payload.tickets.length) {
+          const empty = node('div', 'portal-queue-empty');
+          empty.setAttribute('data-queue-empty', '');
+          const iconWrap = node('span', 'portal-queue-empty-icon');
+          iconWrap.setAttribute('aria-hidden', 'true');
+          iconWrap.append(node('i', 'bi bi-card-checklist'));
+          const emptyCopy = node('div', 'portal-queue-empty-copy');
+          emptyCopy.append(
+            node('p', 'portal-queue-empty-title', 'No active waiting room tickets today.'),
+            node('p', 'portal-queue-empty-body', 'Your live waiting room ticket appears here once the clinic or guidance center checks you in.')
+          );
+          empty.append(iconWrap, emptyCopy);
+          fragment.append(empty);
+        }
         tickets?.replaceChildren(fragment);
       } else {
         root.querySelectorAll('[data-queue-count]').forEach(el => {

@@ -288,6 +288,49 @@ class GuidanceMultipleIntelligenceService
     }
 
     /**
+     * List the signed-in person's MI assignments for the combined My Surveys hub.
+     *
+     * @param array<string, mixed> $actor
+     * @return array<int, array<string, mixed>>
+     */
+    public function listPortalAssignments(array $actor): array
+    {
+        $tenantId = (int) ($actor['tenant_id'] ?? 0);
+        if ($tenantId <= 0) {
+            throw new DomainException('An active account is required to access assessments.', 403);
+        }
+        $resolvedActor = $this->authorizeActor($actor, 'guidance.assessments.take', $tenantId);
+        $personId = (int) ($resolvedActor['person_id'] ?? 0);
+        if ($personId <= 0) {
+            throw new DomainException('An identified person profile is required to access assessments.', 403);
+        }
+        if (!$this->db->tableExists('guidance_mi_assignments') || !$this->db->tableExists('guidance_mi_submissions')) {
+            return [];
+        }
+
+        $assignments = $this->db->table('guidance_mi_assignments a')
+            ->select('a.*, s.id AS submission_id, s.status AS submission_status, s.attested_at')
+            ->join('guidance_mi_submissions s', 's.assignment_id = a.id AND s.tenant_id = a.tenant_id AND s.deleted_at IS NULL', 'left')
+            ->where('a.tenant_id', $tenantId)
+            ->where('a.person_id', $personId)
+            ->where('a.deleted_at', null)
+            ->orderBy('a.id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        foreach ($assignments as &$row) {
+            $row['draft_count'] = 0;
+            if (($row['status'] ?? '') !== 'completed') {
+                $draft = $this->getDraft((int) $row['id'], $tenantId, $resolvedActor);
+                $row['draft_count'] = is_array($draft) ? count($draft) : 0;
+            }
+        }
+        unset($row);
+
+        return $assignments;
+    }
+
+    /**
      * Assigns survey to a person, enforcing single active assignment constraint.
      *
      * @param int $personId
@@ -353,6 +396,83 @@ class GuidanceMultipleIntelligenceService
         ]);
 
         return $this->assignmentModel->find($assignmentId);
+    }
+
+    /**
+     * Assigns the MI survey to one or multiple students in a single batch.
+     *
+     * For a single student without `allow_skip_active`, delegates directly to
+     * `assignSurvey()` so duplicate active assignment errors remain 409.
+     * For batches or cohort assignments, skips students with an existing active
+     * assignment unless all selected students already have one.
+     *
+     * @param array<int, int|string> $personIds
+     * @param array<string, mixed> $options
+     * @param int|null $tenantId
+     * @param array<string, mixed>|null $actor
+     * @return array{created: list<array<string, mixed>>, assigned_count: int, skipped_active_ids: list<int>, skipped_active_count: int}
+     */
+    public function assignSurveyBatch(array $personIds, array $options = [], ?int $tenantId = null, ?array $actor = null): array
+    {
+        $tid = $tenantId ?? CurrentTenant::id();
+        $effectiveActor = $actor ?? (isset($options['actor']) && is_array($options['actor']) ? $options['actor'] : null);
+        $resolvedActor = $this->authorizeActor($effectiveActor, 'guidance.assessments.assign', $tid);
+
+        $normalizedIds = [];
+        foreach ($personIds as $rawId) {
+            if (is_numeric($rawId)) {
+                $pid = (int) $rawId;
+                if ($pid > 0) {
+                    $normalizedIds[$pid] = $pid;
+                }
+            }
+        }
+        $uniqueIds = array_values($normalizedIds);
+        if ($uniqueIds === []) {
+            throw new InvalidArgumentException('Please select at least one valid student to assign.', 422);
+        }
+
+        $allowSkipActive = !empty($options['allow_skip_active']);
+        if (count($uniqueIds) === 1 && !$allowSkipActive) {
+            $created = $this->assignSurvey($uniqueIds[0], $options, $tid, $resolvedActor);
+            return [
+                'created'              => [$created],
+                'assigned_count'       => 1,
+                'skipped_active_ids'   => [],
+                'skipped_active_count' => 0,
+            ];
+        }
+
+        $activeRows = $this->assignmentModel->scoped($tid)
+            ->select('person_id')
+            ->whereIn('person_id', $uniqueIds)
+            ->whereIn('status', ['assigned', 'in_progress'])
+            ->findAll();
+        $activeLookup = [];
+        foreach ($activeRows as $row) {
+            $activeLookup[(int) $row['person_id']] = true;
+        }
+
+        $created = [];
+        $skippedActiveIds = [];
+        foreach ($uniqueIds as $pid) {
+            if (isset($activeLookup[$pid])) {
+                $skippedActiveIds[] = $pid;
+                continue;
+            }
+            $created[] = $this->assignSurvey($pid, $options, $tid, $resolvedActor);
+        }
+
+        if ($created === [] && $skippedActiveIds !== []) {
+            throw new DomainException('All selected students already have an active Multiple Intelligence assessment assignment.', 409);
+        }
+
+        return [
+            'created'              => $created,
+            'assigned_count'       => count($created),
+            'skipped_active_ids'   => $skippedActiveIds,
+            'skipped_active_count' => count($skippedActiveIds),
+        ];
     }
 
     /**

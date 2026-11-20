@@ -173,7 +173,7 @@ $renderAggregateCard = static function (
       <?php if ($canViewAnyProvider && $providers !== []): ?>
         <div class="col-md-4">
           <label for="eval-provider-select" class="form-label small fw-semibold">Guidance Provider</label>
-          <select id="eval-provider-select" name="provider_user_id" class="form-select form-select-sm">
+          <select id="eval-provider-select" name="provider_user_id" class="form-select">
             <?php foreach ($providers as $prov): ?>
               <?php
               $pName = trim(trim((string) ($prov['first_name'] ?? '')) . ' ' . trim((string) ($prov['last_name'] ?? '')));
@@ -188,15 +188,15 @@ $renderAggregateCard = static function (
       <?php endif; ?>
       <div class="col-md-3">
         <label for="eval-filter-term" class="form-label small fw-semibold">Academic Term</label>
-        <input id="eval-filter-term" type="text" name="academic_term" class="form-control form-control-sm" value="<?= esc($filters['academic_term'] ?? '', 'attr') ?>" placeholder="All terms">
+        <input id="eval-filter-term" type="text" name="academic_term" class="form-control" value="<?= esc($filters['academic_term'] ?? '', 'attr') ?>" placeholder="All terms">
       </div>
       <div class="col-md-3">
         <label for="eval-filter-year" class="form-label small fw-semibold">Academic Year</label>
-        <input id="eval-filter-year" type="text" name="academic_year" class="form-control form-control-sm" value="<?= esc($filters['academic_year'] ?? '', 'attr') ?>" placeholder="All years">
+        <input id="eval-filter-year" type="text" name="academic_year" class="form-control" value="<?= esc($filters['academic_year'] ?? '', 'attr') ?>" placeholder="All years">
       </div>
-      <div class="col-md-2 d-flex flex-wrap gap-2">
-        <button type="submit" class="btn btn-primary btn-sm flex-grow-1">Apply</button>
-        <a href="<?= esc(site_url('/guidance/evaluations/dashboard'), 'attr') ?>" class="btn btn-outline-secondary btn-sm">Reset</a>
+      <div class="col-12 col-md-2 d-flex flex-nowrap gap-2">
+        <button type="submit" class="btn btn-primary flex-fill">Apply</button>
+        <a href="<?= esc(site_url('/guidance/evaluations/dashboard'), 'attr') ?>" class="btn btn-outline-secondary flex-fill">Reset</a>
       </div>
     </form>
   </div>

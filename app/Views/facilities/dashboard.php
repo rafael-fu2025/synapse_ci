@@ -23,7 +23,7 @@
       <div>
         <h2 class="h4 fw-bold mb-1 text-white">Welcome back, <?= esc($user['name'] ?? 'Facilities Operator') ?>!</h2>
         <p class="mb-0 opacity-75">
-          Foundation University Facilities · Bioreactor Mechanized Gearing (BMG) Console · <?= date('l, F j, Y') ?>
+          Foundation University Facilities · Biomechanical Goat (BMG) Console · <?= esc(\App\Services\Scheduling\SchedulingClock::now()->format('l, F j, Y')) ?>
         </p>
       </div>
       <div class="d-none d-md-block text-end">
@@ -33,6 +33,8 @@
       </div>
     </div>
   </div>
+
+  <p class="small text-muted mb-3">Figures below summarize recorded application state only — not verified physical motor state, device liveness, or compost certification.</p>
 
   <!-- NiceAdmin v3 KPI Rail -->
   <section class="row g-3 mb-4 nd-kpi-rail">
@@ -64,7 +66,7 @@
         <span class="nd-kpi-label">Bound IoT Controllers</span>
         <strong class="nd-kpi-value"><?= number_format($boundDevices) ?></strong>
         <span class="nd-kpi-trend <?= $boundDevices > 0 ? 'up' : 'down' ?>">
-          <i class="bi bi-broadcast-pin"></i> ESP32-S3 hardware
+          <i class="bi bi-broadcast-pin"></i> Registered bindings (not liveness)
         </span>
       </article>
     </div>
@@ -72,10 +74,10 @@
     <div class="col-6 col-md-6 col-xxl-3">
       <article class="nd-kpi-card nd-kpi-cycle">
         <span class="nd-kpi-icon"><i class="bi bi-box-seam"></i></span>
-        <span class="nd-kpi-label">Organic Waste Treated</span>
+        <span class="nd-kpi-label">Released Batch Input</span>
         <strong class="nd-kpi-value"><?= number_format($totalTreatedKg, 1) ?> <small class="text-muted fs-6 fw-normal">kg</small></strong>
         <span class="nd-kpi-trend up">
-          <i class="bi bi-speedometer2"></i> Composted output
+          <i class="bi bi-speedometer2"></i> Recorded input weight (bookkeeping)
         </span>
       </article>
     </div>
@@ -144,7 +146,7 @@
                       <td><?= esc($drum['drum_capacity_kg']) ?> kg</td>
                       <td>
                         <span class="badge <?= !empty($sched['enabled']) ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-secondary-subtle text-secondary border' ?>">
-                          <?= !empty($sched['enabled']) ? 'Active (' . count($sched['times'] ?? []) . ' runs)' : 'Disabled' ?>
+                          <?= !empty($sched['enabled']) ? 'Saved enabled (' . count($sched['times'] ?? []) . ' times)' : 'Saved disabled' ?>
                         </span>
                       </td>
                       <td>
@@ -157,7 +159,7 @@
                         <?php endif; ?>
                       </td>
                       <td>
-                        <span class="badge <?= $drum['status'] === 'active' ? 'bg-success' : 'bg-warning text-dark' ?>">
+                        <span class="badge <?= $drum['status'] === 'active' ? 'bg-success' : ($drum['status'] === 'maintenance' ? 'bg-warning text-dark' : 'bg-secondary') ?>">
                           <?= esc(ucfirst($drum['status'])) ?>
                         </span>
                       </td>
@@ -180,9 +182,9 @@
         <div class="card-body">
           <div id="bmgStatusChart" class="nd-donut-canvas"></div>
           <div class="nd-acq-list mt-2">
-            <div><span>Active Operational</span><strong class="text-success"><?= $activeUnits ?></strong></div>
+            <div><span>Active (Configured)</span><strong class="text-success"><?= $activeUnits ?></strong></div>
             <div><span>Under Maintenance</span><strong class="text-warning"><?= $maintenanceUnits ?></strong></div>
-            <div><span>Idle / Unconfigured</span><strong class="text-muted"><?= max(0, $totalUnits - $activeUnits - $maintenanceUnits) ?></strong></div>
+            <div><span>Offline</span><strong class="text-muted"><?= max(0, $totalUnits - $activeUnits - $maintenanceUnits) ?></strong></div>
           </div>
         </div>
       </div>
@@ -203,7 +205,7 @@
               </a>
               <?php if (!empty($canUsb)): ?>
               <a href="<?= site_url('/facilities/unit/' . $units[0]['unit']['id'] . '/usb') ?>" class="btn btn-outline-secondary text-start p-2">
-                <i class="bi bi-usb-symbol me-2"></i> WebUSB Firmware Commissioning
+                <i class="bi bi-usb-symbol me-2"></i> USB Serial Firmware Commissioning
               </a>
               <?php endif; ?>
             <?php endif; ?>
@@ -256,7 +258,7 @@
       ChartTheme.create(statusTarget, function(t) {
         return ChartTheme.donut(t, {
           series: statusData,
-          labels: ['Active', 'Maintenance', 'Idle'],
+          labels: ['Active', 'Maintenance', 'Offline'],
           colors: ChartTheme.themedSlices(t, [t['status-success'], t['status-warning'], t['status-idle']]),
           plotOptions: {
             pie: {

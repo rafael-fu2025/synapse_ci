@@ -2,7 +2,7 @@
 
 <?= $this->section('page_actions') ?>
 <a href="<?= esc($backUrl, 'attr') ?>" class="btn btn-outline-secondary btn-sm">
-  <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>My MI Assessments
+  <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>My Surveys
 </a>
 <?= $this->endSection() ?>
 

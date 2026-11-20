@@ -245,6 +245,8 @@ test('credential and SSID byte validation is inline, with no raw values or reque
   for (const [name, value, expected, restore] of [
     ['password', '', /8–64 characters/, 'wifi-secret'],
     ['password', 'short', /8–64 characters/, 'wifi-secret'],
+    ['password', 'x'.repeat(64), /8–63 UTF-8 bytes/, 'wifi-secret'],
+    ['password', 'é'.repeat(32), /8–63 UTF-8 bytes/, 'wifi-secret'],
     ['token', 'old-token', /64 lowercase hexadecimal/, deviceToken],
     ['token', 'A'.repeat(64), /64 lowercase hexadecimal/, deviceToken],
     ['ssid', 'é'.repeat(17), /1–32 UTF-8 bytes/, 'Compost 2.4'],
@@ -256,6 +258,10 @@ test('credential and SSID byte validation is inline, with no raw values or reque
     assert.equal(posts.length, 0);
     await el(page, name).fill(restore);
   }
+  await el(page, 'password').fill('A1'.repeat(32));
+  await el(page, 'build').click();
+  await el(page, 'message').filter({ hasText: 'Private reviewed build selected' }).waitFor();
+  assert.equal(posts.length, 1);
   assert.equal(await el(page, 'password').getAttribute('maxlength'), '64');
   assert.equal(await el(page, 'password').getAttribute('minlength'), '8');
 });

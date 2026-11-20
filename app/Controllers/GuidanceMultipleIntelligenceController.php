@@ -62,6 +62,14 @@ final class GuidanceMultipleIntelligenceController extends BaseController
         if (!in_array($statusFilter, ['assigned', 'in_progress', 'completed', 'cancelled'], true)) {
             $statusFilter = '';
         }
+        $programFilter = trim((string) ($this->request->getGet('program') ?? ''));
+
+        $totalAssignments = (int) $db->table('guidance_mi_assignments a')
+            ->join('people p', 'p.id = a.person_id AND p.tenant_id = a.tenant_id')
+            ->where('a.tenant_id', $tenantId)
+            ->where('a.deleted_at', null)
+            ->where('p.deleted_at', null)
+            ->countAllResults();
 
         $builder = $db->table('guidance_mi_assignments a')
             ->select('a.*, p.first_name, p.middle_name, p.last_name, p.mis_id, sp.program, sp.year_level, s.id AS submission_id, s.status AS submission_status, s.attested_at')
@@ -75,8 +83,23 @@ final class GuidanceMultipleIntelligenceController extends BaseController
         if ($statusFilter !== '') {
             $builder->where('a.status', $statusFilter);
         }
+        if ($programFilter !== '') {
+            $builder->where('sp.program', $programFilter);
+        }
 
-        $assignments = $builder->orderBy('a.id', 'DESC')->get()->getResultArray();
+        $filteredAssignments = (int) (clone $builder)->countAllResults();
+        $perPage = (int) ($this->request->getGet('per_page') ?? 25);
+        $perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 25;
+        $totalPages = max(1, (int) ceil($filteredAssignments / $perPage));
+        $page = max(1, min($totalPages, (int) ($this->request->getGet('page') ?? 1)));
+
+        $assignments = $builder
+            ->orderBy("CASE WHEN sp.program IS NULL OR sp.program = '' THEN 1 ELSE 0 END", 'ASC', false)
+            ->orderBy('sp.program', 'ASC')
+            ->orderBy('a.id', 'DESC')
+            ->limit($perPage, ($page - 1) * $perPage)
+            ->get()
+            ->getResultArray();
 
         $students = $db->table('people p')
             ->select('p.id, p.mis_id, p.first_name, p.middle_name, p.last_name, sp.program, sp.year_level')
@@ -86,9 +109,63 @@ final class GuidanceMultipleIntelligenceController extends BaseController
             ->where('p.deleted_at', null)
             ->orderBy('p.last_name', 'ASC')
             ->orderBy('p.first_name', 'ASC')
-            ->limit(250)
+            ->limit(500)
             ->get()
             ->getResultArray();
+
+        $programRows = $db->table('people p')
+            ->distinct()
+            ->select('sp.program')
+            ->join('student_profiles sp', 'sp.person_id = p.id AND sp.tenant_id = p.tenant_id')
+            ->where('p.tenant_id', $tenantId)
+            ->where('p.kind', 'student')
+            ->where('p.deleted_at', null)
+            ->where('sp.program IS NOT NULL', null, false)
+            ->where('sp.program !=', '')
+            ->get()
+            ->getResultArray();
+        $programs = [];
+        foreach ($programRows as $row) {
+            $prog = trim((string) ($row['program'] ?? ''));
+            if ($prog !== '') {
+                $programs[$prog] = $prog;
+            }
+        }
+        $programs = array_values($programs);
+        sort($programs, SORT_NATURAL | SORT_FLAG_CASE);
+
+        $yearRows = $db->table('people p')
+            ->distinct()
+            ->select('sp.year_level')
+            ->join('student_profiles sp', 'sp.person_id = p.id AND sp.tenant_id = p.tenant_id')
+            ->where('p.tenant_id', $tenantId)
+            ->where('p.kind', 'student')
+            ->where('p.deleted_at', null)
+            ->where('sp.year_level IS NOT NULL', null, false)
+            ->where('sp.year_level !=', '')
+            ->get()
+            ->getResultArray();
+        $yearMap = ['1' => '1', '2' => '2', '3' => '3', '4' => '4'];
+        foreach ($yearRows as $row) {
+            $yr = trim((string) ($row['year_level'] ?? ''));
+            if ($yr !== '') {
+                $yearMap[$yr] = $yr;
+            }
+        }
+        $yearLevels = array_values($yearMap);
+        sort($yearLevels, SORT_NATURAL);
+
+        $activeRows = $db->table('guidance_mi_assignments')
+            ->select('person_id')
+            ->where('tenant_id', $tenantId)
+            ->where('deleted_at', null)
+            ->whereIn('status', ['assigned', 'in_progress'])
+            ->get()
+            ->getResultArray();
+        $activePersonIds = array_values(array_unique(array_map(
+            static fn (array $row): int => (int) $row['person_id'],
+            $activeRows
+        )));
 
         $miGate = $this->gateService->getGate(GuidanceActivationGateService::GATE_MI_REPRODUCTION, $tenantId);
         $miGateEnabled = $miGate !== null && (int) ($miGate['is_enabled'] ?? 0) === 1;
@@ -96,15 +173,26 @@ final class GuidanceMultipleIntelligenceController extends BaseController
         $this->response->setHeader('Cache-Control', 'private, no-store');
 
         return view('guidance/assessments/mi_index', [
-            'title'         => 'Multiple Intelligence Assessments',
-            'pageTitle'     => 'Multiple Intelligence (80-Item) Registry',
-            'assignments'   => $assignments,
-            'students'      => $students,
-            'statusFilter'  => $statusFilter,
-            'miGate'        => $miGate,
-            'miGateEnabled' => $miGateEnabled,
-            'canAssign'     => $actor['role'] === 'superadmin' || in_array('guidance.assessments.assign', $actor['permissions'] ?? [], true),
-            'breadcrumbs'   => [
+            'title'           => 'Multiple Intelligence Assessments',
+            'pageTitle'       => 'Multiple Intelligence (80-Item) Registry',
+            'assignments'     => $assignments,
+            'students'        => $students,
+            'programs'        => $programs,
+            'yearLevels'      => $yearLevels,
+            'activePersonIds' => $activePersonIds,
+            'statusFilter'    => $statusFilter,
+            'programFilter'   => $programFilter,
+            'pagination'      => [
+                'per_page' => $perPage,
+                'filtered' => $filteredAssignments,
+                'total'    => $totalAssignments,
+                'pages'    => $totalPages,
+                'page'     => $page,
+            ],
+            'miGate'          => $miGate,
+            'miGateEnabled'   => $miGateEnabled,
+            'canAssign'       => $actor['role'] === 'superadmin' || in_array('guidance.assessments.assign', $actor['permissions'] ?? [], true),
+            'breadcrumbs'     => [
                 ['label' => 'Guidance', 'url' => site_url('/guidance')],
                 ['label' => 'Multiple Intelligence', 'url' => ''],
             ],
@@ -112,7 +200,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
     }
 
     /**
-     * Guidance Counselor Console: assign a new 80-item MI survey to a student.
+     * Guidance Counselor Console: assign a new 80-item MI survey to one or more students.
      */
     public function assign()
     {
@@ -125,43 +213,41 @@ final class GuidanceMultipleIntelligenceController extends BaseController
 
         try {
             $input = $this->requestInput();
-            $personId = isset($input['person_id']) && is_numeric($input['person_id']) ? (int) $input['person_id'] : 0;
-
-            if ($personId <= 0 && !empty($input['mis_id']) && is_string($input['mis_id'])) {
-                $person = Database::connect()->table('people')
-                    ->where('tenant_id', $tenantId)
-                    ->where('mis_id', trim($input['mis_id']))
-                    ->where('deleted_at', null)
-                    ->get()
-                    ->getRowArray();
-                if ($person !== null) {
-                    $personId = (int) $person['id'];
-                }
-            }
-
-            if ($personId <= 0) {
-                throw new InvalidArgumentException('Please select a valid student (person_id or exact MIS ID).', 422);
-            }
+            [$targetPersonIds, $isCohortRequest] = $this->resolveAssignTargets($input, $tenantId);
 
             $options = [
                 'academic_term'       => isset($input['academic_term']) ? trim((string) $input['academic_term']) : null,
                 'academic_year'       => isset($input['academic_year']) ? trim((string) $input['academic_year']) : null,
                 'due_at'              => !empty($input['due_at']) ? trim((string) $input['due_at']) : null,
                 'assigned_by_user_id' => (int) $actor['id'],
+                'allow_skip_active'   => $isCohortRequest || count($targetPersonIds) > 1,
             ];
 
-            $created = $this->miService->assignSurvey($personId, $options, $tenantId, $actor);
-            $message = 'Multiple Intelligence survey assigned successfully.';
+            $batch = $this->miService->assignSurveyBatch($targetPersonIds, $options, $tenantId, $actor);
+            if ($batch['assigned_count'] === 1 && $batch['skipped_active_count'] === 0) {
+                $message = 'Multiple Intelligence survey assigned successfully.';
+            } elseif ($batch['skipped_active_count'] > 0) {
+                $message = sprintf(
+                    'Multiple Intelligence survey assigned to %d student(s) (%d skipped with an existing active assignment).',
+                    $batch['assigned_count'],
+                    $batch['skipped_active_count']
+                );
+            } else {
+                $message = sprintf('Multiple Intelligence survey assigned to %d students.', $batch['assigned_count']);
+            }
 
             if ($this->wantsJson()) {
                 return $this->response->setStatusCode(201)
                     ->setHeader('Cache-Control', 'private, no-store')
                     ->setJSON([
-                        'success'    => true,
-                        'message'    => $message,
-                        'assignment' => $created,
-                        'redirect'   => site_url('/guidance/assessments/mi'),
-                        'csrf'       => ['name' => csrf_token(), 'hash' => csrf_hash()],
+                        'success'              => true,
+                        'message'              => $message,
+                        'assignment'           => $batch['created'][0] ?? null,
+                        'assignments'          => $batch['created'],
+                        'assigned_count'       => $batch['assigned_count'],
+                        'skipped_active_count' => $batch['skipped_active_count'],
+                        'redirect'             => site_url('/guidance/assessments/mi'),
+                        'csrf'                 => ['name' => csrf_token(), 'hash' => csrf_hash()],
                     ]);
             }
 
@@ -198,7 +284,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
     }
 
     /**
-     * Student Portal: list active and completed MI assignments for the signed-in student.
+     * Compatibility route: MI assignments now live in the combined My Surveys hub.
      */
     public function portalList()
     {
@@ -207,48 +293,11 @@ final class GuidanceMultipleIntelligenceController extends BaseController
             return $actor;
         }
 
-        $tenantId = (int) $actor['tenant_id'];
-        $personId = (int) ($actor['person_id'] ?? 0);
-        if ($personId <= 0) {
-            return AuthenticatedUser::denied($this->request, true, 'An identified student profile is required.', '/portal');
+        if ((int) ($actor['person_id'] ?? 0) <= 0) {
+            return AuthenticatedUser::denied($this->request, true, 'An identified profile is required.', '/portal');
         }
 
-        $db = Database::connect();
-        $assignments = $db->table('guidance_mi_assignments a')
-            ->select('a.*, s.id AS submission_id, s.status AS submission_status, s.attested_at')
-            ->join('guidance_mi_submissions s', 's.assignment_id = a.id AND s.tenant_id = a.tenant_id AND s.deleted_at IS NULL', 'left')
-            ->where('a.tenant_id', $tenantId)
-            ->where('a.person_id', $personId)
-            ->where('a.deleted_at', null)
-            ->orderBy('a.id', 'DESC')
-            ->get()
-            ->getResultArray();
-
-        foreach ($assignments as &$row) {
-            $row['draft_count'] = 0;
-            if (($row['status'] ?? '') !== 'completed') {
-                $draft = $this->miService->getDraft((int) $row['id'], $tenantId, $actor);
-                $row['draft_count'] = is_array($draft) ? count($draft) : 0;
-            }
-        }
-        unset($row);
-
-        $miGate = $this->gateService->getGate(GuidanceActivationGateService::GATE_MI_REPRODUCTION, $tenantId);
-        $miGateEnabled = $miGate !== null && (int) ($miGate['is_enabled'] ?? 0) === 1;
-
-        $this->response->setHeader('Cache-Control', 'private, no-store');
-
-        return view('portal/assessments/mi_list', [
-            'title'         => 'My Multiple Intelligence Assessments',
-            'pageTitle'     => 'Multiple Intelligence Surveys',
-            'assignments'   => $assignments,
-            'miGate'        => $miGate,
-            'miGateEnabled' => $miGateEnabled,
-            'breadcrumbs'   => [
-                ['label' => 'Campus Portal', 'url' => site_url('/portal')],
-                ['label' => 'Multiple Intelligence', 'url' => ''],
-            ],
-        ]);
+        return redirect()->to(site_url('/portal/surveys#multiple-intelligence'));
     }
 
     /**
@@ -270,7 +319,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
         }
 
         if ($personId <= 0 || (int) $assignment['person_id'] !== $personId) {
-            return AuthenticatedUser::denied($this->request, true, 'You may only access your own Multiple Intelligence assignment.', '/portal/assessments/mi');
+            return AuthenticatedUser::denied($this->request, true, 'You may only access your own Multiple Intelligence assignment.', '/portal/surveys#multiple-intelligence');
         }
 
         if (($assignment['status'] ?? '') === 'completed') {
@@ -281,7 +330,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
         }
 
         if (($assignment['status'] ?? '') === 'cancelled') {
-            return redirect()->to(site_url('/portal/assessments/mi'))->with('error', 'This assessment assignment has been cancelled.');
+            return redirect()->to(site_url('/portal/surveys#multiple-intelligence'))->with('error', 'This assessment assignment has been cancelled.');
         }
 
         $catalog = $this->miService->getSurveyCatalog();
@@ -302,10 +351,10 @@ final class GuidanceMultipleIntelligenceController extends BaseController
             'attestationDefault'  => self::DEFAULT_STUDENT_ATTESTATION,
             'draftUrl'            => site_url('/portal/assessments/mi/' . $assignmentId . '/draft'),
             'finalizeUrl'         => site_url('/portal/assessments/mi/' . $assignmentId . '/finalize'),
-            'backUrl'             => site_url('/portal/assessments/mi'),
+            'backUrl'             => site_url('/portal/surveys#multiple-intelligence'),
             'breadcrumbs'         => [
                 ['label' => 'Campus Portal', 'url' => site_url('/portal')],
-                ['label' => 'Multiple Intelligence', 'url' => site_url('/portal/assessments/mi')],
+                ['label' => 'My Surveys', 'url' => site_url('/portal/surveys#multiple-intelligence')],
                 ['label' => 'Survey #' . $assignmentId, 'url' => ''],
             ],
         ]);
@@ -450,7 +499,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
                 : site_url('/portal/assessments/mi/results/' . $submissionId . '/pdf');
             $backUrl = $isCounselor
                 ? site_url('/guidance/assessments/mi')
-                : site_url('/portal/assessments/mi');
+                : site_url('/portal/surveys#multiple-intelligence');
 
             $breadcrumbs = $isCounselor
                 ? [
@@ -460,7 +509,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
                 ]
                 : [
                     ['label' => 'Campus Portal', 'url' => site_url('/portal')],
-                    ['label' => 'Multiple Intelligence', 'url' => site_url('/portal/assessments/mi')],
+                    ['label' => 'My Surveys', 'url' => site_url('/portal/surveys#multiple-intelligence')],
                     ['label' => 'Results #' . $submissionId, 'url' => ''],
                 ];
 
@@ -477,7 +526,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
                 'breadcrumbs' => $breadcrumbs,
             ]);
         } catch (Throwable $e) {
-            $fallback = $mode === 'counselor' ? site_url('/guidance/assessments/mi') : site_url('/portal/assessments/mi');
+            $fallback = $mode === 'counselor' ? site_url('/guidance/assessments/mi') : site_url('/portal/surveys#multiple-intelligence');
             return $this->handleFailure($e, $fallback);
         }
     }
@@ -545,7 +594,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
                 ->setHeader('X-Content-Type-Options', 'nosniff')
                 ->setBody($pdfBytes);
         } catch (Throwable $e) {
-            return $this->handleFailure($e, site_url('/portal/assessments/mi'));
+            return $this->handleFailure($e, site_url('/portal/surveys#multiple-intelligence'));
         }
     }
 
@@ -736,5 +785,161 @@ final class GuidanceMultipleIntelligenceController extends BaseController
         return $this->response->setStatusCode(404)
             ->setHeader('Cache-Control', 'private, no-store')
             ->setBody(esc($message));
+    }
+
+    /**
+     * Resolve deduplicated target student person IDs and whether cohort filtering was requested.
+     *
+     * @param array<string, mixed> $input
+     * @return array{0: list<int>, 1: bool}
+     */
+    private function resolveAssignTargets(array $input, int $tenantId): array
+    {
+        $db = Database::connect();
+        $targetPersonIds = array_merge(
+            $this->collectNumericIds($input['person_id'] ?? null, false),
+            $this->collectNumericIds($input['person_ids'] ?? null, true)
+        );
+
+        $misTokens = $this->collectTokenList([$input['mis_id'] ?? null, $input['mis_ids'] ?? null], true);
+        if ($misTokens !== []) {
+            $matchedRows = $db->table('people')
+                ->select('id, mis_id')
+                ->where('tenant_id', $tenantId)
+                ->whereIn('mis_id', $misTokens)
+                ->where('deleted_at', null)
+                ->get()
+                ->getResultArray();
+            $byMis = [];
+            foreach ($matchedRows as $row) {
+                $byMis[(string) $row['mis_id']] = (int) $row['id'];
+            }
+            $unmatchedMisIds = [];
+            foreach ($misTokens as $token) {
+                if (isset($byMis[$token])) {
+                    $targetPersonIds[] = $byMis[$token];
+                } else {
+                    $unmatchedMisIds[] = $token;
+                }
+            }
+            if ($unmatchedMisIds !== []) {
+                if (count($misTokens) === 1 && $targetPersonIds === []) {
+                    throw new InvalidArgumentException('Please select a valid student (person_id or exact MIS ID).', 422);
+                }
+                throw new InvalidArgumentException('Unknown Student MIS ID(s): ' . implode(', ', $unmatchedMisIds), 422);
+            }
+        }
+
+        $assignAllStudents = !empty($input['assign_all_students'])
+            && !in_array(strtolower((string) $input['assign_all_students']), ['0', 'false'], true);
+        $targetPrograms = $this->collectTokenList([$input['target_programs'] ?? null], false);
+        $targetYearLevels = $this->collectTokenList([$input['target_year_levels'] ?? null], false);
+        $isCohortRequest = (($input['assign_scope'] ?? '') === 'cohort')
+            || $assignAllStudents
+            || $targetPrograms !== []
+            || $targetYearLevels !== [];
+
+        if ($isCohortRequest) {
+            if (!$assignAllStudents && $targetPrograms === [] && $targetYearLevels === [] && $targetPersonIds === []) {
+                throw new InvalidArgumentException(
+                    'Please select at least one cohort filter (Program, Year Level, or All Active Students) or choose specific students.',
+                    422
+                );
+            }
+
+            if ($assignAllStudents || $targetPrograms !== [] || $targetYearLevels !== []) {
+                $cohortQuery = $db->table('people p')
+                    ->select('p.id')
+                    ->join('student_profiles sp', 'sp.person_id = p.id AND sp.tenant_id = p.tenant_id', 'left')
+                    ->where('p.tenant_id', $tenantId)
+                    ->where('p.kind', 'student')
+                    ->where('p.deleted_at', null);
+
+                if (!$assignAllStudents) {
+                    if ($targetPrograms !== []) {
+                        $cohortQuery->whereIn('sp.program', $targetPrograms);
+                    }
+                    if ($targetYearLevels !== []) {
+                        $cohortQuery->whereIn('sp.year_level', $targetYearLevels);
+                    }
+                }
+
+                $cohortIds = array_map(
+                    static fn (array $row): int => (int) $row['id'],
+                    $cohortQuery->get()->getResultArray()
+                );
+                if ($cohortIds === [] && $targetPersonIds === []) {
+                    throw new InvalidArgumentException('No active students matched the selected cohort filters.', 422);
+                }
+                $targetPersonIds = array_merge($targetPersonIds, $cohortIds);
+            }
+        }
+
+        $targetPersonIds = array_values(array_unique(array_filter(
+            $targetPersonIds,
+            static fn (int $pid): bool => $pid > 0
+        )));
+
+        if ($targetPersonIds === []) {
+            throw new InvalidArgumentException('Please select a valid student (person_id or exact MIS ID).', 422);
+        }
+
+        return [$targetPersonIds, $isCohortRequest];
+    }
+
+    /**
+     * @param mixed $raw
+     * @return list<int>
+     */
+    private function collectNumericIds(mixed $raw, bool $splitStrings): array
+    {
+        $items = is_array($raw) ? $raw : [$raw];
+        $ids = [];
+        foreach ($items as $item) {
+            if (is_string($item) && $splitStrings) {
+                foreach (preg_split('/[\s,;]+/', trim($item)) ?: [] as $part) {
+                    if ($part !== '' && is_numeric($part) && (int) $part > 0) {
+                        $ids[] = (int) $part;
+                    }
+                }
+                continue;
+            }
+            if (is_numeric($item) && (int) $item > 0) {
+                $ids[] = (int) $item;
+            }
+        }
+        return $ids;
+    }
+
+    /**
+     * @param list<mixed> $sources
+     * @return list<string>
+     */
+    private function collectTokenList(array $sources, bool $splitStrings): array
+    {
+        $tokens = [];
+        foreach ($sources as $raw) {
+            if ($raw === null || $raw === '') {
+                continue;
+            }
+            $items = is_array($raw) ? $raw : [$raw];
+            foreach ($items as $item) {
+                if (!is_string($item) && !is_numeric($item)) {
+                    continue;
+                }
+                $value = trim((string) $item);
+                if ($value === '') {
+                    continue;
+                }
+                $parts = $splitStrings ? (preg_split('/[\s,;]+/', $value) ?: []) : [$value];
+                foreach ($parts as $part) {
+                    $trimmed = trim($part);
+                    if ($trimmed !== '') {
+                        $tokens[$trimmed] = $trimmed;
+                    }
+                }
+            }
+        }
+        return array_values($tokens);
     }
 }

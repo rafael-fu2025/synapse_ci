@@ -277,7 +277,7 @@ final class BmgUnitCrudTest extends CIUnitTestCase
     private function snapshot(): array
     {
         $result = [];
-        foreach (['bmg_units', 'bmg_devices', 'bmg_rotation_schedules', 'bmg_rotation_commands', 'audit_events',
+        foreach (['bmg_units', 'bmg_devices', 'bmg_rotation_schedules', 'bmg_rotation_commands', 'audit_events', 'workflow_events',
             'bmg_batches', 'bmg_batch_inputs', 'bmg_batch_outputs', 'bmg_rotation_runs'] as $table) {
             $result[$table] = $this->unitDb->table($table)->orderBy('id')->get()->getResultArray();
         }
@@ -314,7 +314,7 @@ final class BmgUnitCrudTest extends CIUnitTestCase
         $this->unitDb->table('bmg_rotation_runs')->insert(['id' => 1, 'tenant_id' => 1, 'unit_id' => $unit, 'device_id' => $device, 'run_uid' => 'historical-run']);
         foreach (['pending', 'completed'] as $status) {
             $this->unitDb->table('bmg_rotation_commands')->insert(['tenant_id' => 1, 'unit_id' => $unit, 'device_id' => $device,
-                'command' => 'run_now', 'status' => $status, 'expires_at' => '2099-01-01 00:00:00']);
+                'command' => 'run_now', 'status' => $status, 'created_by_user_id' => 1, 'expires_at' => '2099-01-01 00:00:00']);
         }
     }
 
@@ -330,11 +330,32 @@ final class BmgUnitCrudTest extends CIUnitTestCase
             'CREATE TABLE bmg_devices (id INTEGER PRIMARY KEY, tenant_id INTEGER, unit_id INTEGER, chip_mac TEXT, device_token_hash TEXT, status TEXT, revoked_at TEXT, rotation_bound_at TEXT, reported_firmware_version TEXT, rtc_valid INTEGER, applied_schedule_version INTEGER, last_seen_at TEXT, firmware_reported_at TEXT, rtc_reported_at TEXT, schedule_reported_at TEXT, created_at TEXT, updated_at TEXT)',
             'CREATE TABLE bmg_rotation_schedules (id INTEGER PRIMARY KEY, tenant_id INTEGER, unit_id INTEGER, enabled INTEGER, version INTEGER, times_json TEXT, duration_seconds INTEGER, pwm INTEGER, updated_by_user_id INTEGER, created_at TEXT, updated_at TEXT)',
             'CREATE TABLE bmg_rotation_runs (id INTEGER PRIMARY KEY, tenant_id INTEGER, unit_id INTEGER REFERENCES bmg_units(id), device_id INTEGER REFERENCES bmg_devices(id), run_uid TEXT)',
-            'CREATE TABLE bmg_rotation_commands (id INTEGER PRIMARY KEY, tenant_id INTEGER, unit_id INTEGER REFERENCES bmg_units(id), device_id INTEGER REFERENCES bmg_devices(id), command TEXT, status TEXT, expires_at TEXT)',
+            'CREATE TABLE bmg_rotation_commands (id INTEGER PRIMARY KEY, tenant_id INTEGER, unit_id INTEGER REFERENCES bmg_units(id), device_id INTEGER REFERENCES bmg_devices(id), command TEXT, status TEXT, created_by_user_id INTEGER, expires_at TEXT)',
             'CREATE TABLE bmg_batches (id INTEGER PRIMARY KEY, tenant_id INTEGER, unit_id INTEGER REFERENCES bmg_units(id), status TEXT, total_input_weight_kg TEXT)',
             'CREATE TABLE bmg_batch_inputs (id INTEGER PRIMARY KEY, batch_id INTEGER REFERENCES bmg_batches(id), weight_kg TEXT)',
             'CREATE TABLE bmg_batch_outputs (id INTEGER PRIMARY KEY, batch_id INTEGER REFERENCES bmg_batches(id), weight_kg TEXT)',
             'CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER NOT NULL, event_type TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL, actor_user_id INTEGER, actor_role TEXT, actor_ip TEXT, action TEXT NOT NULL, payload_json TEXT, prev_hash TEXT NOT NULL, curr_hash TEXT NOT NULL, hash_version INTEGER NOT NULL DEFAULT 1, occurred_at TEXT NOT NULL)',
+            'CREATE UNIQUE INDEX unit_crud_user_tenant ON users(tenant_id, id)',
+            "CREATE TABLE workflow_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tenant_id INTEGER NOT NULL,
+                unit VARCHAR(16) NOT NULL CHECK (unit IN ('clinic','guidance','facilities')),
+                event_key CHAR(64) NOT NULL COLLATE BINARY,
+                event_kind VARCHAR(64) NOT NULL,
+                subject_kind VARCHAR(32) NOT NULL,
+                subject_id INTEGER NOT NULL CHECK (subject_id > 0),
+                actor_user_id INTEGER DEFAULT NULL,
+                occurrence_key VARCHAR(96) NOT NULL CHECK (length(occurrence_key)>0 AND occurrence_key NOT GLOB '*[^A-Za-z0-9_.:-]*'),
+                occurred_at DATETIME NOT NULL,
+                created_at DATETIME NOT NULL,
+                available_at DATETIME NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                processed_at DATETIME DEFAULT NULL,
+                last_error VARCHAR(64) DEFAULT NULL CHECK (last_error IS NULL OR (length(last_error)>0 AND substr(last_error,1,1) GLOB '[A-Z]' AND last_error NOT GLOB '*[^A-Z0-9_]*')),
+                UNIQUE(tenant_id,id), UNIQUE(tenant_id,event_key),
+                FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+                FOREIGN KEY (tenant_id,actor_user_id) REFERENCES users(tenant_id,id) ON DELETE RESTRICT ON UPDATE RESTRICT
+            )",
             'INSERT INTO tenants (id, is_active) VALUES (1, 1), (2, 1)',
             "INSERT INTO users (id, tenant_id, role, username, status) VALUES (1, 1, 'superadmin', 'configurator', 'active')",
             "INSERT INTO permissions VALUES (1, 'facilities.read'), (2, 'facilities.manage'), (3, 'facilities.configure')",

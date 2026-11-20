@@ -28,7 +28,6 @@ final class GuidanceMobileContractService
     public const ALLOWED_MOBILE_ACTIONS = [
         'view_appointments',
         'acknowledge_call_slip',
-        'submit_self_referral',
         'take_mi_survey',
         'view_mi_results',
         'submit_service_evaluation',
@@ -75,8 +74,7 @@ final class GuidanceMobileContractService
     /**
      * Assert that an action is permitted on the student mobile surface.
      *
-     * Allows ['view_appointments', 'acknowledge_call_slip', 'submit_self_referral',
-     * 'take_mi_survey', 'view_mi_results', 'submit_service_evaluation'].
+     * Allows student appointment, call-slip, MI survey, result, and service-evaluation actions.
      * Blocks clinical authoring, co-signing, safety triage, and case transfers on mobile
      * surface with 403 DomainException.
      *

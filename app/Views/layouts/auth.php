@@ -15,17 +15,8 @@
   <link rel="icon" type="image/png" sizes="192x192" href="<?= base_url('favicon-192.png') ?>">
   <link rel="apple-touch-icon" sizes="180x180" href="<?= base_url('favicon-180.png') ?>">
 
-  <!-- Inline theme restoration to preserve dark mode after logout -->
-  <script>
-    (function() {
-      const storedTheme = localStorage.getItem('na-dark-mode');
-      if (storedTheme === '1' || (!storedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      } else {
-        document.documentElement.setAttribute('data-theme', 'light');
-      }
-    })();
-  </script>
+  <!-- Pre-paint theme restoration to preserve dark mode after logout -->
+  <script src="<?= base_url('assets/js/auth-theme-init.js') ?>"></script>
 
   <!-- Google Fonts - Nunito Sans + Poppins -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -70,17 +61,22 @@
       padding: 1.5rem;
     }
 
-    .auth-top-spacer { height: 1rem; }
     .auth-form-container, .auth-socials { max-width: 380px; min-width: 0; }
-    .auth-top-spacer, .auth-form-container, .auth-socials { flex-shrink: 0; }
+    .auth-form-container, .auth-socials { flex-shrink: 0; }
     .auth-brand { margin-bottom: 1.5rem; }
     .auth-brand-mark { min-height: var(--auth-logo-height); margin-bottom: 1rem; }
     .auth-brand-mark img { max-width: 100%; }
+    .auth-brand-logo { height: var(--auth-logo-height); width: auto; object-fit: contain; }
+    .auth-portal-badge { letter-spacing: 0.05rem; font-size: 0.72rem; }
     .auth-signin-form { margin-top: 1.5rem; }
     .auth-password-group { margin-bottom: 1.5rem; }
-    .auth-help { margin-top: 1.5rem; }
-    .auth-socials { padding-top: 1.5rem; padding-bottom: .5rem; }
-    .auth-socials-heading { margin-bottom: .5rem; }
+    .auth-help { margin-top: 1.25rem; font-size: 0.8rem; }
+    #auth-alerts:focus { outline: none; }
+    #auth-alerts:focus-visible { outline: 2px solid var(--fu-maroon); outline-offset: 2px; border-radius: 0.375rem; }
+    .auth-socials { margin-top: 1.25rem; padding-top: 0; padding-bottom: 0; }
+    .auth-socials-heading { margin-bottom: .35rem; }
+    .auth-socials-divider { height: 1px; }
+    .auth-socials-title { font-size: 0.65rem; letter-spacing: 0.05rem; }
 
     @media (min-width: 576px) {
       .auth-pane { padding: 3rem; }
@@ -90,24 +86,24 @@
        Content remains in normal flow so errors and enlarged text can scroll. */
     @media (max-height: 760px) {
       .auth-pane { --auth-logo-height: 44px; padding-top: 1rem; padding-bottom: 1rem; }
-      .auth-top-spacer { height: 0; }
       .auth-brand { margin-bottom: 1rem; }
       .auth-brand-mark { margin-bottom: .5rem; }
-      .auth-signin-form, .auth-help { margin-top: 1rem; }
+      .auth-signin-form { margin-top: 1rem; }
       .auth-password-group { margin-bottom: 1rem; }
-      .auth-socials { padding-top: .75rem; }
+      .auth-socials { margin-top: .875rem; }
       .auth-socials-heading { margin-bottom: .25rem; }
       .auth-socials .social-seal { width: 36px; height: 36px; }
       .auth-socials .social-item { padding-top: .375rem; padding-bottom: .375rem; }
+      .auth-help { margin-top: .875rem; }
     }
 
     @media (max-height: 640px) {
       .auth-pane { --auth-logo-height: 40px; }
       .auth-brand, .auth-password-group { margin-bottom: .75rem; }
-      .auth-signin-form, .auth-help { margin-top: .75rem; }
-      .auth-help { margin-bottom: .5rem; }
-      .auth-socials { padding-top: .5rem; }
+      .auth-signin-form { margin-top: .75rem; }
+      .auth-socials { margin-top: .625rem; }
       .auth-socials .social-seal { width: 32px; height: 32px; }
+      .auth-help { margin-top: .625rem; }
     }
 
     .auth-pane .alert {
@@ -321,8 +317,39 @@
       background-color: #ffffff;
     }
 
+    /* WCAG 2.2 SC 2.2.2 slideshow Pause/Play control */
+    .auth-carousel-pause {
+      position: absolute;
+      right: 1.25rem;
+      bottom: 1.05rem;
+      z-index: 25;
+      width: 2rem;
+      height: 2rem;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
+      background-color: rgba(0, 0, 0, 0.52);
+      color: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .auth-carousel-pause:hover {
+      background-color: rgba(0, 0, 0, 0.72);
+      border-color: rgba(255, 255, 255, 0.65);
+    }
+
+    .auth-carousel-pause:focus-visible {
+      outline: 2px solid #ffffff;
+      outline-offset: 2px;
+    }
+
     /* The floating wrapper must not block nearby controls with its padding. */
-    .auth-theme-control { pointer-events: none; }
+    .auth-theme-control { pointer-events: none; z-index: 1050; }
 
     /* The login toggle reuses the app header's .header-action control, so its
        surface, border, and icon colors come from the shared theme tokens. */
@@ -359,6 +386,34 @@
       display: block;
     }
 
+
+    .auth-signin-form .form-control {
+      font-family: var(--default-font);
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    .auth-signin-form .form-control::placeholder {
+      font-size: 0.875rem;
+    }
+
+    .auth-signin-form .form-control:-webkit-autofill,
+    .auth-signin-form .form-control:-webkit-autofill:hover,
+    .auth-signin-form .form-control:-webkit-autofill:focus,
+    .auth-signin-form .form-control:-webkit-autofill:active,
+    .auth-signin-form .form-control:autofill {
+      font-family: var(--default-font) !important;
+      font-size: 0.875rem !important;
+      line-height: 1.5 !important;
+    }
+
+    .auth-signin-form .form-control:-webkit-autofill::first-line,
+    .auth-signin-form .form-control:autofill::first-line {
+      font-family: var(--default-font) !important;
+      font-size: 0.875rem !important;
+      font-weight: 400 !important;
+      line-height: 1.5 !important;
+    }
 
     .form-control:focus {
       border-color: var(--fu-maroon);
@@ -483,25 +538,6 @@
   <script src="<?= base_url('assets/js/loading.js') ?>"></script>
   <script src="<?= base_url('assets/js/form-loading.js') ?>"></script>
   <script src="<?= base_url('assets/js/csrf.js') ?>"></script>
-    <script src="<?= base_url('assets/js/custom-dropdown.js') ?>"></script>
-    <script src="<?= base_url('assets/js/datepicker.js') ?>"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Hover-only tooltip trigger with 150ms show delay (matching original Zynapse)
-      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-      tooltipTriggerList.map(function(el) {
-        var tip = new bootstrap.Tooltip(el, {
-          trigger: 'hover',
-          html: true,
-          delay: { show: 150, hide: 100 }
-        });
-        el.addEventListener('click', function() {
-          tip.hide();
-        });
-        return tip;
-      });
-    });
-  </script>
   <?= $this->renderSection('scripts') ?>
 </body>
 

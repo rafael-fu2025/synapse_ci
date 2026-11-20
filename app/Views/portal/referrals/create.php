@@ -15,7 +15,6 @@ $catalogItems       = $catalog['items'] ?? [];
 $priorityHints      = $priorityHints ?? ['routine', 'urgent', 'crisis'];
 $canonicalFormsGate = $canonicalFormsGate ?? null;
 $canonicalFormsOpen = !empty($canonicalFormsOpen);
-$selfPerson         = $selfPerson ?? null;
 $myReferrals        = $myReferrals ?? [];
 $user               = $user ?? [];
 
@@ -64,61 +63,51 @@ $statusBadge = static fn (string $status): string => match ($status) {
                   method="POST"
                   data-background-submit>
               <?= csrf_field() ?>
-              <input type="hidden" name="subject_person_id" id="resolvedSubjectPersonId" value="">
 
-              <!-- Step 1: Source Type & Subject Resolution -->
+              <!-- Step 1: Source Type & Student Resolution -->
               <div class="mb-4">
-                <label class="form-label fw-semibold" for="referralSourceType">1. Referral Type &amp; Subject Lookup</label>
+                <label class="form-label fw-semibold" for="referralSourceType">1. Referral Type &amp; Student Lookup</label>
                 <select name="source_type" id="referralSourceType" class="form-select mb-3" required>
-                  <option value="employee_teacher">Faculty / Teacher Referral (For a Student)</option>
-                  <option value="staff_on_behalf">Staff Referral on Behalf of Subject</option>
-                  <option value="self" <?= $selfPerson === null ? 'disabled' : '' ?>>Self-Referral (For Myself)</option>
+                  <option value="employee_teacher">Faculty / Teacher Referral</option>
+                  <option value="staff_on_behalf">Staff Referral on Behalf of Students</option>
                 </select>
 
                 <div id="misLookupPanel" class="p-3 rounded border bg-body-tertiary">
-                  <label for="exactMisIdInput" class="form-label small fw-semibold">Exact Student / Employee MIS ID</label>
+                  <label for="exactMisIdInput" class="form-label small fw-semibold">Exact Student MIS ID</label>
                   <div class="d-flex flex-column flex-sm-row gap-2 mb-2">
                     <input type="text"
                            id="exactMisIdInput"
-                           name="mis_id"
                            class="form-control form-control-sm"
                            maxlength="64"
-                           placeholder="Enter exact MIS ID (e.g. 2024-00123)"
+                           placeholder="Enter exact student MIS ID (e.g. 2024-00123)"
                            autocomplete="off">
                     <button type="button"
                             id="resolveSubjectBtn"
                             class="btn btn-outline-primary btn-sm flex-shrink-0"
-                            data-resolve-url="<?= esc(site_url('/portal/referrals/resolve-subject'), 'attr') ?>">
-                      <i class="bi bi-person-check me-1" aria-hidden="true"></i> Resolve Subject
+                            data-resolve-url="<?= esc(site_url('/portal/referrals/resolve-student'), 'attr') ?>">
+                      <i class="bi bi-person-plus me-1" aria-hidden="true"></i> Add Student
                     </button>
                   </div>
                   <div class="form-text small text-muted">
-                    Directory browsing and wildcard queries (<code>%</code>, <code>*</code>, <code>?</code>) are strictly disabled for privacy. Provide the exact MIS ID.
+                    Add up to <?= \App\Services\Guidance\GuidanceIntakeService::MAX_PORTAL_STUDENTS ?> students by exact MIS ID. Directory browsing and wildcard queries (<code>%</code>, <code>*</code>, <code>?</code>) remain disabled for privacy.
                   </div>
                   <div id="subjectResolveStatus" class="small mt-2" role="status" aria-live="polite"></div>
-                  <div id="resolvedSubjectCard" class="mt-2 p-2 rounded border bg-success-subtle text-success d-none">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                      <div>
-                        <strong id="resolvedSubjectName"></strong>
-                        <div class="small" id="resolvedSubjectMeta"></div>
-                      </div>
-                      <span class="badge bg-success">Verified</span>
+
+                  <div class="mt-3" id="selectedStudentsPanel">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                      <span class="small fw-semibold">Selected Students</span>
+                      <span class="badge bg-primary-subtle text-primary" id="selectedStudentsCount">0 selected</span>
                     </div>
+                    <div id="selectedStudentsEmpty" class="small text-muted border rounded p-3">No students selected yet.</div>
+                    <div id="selectedStudentsList" class="vstack gap-2" aria-live="polite"></div>
                   </div>
                 </div>
-
-                <?php if ($selfPerson !== null): ?>
-                  <div id="selfSubjectPanel" class="p-3 rounded border bg-body-tertiary d-none">
-                    <div class="small text-muted">Referring self as:</div>
-                    <div class="fw-semibold">
-                      <?= esc(trim(($selfPerson['last_name'] ?? '') . ', ' . ($selfPerson['first_name'] ?? ''))) ?>
-                      (MIS ID: <?= esc($selfPerson['mis_id'] ?? '—') ?>)
-                    </div>
-                  </div>
-                <?php endif; ?>
               </div>
 
               <!-- Step 2: Concern Catalog -->
+              <div class="alert alert-info small border-0" role="note">
+                The concerns, narrative, priority, and prior actions below will be copied into a separate confidential referral for every selected student.
+              </div>
               <div class="mb-4">
                 <div class="form-label fw-semibold">2. Presenting Concerns (Select all that apply)</div>
                 <div class="row g-2">
@@ -235,7 +224,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
                           </form>
                         <?php endif; ?>
                         <?php if (in_array($ref['status'], ['draft', 'submitted', 'received'], true)): ?>
-                          <form action="<?= esc(site_url('/guidance/intake/' . (int) $ref['id'] . '/withdraw'), 'attr') ?>"
+                          <form action="<?= esc(site_url('/portal/referrals/' . (int) $ref['id'] . '/withdraw'), 'attr') ?>"
                                 method="POST"
                                 data-background-submit
                                 data-confirm="Withdraw referral <?= esc($ref['referral_number'], 'js') ?>? Referrals cannot be withdrawn once triaged."
@@ -268,46 +257,75 @@ $statusBadge = static fn (string $status): string => match ($status) {
 (function () {
   'use strict';
 
+  const MAX_SELECTED_STUDENTS = <?= \App\Services\Guidance\GuidanceIntakeService::MAX_PORTAL_STUDENTS ?>;
   const boundNodes = window.__synapseReferralBound || (window.__synapseReferralBound = new WeakSet());
 
   function bindReferralLookup() {
-    const sourceSelect = document.getElementById('referralSourceType');
-    const misPanel = document.getElementById('misLookupPanel');
-    const selfPanel = document.getElementById('selfSubjectPanel');
+    const form = document.getElementById('portalReferralForm');
     const misInput = document.getElementById('exactMisIdInput');
     const resolveBtn = document.getElementById('resolveSubjectBtn');
-    const hiddenPersonId = document.getElementById('resolvedSubjectPersonId');
     const statusBox = document.getElementById('subjectResolveStatus');
-    const card = document.getElementById('resolvedSubjectCard');
-    const nameEl = document.getElementById('resolvedSubjectName');
-    const metaEl = document.getElementById('resolvedSubjectMeta');
+    const list = document.getElementById('selectedStudentsList');
+    const empty = document.getElementById('selectedStudentsEmpty');
+    const count = document.getElementById('selectedStudentsCount');
 
-    if (!sourceSelect || !resolveBtn || boundNodes.has(resolveBtn)) return;
+    if (!form || !misInput || !resolveBtn || !list || boundNodes.has(resolveBtn)) return;
     boundNodes.add(resolveBtn);
 
-    function toggleSourceMode() {
-      const isSelf = sourceSelect.value === 'self';
-      if (misPanel) misPanel.classList.toggle('d-none', isSelf);
-      if (selfPanel) selfPanel.classList.toggle('d-none', !isSelf);
-      if (isSelf && hiddenPersonId) {
-        hiddenPersonId.value = '';
-      }
+    const selected = new Map();
+
+    function syncSelectedStudents() {
+      list.replaceChildren();
+      selected.forEach(function (person) {
+        const row = document.createElement('div');
+        row.className = 'd-flex flex-wrap align-items-center justify-content-between gap-2 rounded border bg-white p-2';
+
+        const copy = document.createElement('div');
+        const name = document.createElement('strong');
+        name.className = 'small d-block';
+        name.textContent = `${person.last_name}, ${person.first_name}`;
+        const meta = document.createElement('span');
+        meta.className = 'small text-muted';
+        meta.textContent = [`MIS ID: ${person.mis_id}`, person.program || null, person.year_level ? `Year ${person.year_level}` : null].filter(Boolean).join(' · ');
+        copy.append(name, meta);
+
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'subject_person_ids[]';
+        hidden.value = String(person.person_id || person.id);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-outline-danger btn-sm';
+        remove.setAttribute('aria-label', `Remove ${person.first_name} ${person.last_name}`);
+        remove.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i> Remove';
+        remove.addEventListener('click', function () {
+          selected.delete(String(person.person_id || person.id));
+          syncSelectedStudents();
+        });
+
+        row.append(copy, hidden, remove);
+        list.append(row);
+      });
+      const size = selected.size;
+      if (empty) empty.classList.toggle('d-none', size > 0);
+      if (count) count.textContent = `${size} selected`;
+      resolveBtn.disabled = size >= MAX_SELECTED_STUDENTS;
     }
 
-    sourceSelect.addEventListener('change', toggleSourceMode);
-    toggleSourceMode();
-
-    misInput?.addEventListener('input', function () {
-      if (hiddenPersonId) hiddenPersonId.value = '';
-      if (card) card.classList.add('d-none');
-    });
-
     resolveBtn.addEventListener('click', async function () {
-      const misId = (misInput?.value || '').trim();
+      const misId = (misInput.value || '').trim();
       if (!misId) {
         if (statusBox) {
           statusBox.className = 'small mt-2 text-danger';
-          statusBox.textContent = 'Enter an exact MIS ID before looking up.';
+          statusBox.textContent = 'Enter an exact student MIS ID before adding.';
+        }
+        return;
+      }
+      if (selected.size >= MAX_SELECTED_STUDENTS) {
+        if (statusBox) {
+          statusBox.className = 'small mt-2 text-danger';
+          statusBox.textContent = `You may select up to ${MAX_SELECTED_STUDENTS} students per form.`;
         }
         return;
       }
@@ -315,7 +333,7 @@ $statusBadge = static fn (string $status): string => match ($status) {
       resolveBtn.disabled = true;
       if (statusBox) {
         statusBox.className = 'small mt-2 text-muted';
-        statusBox.textContent = 'Resolving exact MIS ID...';
+        statusBox.textContent = 'Resolving exact student MIS ID...';
       }
 
       try {
@@ -340,35 +358,53 @@ $statusBadge = static fn (string $status): string => match ($status) {
         window.SynapseCsrf?.sync(payload.csrf);
 
         if (!response.ok || payload.success !== true || !payload.person) {
-          throw new Error(payload.message || 'Subject not found for that exact MIS ID.');
+          throw new Error(payload.message || 'Student not found for that exact MIS ID.');
         }
 
-        const p = payload.person;
-        if (hiddenPersonId) hiddenPersonId.value = String(p.person_id || p.id || '');
-        if (nameEl) nameEl.textContent = `${p.last_name}, ${p.first_name}`;
-        const details = [
-          `MIS ID: ${p.mis_id}`,
-          (p.kind || 'student').toUpperCase(),
-          p.program ? `${p.program}${p.year_level ? ' · Yr ' + p.year_level : ''}` : null,
-          p.department || null
-        ].filter(Boolean).join(' · ');
-        if (metaEl) metaEl.textContent = details;
-        if (card) card.classList.remove('d-none');
+        const person = payload.person;
+        const personId = String(person.person_id || person.id || '');
+        if (!personId || person.kind !== 'student') {
+          throw new Error('Only active students may be selected.');
+        }
+        if (selected.has(personId)) {
+          throw new Error('That student is already selected.');
+        }
+        selected.set(personId, person);
+        syncSelectedStudents();
+        misInput.value = '';
         if (statusBox) {
           statusBox.className = 'small mt-2 text-success';
-          statusBox.textContent = 'Exact subject resolved.';
+          statusBox.textContent = `${person.first_name} ${person.last_name} added.`;
         }
+        misInput.focus();
       } catch (err) {
-        if (hiddenPersonId) hiddenPersonId.value = '';
-        if (card) card.classList.add('d-none');
         if (statusBox) {
           statusBox.className = 'small mt-2 text-danger';
-          statusBox.textContent = err.message || 'Unable to resolve subject.';
+          statusBox.textContent = err.message || 'Unable to resolve student.';
         }
       } finally {
-        resolveBtn.disabled = false;
+        resolveBtn.disabled = selected.size >= MAX_SELECTED_STUDENTS;
       }
     });
+
+    misInput.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        resolveBtn.click();
+      }
+    });
+
+    form.addEventListener('submit', function (event) {
+      if (selected.size > 0) return;
+      event.preventDefault();
+      if (statusBox) {
+        statusBox.className = 'small mt-2 text-danger';
+        statusBox.textContent = 'Add at least one student before saving or submitting.';
+      }
+      misInput.focus();
+    });
+
+    syncSelectedStudents();
   }
 
   function bindOthersToggle() {

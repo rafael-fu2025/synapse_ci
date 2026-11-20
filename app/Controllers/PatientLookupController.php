@@ -34,7 +34,14 @@ final class PatientLookupController extends BaseController
 
         $results = (new PersonModel())->allowCallbacks(false)->scoped((int) $actor['tenant_id'])
             ->select('id, mis_id, kind, first_name, middle_name, last_name');
-        LikePattern::applyGroup($results->builder(), ['first_name', 'last_name', 'mis_id'], trim($query));
+        $tokens = preg_split('/[\s,]+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY);
+        if ($tokens !== [] && $tokens !== false) {
+            foreach ($tokens as $token) {
+                LikePattern::applyGroup($results->builder(), ['first_name', 'last_name', 'middle_name', 'mis_id'], $token);
+            }
+        } else {
+            LikePattern::applyGroup($results->builder(), ['first_name', 'last_name', 'mis_id'], trim($query));
+        }
         $results = $results->orderBy('last_name', 'ASC')->orderBy('first_name', 'ASC')->findAll(10);
 
         return $this->response->setJSON(['results' => $results]);

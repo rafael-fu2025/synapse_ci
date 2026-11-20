@@ -44,6 +44,10 @@
   position: relative;
 }
 
+.bd-select.w-auto {
+  width: auto !important;
+}
+
 .bd-select .bd-select-toggle {
   display: flex;
   align-items: center;
@@ -464,6 +468,255 @@
   background: rgba(255, 255, 255, 0.08);
   color: #e0e0e0;
   border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* =========================================================
+ * Portal Personal Waiting Room Tickets (Mobile-matched Card)
+ * Matches mobile/src/features/queue/components/QueueTicketCard.tsx
+ * + PlaceholderCard.tsx + CardOutline.tsx in light & dark mode.
+ * ========================================================= */
+.portal-queue-section {
+  width: 360px;
+  max-width: 100%;
+}
+
+/* Dashed empty placeholder matching mobile QueueTicketPlaceholder / PlaceholderCard */
+.portal-queue-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 15px;
+  border: 1px dashed var(--border-color, #d5dae3);
+  background: var(--surface-color, #ffffff);
+  color: var(--default-color, #1f2937);
+}
+
+.portal-queue-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  min-height: 1.5rem;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--icon-accent-color, #800000);
+}
+
+.portal-queue-empty-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.portal-queue-empty-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--heading-color, #111827);
+}
+
+.portal-queue-empty-body {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.38;
+  color: var(--muted-color, #667085);
+}
+
+/* Branded gradient ticket card matching mobile QueueTicketCard */
+.portal-queue-card {
+  --portal-queue-pill-bg: #ffffff;
+  --portal-queue-pill-color: #800000;
+  position: relative;
+  overflow: hidden;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #520000 0%, #800000 100%);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(128, 0, 0, 0.2);
+}
+
+.portal-queue-card--guidance {
+  --portal-queue-pill-color: #7356a2;
+  background: linear-gradient(135deg, #4f3974 0%, #7356a2 100%);
+  box-shadow: 0 8px 18px rgba(79, 57, 116, 0.24);
+}
+
+.portal-queue-card + .portal-queue-card {
+  margin-top: 0.65rem;
+}
+
+.portal-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.portal-queue-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.portal-queue-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.24rem 0.55rem;
+  border-radius: 999px;
+  background: var(--portal-queue-pill-bg);
+  color: var(--portal-queue-pill-color);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.portal-queue-code {
+  margin: 0.45rem 0 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.625rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+
+.portal-queue-priority {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.portal-queue-priority-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.portal-queue-priority-value {
+  margin-top: 0.15rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.portal-queue-meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.portal-queue-meta strong {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.portal-queue-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0.85rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* Column-reverse shows bold value above label like mobile QueueTicketCard while
+   keeping semantic <dt> before <dd> in DOM order. */
+.portal-queue-stat {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  padding: 0 0.3rem;
+  min-width: 0;
+}
+
+.portal-queue-stat--divided {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.portal-queue-stat-val {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.9375rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #ffffff;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+.portal-queue-stat-val.is-long {
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.22;
+}
+
+.portal-queue-stat-label {
+  margin: 0.2rem 0 0;
+  font-size: 0.66rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.portal-queue-note {
+  margin: 0.65rem 0 0;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+/* Dark mode: black gradient card, translucent pill, and dissolving CardOutline border */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-queue-empty {
+  background: var(--surface-color, #1c1c1c);
+  border-color: var(--border-color, #484848);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-queue-empty-icon {
+  color: #ffffff;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-queue-empty-title {
+  color: #ffffff;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-queue-empty-body {
+  color: var(--muted-color, #a3a3a3);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-queue-card {
+  --portal-queue-pill-bg: rgba(255, 255, 255, 0.18);
+  --portal-queue-pill-color: #ffffff;
+  background: linear-gradient(135deg, #1c1c1c 0%, #0f0f0f 100%);
+  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.5);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-queue-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
 }
 
 /* =========================================================

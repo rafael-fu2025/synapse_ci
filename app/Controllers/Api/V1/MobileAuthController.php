@@ -25,8 +25,8 @@ final class MobileAuthController extends ApiV1Controller
             $identifierOk = is_string($identifier) && trim($identifier) !== '' && mb_strlen($identifier) <= 100;
             $passwordOk = is_string($password) && $password !== '';
             if (!$identifierOk || !$passwordOk) {
-                return $this->fail(422, 'validation_failed', 'Please enter your ID number/email and password.', [
-                    'identifier' => $identifierOk ? [] : ['Enter your ID number or email.'],
+                return $this->fail(422, 'validation_failed', 'Please enter your student or employee ID number and password.', [
+                    'identifier' => $identifierOk ? [] : ['Enter your student or employee ID number.'],
                     'password' => $passwordOk ? [] : ['Enter your password.'],
                 ]);
             }

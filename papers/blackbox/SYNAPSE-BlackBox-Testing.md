@@ -22,7 +22,7 @@
 
 - Suite metadata status is **DRAFT**, not READY.
 - **33** cases have DRAFT lifecycle.
-- **14** cases are CONDITIONAL and require their stated preconditions.
+- **13** cases are CONDITIONAL and require their stated preconditions.
 - **245** cases are NOT_RUN; expectations are specifications, not observed outcomes.
 
 ## Computed summary
@@ -31,9 +31,9 @@
 
 | Lifecycle | Cases |
 | --- | ---: |
-| READY | 198 |
+| READY | 199 |
 | DRAFT | 33 |
-| CONDITIONAL | 14 |
+| CONDITIONAL | 13 |
 | **Total** | **245** |
 
 ### Verdict
@@ -79,7 +79,7 @@
 | 17 | Mobile Team Workspace | `papers/blackbox/sections/17-mobile-team-workspace.md` | 16 | 15 | 1 | 0 | 16 | 0 | 0 | 0 | 0 |
 | 18 | Mobile platform | `papers/blackbox/sections/18-mobile-platform.md` | 8 | 4 | 4 | 0 | 8 | 0 | 0 | 0 | 0 |
 | 19 | Responsive web contracts | `papers/blackbox/sections/19-responsive-web.md` | 8 | 8 | 0 | 0 | 8 | 0 | 0 | 0 | 0 |
-| 20 | Guidance mobile API conditional annex | `papers/blackbox/sections/20-guidance-mobile-api.md` | 6 | 0 | 0 | 6 | 6 | 0 | 0 | 0 | 0 |
+| 20 | Guidance mobile API conditional annex | `papers/blackbox/sections/20-guidance-mobile-api.md` | 6 | 1 | 0 | 5 | 6 | 0 | 0 | 0 | 0 |
 
 ## Table of contents
 
@@ -156,8 +156,8 @@
    - [GD\-011 — Survey response review and export remain bounded](#case-gd-011)
    - [GD\-012 — Guidance announcement publishing reaches only its audience](#case-gd-012)
 6. [Guidance intake, governance, and practitioner controls](#6-guidance-intake-governance-and-practitioner-controls)
-   - [GD\-INT\-001 — Portal referrer resolves only an exact MIS subject](#case-gd-int-001)
-   - [GD\-INT\-002 — Portal self\-referral submits encrypted intake content](#case-gd-int-002)
+   - [GD\-INT\-001 — Employee portal resolves only exact active students; Guidance resolver remains staff\-scoped](#case-gd-int-001)
+   - [GD\-INT\-002 — Employee multi\-student referral fans out encrypted intake records atomically](#case-gd-int-002)
    - [GD\-INT\-003 — Staff creates intake on behalf of an identified subject](#case-gd-int-003)
    - [GD\-INT\-004 — Intake receive and triage preserve hint\-versus\-risk distinction](#case-gd-int-004)
    - [GD\-INT\-005 — Accepted intake links to a matching case explicitly](#case-gd-int-005)
@@ -344,7 +344,7 @@
 20. [Guidance mobile API conditional annex](#20-guidance-mobile-api-conditional-annex)
    - [GD\-API\-001 — Student dashboard is own\-scope and clinically redacted](#case-gd-api-001)
    - [GD\-API\-002 — Call\-slip acknowledgement is owner\-bound and transition\-safe](#case-gd-api-002)
-   - [GD\-API\-003 — Mobile self\-referral binds subject to authenticated student](#case-gd-api-003)
+   - [GD\-API\-003 — Retired mobile self\-referral endpoint remains unavailable](#case-gd-api-003)
    - [GD\-API\-004 — MI draft, finalization, and results are own\-assignment contracts](#case-gd-api-004)
    - [GD\-API\-005 — Evaluation submission requires eligible one\-time redemption token](#case-gd-api-005)
    - [GD\-API\-006 — Workstation\-only Guidance actions always return 403 on mobile API](#case-gd-api-006)
@@ -1656,39 +1656,41 @@ Source: `papers/blackbox/sections/05-guidance-core.md` · Cases: **12**
 
 Source: `papers/blackbox/sections/06-guidance-intake-governance.md` · Cases: **14**
 
-### GD-INT-001 — Portal referrer resolves only an exact MIS subject
+### GD-INT-001 — Employee portal resolves only exact active students; Guidance resolver remains staff-scoped
 - **Lifecycle:** `READY`
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.EXACT_SUBJECT`
-- **Surface:** Portal Guidance referral
-- **Route/API:** POST /portal/referrals/resolve-subject
-- **Actor/grants:** Authenticated permitted referrer
-- **Preconditions:** Known same-tenant synthetic MIS ID; wildcard/name fragments; foreign-tenant sentinel ID.
+- **Surface:** Employee Portal Guidance referral and Guidance intake workstation
+- **Route/API:** POST /portal/referrals/resolve-student; POST /guidance/intake/resolve-subject
+- **Actor/grants:** Active employee for the portal route; Guidance actor with guidance.intake.process for the workstation route
+- **Preconditions:** Known same-tenant student MIS ID; employee MIS ID; wildcard/name fragments; foreign-tenant sentinel ID.
 **Steps**
-1. Resolve the exact synthetic MIS ID and inspect the minimal subject confirmation.
-2. Submit blank, wildcard, name-fragment, unknown, and foreign-tenant values.
-- **Expected:** Exact same-tenant lookup returns only minimal identity/program confirmation; all directory-like queries fail.
-- **Negative/non-disclosure:** No broad patient directory, case count/title, note, safety plan, contact details, or foreign tenant person is disclosed.
+1. As an active employee, resolve the exact synthetic student MIS ID and inspect the minimal student confirmation.
+2. Attempt the employee portal route as a student, with an employee MIS ID, blank, wildcard, name-fragment, unknown, and foreign-tenant values.
+3. As authorized Guidance staff, use the workstation resolver for its broader intake subject lookup; deny an actor without guidance.intake.process.
+- **Expected:** Employee lookup returns only an active same-tenant student; student actors and directory-like/nonstudent queries fail. Guidance lookup remains permission-gated and may resolve the person kinds supported by intake.
+- **Negative/non-disclosure:** No broad patient directory, case count/title, note, safety plan, contact details, employee record through the portal resolver, or foreign tenant person is disclosed.
 - **Cleanup:** No state change; clear session and captured synthetic identifiers.
 - **Source:** app/Services/Guidance/GuidanceIntakeService.php:112-184; app/Config/Routes.php:420-424
 - **Evidence:** Exact confirmation and negative query/status matrix with minimal response fields.
 - **Verdict:** `NOT_RUN`
 
-### GD-INT-002 — Portal self-referral submits encrypted intake content
+### GD-INT-002 — Employee multi-student referral fans out encrypted intake records atomically
 - **Lifecycle:** `READY`
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.PORTAL_SUBMIT`
-- **Surface:** Portal Guidance referral
+- **Surface:** Employee Portal Guidance referral
 - **Route/API:** GET /portal/referrals/create; POST /portal/referrals/store
-- **Actor/grants:** Student/employee referrer using supported self/general-referral workflow
-- **Preconditions:** Synthetic caller/subject permitted by current portal flow; reviewed concern catalog; non-sensitive narrative/prior-action sentinels; activation prerequisites satisfied for web flow.
+- **Actor/grants:** Active employee-backed referrer; student actors denied
+- **Preconditions:** Two or more same-tenant synthetic students; reviewed concern catalog; non-sensitive shared narrative/prior-action sentinels; activation prerequisites satisfied for live submission.
 **Steps**
-1. Create a draft/select concerns, narrative, prior actions, and priority hint, then submit.
-2. Open the caller's available status view and the authorized Guidance intake list; inspect stored/audit representations.
-- **Expected:** A numbered submitted intake appears with encrypted selections/narrative/prior actions and referrer snapshots.
-- **Negative/non-disclosure:** Priority is only a referrer attention hint, not clinical risk; plaintext and other referrals are absent from logs/audit/list summaries.
+1. Add multiple students by exact MIS ID, select shared concerns, narrative, prior actions, and priority hint, then submit.
+2. Verify one independently numbered intake row per selected student and inspect encrypted/audit representations.
+3. Attempt the form as a student, include a nonstudent/foreign subject, exceed the batch cap, and force a later-child failure to prove full rollback.
+- **Expected:** One atomic form submission creates a separate encrypted referral lifecycle per selected student; duplicates are normalized and any invalid/failing child rolls back the whole batch.
+- **Negative/non-disclosure:** Students and inactive employees cannot use the surface; priority is only a referrer attention hint; plaintext and other referrals are absent from logs/audit/list summaries.
 - **Cleanup:** Withdraw/close and delete the synthetic intake via disposable teardown.
 - **Source:** app/Services/Guidance/GuidanceIntakeService.php:298-520; app/Config/Routes.php:420-424
 - **Evidence:** Portal submission/status, Guidance receipt row, cipher-vs-sentinel check, and metadata-only audit evidence.
@@ -5339,26 +5341,26 @@ Source: `papers/blackbox/sections/20-guidance-mobile-api.md` · Cases: **6**
 - Evidence: Before/after slip/audit state and negative response matrix.
 - Verdict: `NOT_RUN`
 
-### GD-API-003 — Mobile self-referral binds subject to authenticated student
-- Lifecycle: `CONDITIONAL`
+### GD-API-003 — Retired mobile self-referral endpoint remains unavailable
+- Lifecycle: `READY`
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
-- Requirement: If mobile self-referral policy is approved, API must accept validated concern selections, nonblank narrative, optional prior actions, and allowed priority hint, create then submit an own `self` referral using current concern-catalog version, and accept no subject/referrer override.
-- Surface: Guidance Mobile API V1.
-- Route/API: `POST /api/v1/guidance/self-referral`.
-- Actor/grants: Active identified student; policy gate approved.
-- Preconditions: Decision resolves web/mobile self-referral gates; disposable concern catalog and student.
+- Requirement: Student self-referral is retired; the V1 API must not expose a route or controller action that creates `self` intake referrals.
+- Surface: Guidance Mobile API V1 (no native UI).
+- Route/API: legacy `POST /api/v1/guidance/self-referral` (retired).
+- Actor/grants: Student, employee, counselor, and superadmin bearer variants.
+- Preconditions: Disposable API tokens and a before-state digest of intake/audit tables.
 
 **Steps**
-1. Submit valid own referral and reconcile returned/source type, subject, catalog version, selections, narrative, status, timestamps, and notifications.
-2. Retry/duplicate as defined by policy and test missing/oversized/invalid fields plus urgent/crisis hints.
-3. Add subject/person/tenant/referrer/action fields, including workstation-only action names, and try another identity.
+1. Attempt the retired route with every bearer role and a formerly valid self-referral payload.
+2. Verify route discovery/source does not advertise a handler and inspect the HTTP routing response according to the framework's ordinary missing-route behavior.
+3. Reconcile intake and audit tables before and after.
 
-- Expected: One valid referral is bound to bearer’s person and submitted under current catalog; invalid/blocked/override attempts reject atomically; urgency is a hint, not self-triage conclusion.
-- Negative/non-disclosure: Client cannot refer another person, author safety assessment/triage, choose receiving staff, expose internal notes, or bypass policy gate.
-- Cleanup: Withdraw/delete fixture through approved disposable workflow and retire DB.
-- Source: `app/Controllers/Api/V1/GuidanceMobileController.php:83-149`; `app/Controllers/Api/V1/GuidanceMobileController.php:374-389`
-- Evidence: Submitted-row/notification reconciliation, validation/override matrix, and policy-decision reference.
+- Expected: The retired endpoint is unavailable for every role and creates no intake or audit record; no replacement student self-referral route exists.
+- Negative/non-disclosure: Response does not reveal person, intake, safety, or internal workflow details and cannot be converted into another-subject referral through payload fields.
+- Cleanup: Revoke tokens and retire the disposable DB.
+- Source: `app/Config/Routes.php:94-101`; `app/Controllers/Api/V1/GuidanceMobileController.php`
+- Evidence: Route table/source assertion, role/status matrix, and unchanged table digests.
 - Verdict: `NOT_RUN`
 
 ### GD-API-004 — MI draft, finalization, and results are own-assignment contracts
@@ -5417,7 +5419,7 @@ Source: `papers/blackbox/sections/20-guidance-mobile-api.md` · Cases: **6**
 
 **Steps**
 1. Send every method that is explicitly routed at each wildcard boundary and GET at the `/guidance/cases` root using each role variant and valid-looking payloads/IDs; record unrouted root methods separately as 404/405 routing behavior, not as promised 403 denials.
-2. Send blocked action names inside self-referral, MI draft/final, and evaluation payloads.
+2. Send blocked action names inside MI draft/final and evaluation payloads.
 3. Compare every clinical/case/safety/form/transfer/audit row before and after and inspect responses.
 
 - Expected: Every explicitly routed workstation-only attempt is `403` with a generic boundary message and zero writes; unrouted root methods remain ordinary 404/405 routing outcomes; allowed student-safe actions remain separately routable under their rules.

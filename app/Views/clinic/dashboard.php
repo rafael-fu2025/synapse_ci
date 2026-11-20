@@ -334,9 +334,10 @@
 <script>
   (function() {
     'use strict';
-    function initClinicDashboard() {
-      var activityTarget = document.querySelector('#clinicActivityChart');
-      var triageTarget = document.querySelector('#clinicTriageChart');
+    function initClinicDashboard(root) {
+      var scope = root && typeof root.querySelector === 'function' ? root : document;
+      var activityTarget = scope.querySelector('#clinicActivityChart');
+      var triageTarget = scope.querySelector('#clinicTriageChart');
       if (typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
 
       var activitySeries = [{
@@ -387,12 +388,16 @@
       ChartTheme.initialize();
     }
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initClinicDashboard);
-    } else {
-      initClinicDashboard();
+    if (!document.body.classList.contains('is-navigating')) {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() { initClinicDashboard(document); }, { once: true });
+      } else {
+        initClinicDashboard(document);
+      }
     }
-    document.addEventListener('synapse:page-load', initClinicDashboard);
+    document.addEventListener('synapse:page-load', function(event) {
+      initClinicDashboard(event && event.detail && event.detail.root);
+    }, { once: true });
   })();
 </script>
 <?= $this->endSection() ?>

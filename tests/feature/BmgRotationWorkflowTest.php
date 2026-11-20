@@ -843,6 +843,111 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
         }
     }
 
+    public function testDirectoryOverviewAndListingAvoidNPlusOneAndUnusedHistoryQueries(): void
+    {
+        for ($i = 2; $i <= 10; $i++) {
+            $created = $this->rotation->saveUnit(null, [
+                'unit_code' => 'batch-' . $i, 'name' => 'Batch Drum ' . $i, 'status' => 'active', 'drum_capacity_kg' => '80.00',
+            ]);
+            $this->register((int) $created['unit']['id'], ['chip_mac' => sprintf('aa:bb:cc:dd:ee:%02x', $i)]);
+        }
+
+        $queries = [];
+        $listener = static function (\CodeIgniter\Database\Query $query) use (&$queries): void {
+            $queries[] = $query->getQuery();
+        };
+        \CodeIgniter\Events\Events::on('DBQuery', $listener);
+        try {
+            $overview = $this->rotation->overview();
+            $overviewQueries = $queries;
+            $queries = [];
+            $listing = $this->rotation->listing(['per_page' => '20']);
+            $listingQueries = $queries;
+        } finally {
+            \CodeIgniter\Events\Events::removeListener('DBQuery', $listener);
+        }
+
+        $this->assertCount(10, $overview);
+        $this->assertCount(10, $listing['units']);
+        foreach ([$overviewQueries, $listingQueries] as $batch) {
+            // Bounded regardless of unit count (auth + unit/stats + batch schedules + batch devices).
+            $this->assertLessThanOrEqual(15, count($batch));
+            foreach ($batch as $sql) {
+                $this->assertStringNotContainsString('bmg_rotation_runs', $sql);
+                $this->assertStringNotContainsString('bmg_rotation_commands', $sql);
+            }
+        }
+        foreach ($overview as $item) {
+            $this->assertSame(['unit', 'schedule', 'device', 'hardware_enabled'], array_keys($item));
+        }
+        $this->assertSame($overview, $listing['units']);
+    }
+
+    public function testRevokeDeviceReturnsUnitIdAndDeviceApiLimitsSupportEnvOverrides(): void
+    {
+        $revoked = $this->rotation->revokeDevice($this->deviceId, $this->version($this->unitId));
+        $this->assertSame($this->unitId, $revoked['unit_id']);
+
+        $newDevice = $this->register($this->unitId, ['chip_mac' => 'aa:bb:cc:dd:ee:44']);
+        $savedEnv = [
+            'BMG_DEVICE_API_IP_LIMIT' => [$_ENV['BMG_DEVICE_API_IP_LIMIT'] ?? null, $_SERVER['BMG_DEVICE_API_IP_LIMIT'] ?? null, getenv('BMG_DEVICE_API_IP_LIMIT')],
+            'BMG_DEVICE_API_TOKEN_LIMIT' => [$_ENV['BMG_DEVICE_API_TOKEN_LIMIT'] ?? null, $_SERVER['BMG_DEVICE_API_TOKEN_LIMIT'] ?? null, getenv('BMG_DEVICE_API_TOKEN_LIMIT')],
+        ];
+        try {
+            $captureLimits = function () use ($newDevice): array {
+                $seen = [];
+                $throttler = new class($seen) extends \CodeIgniter\Throttle\Throttler {
+                    public array $seen;
+                    public function __construct(array &$seen)
+                    {
+                        parent::__construct(new \CodeIgniter\Cache\Handlers\DummyHandler(config('Cache')));
+                        $this->seen = &$seen;
+                    }
+                    public function check(string $key, int $capacity, int $seconds, int $cost = 1): bool
+                    {
+                        $this->seen[] = [$key, $capacity, $seconds];
+                        return true;
+                    }
+                };
+                Services::injectMock('throttler', $throttler);
+                $request = service('request');
+                $request->setHeader('X-Device-Token', $newDevice['token']);
+                $controller = new BmgDeviceApiController();
+                $controller->initController($request, service('response'), service('logger'));
+                $this->assertSame(200, $controller->schedule()->getStatusCode());
+                return $throttler->seen;
+            };
+
+            $defaultSeen = $captureLimits();
+            $this->assertSame(120, $defaultSeen[0][1]);
+            $this->assertSame(60, $defaultSeen[1][1]);
+
+            foreach (['BMG_DEVICE_API_IP_LIMIT' => '500', 'BMG_DEVICE_API_TOKEN_LIMIT' => '90'] as $key => $val) {
+                $_ENV[$key] = $_SERVER[$key] = $val;
+                putenv($key . '=' . $val);
+            }
+            $overrideSeen = $captureLimits();
+            $this->assertSame(500, $overrideSeen[0][1]);
+            $this->assertSame(90, $overrideSeen[1][1]);
+
+            foreach ([['0', '9'], ['-5', 'abc'], ['6001', '601'], ['59', '0']] as [$badIp, $badToken]) {
+                $_ENV['BMG_DEVICE_API_IP_LIMIT'] = $_SERVER['BMG_DEVICE_API_IP_LIMIT'] = $badIp;
+                $_ENV['BMG_DEVICE_API_TOKEN_LIMIT'] = $_SERVER['BMG_DEVICE_API_TOKEN_LIMIT'] = $badToken;
+                putenv('BMG_DEVICE_API_IP_LIMIT=' . $badIp);
+                putenv('BMG_DEVICE_API_TOKEN_LIMIT=' . $badToken);
+                $fallbackSeen = $captureLimits();
+                $this->assertSame(120, $fallbackSeen[0][1]);
+                $this->assertSame(60, $fallbackSeen[1][1]);
+            }
+        } finally {
+            foreach ($savedEnv as $key => [$e, $s, $p]) {
+                if ($e === null) { unset($_ENV[$key]); } else { $_ENV[$key] = $e; }
+                if ($s === null) { unset($_SERVER[$key]); } else { $_SERVER[$key] = $s; }
+                putenv($p === false ? $key : $key . '=' . $p);
+            }
+        }
+    }
+
     private function configurationOperations(): array
     {
         return [

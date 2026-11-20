@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Controllers\Api\V1;
 
 use App\Services\Guidance\GuidanceActivationGateService;
-use App\Services\Guidance\GuidanceIntakeService;
 use App\Services\Guidance\GuidanceMobileContractService;
 use App\Services\Guidance\GuidanceMultipleIntelligenceService;
 use App\Services\Guidance\GuidanceServiceEvaluationService;
@@ -14,7 +13,7 @@ use Config\Database;
 use DomainException;
 
 /**
- * Mobile API V1 Guidance Student Self-Service & Boundary Controller.
+ * Mobile API V1 Guidance Student Surveys & Boundary Controller.
  *
  * Strictly exposes student-safe mobile contracts and blocks workstation-only
  * clinical authoring, co-signing, safety triage, and case transfer actions with 403.
@@ -22,20 +21,17 @@ use DomainException;
 final class GuidanceMobileController extends ApiV1Controller
 {
     private GuidanceMobileContractService $mobileContractService;
-    private GuidanceIntakeService $intakeService;
     private GuidanceMultipleIntelligenceService $miService;
     private GuidanceServiceEvaluationService $evaluationService;
     private GuidanceActivationGateService $gateService;
 
     public function __construct(
         ?GuidanceMobileContractService $mobileContractService = null,
-        ?GuidanceIntakeService $intakeService = null,
         ?GuidanceMultipleIntelligenceService $miService = null,
         ?GuidanceServiceEvaluationService $evaluationService = null,
         ?GuidanceActivationGateService $gateService = null
     ) {
         $this->mobileContractService = $mobileContractService ?? new GuidanceMobileContractService();
-        $this->intakeService = $intakeService ?? new GuidanceIntakeService();
         $this->miService = $miService ?? new GuidanceMultipleIntelligenceService();
         $this->evaluationService = $evaluationService ?? new GuidanceServiceEvaluationService();
         $this->gateService = $gateService ?? new GuidanceActivationGateService();
@@ -77,75 +73,6 @@ final class GuidanceMobileController extends ApiV1Controller
             );
 
             return $this->ok(['data' => $acknowledged]);
-        });
-    }
-
-    /**
-     * POST api/v1/guidance/referrals/self
-     */
-    public function submitSelfReferral(): ResponseInterface
-    {
-        return $this->run(function (): ResponseInterface {
-            $identity = $this->requireStudentIdentity();
-            $payload = $this->jsonBody();
-            $this->assertNoBlockedActionInPayload($payload);
-            $this->mobileContractService->assertMobileActionPermitted('submit_self_referral');
-
-            $fields = [];
-            $narrative = $payload['narrative'] ?? null;
-            if (!is_string($narrative) || trim($narrative) === '') {
-                $fields['narrative'] = ['Please describe the reason for your self-referral.'];
-            }
-
-            $selections = $payload['selections'] ?? [];
-            if (!is_array($selections)) {
-                $fields['selections'] = ['Concern selections must be an array.'];
-            }
-
-            $priorityHint = isset($payload['priority_hint']) && is_string($payload['priority_hint'])
-                ? strtolower(trim($payload['priority_hint']))
-                : 'routine';
-            if (!in_array($priorityHint, GuidanceIntakeService::PRIORITY_HINTS, true)) {
-                $fields['priority_hint'] = ['Priority hint must be routine, urgent, or crisis.'];
-            }
-
-            $priorActions = $payload['prior_actions'] ?? null;
-            if ($priorActions !== null && !is_string($priorActions)) {
-                $fields['prior_actions'] = ['Prior actions must be a string.'];
-            }
-
-            if ($fields !== []) {
-                return $this->fail(422, 'validation_failed', 'Please review the highlighted fields.', $fields);
-            }
-
-            $draft = $this->intakeService->createDraft(
-                (int) $identity['person_id'],
-                'self',
-                $selections,
-                trim((string) $narrative),
-                $priorActions !== null ? trim((string) $priorActions) : null,
-                $priorityHint,
-                $identity
-            );
-
-            $submitted = $this->intakeService->submitReferral((int) $draft['id'], $identity);
-
-            return $this->ok([
-                'data' => [
-                    'id'                      => (int) ($submitted['id'] ?? 0),
-                    'referral_number'         => (string) ($submitted['referral_number'] ?? ''),
-                    'source_type'             => (string) ($submitted['source_type'] ?? 'self'),
-                    'subject_person_id'       => (int) ($submitted['subject_person_id'] ?? 0),
-                    'priority_hint'           => (string) ($submitted['priority_hint'] ?? 'routine'),
-                    'status'                  => (string) ($submitted['status'] ?? 'submitted'),
-                    'concern_catalog_version' => (string) ($submitted['concern_catalog_version'] ?? ''),
-                    'selections'              => $submitted['selections'] ?? [],
-                    'narrative'               => (string) ($submitted['narrative'] ?? ''),
-                    'prior_actions'           => $submitted['prior_actions'] ?? null,
-                    'submitted_at'            => $submitted['submitted_at'] ?? null,
-                    'created_at'              => $submitted['created_at'] ?? null,
-                ],
-            ], 201);
         });
     }
 

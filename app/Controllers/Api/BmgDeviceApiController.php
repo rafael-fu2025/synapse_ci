@@ -50,8 +50,10 @@ final class BmgDeviceApiController extends BaseController
             $token = $this->request->getHeaderLine('X-Device-Token');
             // Bound unauthenticated traffic as well as aggregate traffic across device endpoints.
             $throttler = service('throttler');
-            if (!$throttler->check('bmg-rotation-ip-' . hash('sha256', $this->request->getIPAddress()), 120, 60)
-                || ($token !== '' && !$throttler->check('bmg-rotation-token-' . hash('sha256', $token), 60, 60))) {
+            $ipLimit = $this->limit('BMG_DEVICE_API_IP_LIMIT', 120, 60, 6000);
+            $tokenLimit = $this->limit('BMG_DEVICE_API_TOKEN_LIMIT', 60, 10, 600);
+            if (!$throttler->check('bmg-rotation-ip-' . hash('sha256', $this->request->getIPAddress()), $ipLimit, 60)
+                || ($token !== '' && !$throttler->check('bmg-rotation-token-' . hash('sha256', $token), $tokenLimit, 60))) {
                 $this->response->setHeader('Retry-After', '60');
                 throw new RuntimeException('Device API rate limit exceeded.', 429);
             }
@@ -84,5 +86,22 @@ final class BmgDeviceApiController extends BaseController
             return (array) $object;
         }
         return $this->request->getPost() ?? [];
+    }
+
+    private function limit(string $envKey, int $default, int $min, int $max): int
+    {
+        $raw = env($envKey);
+        if (is_int($raw)) {
+            return $raw >= $min && $raw <= $max ? $raw : $default;
+        }
+        if (!is_string($raw)) {
+            return $default;
+        }
+        $trimmed = trim($raw);
+        if (!preg_match('/\A[1-9][0-9]*\z/D', $trimmed)) {
+            return $default;
+        }
+        $parsed = filter_var($trimmed, FILTER_VALIDATE_INT, ['options' => ['min_range' => $min, 'max_range' => $max]]);
+        return $parsed === false ? $default : $parsed;
     }
 }

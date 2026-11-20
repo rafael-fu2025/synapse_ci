@@ -43,6 +43,7 @@ before(async () => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/fixture') {
       const theme = url.searchParams.get('theme') === 'dark' ? 'dark' : 'light';
+      const useProdJs = url.searchParams.has('prodjs');
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(`<!doctype html><html data-theme="${theme}"><head><meta charset="utf-8"><link rel="icon" href="data:,">
         <link rel="stylesheet" href="/assets/vendor/bootstrap/css/bootstrap.min.css">
@@ -52,9 +53,11 @@ before(async () => {
           ${url.searchParams.has('tall') ? '<section class="col-12 col-lg-5 auth-pane" style="min-height:850px">Enlarged sign-in content fixture</section>' : ''}
         </div></main>
         <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-        <script>window.addEventListener('load',()=>{const el=document.getElementById('loginPhotoCarousel');
+        ${useProdJs
+          ? '<script src="/assets/js/pages/auth-login.js"></script>'
+          : `<script>window.addEventListener('load',()=>{const el=document.getElementById('loginPhotoCarousel');
           bootstrap.Carousel.getInstance(el)?.dispose();
-          window.carousel=new bootstrap.Carousel(el,{interval:false,ride:false});});</script></body></html>`);
+          window.carousel=new bootstrap.Carousel(el,{interval:false,ride:false});});</script>`}</body></html>`);
       return;
     }
     if (url.pathname.startsWith('/fixture/')) {
@@ -225,4 +228,34 @@ test('reduced motion disables both incoming animation and outgoing delay', async
   transitions.forEach(value => assert.deepEqual(value, { duration: '0s', delay: '0s' }));
   await page.evaluate(() => window.carousel.next());
   await page.waitForFunction(() => document.querySelectorAll('.carousel-item')[1].classList.contains('active'));
+});
+
+test('WCAG 2.2 SC 2.2.2: carousel exposes pause/play toggle and starts paused under reduced motion', async t => {
+  const normalCtx = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'no-preference' });
+  t.after(() => normalCtx.close());
+  const normalPage = await normalCtx.newPage();
+  await normalPage.goto(`${origin}/fixture?prodjs=1`);
+  const toggle = normalPage.locator('[data-carousel-toggle]');
+  assert.equal(await toggle.count(), 1);
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+  assert.equal(await toggle.getAttribute('aria-label'), 'Pause background slideshow');
+  assert.equal(await normalPage.locator('#loginPhotoCarousel').getAttribute('data-carousel-paused'), 'false');
+
+  await toggle.click();
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
+  assert.equal(await toggle.getAttribute('aria-label'), 'Resume background slideshow');
+  assert.equal(await normalPage.locator('#loginPhotoCarousel').getAttribute('data-carousel-paused'), 'true');
+
+  await toggle.click();
+  assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+  assert.equal(await toggle.getAttribute('aria-label'), 'Pause background slideshow');
+
+  const reducedCtx = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+  t.after(() => reducedCtx.close());
+  const reducedPage = await reducedCtx.newPage();
+  await reducedPage.goto(`${origin}/fixture?prodjs=1`);
+  const reducedToggle = reducedPage.locator('[data-carousel-toggle]');
+  assert.equal(await reducedToggle.getAttribute('aria-pressed'), 'true');
+  assert.equal(await reducedToggle.getAttribute('aria-label'), 'Resume background slideshow');
+  assert.equal(await reducedPage.locator('#loginPhotoCarousel').getAttribute('data-carousel-paused'), 'true');
 });

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit;
 
 use App\Integrations\Mis\HttpMisClient;
+use App\Integrations\Mis\MisAccountException;
 use App\Integrations\Mis\MisUnavailableException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -103,8 +104,9 @@ final class HttpMisClientTest extends TestCase
         yield '422 API key message' => [422, '{"message":"API-Key header is required"}'];
         yield '200 error without credential phrase' => [200, '{"status":"error","message":"Database connection failed"}'];
         yield 'rate limited' => [429, '{"message":"invalid credentials"}'];
-        yield 'server error' => [500, '{"message":"invalid credentials"}'];
+        yield 'bad gateway' => [502, '{"message":"upstream-secret"}'];
         yield 'unavailable' => [503, 'upstream-secret'];
+        yield 'gateway timeout' => [504, '{"message":"upstream-secret"}'];
         yield 'bad request' => [400, '{"message":"invalid credentials"}'];
         yield 'redirect' => [302, 'https://secret.example.test/?token=secret'];
         yield 'no HTTP status' => [0, ''];
@@ -222,6 +224,50 @@ final class HttpMisClientTest extends TestCase
             } catch (MisUnavailableException $e) {
                 self::assertFalse($called);
                 self::assertSame((new MisUnavailableException())->getMessage(), $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * The live employee login endpoint answers HTTP 500 for accounts whose state it cannot
+     * handle. The submitted credential cannot be judged from that response, so it must be
+     * reported as an unverifiable account: never a rejected password, never a transport outage.
+     */
+    public function testUpstreamServerErrorReportsAnUnverifiableAccount(): void
+    {
+        $body = json_encode([
+            'title'   => 'ErrorException',
+            'code'    => 500,
+            'message' => 'Trying to access array offset on value of type null',
+            'file'    => '/var/www/mis.foundationu.com/app/Controllers/Api/V1/EmployeeController.php',
+            'line'    => 88,
+        ], JSON_THROW_ON_ERROR);
+
+        foreach (['studentLogin', 'employeeLogin'] as $method) {
+            try {
+                $this->clientReturning(500, $body)->$method('123', 'secret');
+                self::fail('Expected an unverifiable account exception.');
+            } catch (MisAccountException $exception) {
+                self::assertSame('MIS could not verify this account.', $exception->getMessage());
+                self::assertNull($exception->getPrevious());
+                self::assertStringNotContainsString('array offset', $exception->getMessage());
+                self::assertStringNotContainsString('mis.foundationu.com', $exception->getMessage());
+            }
+        }
+    }
+
+    /**
+     * A gateway failure is a transport problem, not an account problem, and must keep the
+     * unavailable classification that tells the actor to retry later.
+     */
+    public function testGatewayFailuresRemainUnavailable(): void
+    {
+        foreach ([502, 503, 504] as $status) {
+            try {
+                $this->clientReturning($status, '{"message":"upstream"}')->employeeLogin('123', 'secret');
+                self::fail('Expected an unavailable exception.');
+            } catch (MisUnavailableException $exception) {
+                self::assertSame((new MisUnavailableException())->getMessage(), $exception->getMessage());
             }
         }
     }

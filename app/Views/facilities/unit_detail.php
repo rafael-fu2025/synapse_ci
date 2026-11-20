@@ -4,10 +4,24 @@ $id = (int) $unit['id'];
 $base = '/facilities/unit/' . $id;
 $manage = !empty($canManage);
 $configure = !empty($canConfigure);
-$hardwareAllowed = $configure && !empty($canHardware) && !empty($hardwareEnabled) && !empty($hardware_enabled);
+$gateOpen = !empty($hardwareEnabled) && !empty($hardware_enabled);
+$hardwareAllowed = $configure && !empty($canHardware) && $gateOpen;
+$commandHardwareAllowed = $manage && !empty($canHardware) && $gateOpen;
 $canCommand = $hardwareAllowed && $unit['status'] === 'active' && $device !== null;
+$canRunNow = $commandHardwareAllowed && $unit['status'] === 'active' && $device !== null;
+$canStop = $commandHardwareAllowed && $device !== null;
 $activeBatch = $activeBatch ?? null;
 $pastBatches = $pastBatches ?? [];
+$formatBatchTime = static function (?string $utc): string {
+    if ($utc === null || $utc === '') {
+        return 'Not recorded';
+    }
+    $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $utc, new \DateTimeZone('UTC'));
+    if ($parsed === false || $parsed->format('Y-m-d H:i:s') !== $utc) {
+        return $utc;
+    }
+    return \App\Services\Scheduling\SchedulingClock::formatManila($utc, 'Y-m-d H:i:s');
+};
 ?>
 <?= $this->section('styles') ?>
 <link rel="stylesheet" href="<?= esc(base_url('assets/css/bmg.css')) ?>">
@@ -42,7 +56,7 @@ $pastBatches = $pastBatches ?? [];
   <a class="nav-link" href="#bmg-setup">Setup checklist</a><a class="nav-link" href="#bmg-schedule">Rotation schedule</a><a class="nav-link" href="#bmg-controls">Manual controls</a><a class="nav-link" href="#bmg-batch">Current batch</a><a class="nav-link" href="#bmg-device">Device &amp; setup</a><a class="nav-link" href="#bmg-history">History</a>
 </nav>
 <div class="alert alert-warning mb-3" role="note"><strong>Web stop is not an emergency stop.</strong> Use the local physical emergency stop for immediate safety. Device-reported motor events are not verified drum rotation. Connectivity does not establish motor state.</div>
-<?php if (!$hardwareAllowed): ?><div class="alert alert-secondary mb-3" role="note"><?= empty($hardwareEnabled) || empty($hardware_enabled) ? 'Hardware control is disabled by the server gate.' : 'Configuration access and explicit hardware-control permission are required.' ?> Run, stop and schedule editing/enabling are unavailable. Configuration admins may disable existing schedule intent without changing its times or duration. Configuration admins can still register a device without enabling motor operation. Existing schedule intent may still be reviewed.</div><?php elseif (!$canCommand): ?><div class="alert alert-info mb-3" role="note">Motor commands require an active drum and one active bound device.</div><?php endif; ?>
+<?php if (!$gateOpen): ?><div class="alert alert-secondary mb-3" role="note">Hardware control is disabled by the server gate. Run, stop and schedule editing/enabling are unavailable. Configuration admins may disable existing schedule intent without changing its times or duration. Configuration admins can still register a device without enabling motor operation. Existing schedule intent may still be reviewed.</div><?php elseif (!$hardwareAllowed && !$commandHardwareAllowed): ?><div class="alert alert-secondary mb-3" role="note">Configuration access and explicit hardware-control permission are required. Run, stop and schedule editing/enabling are unavailable. Configuration admins may disable existing schedule intent without changing its times or duration. Configuration admins can still register a device without enabling motor operation. Existing schedule intent may still be reviewed.</div><?php elseif (!$hardwareAllowed && $commandHardwareAllowed): ?><div class="alert alert-info mb-3" role="note">Schedule editing/enabling requires configuration access. Manual commands remain gated by facilities management and hardware-control permission. <?php if (!$canStop): ?>Motor commands require one active bound device.<?php elseif (!$canRunNow): ?>Timed run requests require an active drum; web stop remains available while a device is bound, but is not an emergency stop.<?php endif; ?></div><?php elseif ($hardwareAllowed && !$commandHardwareAllowed): ?><div class="alert alert-info mb-3" role="note">Manual commands require facilities management (<code>facilities.manage</code>) and hardware-control permission.</div><?php elseif (!$canStop): ?><div class="alert alert-info mb-3" role="note">Motor commands require one active bound device.</div><?php elseif (!$canRunNow): ?><div class="alert alert-info mb-3" role="note">Timed run requests require an active drum and one active bound device. Web stop remains available while a device is bound, but is not an emergency stop.</div><?php endif; ?>
 <?php require __DIR__ . '/_setup_steps.php'; ?>
 <div class="bmg-detail-grid">
   <div class="bmg-main">
@@ -94,13 +108,13 @@ $pastBatches = $pastBatches ?? [];
       <div class="bmg-command-box border rounded p-3"><h3 class="h6">Timed run request</h3>
       <form action="<?= esc(site_url($base . '/command')) ?>" method="POST" data-bmg-submit class="mb-3" data-confirm="Queue a run request for this drum? Confirm that the equipment and surrounding area are safe before continuing." data-confirm-title="Request rotation" data-confirm-label="Queue run" data-confirm-tone="warning">
         <?= csrf_field() ?><input type="hidden" name="expected_version" value="<?= (int) ($schedule['version'] ?? 0) ?>"><input type="hidden" name="command" value="run_now">
-        <div class="mb-2"><label for="manualDuration" class="form-label">Run duration (seconds)</label><input id="manualDuration" type="number" name="duration_seconds" class="form-control" min="1" max="600" step="1" value="60" required <?= $canCommand ? '' : 'disabled' ?>></div>
-        <button class="btn btn-primary" type="submit" <?= $canCommand ? '' : 'disabled' ?>>Request run now</button>
+        <div class="mb-2"><label for="manualDuration" class="form-label">Run duration (seconds)</label><input id="manualDuration" type="number" name="duration_seconds" class="form-control" min="1" max="600" step="1" value="60" required <?= $canRunNow ? '' : 'disabled' ?>></div>
+        <button class="btn btn-primary" type="submit" <?= $canRunNow ? '' : 'disabled' ?>>Request run now</button>
       </form>
       </div>
       <div class="bmg-command-box border rounded p-3"><h3 class="h6">Web stop request</h3><p class="small text-muted">Delivery is not guaranteed. For immediate safety, use the local physical emergency stop.</p>
       <form action="<?= esc(site_url($base . '/command')) ?>" method="POST" data-bmg-submit data-confirm="Queue a web stop request? This is not an emergency stop and delivery is not guaranteed. Use the local physical emergency stop for immediate safety." data-confirm-title="Request web stop" data-confirm-label="Queue stop" data-confirm-tone="danger">
-        <?= csrf_field() ?><input type="hidden" name="expected_version" value="<?= (int) ($schedule['version'] ?? 0) ?>"><input type="hidden" name="command" value="stop"><button class="btn btn-outline-danger" type="submit" <?= $canCommand ? '' : 'disabled' ?>>Request web stop</button>
+        <?= csrf_field() ?><input type="hidden" name="expected_version" value="<?= (int) ($schedule['version'] ?? 0) ?>"><input type="hidden" name="command" value="stop"><button class="btn btn-outline-danger" type="submit" <?= $canStop ? '' : 'disabled' ?>>Request web stop</button>
       </form>
       </div></div>
     </div></section>
@@ -112,7 +126,7 @@ $pastBatches = $pastBatches ?? [];
       <?php if ($activeBatch === null): ?><p class="text-muted">No active batch. <?= $unit['status'] === 'active' ? 'This drum is available for a new batch record.' : 'Set the drum to active before starting a batch.' ?></p>
       <?php if ($manage && $unit['status'] === 'active'): ?><button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#startBatchModal">Start batch</button><?php endif; ?>
       <?php else: ?>
-      <h3 class="h6 text-break"><?= esc($activeBatch['batch_code']) ?></h3><dl class="bmg-fact-grid small"><div class="bmg-fact"><dt>Status</dt><dd><?= esc($activeBatch['status']) ?></dd></div><div class="bmg-fact"><dt>Started</dt><dd><?= esc($activeBatch['started_at']) ?></dd></div><div class="bmg-fact"><dt>Input weight</dt><dd><?= esc($activeBatch['total_input_weight_kg']) ?> kg</dd></div></dl><p class="small text-muted text-break"><strong>Creation notes:</strong> <?= nl2br(esc($activeBatch['notes'] ?? 'Not recorded')) ?></p>
+      <h3 class="h6 text-break"><?= esc($activeBatch['batch_code']) ?></h3><dl class="bmg-fact-grid small"><div class="bmg-fact"><dt>Status</dt><dd><?= esc($activeBatch['status']) ?></dd></div><div class="bmg-fact"><dt>Started (Asia/Manila)</dt><dd><?= esc($formatBatchTime($activeBatch['started_at'] ?? null)) ?></dd></div><div class="bmg-fact"><dt>Input weight</dt><dd><?= esc($activeBatch['total_input_weight_kg']) ?> kg</dd></div></dl><p class="small text-muted text-break"><strong>Creation notes:</strong> <?= nl2br(esc($activeBatch['notes'] ?? 'Not recorded')) ?></p>
       <?php if ($manage): ?><div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#completeBatchModal">Complete batch</button><button class="btn btn-outline-danger btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#cancelBatchModal">Cancel batch</button></div><?php endif; endif; ?>
     </div></section>
     <section class="card bmg-panel mb-4" id="bmg-device" aria-labelledby="bmg-device-title">

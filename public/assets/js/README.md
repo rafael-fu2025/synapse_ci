@@ -90,6 +90,6 @@ Run `node --test tests/browser/navigation.test.cjs` for shell identity, history,
 
 `live-table.js` is loaded by the patient-directory and medicine-inventory views. It progressively enhances ordinary server-paginated GET forms/links with debounced search, abort/sequence protection, validated HTML fragments, filter-preserving URLs, retry, and history restoration. PHP remains responsible for authorization, counts, filtering, ordering, and page limits; do not initialize a client-only DataTable over these partial pages.
 
-`pages/` owns feature-specific behavior. Scripts use route-safe feature names: `calendar.js`, `chat.js`, `contacts.js`, `file-manager.js`, `kanban.js`, `support.js`, and `todo.js`.
+`pages/` owns feature-specific behavior. Scripts use route-safe feature names: `auth-login.js`, `calendar.js`, `chat.js`, `contacts.js`, `file-manager.js`, `kanban.js`, `support.js`, and `todo.js`. `auth-theme-init.js` restores the saved light/dark theme before paint on `layouts/auth.php`, while `pages/auth-login.js` owns login tooltips, password reveal ARIA state, carousel pause/play and reduced-motion playback, alert focus, and theme switching without inline scripts.
 
 When extracting remaining inline scripts, move only page behavior into the matching file. Keep shared selectors and initialization in `core/main.js`, and update the route’s `<script src>` after testing the page independently.

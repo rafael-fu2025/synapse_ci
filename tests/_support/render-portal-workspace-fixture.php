@@ -25,7 +25,7 @@ $kind = ($fixture['kind'] ?? '') === 'employee' ? 'employee' : 'student';
 $permissions = $fixture['permissions'] ?? ['portal.records.read', 'portal.appointments.read', 'portal.surveys.submit'];
 $person = ['id' => 999999999, 'kind' => $kind, 'mis_id' => 'FIXTURE-123', 'first_name' => 'Synthetic', 'middle_name' => '',
     'last_name' => ucfirst($kind), 'email' => 'fixture@example.test'];
-$actor = ['id' => 1, 'person_id' => $person['id'], 'tenant_id' => 999999999, 'name' => 'Synthetic ' . ucfirst($kind),
+$actor = ['id' => 1, 'person_id' => $person['id'], 'person_kind' => $kind, 'tenant_id' => 999999999, 'name' => 'Synthetic ' . ucfirst($kind),
     'role' => $kind, 'email' => $person['email'], 'permissions' => $permissions, 'logged_in' => true,
     'avatar_initials' => \App\Services\ProfileAvatar::initials($person)];
 session()->set(['user' => $actor, 'tenant_id' => $actor['tenant_id']]);
@@ -56,9 +56,18 @@ if ($path === '/portal') {
 } elseif ($path === '/portal/surveys') {
     $filters = \App\Services\PortalContent::filters($_GET, ['all', 'available', 'submitted', 'closed']);
     echo view('surveys/portal_index', $data + ['title' => 'My Surveys', 'items' => [$survey], 'hasProfile' => true,
-        'filters' => $filters, 'nowUtc' => '2026-11-16 00:00:00',
+        'filters' => $filters, 'nowUtc' => '2026-11-16 00:00:00', 'miAssignments' => [], 'miGateEnabled' => false,
         'counts' => ['all' => 1, 'available' => $survey['submitted'] ? 0 : 1, 'submitted' => $survey['submitted'] ? 1 : 0, 'closed' => 0],
         'pagination' => ['page' => 1, 'pages' => 1, 'filtered' => 1, 'total' => 1, 'per_page' => 25]]);
+} elseif ($path === '/portal/assessments/mi/7') {
+    echo view('portal/assessments/mi_survey', $data + [
+        'title' => 'Multiple Intelligences Survey', 'assignment' => ['id' => 7],
+        'catalog' => ['items' => [], 'scale' => []], 'draft' => [], 'miGateEnabled' => false,
+        'attestationDefault' => \App\Controllers\GuidanceMultipleIntelligenceController::DEFAULT_STUDENT_ATTESTATION,
+        'backUrl' => site_url('portal/surveys#multiple-intelligence'),
+        'draftUrl' => site_url('portal/assessments/mi/7/draft'),
+        'finalizeUrl' => site_url('portal/assessments/mi/7/finalize'),
+    ]);
 } elseif ($path === '/portal/appointments/clinic/create') {
     echo view('appointments/create', ['title' => 'Request Clinic Visit', 'formModalPage' => true, 'unit' => 'clinic',
         'bookingMode' => 'personal', 'person' => $person, 'formAction' => site_url('portal/appointments/clinic/store'), 'cancelUrl' => site_url('portal')]);
