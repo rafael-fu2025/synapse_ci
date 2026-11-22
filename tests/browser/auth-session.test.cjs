@@ -271,6 +271,22 @@ test('Chromium: real HTTP auth denials navigate to a canonical login document wi
         'X-Synapse-Login': fixtureOrigin + '/auth/login', 'X-CSRF-TOKEN': 'must-not-sync'
       }).end('{"message":"Denied"}');
     }
+    if (url.pathname === '/rotated-once') {
+      const attempt = requests.filter(r => r.url === '/rotated-once').length;
+      if (attempt === 1) {
+        return res.writeHead(409, {
+          'Content-Type': 'application/json', 'Cache-Control': 'no-store',
+          'X-Synapse-Session': 'rotated', 'Retry-After': '0.25'
+        }).end('{"message":"Your session is being renewed. Please retry this request."}');
+      }
+      return res.writeHead(200, { 'Content-Type': 'text/html' }).end(html.replaceAll('Protected fixture', 'Recovered page'));
+    }
+    if (url.pathname === '/rotated-stuck') {
+      return res.writeHead(409, {
+        'Content-Type': 'application/json', 'Cache-Control': 'no-store',
+        'X-Synapse-Session': 'rotated', 'Retry-After': '0.25'
+      }).end('{"message":"Your session is being renewed. Please retry this request."}');
+    }
     if (url.pathname === '/protected') return res.writeHead(200, { 'Content-Type': 'text/html' }).end(html);
     res.writeHead(404).end();
   });
@@ -350,5 +366,20 @@ test('Chromium: real HTTP auth denials navigate to a canonical login document wi
     assert.deepEqual(traffic.map(r => [r.method, r.url]), [['GET', '/next'], ['GET', '/auth/login']]);
     assert.equal(traffic[0].headers['x-synapse-navigation'], '1');
     assert.equal(traffic[0].headers['hx-request'], undefined);
+  });
+
+  await t.test('navigation GET retries 409 rotated session once and recovers without looping', async t => {
+    const page = await pageFor(t);
+    const start = requests.length;
+    assert.equal(await page.evaluate(() => SynapseNavigation.navigate('/rotated-once')), true);
+    assert.equal(await page.title(), 'Recovered page');
+    assert.equal(await page.locator('#main h1').textContent(), 'Recovered page');
+    const recoveredTraffic = requests.slice(start).filter(r => r.url === '/rotated-once');
+    assert.equal(recoveredTraffic.length, 2, 'Should retry rotated 409 exactly once and succeed');
+
+    const stuckStart = requests.length;
+    assert.equal(await page.evaluate(() => SynapseNavigation.navigate('/rotated-stuck')), false);
+    const stuckTraffic = requests.slice(stuckStart).filter(r => r.url === '/rotated-stuck');
+    assert.equal(stuckTraffic.length, 2, 'Should stop after a single retry instead of looping');
   });
 });

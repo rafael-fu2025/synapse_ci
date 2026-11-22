@@ -1,17 +1,43 @@
 <?= $this->extend('layouts/app') ?>
+<?= $this->section('styles') ?>
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/guidance-question-bank.css'), 'attr') ?>">
+<?= $this->endSection() ?>
+<?= $this->section('page_actions') ?>
+<a class="btn btn-outline-secondary btn-sm" href="<?= esc($baseUrl, 'attr') ?>"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to question bank</a>
+<?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <?php $refreshOwner = 'question-bank.history.' . (int) $entry['id']; ?>
-<section class="guidance-ui" data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
-<a class="btn btn-outline-secondary btn-sm mb-3" href="<?= esc($baseUrl) ?>">Back to question bank</a>
-<div data-refresh-region="selected-revision" class="mb-3">
-<div class="card"><div class="card-body pt-3"><h2 class="h5"><?= esc($selected['question']['label']) ?></h2>
-<p class="text-muted">Bank #<?= (int) $entry['id'] ?> · Revision <?= (int) $selected['revision'] ?> · <?= esc(ucfirst($entry['status'])) ?> · <?= esc($selected['category']) ?> · <?= esc($selected['audience']) ?></p>
-<p class="small">Earlier revisions are read-only. Survey copies remain independent of the bank. <?= $selected['question']['required'] ? 'Required' : 'Optional' ?> by default.</p>
-<?= view('question_bank/_preview', ['question' => $selected['question'], 'reviewNote' => $selected['review_note']], ['saveData' => false]) ?>
-</div></div>
-</div>
-<div class="card"><div class="card-body pt-3"><h2 class="h6">Revision history</h2><ul class="list-group list-group-flush">
-<?php foreach ($revisions as $revision): ?><li class="list-group-item d-flex flex-wrap justify-content-between gap-2"><a href="<?= esc($baseUrl . '/' . (int) $entry['id'] . '?revision=' . (int) $revision['revision']) ?>">Revision <?= (int) $revision['revision'] ?></a><span class="small text-muted"><?= esc($revision['created_at']) ?> UTC</span></li><?php endforeach; ?>
-</ul></div></div>
+<section class="guidance-ui qb-workspace qb-history" data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+  <div class="qb-sheet">
+    <div class="qb-band qb-selected-revision" data-refresh-region="selected-revision">
+      <div class="qb-history-top">
+        <span class="qb-record-id">Bank #<?= (int) $entry['id'] ?> <span aria-hidden="true">·</span> Revision <?= (int) $selected['revision'] ?></span>
+        <span class="qb-status <?= $entry['status'] === 'active' ? 'is-active' : 'is-archived' ?>"><?= esc(ucfirst($entry['status'])) ?></span>
+      </div>
+      <h2 class="qb-history-question"><?= esc($selected['question']['label']) ?></h2>
+      <dl class="qb-history-meta">
+        <div><dt>Category</dt><dd><?= esc($selected['category']) ?></dd></div>
+        <div><dt>Intended audience</dt><dd><?= esc($selected['audience'] === 'all' ? 'Students and employees' : ucfirst($selected['audience'])) ?></dd></div>
+        <div><dt>Answer type</dt><dd><?= esc(ucfirst($selected['question']['type'])) ?></dd></div>
+        <div><dt>Response</dt><dd><?= $selected['question']['required'] ? 'Required' : 'Optional' ?> by default</dd></div>
+      </dl>
+      <p class="qb-history-note"><i class="bi bi-lock" aria-hidden="true"></i>Earlier revisions are read-only. Survey copies remain independent of the bank.</p>
+      <?= view('question_bank/_preview', ['question' => $selected['question'], 'reviewNote' => $selected['review_note']], ['saveData' => false]) ?>
+    </div>
+    <section class="qb-history-revisions" aria-labelledby="bankRevisionHistory">
+      <div class="qb-results-head">
+        <h2 class="qb-results-title" id="bankRevisionHistory">Revision history</h2>
+        <span class="qb-count"><?= number_format(count($revisions)) ?> <?= count($revisions) === 1 ? 'revision' : 'revisions' ?></span>
+      </div>
+      <ul class="qb-revision-list">
+        <?php foreach ($revisions as $revision): ?>
+          <li class="qb-revision-row <?= (int) $revision['revision'] === (int) $selected['revision'] ? 'is-selected' : '' ?>">
+            <a href="<?= esc($baseUrl . '/' . (int) $entry['id'] . '?revision=' . (int) $revision['revision'], 'attr') ?>"<?= (int) $revision['revision'] === (int) $selected['revision'] ? ' aria-current="page"' : '' ?>>Revision <?= (int) $revision['revision'] ?></a>
+            <span class="qb-revision-time"><?= esc($revision['created_at']) ?> UTC</span>
+          </li>
+        <?php endforeach; ?>
+      </ul>
+    </section>
+  </div>
 </section>
 <?= $this->endSection() ?>

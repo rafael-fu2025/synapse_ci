@@ -1,4 +1,8 @@
 /* Keep the shell still; loading feedback never shifts page content. */
+:is(h1, h2, h3, h4, h5, h6, .portal-workspace-title)[tabindex="-1"]:is(:focus, :focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
 body.is-navigating::after {
   content: "";
   position: fixed;

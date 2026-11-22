@@ -1,0 +1,589 @@
+/* Independent date-range picker; shared SYNAPSE tokens follow both themes.
+   Keep all styling local to the range trigger and popup. */
+
+.drp-wrap,
+.drp-popup {
+  --drp-brand: var(--fu-maroon, #800000);
+  --drp-focus: var(--focus-color, var(--drp-brand));
+}
+
+/* Reserve the icon gutter even when survey controls override input padding. */
+.drp-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.drp-wrap > input.form-control {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding-inline: 0.75rem 2.5rem !important;
+  cursor: pointer;
+}
+
+.drp-wrap > input.form-control-sm {
+  padding-inline: 0.5rem 2.25rem !important;
+}
+
+.drp-wrap > .drp-icon {
+  position: absolute;
+  inset-inline-start: auto;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--muted-color);
+  pointer-events: none;
+  transition: color 0.15s ease;
+}
+
+.drp-wrap > input.form-control-sm ~ .drp-icon {
+  inset-inline-end: 10px;
+  font-size: 0.85rem;
+}
+
+.drp-wrap > input.form-control:focus ~ .drp-icon,
+.drp-wrap.drp-open > .drp-icon {
+  color: var(--icon-accent-color, var(--drp-brand));
+}
+
+.drp-wrap > input.form-control:disabled {
+  cursor: not-allowed;
+}
+
+.drp-wrap > input.form-control:disabled ~ .drp-icon {
+  opacity: 0.55;
+}
+
+.drp-wrap > input.form-control:focus-visible {
+  outline: 2px solid var(--drp-focus);
+  outline-offset: 2px;
+}
+
+/* JavaScript owns viewport positioning and the single/dual panel choice. */
+.drp-popup {
+  --drp-surface: var(--surface-color, var(--bs-body-bg));
+  --drp-text: var(--default-color, var(--bs-body-color));
+  --drp-heading: var(--heading-color, var(--drp-text));
+  --drp-muted: var(--muted-color, var(--bs-secondary-color));
+  --drp-border: var(--border-color, var(--bs-border-color));
+  --drp-accent-text: var(--primary-text-color, var(--drp-brand));
+  --drp-contrast: var(--contrast-color, #ffffff);
+  --drp-range-bg: color-mix(in srgb, var(--drp-brand) 14%, var(--drp-surface));
+  --drp-preview-bg: color-mix(in srgb, var(--drp-brand) 7%, var(--drp-surface));
+  --drp-preview-border: color-mix(in srgb, var(--drp-accent-text) 45%, var(--drp-border));
+  position: fixed;
+  z-index: 1090;
+  display: block;
+  width: 320px;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  max-width: calc(100dvw - 16px);
+  max-height: calc(100vh - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  border: 1px solid var(--drp-border);
+  border-radius: var(--radius-lg, 0.25rem);
+  background: var(--drp-surface);
+  color: var(--drp-text);
+  font-family: var(--default-font, sans-serif);
+  line-height: 1.4;
+  box-shadow: none;
+}
+
+.drp-popup,
+.drp-popup :where(*) {
+  box-sizing: border-box;
+}
+
+.drp-popup.is-dual {
+  width: 632px;
+}
+
+.drp-popup .drp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.drp-popup .drp-heading {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--heading-font, sans-serif);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--drp-heading);
+  overflow-wrap: anywhere;
+}
+
+/* Toolbar actions match the single picker's secondary solid-fill policy. */
+.drp-popup .drp-control {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--action-secondary, #595959);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--action-secondary, #595959);
+  color: var(--drp-contrast);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.drp-popup :is(.drp-nav, .drp-close) {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.drp-popup .drp-control > i {
+  font-size: 0.95rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.drp-popup .drp-control:not(:disabled):not([aria-disabled="true"]):is(:hover, :focus-visible) {
+  border-color: var(--action-secondary-hover, #484848);
+  background: var(--action-secondary-hover, #484848);
+  color: var(--drp-contrast);
+}
+
+.drp-popup .drp-control:not(:disabled):not([aria-disabled="true"]):active {
+  border-color: var(--action-secondary-active, #383838);
+  background: var(--action-secondary-active, #383838);
+}
+
+.drp-popup :is(.drp-control, .drp-endpoint):is(:disabled, [aria-disabled="true"]) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.drp-popup :is(.drp-control, .drp-endpoint):focus-visible {
+  outline: 2px solid var(--drp-focus);
+  outline-offset: 2px;
+}
+
+.drp-popup .drp-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.drp-popup .drp-endpoint {
+  appearance: none;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid var(--drp-border);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--drp-surface);
+  color: var(--drp-text);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.drp-popup .drp-endpoint:hover:not(:disabled) {
+  border-color: var(--drp-accent-text);
+  background: var(--drp-preview-bg);
+}
+
+.drp-popup .drp-endpoint:not(:disabled):is(.is-active, [aria-pressed="true"]) {
+  border-color: var(--drp-focus);
+  background: var(--drp-range-bg);
+}
+
+.drp-popup .drp-label {
+  color: var(--drp-muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.drp-popup .drp-endpoint:is(.is-active, [aria-pressed="true"]) .drp-label {
+  color: var(--drp-accent-text);
+}
+
+.drp-popup .drp-value {
+  color: var(--drp-heading);
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.drp-popup .drp-status {
+  min-height: 1.4em;
+  margin: 8px 0;
+  color: var(--drp-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* Native selects and their BalaySelect replacements share a compact layout. */
+.drp-popup .drp-navigation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  max-width: 320px;
+  margin: 0 auto 10px;
+}
+
+.drp-popup .drp-navigation > select:not(.bd-select-source),
+.drp-popup .drp-navigation .bd-select {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.drp-popup .drp-navigation > select.drp-month,
+.drp-popup .drp-navigation .bd-select:has(> .drp-month) {
+  flex-grow: 1.5;
+}
+
+.drp-popup .drp-navigation .bd-select {
+  width: auto !important;
+}
+
+.drp-popup .drp-navigation > select:not(.bd-select-source),
+.drp-popup .drp-navigation .bd-select .bd-select-toggle {
+  min-height: 36px;
+  border: 1px solid var(--drp-border);
+  border-radius: var(--radius-sm, 0.25rem) !important;
+  background-color: var(--drp-surface);
+  color: var(--drp-heading);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.drp-popup .drp-navigation > select:not(.bd-select-source) {
+  padding: 0.34rem 1.6rem 0.34rem 0.55rem;
+  background-position: right 0.45rem center;
+}
+
+.drp-popup .drp-navigation .bd-select .bd-select-toggle {
+  width: 100%;
+  padding: 0.34rem 0.6rem 0.34rem 0.55rem !important;
+  background-image: none;
+}
+
+.drp-popup .drp-navigation .bd-select-toggle::after {
+  width: 0.36rem;
+  height: 0.36rem;
+  margin-inline-start: 0.4rem;
+}
+
+.drp-popup .drp-navigation .bd-select-label {
+  min-width: 0;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drp-popup .drp-navigation > select:focus-visible,
+.drp-popup .drp-navigation .bd-select .bd-select-toggle:focus-visible {
+  outline: 2px solid var(--drp-focus);
+  outline-offset: 2px;
+}
+
+/* Fixed menus use the dropdown's measured control width, not a viewport
+   percentage. Long month labels wrap instead of widening the popup. */
+.drp-popup .bd-select-menu {
+  min-width: 0 !important;
+  max-width: 100%;
+  max-height: min(320px, calc(100vh - 48px));
+  max-height: min(320px, calc(100dvh - 48px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.3rem;
+  border: 1px solid var(--drp-border);
+  border-radius: var(--radius-sm, 0.25rem);
+  background: var(--drp-surface);
+  box-shadow: none !important;
+}
+
+.drp-popup .bd-select-menu .dropdown-item {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0.34rem 0.5rem;
+  font-size: 0.84rem;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.drp-popup .bd-select-menu .dropdown-item:focus-visible {
+  outline: 2px solid var(--drp-focus);
+  outline-offset: -2px;
+}
+
+.drp-popup .bd-select-menu .dropdown-item.active::after {
+  display: none;
+}
+
+.drp-popup .drp-calendars {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.drp-popup.is-dual .drp-calendars {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.drp-popup .drp-calendar {
+  min-width: 0;
+}
+
+.drp-popup .drp-month-title {
+  margin: 0 0 6px;
+  color: var(--drp-heading);
+  font-family: var(--heading-font, sans-serif);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.drp-popup .drp-grid {
+  width: 100%;
+  min-width: 252px;
+  margin: 0;
+  border: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.drp-popup .drp-grid th {
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--drp-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* The interactive gridcell, not the decorative number, is the 36px target. */
+.drp-popup .drp-grid td:is(.drp-cell, .drp-empty) {
+  height: 36px;
+  padding: 0;
+  border: 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.drp-popup .drp-grid td.drp-cell {
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.drp-popup .drp-grid td.drp-empty {
+  background: transparent;
+}
+
+.drp-popup .drp-grid td.drp-cell:focus {
+  outline: none;
+}
+
+.drp-popup .drp-day {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-sm, 0.25rem);
+  color: var(--drp-text);
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.drp-popup .drp-grid td.drp-cell:not(.is-disabled):not(.is-selected):not(.is-range-start):not(.is-range-end):hover .drp-day {
+  background: color-mix(in srgb, var(--drp-brand) 12%, var(--drp-surface));
+  color: var(--drp-accent-text);
+}
+
+.drp-popup .drp-grid td.drp-cell.is-today .drp-day {
+  border-color: var(--drp-focus);
+  color: var(--drp-accent-text);
+  font-weight: 700;
+}
+
+/* Bands live on cells so consecutive days meet without gaps across a row.
+   Half-cell bands terminate at the centers of the round endpoint markers. */
+.drp-popup .drp-grid td.drp-cell.is-in-range {
+  background: var(--drp-range-bg);
+}
+
+.drp-popup .drp-grid td.drp-cell.is-range-start.is-in-range {
+  background: linear-gradient(to right, transparent 50%, var(--drp-range-bg) 50%);
+}
+
+.drp-popup .drp-grid td.drp-cell.is-range-end {
+  background: linear-gradient(to right, var(--drp-range-bg) 50%, transparent 50%);
+}
+
+.drp-popup .drp-grid td.drp-cell.is-range-start.is-range-end {
+  background: transparent;
+}
+
+/* Provisional dates are lighter and dashed, never solid committed markers. */
+.drp-popup .drp-grid td.drp-cell:is(.is-preview, .is-preview-start, .is-preview-end):not(.is-disabled) {
+  background: var(--drp-preview-bg);
+  outline: 1px dashed var(--drp-preview-border);
+  outline-offset: -1px;
+}
+
+.drp-popup .drp-grid td.drp-cell.is-preview-start:not(.is-disabled) {
+  background: linear-gradient(to right, transparent 50%, var(--drp-preview-bg) 50%);
+}
+
+.drp-popup .drp-grid td.drp-cell.is-preview-end:not(.is-disabled) {
+  background: linear-gradient(to right, var(--drp-preview-bg) 50%, transparent 50%);
+}
+
+.drp-popup .drp-grid td.drp-cell.is-preview-start.is-preview-end:not(.is-disabled) {
+  background: transparent;
+}
+
+.drp-popup .drp-grid td.drp-cell:is(.is-preview-start, .is-preview-end):not(.is-selected):not(.is-range-start):not(.is-range-end) .drp-day {
+  border-color: var(--drp-preview-border);
+  border-style: dashed;
+  border-radius: 50%;
+  background: var(--drp-preview-bg);
+  color: var(--drp-accent-text);
+  font-weight: 700;
+}
+
+.drp-popup .drp-grid td.drp-cell:is(.is-selected, .is-range-start, .is-range-end) .drp-day {
+  border-color: var(--drp-brand);
+  border-radius: 50%;
+  background: var(--drp-brand);
+  color: var(--drp-contrast);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.drp-popup .drp-grid td.drp-cell.is-today:is(.is-selected, .is-range-start, .is-range-end) .drp-day {
+  border-color: var(--drp-contrast);
+}
+
+.drp-popup .drp-grid td.drp-cell.is-disabled {
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.drp-popup .drp-grid td.drp-cell.is-disabled .drp-day {
+  background: transparent;
+  color: var(--drp-muted);
+  font-weight: 400;
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+.drp-popup .drp-grid td.drp-cell:focus .drp-day {
+  outline: 2px solid var(--drp-focus);
+  outline-offset: 1px;
+}
+
+.drp-popup .drp-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color-light, var(--drp-border));
+}
+
+.drp-popup .drp-selection-count {
+  min-width: 0;
+  color: var(--drp-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.drp-popup .drp-instructions {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Protect native hidden semantics from all flex/grid/display declarations. */
+.drp-popup [hidden],
+.drp-popup[hidden] {
+  display: none !important;
+}
+
+/* During a resize, retain both JS-selected panels without shrinking targets. */
+@media (max-width: 599.98px) {
+  .drp-popup.is-dual .drp-calendars {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drp-wrap > .drp-icon,
+  .drp-popup :is(.drp-control, .drp-endpoint, .drp-day, .bd-select-toggle),
+  .drp-popup .bd-select-toggle::after {
+    transition: none;
+  }
+}

@@ -1,4 +1,7 @@
 <?= $this->extend('layouts/app') ?>
+<?= $this->section('styles') ?>
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/guidance-surveys.css'), 'attr') ?>">
+<?= $this->endSection() ?>
 
 <?= $this->section('page_actions') ?>
 <div class="d-flex gap-2">
@@ -21,139 +24,74 @@ $analytics = $analytics ?? [
 $overallRating = $analytics['overall_avg_rating'] ?? null;
 $refreshOwner = 'survey-responses.' . (int) $survey['id'];
 ?>
-<section class="guidance-ui" data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
-
-<!-- Survey Title & Status Header -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body p-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-      <div>
-        <div class="d-flex align-items-center gap-2 mb-1">
-          <span class="badge bg-secondary text-uppercase"><?= esc($survey['status'] ?? 'published') ?></span>
-          <span class="badge bg-light text-dark border text-uppercase">Audience: <?= esc($survey['audience'] ?? 'all') ?></span>
-        </div>
-        <h4 class="fw-bold mb-1 text-dark"><?= esc($survey['title']) ?></h4>
-        <?php if (!empty($survey['description'])): ?>
-          <p class="text-muted small mb-0"><?= esc($survey['description']) ?></p>
-        <?php endif; ?>
-        <?php if (!empty($survey['external_url'])): ?>
-          <div class="mt-2">
-            <a href="<?= esc((string) $survey['external_url'], 'attr') ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm">
-              <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open External Survey Link
-            </a>
-          </div>
-        <?php endif; ?>
-      </div>
-      <div class="text-sm-end">
-        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
-          <i class="bi bi-people-fill me-1"></i> <?= number_format($total) ?> Responses
-        </span>
-      </div>
+<section class="guidance-ui gs-workspace gs-analytics" data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<div class="gs-sheet">
+  <header class="gs-band gs-overview-head">
+    <div class="gs-overview-meta">
+      <span class="gs-status is-<?= esc($survey['status'] ?? 'published', 'attr') ?>"><?= esc(ucfirst($survey['status'] ?? 'published')) ?></span>
+      <span class="gs-meta">Audience: <?= esc($survey['audience'] ?? 'all') ?></span>
+      <span class="gs-count"><?= number_format($total) ?> Responses</span>
     </div>
-  </div>
-</div>
+    <h2 class="gs-intro-title"><?= esc($survey['title']) ?></h2>
+    <?php if (!empty($survey['description'])): ?><p class="gs-intro-desc"><?= esc($survey['description']) ?></p><?php endif; ?>
+    <?php if (!empty($survey['external_url'])): ?>
+      <a href="<?= esc((string) $survey['external_url'], 'attr') ?>" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm gs-external-action"><i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open External Survey Link</a>
+    <?php endif; ?>
+    <p class="gs-overview-note">Identified responses, not anonymous feedback. Response access and downloads are audited.</p>
+  </header>
 
 <?php if ($canExportResponses ?? false): ?>
-<div class="card border-0 shadow-sm mb-4"><div class="card-body p-4">
-  <h2 class="h6">Export identified survey responses</h2>
-  <p class="small">This is not anonymous analytics: the CSV contains respondent names and plaintext answers. Store it securely and share only with authorized recipients. Downloads are audited; the server does not retain the CSV. Maximum 500 responses and 31 calendar days, inclusive; larger exports are rejected, not truncated.</p>
-  <form method="post" action="<?= esc(site_url('guidance/surveys/' . $survey['id'] . '/responses/export')) ?>" class="row g-3" data-report-download>
+<section class="gs-band gs-export-section" aria-labelledby="surveyExportHeading">
+  <h2 class="gs-results-title" id="surveyExportHeading">Export identified survey responses</h2>
+  <p class="gs-export-note">This is not anonymous analytics: the CSV contains respondent names and plaintext answers. Store it securely and share only with authorized recipients. Downloads are audited; the server does not retain the CSV. Maximum 500 responses and 31 calendar days, inclusive; larger exports are rejected, not truncated.</p>
+  <form method="post" action="<?= esc(site_url('guidance/surveys/' . $survey['id'] . '/responses/export'), 'attr') ?>" class="gs-export-form" data-report-download>
     <?= csrf_field() ?>
-    <div class="col-sm-8">
+    <div class="gs-field gs-export-range">
       <label class="form-label" for="response-export-range">Date range</label>
-      <input id="response-export-range" class="form-control" type="text" data-datepicker data-target="#response-export-from" data-range-end="#response-export-to" data-max-days="31" autocomplete="off" placeholder="DD/MM/YYYY – DD/MM/YYYY" aria-describedby="response-export-date-help" required>
+      <input id="response-export-range" class="form-control" type="text" data-daterangepicker data-target="#response-export-from" data-range-end="#response-export-to" data-max-days="31" autocomplete="off" placeholder="DD/MM/YYYY – DD/MM/YYYY" aria-describedby="response-export-date-help" required>
       <input id="response-export-from" type="hidden" name="from" value="">
       <input id="response-export-to" type="hidden" name="to" value="">
+      <p id="response-export-date-help" class="gs-field-note">Dates use Philippine time (Asia/Manila). Both selected dates are included.</p>
     </div>
-    <div class="col-12"><p id="response-export-date-help" class="form-text mb-0">Dates use Philippine time (Asia/Manila). Both selected dates are included.</p></div>
-    <div class="col-12"><label class="d-flex align-items-start gap-2 small mb-0"><input class="form-check-input mt-1 flex-shrink-0" type="checkbox" name="confirm_identified" value="1" required> <span>I understand this download contains identified survey answers.</span></label></div>
-    <div class="col-12"><button type="submit" class="btn btn-outline-primary btn-sm">Download identified response CSV</button></div>
+    <label class="gs-export-consent"><input class="form-check-input" type="checkbox" name="confirm_identified" value="1" required><span>I understand this download contains identified survey answers.</span></label>
+    <div><button type="submit" class="btn btn-outline-primary btn-sm">Download identified response CSV</button></div>
   </form>
-</div></div>
+</section>
 <?php else: ?>
-<p class="small text-muted">Identified CSV downloads additionally require reports.export and Guidance administrator or supervisor access. Viewing responses does not grant export access.</p>
+<p class="gs-band gs-export-note gs-export-section">Identified CSV downloads additionally require reports.export and Guidance administrator or supervisor access. Viewing responses does not grant export access.</p>
 <?php endif; ?>
 
-<!-- NiceAdmin v3 KPI Cards Rail -->
-<section class="row g-3 mb-4 nd-kpi-rail">
-  <div class="col-xxl-3 col-md-6">
-    <article class="nd-kpi-card nd-kpi-leads">
-      <span class="nd-kpi-icon"><i class="bi bi-people"></i></span>
-      <span class="nd-kpi-label">Submissions</span>
-      <strong class="nd-kpi-value"><?= number_format($total) ?></strong>
-      <span class="nd-kpi-trend up">
-        <i class="bi bi-check2-circle"></i> Identified responses
-      </span>
-    </article>
-  </div>
-
-  <div class="col-xxl-3 col-md-6">
-    <article class="nd-kpi-card nd-kpi-cycle">
-      <span class="nd-kpi-icon"><i class="bi bi-star"></i></span>
-      <span class="nd-kpi-label">Average Satisfaction</span>
-      <strong class="nd-kpi-value">
-        <?= $overallRating !== null ? esc(number_format((float) $overallRating, 1)) . ' <small class="text-muted fw-normal fs-6">/ 5.0</small>' : '—' ?>
-      </strong>
-      <span class="nd-kpi-trend <?= $overallRating !== null && $overallRating >= 3.5 ? 'up' : '' ?>">
-        <?php if ($overallRating !== null): ?>
-          <i class="bi bi-arrow-up-right"></i> <?= str_repeat('★', (int) round((float) $overallRating)) . str_repeat('☆', 5 - (int) round((float) $overallRating)) ?> rating
-        <?php else: ?>
-          No rating questions
-        <?php endif; ?>
-      </span>
-    </article>
-  </div>
-
-  <div class="col-xxl-3 col-md-6">
-    <article class="nd-kpi-card nd-kpi-retention">
-      <span class="nd-kpi-icon"><i class="bi bi-shield-check"></i></span>
-      <span class="nd-kpi-label">Survey Instrument</span>
-      <?php if (!empty($survey['external_url'])): ?>
-        <strong class="nd-kpi-value">External Link</strong>
-        <span class="nd-kpi-trend up">
-          <i class="bi bi-box-arrow-up-right"></i> Hosted form URL
-        </span>
-      <?php else: ?>
-        <strong class="nd-kpi-value"><?= count($questions) ?> Questions</strong>
-        <span class="nd-kpi-trend up">
-          <i class="bi bi-lock-fill"></i> AES-256-GCM encrypted
-        </span>
-      <?php endif; ?>
-    </article>
-  </div>
-
-  <div class="col-xxl-3 col-md-6">
-    <article class="nd-kpi-card nd-kpi-revenue">
-      <span class="nd-kpi-icon"><i class="bi bi-broadcast"></i></span>
-      <span class="nd-kpi-label">Availability & Window</span>
-      <strong class="nd-kpi-value"><?= esc(ucfirst($survey['status'] ?? 'published')) ?></strong>
-      <span class="nd-kpi-trend <?= ($survey['status'] ?? '') === 'published' ? 'up' : 'down' ?>">
-        <i class="bi bi-person-check"></i> Audience: <?= esc(ucfirst($survey['audience'] ?? 'All')) ?>
-      </span>
-    </article>
-  </div>
+<section class="gs-metrics" aria-label="Survey response summary">
+  <article class="gs-metric nd-kpi-card">
+    <span class="gs-metric-label">Submissions</span>
+    <strong class="gs-metric-value nd-kpi-value"><?= number_format($total) ?></strong>
+    <span class="gs-metric-note">Identified responses</span>
+  </article>
+  <article class="gs-metric">
+    <span class="gs-metric-label">Average Satisfaction</span>
+    <strong class="gs-metric-value"><?= $overallRating !== null ? esc(number_format((float) $overallRating, 1)) . ' <small>/ 5.0</small>' : '—' ?></strong>
+    <span class="gs-metric-note"><?= $overallRating !== null ? esc(str_repeat('★', (int) round((float) $overallRating)) . str_repeat('☆', 5 - (int) round((float) $overallRating))) . ' rating' : 'No rating questions' ?></span>
+  </article>
+  <article class="gs-metric">
+    <span class="gs-metric-label">Survey Instrument</span>
+    <strong class="gs-metric-value"><?= !empty($survey['external_url']) ? 'External Link' : count($questions) . ' Questions' ?></strong>
+    <span class="gs-metric-note"><?= !empty($survey['external_url']) ? 'Hosted form URL' : 'AES-256-GCM encrypted' ?></span>
+  </article>
+  <article class="gs-metric">
+    <span class="gs-metric-label">Availability &amp; Window</span>
+    <strong class="gs-metric-value"><?= esc(ucfirst($survey['status'] ?? 'published')) ?></strong>
+    <span class="gs-metric-note">Audience: <?= esc(ucfirst($survey['audience'] ?? 'All')) ?></span>
+  </article>
 </section>
 
-<!-- Tabs: Visual Analytics vs Individual Submissions -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-transparent border-bottom p-0">
-    <ul class="nav nav-tabs nav-tabs-bordered" role="tablist">
-      <li class="nav-item">
-        <button class="nav-link active py-3 px-4 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-visualizations" type="button" role="tab">
-          <i class="bi bi-bar-chart-line-fill me-1"></i> Visual Analytics & Charts
-        </button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link py-3 px-4 fw-semibold" data-bs-toggle="tab" data-bs-target="#tab-submissions" type="button" role="tab">
-          <i class="bi bi-person-lines-fill me-1"></i> Individual Submissions (<?= number_format($total) ?>)
-        </button>
-      </li>
-    </ul>
-  </div>
-
-  <div class="card-body p-4 tab-content">
+<div class="gs-tabs-section">
+  <ul class="nav nav-tabs gs-tabs" role="tablist">
+    <li class="nav-item"><button id="survey-visual-tab" class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-visualizations" type="button" role="tab" aria-controls="tab-visualizations" aria-selected="true"><i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>Visual Analytics &amp; Charts</button></li>
+    <li class="nav-item"><button id="survey-submissions-tab" class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-submissions" type="button" role="tab" aria-controls="tab-submissions" aria-selected="false"><i class="bi bi-person-lines-fill me-1" aria-hidden="true"></i>Individual Submissions (<?= number_format($total) ?>)</button></li>
+  </ul>
+  <div class="tab-content gs-tab-content">
     <!-- TAB 1: VISUAL ANALYTICS -->
-    <div class="tab-pane fade show active" id="tab-visualizations" role="tabpanel">
+    <div class="tab-pane fade show active" id="tab-visualizations" role="tabpanel" aria-labelledby="survey-visual-tab">
       <?php if ($total === 0): ?>
         <div class="text-center py-5 text-muted">
           <i class="bi bi-pie-chart fs-1 d-block mb-2 opacity-50"></i>
@@ -164,14 +102,14 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
 
         <!-- Daily Submission Activity -->
         <?php if (!empty($analytics['daily_trend'])): ?>
-          <div class="card bg-light border-0 p-3 mb-4">
-            <h6 class="fw-bold mb-2 text-dark"><i class="bi bi-graph-up text-primary me-1"></i> Submission Activity Velocity</h6>
-            <div class="d-flex flex-wrap gap-2 pt-1">
+          <div class="gs-trend-section">
+            <h3 class="gs-results-title">Submission Activity Velocity</h3>
+            <div class="gs-trend-list">
               <?php foreach ($analytics['daily_trend'] as $date => $cnt): ?>
-                <div class="p-2 bg-white border rounded text-center flex-grow-1 flex-sm-grow-0" style="min-width: 85px;">
-                  <div class="small fw-semibold text-muted" style="font-size: 0.72rem;"><?= esc($date) ?></div>
-                  <div class="fw-bold fs-6 text-primary"><?= number_format($cnt) ?></div>
-                  <small class="text-muted" style="font-size: 0.65rem;">submission<?= $cnt === 1 ? '' : 's' ?></small>
+                <div class="gs-trend-item">
+                  <span class="gs-trend-date"><?= esc($date) ?></span>
+                  <strong><?= number_format($cnt) ?></strong>
+                  <small>submission<?= $cnt === 1 ? '' : 's' ?></small>
                 </div>
               <?php endforeach; ?>
             </div>
@@ -190,8 +128,8 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
           <div class="survey-q-card">
             <div class="survey-q-header">
               <div>
-                <span class="badge bg-secondary me-2">Q<?= $qIdx + 1 ?></span>
-                <strong class="text-dark"><?= esc($qStat['label']) ?></strong>
+                <span class="gs-question-number">Q<?= $qIdx + 1 ?></span>
+                <strong class="gs-question-label"><?= esc($qStat['label']) ?></strong>
               </div>
               <div>
                 <span class="badge bg-light text-dark border text-capitalize">
@@ -234,13 +172,12 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
                       <?php 
                         $cnt = (int) ($qStat['counts'][$star] ?? 0);
                         $pct = $qStat['total_answers'] > 0 ? round(($cnt / $qStat['total_answers']) * 100, 1) : 0;
-                        $anchorSuffix = ($star === 1 && $minAnchor !== '') ? (' · ' . $minAnchor) : (($star === 5 && $maxAnchor !== '') ? (' · ' . $maxAnchor) : '');
                       ?>
                       <div class="survey-bar-row">
                         <div class="survey-bar-label">
-                          <?= $star ?> Star<?= $star === 1 ? '' : 's' ?>
-                          <span class="text-warning">★</span>
-                          <?php if ($anchorSuffix !== ''): ?><small class="text-muted d-block"><?= esc(ltrim($anchorSuffix, ' ·')) ?></small><?php endif; ?>
+                          <?php if ($star === 5 && $maxAnchor !== ''): ?><small class="text-muted d-block"><?= esc($maxAnchor) ?></small><?php endif; ?>
+                          <span class="gs-rating-stars d-block"><?= $star ?> Star<?= $star === 1 ? '' : 's' ?> <span class="text-warning">★</span></span>
+                          <?php if ($star === 1 && $minAnchor !== ''): ?><small class="text-muted d-block"><?= esc($minAnchor) ?></small><?php endif; ?>
                         </div>
                         <div class="survey-bar-track">
                           <div class="survey-bar-fill bar-rating-<?= $star ?>" style="width: <?= max(5, $pct) ?>%;">
@@ -324,69 +261,43 @@ $refreshOwner = 'survey-responses.' . (int) $survey['id'];
     </div>
 
     <!-- TAB 2: INDIVIDUAL SUBMISSIONS -->
-    <div class="tab-pane fade" id="tab-submissions" role="tabpanel">
+    <div class="tab-pane fade" id="tab-submissions" role="tabpanel" aria-labelledby="survey-submissions-tab">
       <div data-refresh-region="submissions">
-      <!-- Preserves required identified submissions notice for automated audit & feature tests -->
-      <div class="alert alert-info small mb-3">
-        <strong><?= number_format($pagination['total']) ?> identified submissions.</strong> This is a completion count, not anonymous participation data. Response access is audited.
-      </div>
-
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-          <caption class="visually-hidden">Identified survey submission list</caption>
-          <thead class="table-light small text-muted text-uppercase">
-            <tr>
-              <th scope="col" class="ps-3">Respondent</th>
-              <th scope="col">Submitted (UTC)</th>
-              <th scope="col">Interview Status</th>
-              <th scope="col" class="text-end pe-3">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php if ($items === []): ?>
-              <tr>
-                <td colspan="4" class="text-center text-muted py-5">
-                  <i class="bi bi-inbox fs-1 d-block mb-2 opacity-50"></i>
-                  No responses recorded yet.
-                </td>
-              </tr>
-            <?php else: ?>
-              <?php foreach ($items as $response): ?>
-                <tr>
-                  <td class="ps-3 fw-semibold text-dark">
-                    <?= esc(trim($response['first_name'] . ' ' . $response['last_name'])) ?>
-                  </td>
-                  <td class="text-muted small">
-                    <?= esc($response['submitted_at']) ?>
-                  </td>
-                  <td class="small">
-                    <?php if (!empty($response['interviewed_by_user_id'])): ?>
-                      <span class="badge bg-success-subtle text-success border border-success-subtle">
-                        Interviewed by <?= esc((string) ($response['interviewer_name'] ?? 'Staff')) ?>
-                        · <?= esc(date('M j, Y', strtotime((string) $response['interviewed_at']))) ?>
-                      </span>
-                    <?php else: ?>
-                      <span class="badge bg-light text-secondary border">Pending Interview</span>
-                    <?php endif; ?>
-                  </td>
-                  <td class="text-md-end pe-md-3">
-                    <a href="<?= esc(site_url('guidance/surveys/' . $survey['id'] . '/responses/' . $response['id'])) ?>" class="btn btn-outline-primary btn-sm">
-                      <i class="bi bi-eye me-1"></i> Read response
-                    </a>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-            <?php endif; ?>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="mt-3">
-        <?= $this->include('partials/table_pagination') ?>
-      </div>
+        <div class="gs-submissions-notice" role="note">
+          <strong><?= number_format($pagination['total']) ?> identified submissions.</strong> This is a completion count, not anonymous participation data. Response access is audited.
+        </div>
+        <div class="gs-table-wrap">
+          <table class="gs-table gs-submission-table" role="table">
+            <caption class="visually-hidden">Identified survey submission list</caption>
+            <thead role="rowgroup"><tr role="row"><th scope="col">Respondent</th><th scope="col">Submitted (UTC)</th><th scope="col">Interview Status</th><th scope="col">Action</th></tr></thead>
+            <tbody role="rowgroup">
+              <?php if ($items === []): ?>
+                <tr role="row"><td colspan="4" class="gs-empty-cell" role="cell"><i class="bi bi-inbox" aria-hidden="true"></i>No responses recorded yet.</td></tr>
+              <?php else: ?>
+                <?php foreach ($items as $response): ?>
+                  <tr role="row" data-submission-row>
+                    <td class="gs-respondent-cell" role="cell"><span class="gs-cell-label" aria-hidden="true">Respondent</span><strong><?= esc(trim($response['first_name'] . ' ' . $response['last_name'])) ?></strong></td>
+                    <td class="gs-submitted-cell" role="cell"><span class="gs-cell-label" aria-hidden="true">Submitted (UTC)</span><span class="gs-timestamp"><?= esc($response['submitted_at']) ?></span></td>
+                    <td class="gs-interview-cell" role="cell">
+                      <span class="gs-cell-label" aria-hidden="true">Interview Status</span>
+                      <?php if (!empty($response['interviewed_by_user_id'])): ?>
+                        <span class="gs-status is-completed">Interviewed by <?= esc((string) ($response['interviewer_name'] ?? 'Staff')) ?> · <?= esc(date('M j, Y', strtotime((string) $response['interviewed_at']))) ?></span>
+                      <?php else: ?>
+                        <span class="gs-status is-pending">Pending Interview</span>
+                      <?php endif; ?>
+                    </td>
+                    <td class="gs-submission-action" role="cell"><a href="<?= esc(site_url('guidance/surveys/' . $survey['id'] . '/responses/' . $response['id']), 'attr') ?>" class="btn btn-outline-primary btn-sm"><i class="bi bi-eye me-1" aria-hidden="true"></i>Read response</a></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
+        </div>
+        <div class="gs-pagination-band"><?= $this->include('partials/table_pagination') ?></div>
       </div>
     </div>
   </div>
+</div>
 </div>
 </section>
 <?= $this->endSection() ?>

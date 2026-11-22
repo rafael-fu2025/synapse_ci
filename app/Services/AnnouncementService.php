@@ -37,11 +37,57 @@ final class AnnouncementService
         return $actor;
     }
 
-    public function listing(string $unit, mixed $page = 1): array
+    public function listing(string $unit, mixed $page = 1, array $query = []): array
     {
         $actor = $this->manager($unit);
-        return $this->paginate($this->db->table('announcements')->select('id,unit,title,body,audience,target_year_levels,target_student_categories,status,is_pinned_advisory,starts_at,ends_at,published_at,version')
-            ->where('tenant_id', $actor['tenant_id'])->where('unit', $unit), $page);
+        $rawQ = is_string($query['q'] ?? null) ? trim(preg_replace('/[\x00-\x1F\x7F]+/', ' ', $query['q']) ?? '') : '';
+        $status = is_string($query['status'] ?? null) ? trim($query['status']) : 'all';
+        $audience = is_string($query['audience'] ?? null) ? trim($query['audience']) : '';
+        $pinned = is_string($query['pinned'] ?? null) ? trim($query['pinned']) : '';
+        $filters = [
+            'q'        => mb_substr($rawQ, 0, 120),
+            'status'   => in_array($status, ['all', 'draft', 'published', 'archived'], true) ? $status : 'all',
+            'audience' => in_array($audience, ['', 'all', 'students', 'employees'], true) ? $audience : '',
+            'pinned'   => $pinned === '1' ? '1' : '',
+        ];
+
+        $base = $this->db->table('announcements')
+            ->select('id,unit,title,body,audience,target_year_levels,target_student_categories,status,is_pinned_advisory,starts_at,ends_at,published_at,version')
+            ->where('tenant_id', $actor['tenant_id'])
+            ->where('unit', $unit);
+        $totalUnfiltered = (clone $base)->countAllResults();
+
+        if ($filters['q'] !== '') {
+            LikePattern::applyGroup($base, ['title', 'body'], $filters['q']);
+        }
+        if ($filters['audience'] !== '') {
+            $base->where('audience', $filters['audience']);
+        }
+        if ($filters['pinned'] === '1') {
+            $base->where('is_pinned_advisory', 1);
+        }
+
+        $counts = ['all' => 0, 'draft' => 0, 'published' => 0, 'archived' => 0];
+        $statusRows = (clone $base)->select('status, COUNT(*) AS cnt', false)->groupBy('status')->get()->getResultArray();
+        foreach ($statusRows as $sr) {
+            $st = (string) ($sr['status'] ?? '');
+            $cnt = (int) ($sr['cnt'] ?? 0);
+            $counts['all'] += $cnt;
+            if (isset($counts[$st])) {
+                $counts[$st] = $cnt;
+            }
+        }
+
+        if ($filters['status'] !== 'all') {
+            $base->where('status', $filters['status']);
+        }
+
+        $result = $this->paginate($base, $page);
+        $result['pagination']['filtered'] = $result['pagination']['total'];
+        $result['pagination']['total'] = $totalUnfiltered;
+        $result['filters'] = $filters;
+        $result['counts'] = $counts;
+        return $result;
     }
 
     /** Active pinned advisories (e.g. Clinic physician schedule / medical exam notices) for the portal top banner. */

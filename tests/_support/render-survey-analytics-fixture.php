@@ -74,5 +74,5 @@ echo view('surveys/responses', [
     'items' => $items,
     'pagination' => ['page' => 1, 'per_page' => 25, 'filtered' => $total, 'total' => $total, 'pages' => 1],
     'baseUrl' => site_url($path),
-    'canExportResponses' => false,
+    'canExportResponses' => ($fixture['exportEnabled'] ?? false) === true,
 ]);

@@ -307,6 +307,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->group('', ['filter' => 'portal_access:guidance'], static function (RouteCollection $routes): void {
         $routes->get('guidance', 'GuidanceController::dashboard');
         $routes->get('guidance/dashboard', 'GuidanceController::dashboard');
+        $routes->get('guidance/dashboard/session-series', 'GuidanceController::sessionSeries');
         $routes->get('guidance/cases', 'GuidanceController::cases');
         $routes->get('guidance/clients', 'GuidanceController::clients');
         $routes->get('guidance/clients/(:num)', 'GuidanceController::cumulativeRecord/$1');
@@ -466,6 +467,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->group('', ['filter' => 'portal_access:clinic'], static function (RouteCollection $routes): void {
         $routes->get('clinic', 'ClinicController::dashboard');
         $routes->get('clinic/dashboard', 'ClinicController::dashboard');
+        $routes->get('clinic/dashboard/intake-series', 'ClinicController::intakeSeries');
         $routes->get('clinic/encounters', 'ClinicController::encounters');
         $routes->get('clinic/encounters/(:num)', 'ClinicController::encounter/$1');
         $routes->post('clinic/encounters/(:num)/vitals', 'ClinicController::saveVitals/$1');
@@ -511,6 +513,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
 
         $routes->get('clinic/reports', 'ClinicController::summaryReport');
         $routes->get('clinic/reports/pdf', 'ClinicController::summaryReportPdf');
+        $routes->post('clinic/reports/pdf', 'ClinicController::summaryReportPdf');
 
         $routes->get('clinic/queue', 'QueueController::index/clinic');
         $routes->get('clinic/queue/board', 'QueueController::board/clinic');

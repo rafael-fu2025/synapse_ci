@@ -9,38 +9,40 @@
     <!-- 1. Client Selection (Student or Employee) -->
     <div class="mb-4">
       <label class="form-label fw-semibold">1. Client Identification (Student or Employee)</label>
-      <div class="input-group mb-2" x-show="!selectedPerson">
-        <span class="input-group-text bg-light"><i class="bi bi-search"></i></span>
-        <input type="text"
-               class="form-control"
-               placeholder="Search Student or Employee ID / Name..." maxlength="150" autocomplete="off"
-               x-model="searchTerm"
-               @input="patientInput()" @input.debounce.300ms="searchPatient()">
-      </div>
+      <div class="syn-person-lookup" data-person-lookup x-show="!selectedPerson">
+        <div class="input-group" data-person-lookup-anchor>
+          <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
+          <input type="text"
+                 class="form-control"
+                 placeholder="Search Student or Employee ID / Name..." maxlength="150" autocomplete="off"
+                 x-model="searchTerm"
+                 @input="patientInput()" @input.debounce.300ms="searchPatient()">
+        </div>
 
-      <!-- Dropdown search results -->
-      <div role="status" aria-live="polite" class="small text-muted mb-2" x-show="!selectedPerson" x-cloak>
-        <span x-show="searching">Searching local directory...</span>
-        <span x-show="searchComplete && !searching && !searchError && results.length === 0">No matching local records.</span>
-        <span x-show="searchError" class="text-danger"><span x-text="searchError"></span> <button type="button" class="btn btn-link btn-sm p-0" @click="searchPatient()">Retry</button></span>
-      </div>
-      <div x-show="results.length > 0 && !selectedPerson" class="list-group mb-2 shadow-sm border" style="max-height: 180px; overflow-y: auto;">
-        <template x-for="p in results" :key="p.id">
-          <button type="button"
-                  class="list-group-item list-group-item-action p-2 d-flex flex-wrap justify-content-between align-items-center gap-2"
-                  @click="selectPerson(p)">
-            <div>
-              <div class="fw-semibold" x-text="p.last_name + ', ' + p.first_name + (p.middle_name ? ' ' + p.middle_name : '')"></div>
-              <small class="text-muted">
-                <span class="badge me-1"
-                      :class="p.kind === 'employee' ? 'bg-info-subtle text-info border border-info-subtle' : 'bg-primary-subtle text-primary border border-primary-subtle'"
-                      x-text="p.kind.toUpperCase()"></span>
-                <span x-text="'ID: ' + p.mis_id"></span>
-              </small>
-            </div>
-            <span class="badge bg-primary">Select</span>
-          </button>
-        </template>
+        <!-- Floating search results popover -->
+        <div class="syn-person-lookup-menu"
+             data-person-lookup-menu
+             x-show="searching || searchError || (searchComplete && !searching && results.length === 0) || results.length > 0"
+             style="display:none;">
+          <div role="status" aria-live="polite" class="syn-person-lookup-status" x-show="searching || searchError || (searchComplete && !searching && !searchError && results.length === 0)" x-cloak>
+            <span x-show="searching">Searching local directory...</span>
+            <span x-show="searchComplete && !searching && !searchError && results.length === 0">No matching local records.</span>
+            <span x-show="searchError" class="text-danger"><span x-text="searchError"></span> <button type="button" class="btn btn-link btn-sm p-0" @click="searchPatient()">Retry</button></span>
+          </div>
+          <div x-show="results.length > 0" class="list-group syn-person-lookup-list">
+            <template x-for="p in results" :key="p.id">
+              <button type="button"
+                      class="list-group-item list-group-item-action p-2 d-flex flex-wrap justify-content-between align-items-center gap-2"
+                      @click="selectPerson(p)">
+                <div>
+                  <div class="fw-semibold" x-text="p.last_name + ', ' + p.first_name + (p.middle_name ? ' ' + p.middle_name : '')"></div>
+                  <small class="text-muted" x-text="(p.kind ? p.kind.toUpperCase() + ' · ' : '') + 'ID: ' + p.mis_id"></small>
+                </div>
+                <span class="syn-person-lookup-select">Select</span>
+              </button>
+            </template>
+          </div>
+        </div>
       </div>
 
       <!-- Selected client card -->

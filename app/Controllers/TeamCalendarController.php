@@ -149,7 +149,9 @@ final class TeamCalendarController extends BaseController
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
             $owner = 'teams.calendar.' . $unit;
             if (config(\Config\RefreshRegions::class)->enables($owner)) {
-                $payload['refresh'] = $this->refreshRegions($owner, ['notice', 'summary', 'results']);
+                $payload['refresh'] = $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === $owner
+                    ? $this->refreshRegions($owner, ['notice', 'summary', 'results'])
+                    : $this->refreshNavigation($redirect);
             }
             return $this->response->setJSON($payload);
         }

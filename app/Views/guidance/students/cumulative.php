@@ -45,80 +45,114 @@ if (!empty($person['date_of_birth'])) {
         $age = null;
     }
 }
+$initials = strtoupper(substr((string) ($person['first_name'] ?? ''), 0, 1) . substr((string) ($person['last_name'] ?? ''), 0, 1));
+if ($initials === '') {
+    $initials = 'GC';
+}
+$affiliationText = !empty($studentProfile)
+    ? trim((string) ($studentProfile['program'] ?? 'Program not on file')
+        . (!empty($studentProfile['year_level']) ? ' (Year ' . (int) $studentProfile['year_level'] . ')' : '')
+        . (!empty($studentProfile['section']) ? ' · Sec ' . (string) $studentProfile['section'] : ''))
+    : (!empty($employeeProfile)
+        ? trim((string) ($employeeProfile['department'] ?? 'Department not on file')
+            . (!empty($employeeProfile['position']) ? ' · ' . (string) $employeeProfile['position'] : ''))
+        : 'University Member');
 ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2 gc-page-links">
-  <a href="<?= esc(site_url('/guidance/clients')) ?>" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i> Clients &amp; Records
+<div class="d-flex flex-wrap gap-2 cp-page-actions gc-page-links">
+  <a href="<?= esc(site_url('/guidance/clients')) ?>" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left" aria-hidden="true"></i>Clients &amp; Records
   </a>
-  <a href="<?= esc(site_url('/guidance/cases')) ?>" class="btn btn-outline-primary btn-sm">
-    <i class="bi bi-folder2-open me-1" aria-hidden="true"></i> Counseling Cases
+  <a href="<?= esc(site_url('/guidance/cases')) ?>" class="btn btn-outline-primary">
+    <i class="bi bi-folder2-open" aria-hidden="true"></i>Counseling Cases
   </a>
 </div>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="guidance-ui guidance-client-record" data-guidance-client-record data-endpoint="<?= esc($recordBaseUrl) ?>" data-refresh-owner="guidance.client.<?= (int) $person['id'] ?>">
-  <div class="alert alert-light border small d-flex align-items-start gap-2 mb-3">
-    <i class="bi bi-shield-lock text-primary mt-1" aria-hidden="true"></i>
-    <div><strong>Confidential Guidance Record</strong> — Read-only cumulative history. Only permitted records are shown; clinical notes, safety plans, and form contents stay in their authorized workspaces. This access is logged. Clinic medical records and anonymous service evaluations are not included.</div>
+<section class="guidance-ui guidance-client-record cp-chart" data-guidance-client-record data-endpoint="<?= esc($recordBaseUrl) ?>" data-refresh-owner="guidance.client.<?= (int) $person['id'] ?>">
+  <div class="cp-notice" role="note">
+    <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>
+    <strong>Confidential Guidance Record</strong> — Read-only cumulative history. Only permitted records are shown; clinical notes, safety plans, and form contents stay in their authorized workspaces. This access is logged. Clinic medical records and anonymous service evaluations are not included.
   </div>
 
-  <div class="card border-0 shadow-sm mb-3" data-refresh-region="profile">
-    <div class="card-body p-4">
-      <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-        <div class="min-width-0">
-          <div class="small text-muted mb-1">Guidance client</div>
-          <h2 class="h4 fw-bold mb-2"><?= esc($fullName) ?></h2>
-          <div class="small text-muted">
-            MIS ID: <strong class="text-body"><?= esc((string) ($person['mis_id'] ?? 'Not on file')) ?></strong>
-            <?php if (!empty($studentProfile)): ?>
-              · <?= esc((string) ($studentProfile['program'] ?? 'Program not on file')) ?>
-              <?= !empty($studentProfile['year_level']) ? ' · Year ' . (int) $studentProfile['year_level'] : '' ?>
-              <?= !empty($studentProfile['section']) ? ' · ' . esc((string) $studentProfile['section']) : '' ?>
-            <?php elseif (!empty($employeeProfile)): ?>
-              · <?= esc((string) ($employeeProfile['department'] ?? 'Department not on file')) ?>
-              <?= !empty($employeeProfile['position']) ? ' · ' . esc((string) $employeeProfile['position']) : '' ?>
+  <div class="cp-hero" data-refresh-region="profile">
+    <div class="cp-hero-top">
+      <div class="cp-hero-identity">
+        <div class="cp-avatar" aria-hidden="true"><?= esc($initials) ?></div>
+        <div class="cp-hero-copy">
+          <div class="cp-hero-eyebrow">
+            Guidance Client · <?= esc(ucfirst((string) ($person['kind'] ?? 'member'))) ?> · <?= esc($affiliationText) ?>
+          </div>
+          <h2 class="cp-hero-name"><?= esc($fullName) ?></h2>
+          <div class="cp-hero-meta">
+            <span>MIS ID: <strong class="cp-mono"><?= esc((string) ($person['mis_id'] ?? 'Not on file')) ?></strong></span>
+            <span>· Gender: <?= esc($displayStatus($person['gender'] ?? 'Unspecified')) ?></span>
+            <?php if (!empty($person['date_of_birth'])): ?>
+              <span>· DOB: <span class="cp-mono"><?= esc($formatDate($person['date_of_birth'], false)) ?></span><?= $age !== null ? ' (Age ' . (int) $age . ')' : '' ?></span>
             <?php endif; ?>
           </div>
         </div>
-        <span class="badge bg-primary-subtle text-primary-emphasis border px-3 py-2"><?= esc(ucfirst((string) $person['kind'])) ?></span>
       </div>
-      <div class="row g-3 border-top pt-3 mt-3 small">
-        <div class="col-md-4"><div class="text-muted">Email on file</div><div class="fw-semibold text-break"><?= esc((string) ($person['email'] ?: 'Not provided')) ?></div></div>
-        <div class="col-md-3"><div class="text-muted">Contact phone</div><div class="fw-semibold"><?= esc((string) ($person['phone'] ?: 'Not provided')) ?></div></div>
-        <div class="col-md-5"><div class="text-muted">Current address</div><div class="fw-semibold text-break"><?= esc((string) ($person['address'] ?: 'Not provided')) ?></div></div>
+      <span class="cp-tag"><?= esc(ucfirst((string) ($person['kind'] ?? 'member'))) ?></span>
+    </div>
+
+    <div class="cp-snapshot-grid">
+      <div class="cp-snapshot-cell">
+        <span class="cp-snapshot-label">Affiliation</span>
+        <span class="cp-snapshot-value"><?= esc($affiliationText) ?></span>
+        <span class="cp-snapshot-sub"><?= esc((string) ($studentProfile['department'] ?? $employeeProfile['department'] ?? 'Campus directory')) ?></span>
+      </div>
+      <div class="cp-snapshot-cell">
+        <span class="cp-snapshot-label">Email on File</span>
+        <span class="cp-snapshot-value"><?= esc((string) ($person['email'] ?: 'Not provided')) ?></span>
+        <span class="cp-snapshot-sub">Campus identity</span>
+      </div>
+      <div class="cp-snapshot-cell">
+        <span class="cp-snapshot-label">Contact Phone</span>
+        <span class="cp-snapshot-value cp-mono"><?= esc((string) ($person['phone'] ?: 'Not provided')) ?></span>
+        <span class="cp-snapshot-sub">Shared directory</span>
+      </div>
+      <div class="cp-snapshot-cell">
+        <span class="cp-snapshot-label">Current Address</span>
+        <span class="cp-snapshot-value"><?= esc((string) ($person['address'] ?: 'Not provided')) ?></span>
+        <span class="cp-snapshot-sub">Recorded location</span>
       </div>
     </div>
   </div>
 
-  <div class="row g-3 mb-4">
+  <div class="row g-3 cp-kpi-row">
     <?php foreach ([
         ['Visible cases', $metrics['cases_total'], $metrics['cases_active'] . ' active · ' . $metrics['cases_closed'] . ' closed', 'cases'],
         ['Visible episodes', $metrics['episodes_total'], 'Authorized Guidance journeys', 'cases'],
         ['Recorded sessions', $metrics['sessions_total'], 'Across visible cases', 'sessions'],
         ['Pending follow-ups', $metrics['followups_pending'], 'Check-ins for visible cases', 'sessions'],
     ] as [$label, $value, $hint, $tab]): ?>
-      <div class="col-6 col-xl-3"><a href="<?= esc($sectionUrl($tab)) ?>" data-record-tab-link="<?= esc($tab) ?>" class="card border-0 shadow-sm h-100 text-decoration-none text-body">
-        <div class="card-body p-3"><div class="small text-muted"><?= esc($label) ?></div><div class="h4 fw-bold my-1"><?= number_format((int) $value) ?></div><div class="small text-muted"><?= esc($hint) ?></div></div>
-      </a></div>
+      <div class="col-6 col-xl-3">
+        <a href="<?= esc($sectionUrl($tab)) ?>" data-record-tab-link="<?= esc($tab) ?>" class="cp-kpi-card">
+          <span class="cp-kpi-label"><?= esc($label) ?></span>
+          <strong class="cp-kpi-val cp-mono"><?= number_format((int) $value) ?></strong>
+          <span class="cp-kpi-sub"><?= esc($hint) ?></span>
+        </a>
+      </div>
     <?php endforeach; ?>
   </div>
 
-  <div class="card border-0 shadow-sm" data-refresh-region="history">
-    <div class="card-header bg-transparent p-0">
-      <nav class="nav nav-tabs nav-tabs-bordered flex-wrap" aria-label="Guidance record sections">
+  <div class="cp-main-panel" data-refresh-region="history">
+    <div class="cp-tabs-bar">
+      <nav class="nav nav-tabs cp-chart-tabs" aria-label="Guidance record sections">
         <?php foreach ($tabLabels as $key => [$label, $icon]): ?>
-          <a class="nav-link text-nowrap px-3 py-3 <?= $activeTab === $key ? 'active' : '' ?>" href="<?= esc($sectionUrl($key)) ?>" data-record-tab-link="<?= esc($key) ?>" <?= $activeTab === $key ? 'aria-current="page"' : '' ?> aria-controls="guidance-record-section">
-            <i class="bi <?= esc($icon) ?> me-1" aria-hidden="true"></i><?= esc($label) ?>
+          <a class="nav-link <?= $activeTab === $key ? 'active' : '' ?>" href="<?= esc($sectionUrl($key)) ?>" data-record-tab-link="<?= esc($key) ?>" <?= $activeTab === $key ? 'aria-current="page"' : '' ?> aria-controls="guidance-record-section">
+            <i class="bi <?= esc($icon) ?>" aria-hidden="true"></i><?= esc($label) ?>
           </a>
         <?php endforeach; ?>
       </nav>
     </div>
-    <div class="card-body p-3 p-md-4" id="guidance-record-section">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-        <h3 class="h5 mb-0" data-refresh-heading tabindex="-1"><?= esc($tabLabels[$activeTab][0]) ?></h3>
+
+    <div class="cp-tab-body" id="guidance-record-section">
+      <div class="cp-tab-toolbar">
+        <h3 class="cp-tab-heading" data-refresh-heading tabindex="-1"><?= esc($tabLabels[$activeTab][0]) ?></h3>
         <?php if ($activeTab !== 'overview'): ?>
           <form action="<?= esc($recordBaseUrl) ?>" method="GET" data-record-history-form class="d-flex align-items-center gap-2 flex-wrap">
             <input type="hidden" name="tab" value="<?= esc($activeTab) ?>">
@@ -145,7 +179,7 @@ if (!empty($person['date_of_birth'])) {
       ], ['saveData' => false]) ?>
     </div>
   </div>
-</div>
+</section>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

@@ -1,8 +1,8 @@
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<a href="<?= esc($backUrl, 'attr') ?>" class="btn btn-outline-secondary btn-sm">
-  <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>My Surveys
+<a href="<?= esc($backUrl, 'attr') ?>" class="portal-back-btn">
+  <i class="bi bi-arrow-left" aria-hidden="true"></i>My Surveys
 </a>
 <?= $this->endSection() ?>
 
@@ -18,245 +18,196 @@ $chunks = array_chunk($items, 10);
 $initialCount = count($draft);
 ?>
 
-<style>
-  .mi-likert-group {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0.4rem;
-  }
-  @media (max-width: 767.98px) {
-    .mi-likert-group {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .mi-likert-option:last-child {
-      grid-column: 1 / -1;
-    }
-    .mi-section-tabs {
-      display: grid !important;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 0.4rem !important;
-    }
-    .mi-section-tabs .mi-section-tab {
-      width: 100%;
-      padding-inline: 0.35rem;
-      font-size: 0.76rem;
-    }
-  }
-  @media (max-width: 575.98px) {
-    .mi-section-tabs {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .mi-section-nav {
-      display: grid !important;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.5rem;
-    }
-    .mi-section-nav-actions {
-      display: contents !important;
-    }
-    .mi-section-nav .mi-prev-btn {
-      order: 1;
-      width: 100%;
-    }
-    .mi-section-nav.mi-section-nav--last .mi-prev-btn {
-      grid-column: 1 / -1;
-    }
-    .mi-section-nav .mi-next-btn {
-      order: 2;
-      width: 100%;
-    }
-    .mi-section-nav .mi-save-draft-btn {
-      order: 3;
-      grid-column: 1 / -1;
-      width: 100%;
-    }
-  }
-  .mi-likert-option input[type="radio"] {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .mi-likert-pill {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 0.5rem 0.35rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bs-border-color, #dee2e6);
-    background-color: var(--bs-body-bg, #fff);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-size: 0.8rem;
-    min-height: 54px;
-  }
-  .mi-likert-option input[type="radio"]:checked + .mi-likert-pill {
-    background-color: var(--bs-primary, #0d6efd);
-    border-color: var(--bs-primary, #0d6efd);
-    color: #fff;
-    font-weight: 600;
-    box-shadow: 0 2px 6px rgba(13, 110, 253, 0.25);
-  }
-  .mi-likert-option input[type="radio"]:focus-visible + .mi-likert-pill {
-    outline: 2px solid var(--bs-primary, #0d6efd);
-    outline-offset: 2px;
-  }
-</style>
+<div class="mi-survey">
+  <div class="mi-sheet">
 
-<div class="card border-0 shadow-sm mb-3" id="mi-progress-card">
-  <div class="card-body">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 gap-sm-3 mb-2">
-      <div>
-        <h5 class="fw-bold mb-1"><?= esc($catalog['title'] ?? 'Multiple Intelligences Survey (McKenzie 1999)') ?></h5>
-        <p class="text-muted small mb-0">
-          Rate each statement honestly from <strong>0 (Never)</strong> to <strong>4 (Always)</strong>.
-          <?php if (!empty($assignment['academic_term']) || !empty($assignment['academic_year'])): ?>
-            · <?= esc(trim(($assignment['academic_term'] ?? '') . ' ' . ($assignment['academic_year'] ?? ''))) ?>
-          <?php endif; ?>
-        </p>
-      </div>
-      <div class="text-start text-sm-end">
-        <div class="small text-muted">Answered Progress</div>
-        <div class="h5 fw-bold mb-0"><span id="mi-answered-count"><?= $initialCount ?></span> / 80</div>
-      </div>
-    </div>
-    <div class="progress mb-2" style="height: 10px;">
-      <div id="mi-progress-bar" class="progress-bar" role="progressbar" style="width: <?= round(($initialCount / 80) * 100, 1) ?>%;" aria-valuenow="<?= $initialCount ?>" aria-valuemin="0" aria-valuemax="80"></div>
-    </div>
-    <div class="d-flex flex-wrap gap-1 mt-3 mi-section-tabs" id="mi-section-pills" role="tablist" aria-label="Survey sections">
-      <?php foreach ($chunks as $secIdx => $secItems): ?>
-        <?php
-        $startNum = ($secIdx * 10) + 1;
-        $endNum = $startNum + count($secItems) - 1;
-        ?>
-        <button type="button"
-                class="btn btn-sm <?= $secIdx === 0 ? 'btn-primary' : 'btn-outline-secondary' ?> mi-section-tab"
-                data-section-target="<?= $secIdx ?>">
-          Section <?= $secIdx + 1 ?> (<?= $startNum ?>–<?= $endNum ?>)
-        </button>
-      <?php endforeach; ?>
-    </div>
-  </div>
-</div>
-
-<?php if (!$miGateEnabled): ?>
-  <div class="alert alert-warning border-0 shadow-sm mb-3" role="status">
-    <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>
-    <strong>Activation Gate Active (<code>mi_reproduction_signoff</code>):</strong>
-    Live final submission is currently disabled pending multi-authority sign-off (Guidance Head, QA Office, DPO). You can complete items and save your encrypted draft below.
-  </div>
-<?php endif; ?>
-
-<form id="mi-survey-form"
-      method="POST"
-      action="<?= esc($finalizeUrl, 'attr') ?>"
-      data-draft-url="<?= esc($draftUrl, 'attr') ?>"
-      data-gate-enabled="<?= $miGateEnabled ? '1' : '0' ?>"
-      autocomplete="off">
-  <?= csrf_field() ?>
-  <input type="hidden" name="signer_capacity" value="student">
-
-  <div id="mi-feedback-banner" class="alert d-none mb-3" role="status"></div>
-
-  <?php foreach ($chunks as $secIdx => $secItems): ?>
-    <div class="card border-0 shadow-sm mb-3 mi-section-pane <?= $secIdx === 0 ? '' : 'd-none' ?>" data-section-index="<?= $secIdx ?>">
-      <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
-        <h6 class="fw-bold mb-0">
-          Section <?= $secIdx + 1 ?> of <?= count($chunks) ?>
-          <span class="text-muted fw-normal">(Items <?= ($secIdx * 10) + 1 ?>–<?= ($secIdx * 10) + count($secItems) ?>)</span>
-        </h6>
-        <span class="badge bg-light text-dark border mi-section-progress" data-section-progress="<?= $secIdx ?>">0 / <?= count($secItems) ?></span>
-      </div>
-      <div class="card-body">
-        <?php foreach ($secItems as $item): ?>
-          <?php
-          $num = (int) $item['item_number'];
-          $savedVal = array_key_exists($num, $draft) ? (int) $draft[$num] : null;
-          ?>
-          <fieldset class="pb-3 mb-3 border-bottom">
-            <legend class="fs-6 fw-semibold mb-2">
-              <span class="badge bg-secondary-subtle text-body me-2"><?= $num ?></span>
-              <?= esc($item['text']) ?>
-            </legend>
-            <div class="mi-likert-group">
-              <?php foreach ($scale as $opt): ?>
-                <?php
-                $val = (int) $opt['value'];
-                $inputId = 'mi-q-' . $num . '-v-' . $val;
-                $checked = $savedVal === $val;
-                ?>
-                <label class="mi-likert-option position-relative mb-0" for="<?= esc($inputId, 'attr') ?>">
-                  <input type="radio"
-                         id="<?= esc($inputId, 'attr') ?>"
-                         name="responses[<?= $num ?>]"
-                         value="<?= $val ?>"
-                         data-mi-item="<?= $num ?>"
-                         <?= $checked ? 'checked' : '' ?>>
-                  <span class="mi-likert-pill">
-                    <span class="fw-bold"><?= $val ?></span>
-                    <span><?= esc($opt['label']) ?></span>
-                  </span>
-                </label>
-              <?php endforeach; ?>
-            </div>
-          </fieldset>
-        <?php endforeach; ?>
-
-        <div class="mi-section-nav <?= $secIdx === count($chunks) - 1 ? 'mi-section-nav--last ' : '' ?>d-flex flex-wrap justify-content-between align-items-center gap-2 pt-2">
-          <button type="button" class="btn btn-outline-secondary btn-sm mi-prev-btn" <?= $secIdx === 0 ? 'disabled' : '' ?> data-prev-section="<?= $secIdx - 1 ?>">
-            <i class="bi bi-chevron-left me-1" aria-hidden="true"></i>Previous Section
-          </button>
-          <div class="mi-section-nav-actions d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-outline-primary btn-sm mi-save-draft-btn">
-              <i class="bi bi-cloud-check me-1" aria-hidden="true"></i>Save Encrypted Draft
-            </button>
-            <?php if ($secIdx < count($chunks) - 1): ?>
-              <button type="button" class="btn btn-primary btn-sm mi-next-btn" data-next-section="<?= $secIdx + 1 ?>">
-                Next Section<i class="bi bi-chevron-right ms-1" aria-hidden="true"></i>
-              </button>
+    <section class="mi-band mi-overview-band" id="mi-progress-card">
+      <div class="mi-overview-top">
+        <div class="mi-overview-copy">
+          <h2 class="mi-title"><?= esc($catalog['title'] ?? 'Multiple Intelligences Survey (McKenzie 1999)') ?></h2>
+          <p class="mi-subtitle">
+            Rate each statement honestly from <strong>0 (Never)</strong> to <strong>4 (Always)</strong>.
+            <?php if (!empty($assignment['academic_term']) || !empty($assignment['academic_year'])): ?>
+              <span class="mi-subtitle-sep" aria-hidden="true">·</span>
+              <span><?= esc(trim(($assignment['academic_term'] ?? '') . ' ' . ($assignment['academic_year'] ?? ''))) ?></span>
             <?php endif; ?>
-          </div>
+          </p>
+        </div>
+        <div class="mi-progress-readout">
+          <span class="mi-progress-label">Answered</span>
+          <span class="mi-progress-value"><span id="mi-answered-count"><?= $initialCount ?></span> / 80</span>
         </div>
       </div>
-    </div>
-  <?php endforeach; ?>
 
-  <div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-transparent py-3">
-      <h6 class="fw-bold mb-0">
-        <i class="bi bi-shield-check me-2 text-primary" aria-hidden="true"></i>Student Digital Attestation &amp; Final Submission
-      </h6>
-    </div>
-    <div class="card-body">
-      <p class="small text-muted mb-2">
-        All 80 items must be answered before finalization. Your finalized submission is attested exclusively under your authenticated student account (never by simulated guardian signatures).
-      </p>
-      <div class="mb-3">
-        <label for="mi-attestation-statement" class="form-label fw-semibold">Digital Attestation Statement</label>
-        <textarea id="mi-attestation-statement" name="attestation_statement" class="form-control" rows="2" maxlength="500" readonly><?= esc($attestationDefault) ?></textarea>
+      <div class="progress mi-progress-track">
+        <div id="mi-progress-bar"
+             class="progress-bar"
+             role="progressbar"
+             style="width: <?= round(($initialCount / 80) * 100, 1) ?>%;"
+             aria-valuenow="<?= $initialCount ?>"
+             aria-valuemin="0"
+             aria-valuemax="80"></div>
       </div>
-      <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" value="1" id="mi-attestation-confirmed" name="attestation_confirmed" <?= $miGateEnabled ? '' : 'disabled' ?>>
-        <label class="form-check-label fw-semibold" for="mi-attestation-confirmed">
-          I confirm this student digital attestation and verify that all 80 responses are my own.
+
+      <?php if ($chunks !== []): ?>
+        <div class="mi-section-tabs" id="mi-section-pills" role="tablist" aria-label="Survey sections">
+          <?php foreach ($chunks as $secIdx => $secItems): ?>
+            <?php
+            $startNum = ($secIdx * 10) + 1;
+            $endNum = $startNum + count($secItems) - 1;
+            ?>
+            <button type="button"
+                    role="tab"
+                    aria-selected="<?= $secIdx === 0 ? 'true' : 'false' ?>"
+                    class="mi-section-tab <?= $secIdx === 0 ? 'is-active' : '' ?>"
+                    data-section-target="<?= $secIdx ?>">
+              <span class="mi-tab-name">Section <?= $secIdx + 1 ?></span>
+              <span class="mi-tab-range"><?= $startNum ?>–<?= $endNum ?></span>
+            </button>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+
+      <?php if (!$miGateEnabled): ?>
+        <div class="mi-gate-notice" role="status">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          <div>
+            <strong>Activation Gate Active (<code>mi_reproduction_signoff</code>):</strong>
+            Live final submission is currently disabled pending multi-authority sign-off (Guidance Head, QA Office, DPO). You can complete items and save your encrypted draft below.
+          </div>
+        </div>
+      <?php endif; ?>
+    </section>
+
+    <form id="mi-survey-form"
+          class="mi-form"
+          method="POST"
+          action="<?= esc($finalizeUrl, 'attr') ?>"
+          data-draft-url="<?= esc($draftUrl, 'attr') ?>"
+          data-gate-enabled="<?= $miGateEnabled ? '1' : '0' ?>"
+          autocomplete="off">
+      <?= csrf_field() ?>
+      <input type="hidden" name="signer_capacity" value="student">
+
+      <div id="mi-feedback-banner" class="alert mi-feedback-banner d-none" role="status"></div>
+
+      <?php foreach ($chunks as $secIdx => $secItems): ?>
+        <section class="mi-band mi-section-pane <?= $secIdx === 0 ? '' : 'd-none' ?>" data-section-index="<?= $secIdx ?>">
+          <div class="mi-section-head">
+            <h3 class="mi-section-title">
+              Section <?= $secIdx + 1 ?> of <?= count($chunks) ?>
+              <span class="mi-section-range">· Items <?= ($secIdx * 10) + 1 ?>–<?= ($secIdx * 10) + count($secItems) ?></span>
+            </h3>
+            <span class="mi-section-progress" data-section-progress="<?= $secIdx ?>">0 / <?= count($secItems) ?></span>
+          </div>
+
+          <div class="mi-question-list">
+            <?php foreach ($secItems as $item): ?>
+              <?php
+              $num = (int) $item['item_number'];
+              $savedVal = array_key_exists($num, $draft) ? (int) $draft[$num] : null;
+              ?>
+              <fieldset class="mi-question">
+                <legend class="mi-question-legend">
+                  <span class="mi-question-num"><?= $num ?>.</span>
+                  <?= esc($item['text']) ?>
+                </legend>
+                <div class="mi-likert-group">
+                  <?php foreach ($scale as $opt): ?>
+                    <?php
+                    $val = (int) $opt['value'];
+                    $inputId = 'mi-q-' . $num . '-v-' . $val;
+                    $checked = $savedVal === $val;
+                    ?>
+                    <label class="mi-likert-option" for="<?= esc($inputId, 'attr') ?>">
+                      <input type="radio"
+                             id="<?= esc($inputId, 'attr') ?>"
+                             name="responses[<?= $num ?>]"
+                             value="<?= $val ?>"
+                             data-mi-item="<?= $num ?>"
+                             <?= $checked ? 'checked' : '' ?>>
+                      <span class="mi-likert-pill">
+                        <span class="mi-likert-val"><?= $val ?></span>
+                        <span class="mi-likert-label"><?= esc($opt['label']) ?></span>
+                      </span>
+                    </label>
+                  <?php endforeach; ?>
+                </div>
+              </fieldset>
+            <?php endforeach; ?>
+          </div>
+
+          <div class="mi-section-nav <?= $secIdx === count($chunks) - 1 ? 'mi-section-nav--last' : '' ?>">
+            <button type="button"
+                    class="btn btn-outline-secondary btn-sm mi-btn mi-prev-btn"
+                    <?= $secIdx === 0 ? 'disabled' : '' ?>
+                    data-prev-section="<?= $secIdx - 1 ?>">
+              <i class="bi bi-chevron-left" aria-hidden="true"></i>
+              <span>Previous Section</span>
+            </button>
+            <div class="mi-section-nav-actions">
+              <button type="button" class="btn btn-outline-secondary btn-sm mi-btn mi-save-draft-btn">
+                <span>Save Encrypted Draft</span>
+              </button>
+              <?php if ($secIdx < count($chunks) - 1): ?>
+                <button type="button"
+                        class="btn btn-primary btn-sm mi-btn mi-next-btn"
+                        data-next-section="<?= $secIdx + 1 ?>">
+                  <span>Next Section</span>
+                  <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                </button>
+              <?php endif; ?>
+            </div>
+          </div>
+        </section>
+      <?php endforeach; ?>
+
+      <section class="mi-band mi-attestation-band">
+        <div class="mi-attestation-head">
+          <h3 class="mi-attestation-title">Student Digital Attestation &amp; Final Submission</h3>
+          <p class="mi-attestation-desc">
+            All 80 items must be answered before finalization. Your finalized submission is attested exclusively under your authenticated student account (never by simulated guardian signatures).
+          </p>
+        </div>
+
+        <div class="mi-field">
+          <label for="mi-attestation-statement" class="mi-field-label">Digital Attestation Statement</label>
+          <textarea id="mi-attestation-statement"
+                    name="attestation_statement"
+                    class="form-control mi-attestation-textarea"
+                    rows="2"
+                    maxlength="500"
+                    readonly><?= esc($attestationDefault) ?></textarea>
+        </div>
+
+        <label class="mi-confirm-check" for="mi-attestation-confirmed">
+          <input class="form-check-input"
+                 type="checkbox"
+                 value="1"
+                 id="mi-attestation-confirmed"
+                 name="attestation_confirmed"
+                 <?= $miGateEnabled ? '' : 'disabled' ?>>
+          <span class="mi-confirm-label">
+            I confirm this student digital attestation and verify that all 80 responses are my own.
+          </span>
         </label>
-      </div>
-      <div class="d-grid d-sm-flex flex-sm-wrap justify-content-sm-between align-items-sm-center gap-2">
-        <button type="button" class="btn btn-outline-primary mi-save-draft-btn" id="mi-save-draft-footer">
-          <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Save Encrypted Draft (<span id="mi-footer-count"><?= $initialCount ?></span>/80)
-        </button>
-        <button type="submit"
-                id="mi-finalize-btn"
-                class="btn btn-success"
-                <?= $miGateEnabled ? '' : 'disabled aria-disabled="true"' ?>>
-          <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>
-          <?= $miGateEnabled ? 'Finalize &amp; View 8-Domain Profile' : 'Finalization Gated (Pending Sign-off)' ?>
-        </button>
-      </div>
-    </div>
+
+        <div class="mi-attestation-actions">
+          <button type="button" class="btn btn-outline-secondary mi-btn mi-save-draft-btn" id="mi-save-draft-footer">
+            <span>Save Encrypted Draft (<span id="mi-footer-count"><?= $initialCount ?></span>/80)</span>
+          </button>
+          <button type="submit"
+                  id="mi-finalize-btn"
+                  class="btn btn-primary mi-btn"
+                  <?= $miGateEnabled ? '' : 'disabled aria-disabled="true"' ?>>
+            <span><?= $miGateEnabled ? 'Finalize &amp; View 8-Domain Profile' : 'Finalization Gated (Pending Sign-off)' ?></span>
+          </button>
+        </div>
+      </section>
+    </form>
+
   </div>
-</form>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
@@ -281,8 +232,9 @@ $initialCount = count($draft);
       pane.classList.toggle('d-none', idx !== index);
     });
     tabs.forEach((tab, idx) => {
-      tab.classList.toggle('btn-primary', idx === index);
-      tab.classList.toggle('btn-outline-secondary', idx !== index);
+      const active = idx === index;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
     });
     const scrollTarget = document.getElementById('mi-progress-card') || document.getElementById('portal-workspace-pane');
     if (scrollTarget) {
@@ -318,17 +270,17 @@ $initialCount = count($draft);
       const badge = pane.querySelector(`[data-section-progress="${idx}"]`);
       if (badge) {
         badge.textContent = `${paneDone} / ${paneTotal}`;
-        badge.classList.toggle('bg-success', paneDone === paneTotal);
-        badge.classList.toggle('text-white', paneDone === paneTotal);
-        badge.classList.toggle('bg-light', paneDone !== paneTotal);
-        badge.classList.toggle('text-dark', paneDone !== paneTotal);
+        badge.classList.toggle('is-complete', paneDone === paneTotal && paneTotal > 0);
+      }
+      if (tabs[idx]) {
+        tabs[idx].classList.toggle('is-complete', paneDone === paneTotal && paneTotal > 0);
       }
     });
   };
 
   const setFeedback = (type, message) => {
     if (!feedback) return;
-    feedback.className = `alert alert-${type} mb-3`;
+    feedback.className = `alert alert-${type} mi-feedback-banner`;
     feedback.textContent = message;
   };
 

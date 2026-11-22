@@ -21,12 +21,12 @@ $statusLabel = static fn (string $status): string => match ($status) {
     'no_show' => 'No show',
     default => ucwords(str_replace('_', ' ', $status)),
 };
-$statusBadge = static fn (string $status): string => match ($status) {
-    'requested' => 'bg-warning text-dark',
-    'scheduled', 'confirmed' => 'bg-primary',
-    'checked_in' => 'bg-info text-dark',
-    'completed' => 'bg-success',
-    default => 'bg-secondary',
+$statusTone = static fn (string $status): string => match ($status) {
+    'requested' => 'is-requested',
+    'scheduled', 'confirmed' => 'is-confirmed',
+    'checked_in' => 'is-queue',
+    'completed' => 'is-completed',
+    default => 'is-inactive',
 };
 
 $email = !empty($person['email']) ? $person['email'] : ($user['email'] ?? null);
@@ -180,28 +180,33 @@ $callSlipsTooltip = $unacknowledgedCallSlipsCount > 0
 
 <!-- Staff Role Console Switcher Banner (Shown only if staff logs into personal account) -->
 <?php if (in_array($role, ['superadmin', 'clinic_admin', 'clinic_staff', 'guidance_admin', 'guidance_supervisor', 'counsellor', 'bmg_admin', 'facilities_op'], true)): ?>
-  <div class="alert alert-info login-banner border-0 shadow-sm d-flex flex-wrap justify-content-between align-items-center mb-4 p-3">
-    <div class="d-flex align-items-center gap-2">
-      <i class="bi bi-person-badge-fill fs-3" aria-hidden="true"></i>
-      <div>
-        <strong class="d-block">Staff Member Personal Health Session</strong>
-        <span class="small">You are logged into your individual employee patient account. Switch to your departmental console below.</span>
+  <div class="portal-staff-session-banner login-banner mb-4" role="region" aria-label="Departmental console switch">
+    <div class="portal-staff-banner-left">
+      <div class="portal-staff-banner-icon" aria-hidden="true">
+        <i class="bi bi-person-badge"></i>
+      </div>
+      <div class="portal-staff-banner-copy">
+        <div class="portal-staff-banner-header">
+          <strong class="portal-staff-banner-title">Staff Member Personal Health Session</strong>
+          <span class="portal-staff-banner-badge">Personal Account</span>
+        </div>
+        <p class="portal-staff-banner-desc mb-0">You are logged into your individual employee patient account. Switch to your departmental console below.</p>
       </div>
     </div>
-    <div class="d-flex flex-wrap gap-2 mt-2 mt-md-0">
+    <div class="portal-staff-banner-actions">
       <?php if (in_array($role, ['superadmin', 'clinic_admin', 'clinic_staff'], true)): ?>
-        <a href="<?= \App\Services\PortalContext::urlFor('clinic', 'clinic') ?>" class="btn btn-outline-secondary">
-          <i class="bi bi-hospital me-1"></i> Clinic Staff Console
+        <a href="<?= \App\Services\PortalContext::urlFor('clinic', 'clinic') ?>" class="portal-staff-console-btn">
+          <?= view('partials/unit_vector_icon', ['unit' => 'clinic', 'class' => 'unit-btn-icon me-1']) ?> Clinic Staff Console
         </a>
       <?php endif; ?>
       <?php if (in_array($role, ['superadmin', 'guidance_admin', 'guidance_supervisor', 'counsellor'], true)): ?>
-        <a href="<?= \App\Services\PortalContext::urlFor('guidance', 'guidance') ?>" class="btn btn-outline-secondary">
-          <i class="bi bi-person-heart me-1"></i> Guidance Console
+        <a href="<?= \App\Services\PortalContext::urlFor('guidance', 'guidance') ?>" class="portal-staff-console-btn">
+          <?= view('partials/unit_vector_icon', ['unit' => 'guidance', 'class' => 'unit-btn-icon me-1']) ?> Guidance Console
         </a>
       <?php endif; ?>
       <?php if (in_array($role, ['superadmin', 'bmg_admin', 'facilities_op'], true)): ?>
-        <a href="<?= \App\Services\PortalContext::urlFor('bmg', 'facilities/dashboard') ?>" class="btn btn-outline-secondary">
-          <i class="bi bi-recycle me-1"></i> Facilities Console
+        <a href="<?= \App\Services\PortalContext::urlFor('bmg', 'facilities/dashboard') ?>" class="portal-staff-console-btn">
+          <i class="bi bi-recycle me-1" aria-hidden="true"></i> Facilities Console
         </a>
       <?php endif; ?>
     </div>
@@ -388,232 +393,250 @@ $callSlipsTooltip = $unacknowledgedCallSlipsCount > 0
          data-active-pane="appointments"
          data-workspace-url="<?= esc(site_url('/portal'), 'attr') ?>"
          aria-live="polite">
+      <div class="portal-workspace-header pb-2 mb-3 border-bottom">
+        <div>
+          <h2 class="h5 fw-bold mb-0 portal-workspace-title" id="my-appointments-title">My Appointments</h2>
+        </div>
+      </div>
       <?php
       $pendingOnlySlips = array_values(array_filter(
           $callSlipsList,
           static fn (array $cs): bool => ($cs['attendance_status'] ?? 'pending') === 'pending'
       ));
       ?>
-      <?php if ($unacknowledgedCallSlipsCount > 0): ?>
-        <section class="card border-warning-subtle shadow-sm mb-3 portal-callslip-strip" data-portal-callslips-strip aria-label="Guidance Call Slips awaiting acknowledgment">
-          <div class="card-header bg-transparent py-2 px-3 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom-0">
-            <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-ticket-perforated-fill text-warning" aria-hidden="true"></i>
-              <span class="fw-semibold small">Guidance Call Slips</span>
-              <span class="badge text-bg-warning">
-                <?= $unacknowledgedCallSlipsCount ?> awaiting acknowledgment
-              </span>
+      <div class="pa-workspace">
+        <?php if ($unacknowledgedCallSlipsCount > 0): ?>
+          <section class="pa-callslip-sheet mb-3 portal-callslip-strip" data-portal-callslips-strip aria-label="Guidance Call Slips awaiting acknowledgment">
+            <div class="pa-callslip-head">
+              <div class="pa-callslip-head-left">
+                <i class="bi bi-ticket-perforated" aria-hidden="true"></i>
+                <span class="pa-callslip-title">Guidance Call Slips</span>
+                <span class="pa-callslip-sep" aria-hidden="true">·</span>
+                <span class="pa-callslip-status">
+                  <?= $unacknowledgedCallSlipsCount ?> awaiting acknowledgment
+                </span>
+              </div>
+              <div class="pa-callslip-head-right">
+                <a href="<?= esc(site_url('/portal/call-slips')) ?>" class="pa-callslip-link" data-portal-pane-target="callslips">
+                  View all<?= $callSlipsCount > 0 ? ' (' . $callSlipsCount . ')' : '' ?>
+                </a>
+                <button type="button"
+                        class="pa-callslip-toggle"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#portalCallSlipsBody"
+                        aria-expanded="true"
+                        aria-controls="portalCallSlipsBody">
+                  <span>Toggle</span>
+                  <i class="bi bi-chevron-down small" aria-hidden="true"></i>
+                </button>
+              </div>
             </div>
-            <div class="d-flex align-items-center gap-3">
-              <a href="<?= esc(site_url('/portal/call-slips')) ?>" class="small text-decoration-none fw-medium" data-portal-pane-target="callslips">
-                View all<?= $callSlipsCount > 0 ? ' (' . $callSlipsCount . ')' : '' ?>
-              </a>
-              <button type="button"
-                      class="btn btn-link btn-sm text-decoration-none p-0 text-muted"
-                      data-bs-toggle="collapse"
-                      data-bs-target="#portalCallSlipsBody"
-                      aria-expanded="true"
-                      aria-controls="portalCallSlipsBody">
-                <span class="small me-1">Toggle</span>
-                <i class="bi bi-chevron-down small" aria-hidden="true"></i>
-              </button>
+            <div id="portalCallSlipsBody" class="collapse show">
+              <div class="pa-callslip-list">
+                <?php foreach ($pendingOnlySlips as $cs): ?>
+                  <?php
+                  $csStatus = (string) ($cs['attendance_status'] ?? 'pending');
+                  $csSlipNumber = (string) ($cs['call_slip_number'] ?? '#' . (int) ($cs['id'] ?? 0));
+                  $csSchedule = trim((string) ($cs['call_date'] ?? '') . ' ' . (string) ($cs['call_time'] ?? ''));
+                  $csPurpose = ucwords(str_replace('_', ' ', (string) ($cs['purpose'] ?? 'counseling')));
+                  ?>
+                  <div class="pa-callslip-row portal-callslip-item">
+                    <div class="pa-callslip-meta">
+                      <span class="pa-callslip-num"><?= esc($csSlipNumber) ?></span>
+                      <?php if ($csSchedule !== ''): ?>
+                        <span class="pa-callslip-sep" aria-hidden="true">·</span>
+                        <span class="pa-callslip-time"><?= esc($csSchedule) ?></span>
+                      <?php endif; ?>
+                      <span class="pa-callslip-sep" aria-hidden="true">·</span>
+                      <span class="pa-callslip-purpose"><?= esc($csPurpose) ?></span>
+                      <span class="pa-callslip-sep" aria-hidden="true">·</span>
+                      <span class="pa-callslip-state"><?= esc(ucfirst($csStatus)) ?></span>
+                    </div>
+                    <div class="pa-callslip-action">
+                      <form method="post" action="<?= esc(site_url('/portal/guidance/call-slips/' . (int) ($cs['id'] ?? 0) . '/acknowledge'), 'attr') ?>" class="d-inline">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-primary btn-sm pa-btn pa-btn-sm">Acknowledge receipt</button>
+                      </form>
+                    </div>
+                  </div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+          </section>
+        <?php endif; ?>
+
+        <section id="my-appointments" class="pa-sheet"
+                 data-live-filters
+                 data-mutation-refresh
+                 data-refresh-owner="appointments.portal"
+                 data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
+                 data-filter-url="<?= esc(site_url('/portal')) ?>"
+                 data-filter-key="portal-appointments"
+                 data-live-events="portal.appointments.changed portal.queue.changed"
+                 aria-labelledby="my-appointments-title">
+          <div class="pa-band pa-filter-band">
+            <div class="pa-intro">
+              <h3 class="pa-intro-title">Appointment Schedule &amp; Visit Requests</h3>
+              <p class="pa-intro-desc">Filter by service or status, or change the date order.</p>
+            </div>
+
+            <form method="get" action="<?= esc(site_url('/portal')) ?>" class="pa-filter-grid" role="search" aria-label="Filter my appointments" data-filter-form>
+              <div class="pa-filter-field">
+                <label for="portal-appointment-service" class="pa-filter-label">Service</label>
+                <select id="portal-appointment-service" name="service" class="form-select form-select-sm">
+                  <?php foreach (['all' => 'All services', 'clinic' => 'University Clinic', 'guidance' => 'Guidance & Counseling'] as $value => $label): ?>
+                    <option value="<?= esc($value) ?>" <?= $filters['service'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="pa-filter-field">
+                <label for="portal-appointment-status" class="pa-filter-label">Status</label>
+                <select id="portal-appointment-status" name="status" class="form-select form-select-sm">
+                  <?php foreach ([
+                      'all' => 'All statuses',
+                      'active' => 'Active',
+                      'requested' => 'Awaiting confirmation',
+                      'confirmed' => 'Confirmed',
+                      'checked_in' => 'In queue',
+                      'completed' => 'Completed',
+                      'cancelled' => 'Cancelled',
+                      'no_show' => 'No-show',
+                  ] as $value => $label): ?>
+                    <option value="<?= esc($value) ?>" <?= $filters['status'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="pa-filter-field">
+                <label for="portal-appointment-sort" class="pa-filter-label">Sort by date</label>
+                <select id="portal-appointment-sort" name="sort" class="form-select form-select-sm">
+                  <?php foreach (['upcoming' => 'Upcoming first', 'date_desc' => 'Newest first', 'date_asc' => 'Oldest first'] as $value => $label): ?>
+                    <option value="<?= esc($value) ?>" <?= $filters['sort'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="pa-filter-field">
+                <label for="portal-appointment-per-page" class="pa-filter-label">Rows per page</label>
+                <select id="portal-appointment-per-page" name="per_page" class="form-select form-select-sm">
+                  <?php foreach ([20, 25, 50, 100] as $size): ?>
+                    <option value="<?= $size ?>" <?= (int) $filters['per_page'] === $size ? 'selected' : '' ?>><?= $size ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="pa-filter-actions">
+                <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm pa-btn portal-filter-reset-btn" data-filter-reset>Reset</a>
+              </div>
+            </form>
+
+            <p data-filter-status hidden></p>
+            <div class="alert alert-danger" data-filter-error role="alert" hidden>
+              <span data-filter-error-text></span>
+              <button class="btn btn-secondary btn-sm ms-2" type="button" data-filter-retry>Retry</button>
             </div>
           </div>
-          <div id="portalCallSlipsBody" class="collapse show border-top">
-            <div class="list-group list-group-flush">
-              <?php foreach ($pendingOnlySlips as $cs): ?>
-                <?php
-                $csStatus = (string) ($cs['attendance_status'] ?? 'pending');
-                $csSlipNumber = (string) ($cs['call_slip_number'] ?? '#' . (int) ($cs['id'] ?? 0));
-                $csSchedule = trim((string) ($cs['call_date'] ?? '') . ' ' . (string) ($cs['call_time'] ?? ''));
-                $csPurpose = ucwords(str_replace('_', ' ', (string) ($cs['purpose'] ?? 'counseling')));
-                ?>
-                <div class="list-group-item portal-callslip-item py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
-                  <div class="d-flex flex-wrap align-items-center gap-2 small">
-                    <span class="fw-semibold"><?= esc($csSlipNumber) ?></span>
-                    <?php if ($csSchedule !== ''): ?>
-                      <span class="text-muted">&middot; <i class="bi bi-clock me-1" aria-hidden="true"></i><?= esc($csSchedule) ?></span>
-                    <?php endif; ?>
-                    <span class="text-muted">&middot; <?= esc($csPurpose) ?></span>
-                    <span class="badge text-bg-warning"><?= esc($csStatus) ?></span>
-                  </div>
-                  <div class="ms-auto">
-                    <form method="post" action="<?= esc(site_url('/portal/guidance/call-slips/' . (int) ($cs['id'] ?? 0) . '/acknowledge'), 'attr') ?>" class="d-inline" data-background-submit>
-                      <?= csrf_field() ?>
-                      <button type="submit" class="btn btn-sm btn-primary py-0 px-2" style="font-size:0.78rem;">Acknowledge receipt</button>
-                    </form>
-                  </div>
-                </div>
-              <?php endforeach; ?>
+
+          <div class="pa-results-region" data-filter-region="results" data-refresh-region="appointments.results">
+            <?php if (empty($appointments)): ?>
+              <div class="pa-empty">
+                <i class="bi <?= $hasFilters ? 'bi-funnel' : 'bi-calendar2-x' ?>" aria-hidden="true"></i>
+                <h3><?= $hasFilters ? 'No matching appointments' : 'No appointments or requests yet' ?></h3>
+                <?php if ($hasFilters): ?>
+                  <p>No appointments match these filters.</p>
+                  <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm pa-btn" data-filter-reset>Clear filters</a>
+                <?php else: ?>
+                  <p>You have no appointments or requests. Use the Request Clinic Visit or Request Guidance Session buttons to book a visit.</p>
+                <?php endif; ?>
+              </div>
+            <?php else: ?>
+              <div class="pa-table-wrap">
+                <table class="pa-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Date &amp; Time</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($appointments as $a): ?>
+                      <?php $unitKey = (string) ($a['unit'] ?? 'clinic'); ?>
+                      <tr>
+                        <td>
+                          <div class="pa-service-cell">
+                            <?= view('partials/unit_vector_icon', ['unit' => $unitKey === 'clinic' ? 'clinic' : 'guidance', 'class' => 'pa-unit-icon']) ?>
+                            <div class="pa-service-copy">
+                              <span class="pa-service-name"><?= esc($serviceLabel($unitKey)) ?></span>
+                              <?php if (in_array($a['status'], ['confirmed', 'scheduled'], true) && !empty($a['provider_name'])): ?>
+                                <span class="pa-service-provider">Assigned staff: <?= esc($a['provider_name']) ?></span>
+                              <?php endif; ?>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <div class="pa-datetime-cell">
+                            <span class="pa-date"><?= esc(date('M j, Y', strtotime($a['starts_at']))) ?></span>
+                            <span class="pa-time">
+                              <?= esc(date('h:i A', strtotime($a['starts_at']))) ?><?php if (in_array($a['status'], ['confirmed', 'scheduled', 'checked_in', 'completed'], true) && !empty($a['ends_at'])): ?> – <?= esc(date('h:i A', strtotime($a['ends_at']))) ?><?php endif; ?>
+                            </span>
+                            <?php if ($a['status'] === 'requested'): ?>
+                              <span class="pa-schedule-note">Preferred time—not yet confirmed</span>
+                            <?php elseif (in_array($a['status'], ['confirmed', 'scheduled'], true)): ?>
+                              <span class="pa-schedule-note">Confirmed time—please arrive before your appointment</span>
+                            <?php elseif ($a['status'] === 'checked_in'): ?>
+                              <span class="pa-schedule-note">Checked in—please wait for your turn</span>
+                            <?php endif; ?>
+                          </div>
+                        </td>
+                        <td>
+                          <span class="pa-type-label"><?= esc($typeLabel((string) $a['type'])) ?></span>
+                        </td>
+                        <td>
+                          <span class="pa-status <?= esc($statusTone((string) $a['status'])) ?>"><?= esc($statusLabel((string) $a['status'])) ?></span>
+                        </td>
+                        <td class="text-end">
+                          <div class="pa-actions">
+                            <a href="<?= esc(site_url('/portal/appointments/' . (int) $a['id'])) ?>"
+                               class="btn btn-outline-secondary btn-sm pa-action-btn"
+                               data-app-modal-open
+                               aria-label="<?= esc('View details for ' . $serviceLabel($unitKey) . ' appointment on ' . date('M j, Y', strtotime($a['starts_at']))) ?>">Details</a>
+                            <?php if (in_array($a['status'], ['requested', 'scheduled', 'confirmed'], true)): ?>
+                              <form action="<?= site_url('/portal/appointments/' . $a['unit'] . '/cancel/' . $a['id']) ?>" method="POST" class="d-inline" data-background-submit
+                                    data-confirm-reason
+                                    data-confirm="Cancel this appointment or pending request? Any reserved slot will be released."
+                                    data-confirm-title="Cancel appointment"
+                                    data-confirm-label="Cancel appointment"
+                                    data-confirm-tone="danger">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="reason" value="">
+                                <button type="submit" class="btn btn-outline-danger btn-sm pa-action-btn">Cancel</button>
+                              </form>
+                            <?php endif; ?>
+                          </div>
+                        </td>
+                      </tr>
+                    <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            <?php endif; ?>
+
+            <div class="pa-pagination-band">
+              <?= view('partials/table_pagination', [
+                  'pagination' => $pagination ?? [],
+                  'filters' => $filters,
+                  'rowCount' => count($appointments),
+                  'baseUrl' => site_url('/portal'),
+                  'paginationPageParam' => 'page',
+                  'paginationExtraQuery' => ['service' => $filters['service'], 'sort' => $filters['sort']],
+                  'paginationLiveFilters' => true,
+                  'paginationLabel' => 'My appointment pages',
+                  'totalLabel' => 'total appointments',
+              ]) ?>
             </div>
           </div>
         </section>
-      <?php endif; ?>
-      <section id="my-appointments" class="card border-0 shadow-sm"
-               data-live-filters
-               data-mutation-refresh
-               data-refresh-owner="appointments.portal"
-               data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
-               data-filter-url="<?= esc(site_url('/portal')) ?>"
-               data-filter-key="portal-appointments"
-               data-live-events="portal.appointments.changed portal.queue.changed"
-               aria-labelledby="my-appointments-title">
-      <div class="card-header bg-transparent py-3">
-        <h6 class="fw-bold mb-0 text-dark" id="my-appointments-title">
-          <i class="bi bi-calendar-check text-primary me-1"></i> My Appointments
-        </h6>
-        <p class="small text-muted mb-0">Filter by service or status, or change the date order.</p>
       </div>
-      <div class="px-3 pb-3">
-        <form method="get" action="<?= esc(site_url('/portal')) ?>" class="row g-2 align-items-end" role="search" aria-label="Filter my appointments" data-filter-form>
-          <div class="col-12 col-sm">
-            <label for="portal-appointment-service" class="form-label small mb-1">Service</label>
-            <select id="portal-appointment-service" name="service" class="form-select form-select-sm">
-              <?php foreach (['all' => 'All services', 'clinic' => 'University Clinic', 'guidance' => 'Guidance & Counseling'] as $value => $label): ?>
-                <option value="<?= esc($value) ?>" <?= $filters['service'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div class="col-6 col-sm">
-            <label for="portal-appointment-status" class="form-label small mb-1">Status</label>
-            <select id="portal-appointment-status" name="status" class="form-select form-select-sm">
-              <?php foreach ([
-                  'all' => 'All statuses',
-                  'active' => 'Active',
-                  'requested' => 'Awaiting confirmation',
-                  'confirmed' => 'Confirmed',
-                  'checked_in' => 'In queue',
-                  'completed' => 'Completed',
-                  'cancelled' => 'Cancelled',
-                  'no_show' => 'No-show',
-              ] as $value => $label): ?>
-                <option value="<?= esc($value) ?>" <?= $filters['status'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div class="col-6 col-sm">
-            <label for="portal-appointment-sort" class="form-label small mb-1">Sort by date</label>
-            <select id="portal-appointment-sort" name="sort" class="form-select form-select-sm">
-              <?php foreach (['upcoming' => 'Upcoming first', 'date_desc' => 'Newest first', 'date_asc' => 'Oldest first'] as $value => $label): ?>
-                <option value="<?= esc($value) ?>" <?= $filters['sort'] === $value ? 'selected' : '' ?>><?= esc($label) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div class="col-6 col-sm-auto">
-            <label for="portal-appointment-per-page" class="form-label small mb-1">Rows per page</label>
-            <select id="portal-appointment-per-page" name="per_page" class="form-select form-select-sm">
-              <?php foreach ([20, 25, 50, 100] as $size): ?>
-                <option value="<?= $size ?>" <?= (int) $filters['per_page'] === $size ? 'selected' : '' ?>><?= $size ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-          <div class="col-6 col-sm-auto d-flex gap-2">
-            <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm portal-filter-reset-btn" data-filter-reset>Reset</a>
-          </div>
-        </form>
-      </div>
-      <p data-filter-status hidden></p>
-      <div class="alert alert-danger" data-filter-error role="alert" hidden>
-        <span data-filter-error-text></span>
-        <button class="btn btn-secondary btn-sm ms-2" type="button" data-filter-retry>Retry</button>
-      </div>
-      <div data-filter-region="results" data-refresh-region="appointments.results">
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0 small">
-              <thead class="table-light text-uppercase">
-                <tr>
-                  <th class="ps-3">Service</th>
-                  <th>Date &amp; Time</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th class="text-end pe-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php if (empty($appointments)): ?>
-                  <tr>
-                    <td colspan="5" class="text-center py-5 text-muted">
-                      <i class="bi <?= $hasFilters ? 'bi-funnel' : 'bi-calendar2-x' ?> fs-1 d-block mb-2 opacity-50"></i>
-                      <?php if ($hasFilters): ?>
-                        <p class="mb-2">No appointments match these filters.</p>
-                        <a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-primary btn-sm" data-filter-reset>Clear filters</a>
-                      <?php else: ?>
-                        You have no appointments or requests. Use the Request Clinic Visit or Request Guidance Session buttons to book a visit.
-                      <?php endif; ?>
-                    </td>
-                  </tr>
-                <?php else: ?>
-                  <?php foreach ($appointments as $a): ?>
-                    <tr>
-                      <td class="ps-3 fw-bold"><?= esc($serviceLabel((string) $a['unit'])) ?></td>
-                      <td>
-                        <div><?= esc(date('M j, Y', strtotime($a['starts_at']))) ?></div>
-                        <small class="text-muted">
-                          <?= esc(date('h:i A', strtotime($a['starts_at']))) ?>
-                          <?php if (in_array($a['status'], ['confirmed', 'scheduled', 'checked_in', 'completed'], true) && !empty($a['ends_at'])): ?>
-                            – <?= esc(date('h:i A', strtotime($a['ends_at']))) ?>
-                          <?php endif; ?>
-                        </small>
-                        <?php if ($a['status'] === 'requested'): ?>
-                          <small class="d-block text-muted">Preferred time—not yet confirmed</small>
-                        <?php elseif (in_array($a['status'], ['confirmed', 'scheduled'], true)): ?>
-                          <?php if (!empty($a['provider_name'])): ?>
-                            <small class="d-block text-muted">Assigned staff: <?= esc($a['provider_name']) ?></small>
-                          <?php endif; ?>
-                          <small class="d-block text-muted">Confirmed time—please arrive before your appointment</small>
-                        <?php elseif ($a['status'] === 'checked_in'): ?>
-                          <small class="d-block text-muted">Checked in—please wait for your turn</small>
-                        <?php endif; ?>
-                      </td>
-                      <td>
-                        <span class="badge bg-light text-dark border"><?= esc($typeLabel((string) $a['type'])) ?></span>
-                      </td>
-                      <td>
-                        <span class="badge <?= esc($statusBadge((string) $a['status'])) ?>"><?= esc($statusLabel((string) $a['status'])) ?></span>
-                      </td>
-                      <td class="text-end pe-3">
-                        <div class="d-inline-flex justify-content-end gap-1 text-nowrap">
-                          <a href="<?= esc(site_url('/portal/appointments/' . (int) $a['id'])) ?>"
-                             class="btn btn-outline-primary btn-sm py-0"
-                             data-app-modal-open
-                             aria-label="<?= esc('View details for ' . $serviceLabel((string) $a['unit']) . ' appointment on ' . date('M j, Y', strtotime($a['starts_at']))) ?>">Details</a>
-                          <?php if (in_array($a['status'], ['requested', 'scheduled', 'confirmed'], true)): ?>
-                            <form action="<?= site_url('/portal/appointments/' . $a['unit'] . '/cancel/' . $a['id']) ?>" method="POST" class="d-inline" data-background-submit
-                                  data-confirm-reason
-                                  data-confirm="Cancel this appointment or pending request? Any reserved slot will be released."
-                                  data-confirm-title="Cancel appointment"
-                                  data-confirm-label="Cancel appointment"
-                                  data-confirm-tone="danger">
-                              <?= csrf_field() ?>
-                              <input type="hidden" name="reason" value="">
-                              <button type="submit" class="btn btn-outline-danger btn-sm py-0">Cancel</button>
-                            </form>
-                          <?php endif; ?>
-                        </div>
-                      </td>
-                    </tr>
-                  <?php endforeach; ?>
-                <?php endif; ?>
-              </tbody>
-            </table>
-          </div>
-          <div class="px-3 pb-3">
-            <?= view('partials/table_pagination', [
-                'pagination' => $pagination ?? [],
-                'filters' => $filters,
-                'rowCount' => count($appointments),
-                'baseUrl' => site_url('/portal'),
-                'paginationPageParam' => 'page',
-                'paginationExtraQuery' => ['service' => $filters['service'], 'sort' => $filters['sort']],
-                'paginationLiveFilters' => true,
-                'paginationLabel' => 'My appointment pages',
-                'totalLabel' => 'total appointments',
-            ]) ?>
-          </div>
-        </div>
-      </div>
-      </section>
     </div>
   </div>
 </div>
@@ -897,6 +920,7 @@ $callSlipsTooltip = $unacknowledgedCallSlipsCount > 0
     justify-content: space-between;
     align-items: center;
     gap: 0.75rem;
+    min-height: 41px;
     margin-bottom: 1rem;
   }
   .portal-app-icon {
@@ -1183,23 +1207,6 @@ $callSlipsTooltip = $unacknowledgedCallSlipsCount > 0
     .portal-workspace-actions .btn {
       flex: 1 1 auto;
       text-align: center;
-    }
-    .portal-callslip-item .ms-auto {
-      width: 100%;
-      margin-left: 0 !important;
-    }
-    .portal-callslip-item [data-background-submit] {
-      display: block !important;
-    }
-    .portal-callslip-item [data-background-submit] button {
-      width: 100%;
-    }
-    #my-appointments .card-header {
-      padding: 0.85rem 0.9rem !important;
-    }
-    #my-appointments > div.px-3,
-    #my-appointments [data-filter-region="results"] > .px-3 {
-      padding-inline: 0.9rem !important;
     }
   }
 </style>

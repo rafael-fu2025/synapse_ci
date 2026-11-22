@@ -24,6 +24,7 @@ use App\Services\Reporting\ClinicSummaryReportService;
 use App\Services\Reporting\ExportPdf;
 use App\Services\Reporting\LatexReportCompiler;
 use App\Services\Scheduling\SchedulingClock;
+use CodeIgniter\HTTP\ResponseInterface;
 use Config\Database;
 
 final class ClinicController extends BaseController
@@ -126,6 +127,36 @@ final class ClinicController extends BaseController
                 ->select('e.id, e.chief_complaint, e.status, e.started_at, ' . $timeCol . ' AS visited_at, p.first_name, p.last_name, p.mis_id, p.kind, u.username as attending_name', false)
                 ->orderBy($timeCol, 'DESC', false)->orderBy('e.id', 'DESC')->limit(6)->get()->getResultArray();
 
+            $openEncountersCount = (int) $db->table('clinic_encounters')
+                ->where('tenant_id', $tenantId)->where('deleted_at', null)
+                ->where('status', 'in_progress')->countAllResults();
+
+            $activeQueuePreview = $db->table('queue_entries qe')
+                ->join('people p', 'p.id = qe.person_id AND p.tenant_id = qe.tenant_id')
+                ->join('student_profiles sp', 'sp.person_id = p.id', 'left')
+                ->join('employee_profiles ep', 'ep.person_id = p.id', 'left')
+                ->where('qe.tenant_id', $tenantId)->where('qe.unit', 'clinic')->where('qe.queue_date', $today)
+                ->whereIn('qe.status', ['in_consultation', 'called', 'waiting'])
+                ->select('qe.id, qe.ticket_code, qe.status, qe.priority, qe.called_at, qe.started_at, p.first_name, p.last_name, p.mis_id, sp.program, sp.year_level, ep.department AS employee_dept')
+                ->orderBy("FIELD(qe.status, 'in_consultation', 'called', 'waiting')", '', false)
+                ->orderBy("FIELD(qe.priority, 'emergency', 'urgent', 'routine')", '', false)
+                ->orderBy('qe.ticket_no', 'ASC')
+                ->limit(4)->get()->getResultArray();
+
+            $todaySchedule = $db->table('appointments a')
+                ->join('people p', 'p.id = a.person_id AND p.tenant_id = a.tenant_id')
+                ->where('a.tenant_id', $tenantId)->where('a.deleted_at', null)
+                ->where('a.unit', 'clinic')->where('a.local_date', $today)
+                ->whereNotIn('a.status', ['cancelled', 'no_show'])
+                ->select('a.id, a.starts_at, a.ends_at, a.status, a.type, a.reason, p.first_name, p.last_name, p.mis_id')
+                ->orderBy('a.starts_at', 'ASC')->limit(5)->get()->getResultArray();
+
+            $pendingAppointmentsCount = (int) $db->table('appointments')
+                ->where('tenant_id', $tenantId)->where('deleted_at', null)
+                ->where('unit', 'clinic')->where('status', 'requested')->countAllResults();
+
+            $schoolYear = PatientHistoryService::currentSchoolYear();
+
             if ($rangeKey === 'sy') {
                 $syStartYear = (int) substr(PatientHistoryService::currentSchoolYear(), 0, 4);
                 $manilaTz = SchedulingClock::timezone();
@@ -170,10 +201,15 @@ final class ClinicController extends BaseController
                 'inventoryAlerts'      => $inventoryAlerts,
                 'activeIsolationCount' => $activeIsolationCount,
                 'isolationAlerts'      => $isolationAlerts,
-                'triageCounts'         => $triageCounts,
-                'recentEncounters'     => $recentEncounters,
-                'chartDays'            => $days,
-                'chartSeries'          => $dailyEncounters,
+                'triageCounts'             => $triageCounts,
+                'recentEncounters'         => $recentEncounters,
+                'openEncountersCount'      => $openEncountersCount,
+                'activeQueuePreview'       => $activeQueuePreview,
+                'todaySchedule'            => $todaySchedule,
+                'pendingAppointmentsCount' => $pendingAppointmentsCount,
+                'schoolYear'               => $schoolYear,
+                'chartDays'                => $days,
+                'chartSeries'              => $dailyEncounters,
             ];
         });
 
@@ -189,6 +225,99 @@ final class ClinicController extends BaseController
                 ['label' => 'Dashboard', 'url' => ''],
             ],
         ]);
+    }
+
+    /**
+     * Lightweight JSON feed for in-place dashboard intake timeframe switching (7d / 30d / sy).
+     */
+    public function intakeSeries(): ResponseInterface
+    {
+        $this->response->setHeader('Cache-Control', 'private, no-store');
+
+        $rangeKey = (string) ($this->request->getGet('range') ?? '7d');
+        if (!in_array($rangeKey, ['7d', '30d', 'sy'], true)) {
+            $rangeKey = '7d';
+        }
+
+        try {
+            $tenantId = CurrentTenant::id();
+            $db = Database::connect();
+
+            $payload = DashboardCache::remember('clinic.dashboard.intake.' . $rangeKey, DashboardCache::TTL, static function () use ($db, $tenantId, $rangeKey): array {
+                $hasVisitedAt = $db->fieldExists('visited_at', 'clinic_encounters');
+                $timeCol = $hasVisitedAt ? 'COALESCE(e.visited_at, e.started_at)' : 'e.started_at';
+                $schoolYear = PatientHistoryService::currentSchoolYear();
+
+                if ($rangeKey === 'sy') {
+                    $syStartYear = (int) substr($schoolYear, 0, 4);
+                    $manilaTz = SchedulingClock::timezone();
+                    $utcTz = new \DateTimeZone('UTC');
+                    $currentMonthStart = new \DateTimeImmutable(SchedulingClock::now()->format('Y-m-01 00:00:00'), $manilaTz);
+                    $syStartMonth = new \DateTimeImmutable($syStartYear . '-06-01 00:00:00', $manilaTz);
+                    $ranges = [];
+                    $days = [];
+                    for ($cursor = $syStartMonth; $cursor <= $currentMonthStart; $cursor = $cursor->modify('+1 month')) {
+                        $next = $cursor->modify('+1 month');
+                        $ranges[] = [
+                            $cursor->setTimezone($utcTz)->format('Y-m-d H:i:s'),
+                            $next->setTimezone($utcTz)->format('Y-m-d H:i:s'),
+                        ];
+                        $days[] = $cursor->format('M Y');
+                    }
+                } else {
+                    $dayCount = $rangeKey === '30d' ? 30 : 7;
+                    $ranges = SchedulingClock::businessDayRanges($dayCount);
+                    $days = array_map(static fn (string $businessDay): string => date('M j', strtotime($businessDay)), array_keys($ranges));
+                }
+
+                $series = array_fill(0, count($ranges), 0);
+                if ($ranges !== []) {
+                    foreach ($db->table('clinic_encounters e')
+                        ->where('e.tenant_id', $tenantId)->where('e.deleted_at', null)
+                        ->where($timeCol . ' >= ' . $db->escape($ranges[array_key_first($ranges)][0]), null, false)
+                        ->where($timeCol . ' < ' . $db->escape($ranges[array_key_last($ranges)][1]), null, false)
+                        ->select($timeCol . ' AS effective_at', false)->get()->getResultArray() as $encounterRow) {
+                        $bucket = SchedulingClock::businessDayIndex((string) $encounterRow['effective_at'], $ranges);
+                        if ($bucket !== null) {
+                            $series[$bucket]++;
+                        }
+                    }
+                }
+
+                $total = array_sum($series);
+                $buckets = max(1, count($series));
+                $average = round($total / $buckets, 1);
+                $peakValue = $series !== [] ? max($series) : 0;
+                $peakIdx = $series !== [] ? array_search($peakValue, $series, true) : false;
+                $peakLabel = ($peakIdx !== false && isset($days[$peakIdx])) ? (string) $days[$peakIdx] : '—';
+
+                $subtitle = match ($rangeKey) {
+                    '30d' => '30-day clinical intake trajectory · Manila business days',
+                    'sy' => ($schoolYear !== '' ? 'SY ' . $schoolYear : 'School Year') . ' monthly clinical intake',
+                    default => '7-day clinical intake trajectory · Manila business days',
+                };
+
+                return [
+                    'rangeKey'   => $rangeKey,
+                    'days'       => $days,
+                    'series'     => $series,
+                    'schoolYear' => $schoolYear,
+                    'subtitle'   => $subtitle,
+                    'avgLabel'   => $rangeKey === 'sy' ? 'Monthly Average' : 'Daily Average',
+                    'avgUnit'    => $rangeKey === 'sy' ? '/ month' : '/ day',
+                    'total'      => $total,
+                    'average'    => $average,
+                    'peakValue'  => $peakValue,
+                    'peakLabel'  => $peakLabel,
+                ];
+            });
+
+            return $this->response->setJSON($payload);
+        } catch (\Throwable) {
+            return $this->response->setStatusCode(503)->setJSON([
+                'message' => 'Unable to load intake chart data right now.',
+            ]);
+        }
     }
 
     /**
@@ -770,7 +899,7 @@ final class ClinicController extends BaseController
             $this->authorizeClinicPermission('clinic.reports.export');
             $service = new ClinicSummaryReportService();
             $summary = $service->buildSummary($this->request->getGet());
-            return view('clinic/reports/summary', [
+            $viewData = [
                 'title'     => 'Clinic Periodic & CHED Summary Report',
                 'pageTitle' => 'Clinic Periodic & CHED Report',
                 'summary'   => $summary,
@@ -779,7 +908,11 @@ final class ClinicController extends BaseController
                     ['label' => 'Clinic', 'url' => site_url('/clinic')],
                     ['label' => 'Periodic & CHED Reports', 'url' => ''],
                 ],
-            ]);
+            ];
+            if ($this->request->getGet('fragment') === '1') {
+                return $this->response->setContentType('text/html')->setBody(view('clinic/reports/_body', $viewData));
+            }
+            return view('clinic/reports/summary', $viewData);
         } catch (\Throwable $e) {
             $status = in_array($e->getCode(), [403, 422], true) || $e instanceof \InvalidArgumentException ? ($e->getCode() ?: 422) : 500;
             return $this->response->setStatusCode($status)->setBody(esc($status === 500 ? 'Unable to load Clinic summary report.' : $e->getMessage()));
@@ -788,17 +921,39 @@ final class ClinicController extends BaseController
 
     public function summaryReportPdf()
     {
+        $isPostOrAjax = strtolower($this->request->getMethod()) === 'post' || $this->request->isAJAX();
         try {
             $this->authorizeClinicPermission('clinic.reports.export');
+            $input = strtolower($this->request->getMethod()) === 'post'
+                ? (array) $this->request->getPost()
+                : (array) $this->request->getGet();
+            $format = $input['format'] ?? 'pdf';
+            if (!is_string($format) || $format !== 'pdf') {
+                throw new \InvalidArgumentException('Choose PDF format.', 422);
+            }
             $service = new ClinicSummaryReportService();
-            $summary = $service->buildSummary($this->request->getGet());
+            $summary = $service->buildSummary($input);
             $tex = ClinicSummaryReportLatex::source($summary);
             $pdf = LatexReportCompiler::compile($tex);
-            $slug = 'clinic-summary-' . preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $summary['period']['preset'])) . '.pdf';
+            $presetSlug = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) $summary['period']['preset'])) ?: 'report';
+            $fromSlug = preg_replace('/[^0-9-]/', '', (string) $summary['period']['from']);
+            $toSlug = preg_replace('/[^0-9-]/', '', (string) $summary['period']['to']);
+            $slug = 'clinic-summary-' . $presetSlug
+                . ($fromSlug !== '' && $toSlug !== '' ? '_' . $fromSlug . '_' . $toSlug : '')
+                . '.pdf';
+            $this->response->setHeader('X-Content-Type-Options', 'nosniff');
             return ExportPdf::response($this->response, $pdf, $slug);
         } catch (\Throwable $e) {
-            $status = in_array($e->getCode(), [403, 422], true) || $e instanceof \InvalidArgumentException ? ($e->getCode() ?: 422) : 503;
-            return $this->response->setStatusCode($status)->setBody(esc($e->getMessage()));
+            $code = (int) $e->getCode();
+            $status = in_array($code, [401, 403, 422], true) ? $code
+                : ($e instanceof \InvalidArgumentException ? 422 : 503);
+            $message = $status === 503 ? 'Export unavailable. No download was produced.' : $e->getMessage();
+            if ($isPostOrAjax) {
+                return $this->response->setStatusCode($status)
+                    ->setHeader('Cache-Control', 'private, no-store')
+                    ->setJSON(['message' => $message]);
+            }
+            return $this->response->setStatusCode($status)->setBody(esc($message));
         }
     }
 

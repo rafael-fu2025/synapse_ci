@@ -345,14 +345,29 @@
     busy(true);
     announce('Loading page…');
     try {
-      const response = await fetch(url.href, {
+      const fetchDocument = () => fetch(url.href, {
         method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'follow',
         referrer: currentUrl, referrerPolicy: 'same-origin', signal: controller.signal,
         // Do not send HX-Request/X-Requested-With: this request needs the full server document.
         headers: { Accept: 'text/html', 'X-Synapse-Navigation': '1', ...window.SynapseCsrf?.headers() }
       });
+      let response = await fetchDocument();
       if (token !== sequence) return false;
       if (controller.signal.aborted) throw new Error('Navigation was interrupted.');
+      if (response.status === 409 && response.headers.get('X-Synapse-Session') === 'rotated') {
+        const retrySeconds = Number.parseFloat(response.headers.get('Retry-After') || '');
+        const delayMs = Number.isFinite(retrySeconds) ? Math.min(Math.max(retrySeconds * 1000, 250), 1500) : 1000;
+        await new Promise((resolve, reject) => {
+          const onAbort = () => { clearTimeout(timer); reject(new Error('Navigation was interrupted.')); };
+          const timer = setTimeout(() => { controller.signal.removeEventListener('abort', onAbort); resolve(); }, delayMs);
+          if (controller.signal.aborted) onAbort();
+          else controller.signal.addEventListener('abort', onAbort, { once: true });
+        });
+        if (token !== sequence || controller.signal.aborted) return false;
+        response = await fetchDocument();
+        if (token !== sequence) return false;
+        if (controller.signal.aborted) throw new Error('Navigation was interrupted.');
+      }
       const finalUrl = urlFor(response.url || url.href);
       if (!finalUrl) { if (options.fallback !== false) fullNavigation(url.href); return false; }
       if (window.SynapseCsrf?.fromResponse(response)) return false;
@@ -633,7 +648,7 @@
         void restoreRegionalHistory(entry);
         return;
       }
-      const table = document.querySelector('#main [data-live-table], #main [data-guidance-client-record]');
+      const table = document.querySelector('#main [data-live-table], #main [data-guidance-client-record], #main [data-cr-workspace], #main [data-iso-workspace]');
       const tableEndpoint = table?.dataset.endpoint ? urlFor(table.dataset.endpoint) : null;
       // /index.php/x and /x are the same route; the table fetches the canonical endpoint itself.
       const route = pathname => pathname.replace(/^\/index\.php(?=\/)/, '');

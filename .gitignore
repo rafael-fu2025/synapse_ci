@@ -196,6 +196,7 @@ __pycache__/
 !/tests/unit/AiRecoveryMariaDbTest.php
 !/tests/unit/TeamWorkspaceConfigTest.php
 !/tests/unit/TeamWorkspaceInvalidationTest.php
+!/tests/unit/TeamWorkspaceResponseTest.php
 !/tests/unit/NotificationTargetTest.php
 !/tests/unit/PushPublisherTest.php
 !/tests/unit/TeamPushRecipientTest.php
@@ -261,6 +262,13 @@ __pycache__/
 !/tests/_support/fresh-database-bootstrap.php
 !/tests/_support/run-fresh-database-tests.py
 !/tests/_support/render-guidance-clients-fixture.php
+!/tests/_support/render-guidance-announcements-fixture.php
+!/tests/_support/guidance-announcements-browser-harness.cjs
+!/tests/_support/render-guidance-rollout-gates-fixture.php
+!/tests/_support/guidance-rollout-gates-browser-harness.cjs
+!/tests/_support/render-teams-workspace-fixture.php
+!/tests/_support/teams-workspace-browser-harness.cjs
+!/tests/_support/team-workspace-response-bootstrap.php
 !/tests/_support/render-portal-workspace-fixture.php
 !/tests/_support/guidance-clients-fixture-server.cjs
 !/tests/_support/queue-invalidation-phpunit.xml
@@ -277,6 +285,11 @@ __pycache__/
 /tests/browser/*
 !/tests/browser/package.json
 !/tests/browser/package-lock.json
+!/tests/browser/date-range-picker.test.cjs
+!/tests/browser/survey-date-range-picker.test.cjs
+!/tests/browser/guidance-announcements.test.cjs
+!/tests/browser/guidance-rollout-gates.test.cjs
+!/tests/browser/teams-workspace.test.cjs
 !/tests/browser/refresh-regions.test.cjs
 !/tests/browser/announcement-refresh-regions.test.cjs
 !/tests/browser/clinical-refresh-regions.test.cjs

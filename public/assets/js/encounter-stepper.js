@@ -3,17 +3,18 @@
   'use strict';
   if (window.SynapseEncounterStepper) return;
 
-  window.encounterStepper = function () {
+  window.encounterStepper = function (initial = {}) {
+    const num = (value) => (value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value)) ? Number(value) : null);
     return {
       init() {
         this.$nextTick(() => { this.stopDraftSaving = window.SynapseEncounterStepper.init(this.$el); });
       },
       destroy() { this.stopDraftSaving?.(); },
-      bpSys: null,
-      bpDia: null,
-      tempC: null,
-      weight: null,
-      height: null,
+      bpSys: num(initial.bpSys),
+      bpDia: num(initial.bpDia),
+      tempC: num(initial.tempC),
+      weight: num(initial.weight),
+      height: num(initial.height),
       calcBmi() {
         if (this.weight && this.height && this.height > 0) {
           const hMeter = this.height / 100;
@@ -106,21 +107,24 @@
         qualEl.appendChild(extra);
       }
       qualEl.dataset.initialValue = '';
+      qualEl.dispatchEvent(new Event('bd-select:sync'));
       if (chiefEl && meta && (!chiefEl.value.trim() || chiefEl.dataset.autoComposed === '1')) {
         chiefEl.value = qualEl.value ? `${meta.label} (${qualEl.value})` : meta.label;
         chiefEl.dataset.autoComposed = '1';
       }
     }
 
-    const alpineData = window.Alpine?.$data?.(root);
-    if (alpineData) {
+    const syncAlpineVitals = () => {
+      const alpineData = window.Alpine?.$data?.(root);
+      if (!alpineData) return;
       for (const [name, property] of Object.entries({
         bp_systolic: 'bpSys', bp_diastolic: 'bpDia', temp_c: 'tempC', weight_kg: 'weight', height_cm: 'height'
       })) {
         const field = forms.flatMap(form => Array.from(form.elements)).find(control => control.name === name);
         if (field && field.value !== '') alpineData[property] = Number(field.value);
       }
-    }
+    };
+    syncAlpineVitals();
 
     // Recover unsaved draft after sudden brownout/reload if localStorage holds fresher edits.
     if (storageKey) {
@@ -133,10 +137,14 @@
             const field = fields.find(f => f.name === name);
             if (field && typeof value === 'string' && field.value !== value) {
               field.value = value;
+              if (field.tagName === 'SELECT') field.dispatchEvent(new Event('bd-select:sync'));
               restored = true;
             }
           }
-          if (restored && backupBanner) backupBanner.hidden = false;
+          if (restored) {
+            syncAlpineVitals();
+            if (backupBanner) backupBanner.hidden = false;
+          }
         }
       } catch {}
     }

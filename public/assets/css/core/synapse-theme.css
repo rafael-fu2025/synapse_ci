@@ -251,6 +251,14 @@ fieldset:disabled .btn {
   line-height: 1;
 }
 
+.unit-btn-icon {
+  width: 1.05em;
+  height: 1.05em;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: -0.15em;
+}
+
 .form-actions {
   display: flex;
   flex-wrap: wrap;
@@ -789,6 +797,233 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
   color: #ff9999 !important;
 }
 
+/* Editorial flash banners rendered by partials/alerts.php (e.g. "Welcome back, …!").
+   Uses a calm neutral surface with crisp hairline border and semantic icon ink
+   instead of washed-out pastel Bootstrap fills or thick side stripes. */
+.alert.synapse-flash-alert {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+  padding: 0.72rem 2.75rem 0.72rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background-color: var(--surface-color, #ffffff);
+  color: var(--heading-color, #111827);
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.45;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.alert.synapse-flash-alert.synapse-flash-list {
+  align-items: flex-start;
+  padding-top: 0.82rem;
+  padding-bottom: 0.82rem;
+}
+
+.alert.synapse-flash-alert .synapse-flash-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.alert.synapse-flash-alert.synapse-flash-list .synapse-flash-icon {
+  margin-top: 0.14rem;
+}
+
+.alert.synapse-flash-alert.synapse-flash-success .synapse-flash-icon {
+  color: #146c43;
+}
+
+.alert.synapse-flash-alert.synapse-flash-danger .synapse-flash-icon {
+  color: #b42318;
+}
+
+.alert.synapse-flash-alert.synapse-flash-warning .synapse-flash-icon {
+  color: #9a5b13;
+}
+
+.alert.synapse-flash-alert.synapse-flash-info .synapse-flash-icon {
+  color: #1d5d8f;
+}
+
+.alert.synapse-flash-alert .synapse-flash-text,
+.alert.synapse-flash-alert .synapse-flash-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.alert.synapse-flash-alert .synapse-flash-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: var(--heading-color, #111827);
+}
+
+.alert.synapse-flash-alert .synapse-flash-errors {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.83rem;
+  color: var(--default-color, #374151);
+}
+
+.alert.synapse-flash-alert .synapse-flash-errors li + li {
+  margin-top: 0.15rem;
+}
+
+.alert.synapse-flash-alert .btn-close {
+  position: absolute;
+  top: 50%;
+  right: 0.72rem;
+  transform: translateY(-50%);
+  padding: 0.45rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  background-size: 0.68rem;
+  opacity: 0.5;
+  transition: opacity 0.14s ease;
+}
+
+.alert.synapse-flash-alert.synapse-flash-list .btn-close {
+  top: 0.82rem;
+  transform: none;
+}
+
+.alert.synapse-flash-alert .btn-close:hover {
+  opacity: 0.88;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert.synapse-flash-alert {
+  background-color: #1c1c1c !important;
+  border: 1px solid rgba(255, 255, 255, 0.11) !important;
+  border-left-width: 1px !important;
+  color: #f3f4f6 !important;
+  box-shadow: none;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert.synapse-flash-alert.synapse-flash-success .synapse-flash-icon {
+  color: #6ee7b7;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert.synapse-flash-alert.synapse-flash-danger .synapse-flash-icon {
+  color: #f87171;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert.synapse-flash-alert.synapse-flash-warning .synapse-flash-icon {
+  color: #fbbf24;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert.synapse-flash-alert.synapse-flash-info .synapse-flash-icon {
+  color: #7dd3fc;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert.synapse-flash-alert .synapse-flash-title {
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .alert.synapse-flash-alert .synapse-flash-errors {
+  color: #d1d5db;
+}
+
+/* Editorial Confirmation Dialogs (#synapseConfirmModal & #logoutConfirmModal)
+   Preserves shared modal header/footer/surface tokens with #globalSearchDialog
+   while eliminating centered-icon boilerplate in favor of crisp left-aligned copy. */
+:is(#synapseConfirmModal, #logoutConfirmModal) .synapse-confirm-body {
+  padding: 1.25rem 1.35rem;
+  text-align: left;
+}
+
+:is(#synapseConfirmModal, #logoutConfirmModal) .synapse-confirm-lead {
+  margin: 0 0 0.35rem;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--heading-color, #111827);
+}
+
+:is(#synapseConfirmModal, #logoutConfirmModal) .synapse-confirm-text {
+  font-size: 0.87rem;
+  line-height: 1.58;
+  color: var(--default-color, #374151);
+  overflow-wrap: anywhere;
+}
+
+#synapseConfirmModal .synapse-confirm-reason {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eff1f5;
+  text-align: left;
+}
+
+#synapseConfirmModal .synapse-confirm-label {
+  display: block;
+  margin-bottom: 0.36rem;
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--heading-color, #111827);
+}
+
+#synapseConfirmModal .synapse-confirm-input {
+  height: 38px;
+  min-height: 38px;
+  padding: 0.42rem 0.78rem;
+  font-size: 0.85rem;
+  border-radius: 7px;
+  border-color: #cfd5df;
+}
+
+#synapseConfirmModal .synapse-confirm-help {
+  margin-top: 0.38rem;
+  font-size: 0.76rem;
+  line-height: 1.48;
+  color: #5c6573;
+}
+
+:is(#synapseConfirmModal, #logoutConfirmModal) .modal-footer {
+  gap: 0.5rem;
+}
+
+:is(#synapseConfirmModal, #logoutConfirmModal) .modal-footer .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  border-radius: 7px;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(#synapseConfirmModal, #logoutConfirmModal) .synapse-confirm-lead {
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(#synapseConfirmModal, #logoutConfirmModal) .synapse-confirm-text {
+  color: #d1d5db;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #synapseConfirmModal .synapse-confirm-reason {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #synapseConfirmModal .synapse-confirm-label {
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #synapseConfirmModal .synapse-confirm-input {
+  background-color: #151515;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #synapseConfirmModal .synapse-confirm-help {
+  color: #9ca3af;
+}
+
 /* -------------------------------------------------------------
  * 8b. Dashboard Welcome Banner
  * ------------------------------------------------------------- */
@@ -899,8 +1134,19 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
   box-shadow: none !important;
 }
 
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu {
+  background-color: #1c1c1c !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f0f0f0 !important;
+  box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+}
+
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-header {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-avatar {
+  border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-name {
@@ -942,36 +1188,56 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-email {
-  color: #a3a3a3 !important;
+  color: #9ca3af !important;
 }
 
 .user-menu-role-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 0.64rem;
+  align-self: flex-start;
+  font-size: 0.60rem;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 1.5px 6.5px;
   border-radius: 4px;
   background: rgba(128, 0, 0, 0.08);
-  color: var(--fu-maroon);
+  color: var(--fu-maroon, #800000);
   border: 1px solid rgba(128, 0, 0, 0.22);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
+  margin-top: 5px;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-role-badge {
-  background: rgba(212, 117, 117, 0.16) !important;
+  background: #800000 !important;
   color: #ffffff !important;
-  border-color: rgba(212, 117, 117, 0.35) !important;
+  border-color: #800000 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-section-header {
+  color: #6b7280 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-divider {
+  background-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-item {
-  color: #e0e0e0 !important;
+  color: #d1d5db !important;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-item:hover {
   background-color: rgba(255, 255, 255, 0.08) !important;
   color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-item .user-menu-icon,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-item > i,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-item > .unit-btn-icon {
+  color: #e5e7eb !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .user-menu-footer {
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 /* -------------------------------------------------------------
@@ -981,6 +1247,7 @@ html body :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-lin
   --bs-tooltip-bg: #1e1e1e !important;
   --bs-tooltip-color: #ffffff !important;
   --bs-tooltip-opacity: 1 !important;
+  pointer-events: none;
 }
 
 .tooltip-inner {
@@ -1150,11 +1417,31 @@ html:not([data-theme="dark"]) .synapse-logo-light {
 
 /* Extend NiceAdmin v3's existing notification component; no legacy dropdown copy. */
 .notification-dropdown .notification-mark-all {
-  font-size: .75rem;
+  font-size: 0.72rem;
+  font-weight: 600;
   white-space: nowrap;
+  padding: 4px 10px;
+  height: 28px;
+  border-radius: 6px;
+  line-height: 1.2;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+.notification-dropdown .notification-mark-all:not(:disabled) {
+  background: var(--fu-brand, #800000);
+  border: 1px solid var(--fu-brand, #800000);
+  color: #ffffff;
+}
+.notification-dropdown .notification-mark-all:not(:disabled):hover {
+  background: color-mix(in srgb, var(--fu-brand, #800000), #000 15%);
+  border-color: color-mix(in srgb, var(--fu-brand, #800000), #000 15%);
+  color: #ffffff;
 }
 .notification-dropdown .notification-mark-all:disabled {
   cursor: default;
+  opacity: 0.45;
+  background: var(--fu-brand, #800000);
+  border: 1px solid var(--fu-brand, #800000);
+  color: #ffffff;
 }
 .notification-dropdown .notification-content { min-width: 0; }
 .notification-dropdown .notification-title,
@@ -1174,3 +1461,177 @@ html:not([data-theme="dark"]) .synapse-logo-light {
 }
 .notification-dropdown[aria-busy="true"] .notification-list { opacity: .7; }
 #my-appointments { scroll-margin-top: calc(var(--header-height, 64px) + 1rem); }
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-menu {
+  background: #1e1e1e !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-header {
+  background: #1e1e1e !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-header h6 {
+  color: #f3f4f6 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-header span {
+  color: #9ca3af !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-dropdown .notification-mark-all:not(:disabled) {
+  background: #800000 !important;
+  border-color: #800000 !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-dropdown .notification-mark-all:disabled {
+  background: #800000 !important;
+  border-color: #800000 !important;
+  color: #ffffff !important;
+  opacity: 0.45 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-item {
+  border-bottom-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-item:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-item.unread {
+  background: rgba(128, 0, 0, 0.05) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-dot {
+  background: #800000 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-title {
+  color: #f3f4f6 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-text {
+  color: #9ca3af !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-time {
+  color: #6b7280 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-icon.success {
+  color: #2dd4bf !important;
+  background: rgba(45, 212, 191, 0.12) !important;
+  border-color: rgba(45, 212, 191, 0.25) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-icon.warning {
+  color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.12) !important;
+  border-color: rgba(251, 191, 36, 0.25) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-icon.info {
+  color: #60a5fa !important;
+  background: rgba(96, 165, 250, 0.12) !important;
+  border-color: rgba(96, 165, 250, 0.25) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-footer {
+  background: #1e1e1e !important;
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-footer a {
+  color: #e5e7eb !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .notification-footer a:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Portal Editorial Back Button (.portal-back-btn)
+   Calm neutral hairline button for returning to My Health Portal or parent
+   portal views (both inside #portal-workspace-pane and standalone pages).
+   -------------------------------------------------------------------------- */
+.portal-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 0.85rem;
+  border-radius: 7px;
+  border: 1px solid #d1d5db;
+  background: var(--surface-color, #ffffff);
+  color: #374151 !important;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.portal-back-btn > i {
+  font-size: 0.86rem;
+  line-height: 1;
+  margin-right: 0 !important;
+  transition: transform 0.14s ease;
+}
+
+.portal-back-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #111827 !important;
+  text-decoration: none;
+}
+
+.portal-back-btn:hover > i {
+  transform: translateX(-2px);
+}
+
+.portal-back-btn:active {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+  color: #111827 !important;
+}
+
+.portal-back-btn:focus-visible {
+  outline: none;
+  border-color: var(--focus-color, #800000);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.16));
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-back-btn {
+  background: #1c1c1c;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #e5e7eb !important;
+  box-shadow: none;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-back-btn:hover {
+  background: #262626;
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-back-btn:active {
+  background: #2e2e2e;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff !important;
+}
+
+@media (max-width: 575.98px) {
+  .portal-workspace-actions .portal-back-btn {
+    flex: 1 1 auto;
+    min-height: 38px;
+  }
+}

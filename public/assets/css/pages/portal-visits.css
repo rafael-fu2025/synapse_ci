@@ -1,0 +1,527 @@
+/* ==========================================================================
+   SYNAPSE — My Visit History (.pv-workspace)
+   One editorial attendance sheet with hairline ledger rows, quiet status text,
+   and container-responsive fields matching the other personal portal screens.
+   ========================================================================== */
+
+.pv-workspace {
+  --pv-surface: var(--surface-color, #ffffff);
+  --pv-surface-subtle: #f8f9fb;
+  --pv-border: #e5e7eb;
+  --pv-border-subtle: #eff1f5;
+  --pv-border-input: #cfd5df;
+  --pv-heading: var(--heading-color, #111827);
+  --pv-text: var(--default-color, #1f2937);
+  --pv-muted: #5c6573;
+  --pv-accent: var(--fu-brand, #800000);
+  --pv-success: #146c43;
+  container-type: inline-size;
+  container-name: pv-workspace;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  color: var(--pv-text);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .pv-workspace {
+  --pv-surface: #1c1c1c;
+  --pv-surface-subtle: #161616;
+  --pv-border: rgba(255, 255, 255, 0.11);
+  --pv-border-subtle: rgba(255, 255, 255, 0.075);
+  --pv-border-input: rgba(255, 255, 255, 0.18);
+  --pv-heading: #f3f4f6;
+  --pv-text: #e2e4e8;
+  --pv-muted: #9ca3af;
+  --pv-accent: #e08a8a;
+  --pv-success: #6ee7b7;
+}
+
+/* Sheet, introduction, and attendance-only notice */
+.pv-workspace .pv-sheet {
+  min-width: 0;
+  border: 1px solid var(--pv-border);
+  border-radius: 12px;
+  background: var(--pv-surface);
+}
+
+.pv-workspace .pv-band {
+  padding: 1.4rem 1.55rem;
+  min-width: 0;
+}
+
+.pv-workspace .pv-intro-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+  color: var(--pv-heading);
+}
+
+.pv-workspace .pv-intro-desc {
+  margin: 0.24rem 0 0;
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 1rem 0 1.15rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--pv-border-subtle);
+  font-size: 0.8rem;
+  line-height: 1.65;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-privacy > i {
+  flex-shrink: 0;
+  margin-top: 0.12rem;
+  color: var(--pv-accent);
+}
+
+.pv-workspace .pv-privacy p {
+  margin: 0;
+  min-width: 0;
+}
+
+.pv-workspace .pv-privacy strong {
+  font-weight: 600;
+  color: var(--pv-heading);
+}
+
+/* Filter controls retain the shared custom-select interaction */
+.pv-workspace .pv-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.7rem 0.75rem;
+  max-width: 35rem;
+}
+
+.pv-workspace .pv-filter-field {
+  min-width: 0;
+}
+
+.pv-workspace .pv-filter-label {
+  display: block;
+  margin-bottom: 0.34rem;
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--pv-heading);
+}
+
+.pv-workspace .pv-filter-field .form-select,
+.pv-workspace .pv-filter-field .bd-select .bd-select-toggle {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--pv-border-input);
+  border-radius: 7px !important;
+  background-color: var(--pv-surface);
+  font-size: 0.83rem !important;
+  line-height: 1.4;
+  color: var(--pv-heading);
+}
+
+.pv-workspace .pv-filter-field .form-select:focus-visible,
+.pv-workspace .pv-filter-field .bd-select .bd-select-toggle:focus-visible {
+  border-color: var(--pv-accent);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.16));
+}
+
+.pv-workspace .bd-select-label,
+.pv-workspace .bd-select-menu .dropdown-item {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.pv-workspace .pv-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pv-workspace .pv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  min-height: 38px;
+  padding: 0.46rem 0.9rem !important;
+  border-radius: 7px !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.pv-workspace [data-filter-status]:not([hidden]) {
+  margin: 0.7rem 0 0;
+  font-size: 0.77rem;
+  color: var(--pv-muted);
+}
+
+.pv-workspace [data-filter-error]:not([hidden]) {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.88rem;
+  border-radius: 8px;
+  font-size: 0.81rem;
+}
+
+/* Result summary lives inside the refreshed history region */
+.pv-workspace .pv-results-region {
+  min-width: 0;
+  border-top: 1px solid var(--pv-border);
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+}
+
+.pv-workspace .pv-results-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1.1rem;
+  padding: 0.9rem 1.55rem;
+}
+
+.pv-workspace .pv-results-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.32rem 0.8rem;
+  min-width: 0;
+}
+
+.pv-workspace .pv-results-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--pv-heading);
+}
+
+.pv-workspace .pv-count {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-timezone {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--pv-muted);
+}
+
+/* Semantic table on wide panes; labelled ledger entries below 800px */
+.pv-workspace .pv-table-wrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.pv-workspace .pv-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--pv-text);
+}
+
+.pv-workspace .pv-col-date { width: 27%; }
+.pv-workspace .pv-col-service { width: 21%; }
+.pv-workspace .pv-col-staff { width: 19%; }
+.pv-workspace .pv-col-attendance { width: 14%; }
+.pv-workspace .pv-col-summary { width: 19%; }
+
+.pv-workspace .pv-table thead th {
+  padding: 0.68rem 0.7rem;
+  border-top: 1px solid var(--pv-border-subtle);
+  border-bottom: 1px solid var(--pv-border);
+  background: var(--pv-surface-subtle);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-table tbody td {
+  padding: 1rem 0.7rem;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.pv-workspace .pv-table thead th:first-child,
+.pv-workspace .pv-table tbody td:first-child {
+  padding-left: 1.55rem;
+}
+
+.pv-workspace .pv-table thead th:last-child,
+.pv-workspace .pv-table tbody td:last-child {
+  padding-right: 1.55rem;
+}
+
+.pv-workspace .pv-table > tbody > tr:nth-of-type(odd) {
+  background-color: var(--table-stripe-bg);
+}
+
+.pv-workspace .pv-table tbody tr + tr {
+  border-top: 1px solid var(--pv-border-subtle);
+}
+
+.pv-workspace .pv-cell-label {
+  display: none;
+}
+
+.pv-workspace .pv-started,
+.pv-workspace .pv-finished {
+  display: block;
+  font-family: var(--mono-font, monospace);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+}
+
+.pv-workspace .pv-started {
+  font-size: 0.79rem;
+  font-weight: 600;
+  line-height: 1.55;
+  color: var(--pv-heading);
+}
+
+.pv-workspace .pv-finished {
+  margin-top: 0.18rem;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-service-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.pv-workspace .pv-unit-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  margin-top: 0.14rem;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-service-name {
+  min-width: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--pv-heading);
+}
+
+.pv-workspace .pv-staff-name {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.pv-workspace .pv-attendance-label {
+  font-size: 0.8rem;
+}
+
+.pv-workspace .pv-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--pv-success);
+}
+
+.pv-workspace .pv-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pv-workspace .pv-summary-text {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--pv-muted);
+}
+
+/* Empty state and the existing shared pagination */
+.pv-workspace .pv-empty {
+  padding: 2.5rem 1.55rem;
+  border-top: 1px solid var(--pv-border-subtle);
+  text-align: center;
+}
+
+.pv-workspace .pv-empty > i {
+  display: block;
+  margin-bottom: 0.65rem;
+  font-size: 1.65rem;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-empty h3 {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--pv-heading);
+}
+
+.pv-workspace .pv-empty p {
+  max-width: 34rem;
+  margin: 0.35rem auto 0;
+  font-size: 0.83rem;
+  line-height: 1.65;
+  color: var(--pv-muted);
+}
+
+.pv-workspace .pv-pagination-band {
+  padding: 0.85rem 1.55rem 1.15rem;
+  border-top: 1px solid var(--pv-border-subtle);
+}
+
+@container pv-workspace (max-width: 799.98px) {
+  .pv-workspace .pv-table colgroup {
+    display: none;
+  }
+
+  .pv-workspace .pv-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .pv-workspace .pv-table,
+  .pv-workspace .pv-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .pv-workspace .pv-table tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "service summary" "date date" "staff attendance";
+    gap: 0.85rem 1.25rem;
+    width: 100%;
+    padding: 1.15rem 1.55rem;
+    border-top: 1px solid var(--pv-border-subtle);
+  }
+
+  .pv-workspace .pv-table tbody td,
+  .pv-workspace .pv-table tbody td:first-child,
+  .pv-workspace .pv-table tbody td:last-child {
+    display: block;
+    min-width: 0;
+    padding: 0;
+  }
+
+  .pv-workspace .pv-visit-date { grid-area: date; }
+  .pv-workspace .pv-service { grid-area: service; }
+  .pv-workspace .pv-staff { grid-area: staff; }
+  .pv-workspace .pv-attendance { grid-area: attendance; }
+  .pv-workspace .pv-summary { grid-area: summary; }
+
+  .pv-workspace .pv-cell-label {
+    display: block;
+    margin-bottom: 0.22rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--pv-muted);
+  }
+
+  .pv-workspace .pv-service > .pv-cell-label,
+  .pv-workspace .pv-summary > .pv-cell-label {
+    display: none;
+  }
+
+  .pv-workspace .pv-summary {
+    text-align: right;
+  }
+
+  .pv-workspace .pv-started {
+    font-size: 0.82rem;
+  }
+
+  .pv-workspace .pv-service-name {
+    font-size: 0.89rem;
+  }
+}
+
+@container pv-workspace (max-width: 619.98px) {
+  .pv-workspace .pv-band {
+    padding: 1.15rem 1.05rem;
+  }
+
+  .pv-workspace .pv-results-head,
+  .pv-workspace .pv-pagination-band {
+    padding-inline: 1.05rem;
+  }
+
+  .pv-workspace .pv-table tbody tr {
+    padding-inline: 1.05rem;
+    gap: 0.8rem 0.85rem;
+  }
+
+  .pv-workspace .pv-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: none;
+  }
+
+  .pv-workspace .pv-filter-actions .pv-btn {
+    flex: 1 1 0;
+  }
+
+  .pv-workspace .pv-empty {
+    padding: 2.1rem 1.05rem;
+  }
+}
+
+@container pv-workspace (max-width: 359.98px) {
+  .pv-workspace .pv-table tbody tr {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "service" "date" "staff" "attendance" "summary";
+  }
+
+  .pv-workspace .pv-summary {
+    padding-top: 0.65rem !important;
+    border-top: 1px solid var(--pv-border-subtle);
+    text-align: left;
+  }
+
+  .pv-workspace .pv-summary-text {
+    display: inline;
+    margin: 0 0 0 0.45rem;
+  }
+}

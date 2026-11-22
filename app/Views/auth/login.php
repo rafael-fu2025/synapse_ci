@@ -186,10 +186,10 @@
           <?= csrf_field() ?>
 
           <!-- ID Number -->
-          <div class="mb-3">
-            <label for="identifier" class="form-label small fw-semibold text-secondary mb-1"><?= esc($identifierLabel) ?></label>
+          <div class="auth-field-group">
+            <label for="identifier" class="form-label auth-field-label"><?= esc($identifierLabel) ?></label>
             <input type="text"
-                   class="form-control py-2<?= $identifierError !== '' ? ' is-invalid' : '' ?>"
+                   class="form-control auth-input<?= $identifierError !== '' ? ' is-invalid' : '' ?>"
                    id="identifier"
                    name="identifier"
                    placeholder="<?= esc($identifierPlaceholder) ?>"
@@ -205,10 +205,10 @@
 
           <!-- Password with seamless internal show/hide toggle -->
           <div class="auth-password-group">
-            <label for="password" class="form-label small fw-semibold text-secondary mb-1">Password</label>
+            <label for="password" class="form-label auth-field-label">Password</label>
             <div class="password-field-wrapper">
               <input type="password"
-                     class="form-control py-2<?= $passwordError !== '' ? ' is-invalid' : '' ?>"
+                     class="form-control auth-input<?= $passwordError !== '' ? ' is-invalid' : '' ?>"
                      id="password"
                      name="password"
                      placeholder="Enter your password"
@@ -222,13 +222,13 @@
                       aria-pressed="false"
                       aria-label="Show password">
                 <span class="eye-icon-open d-flex align-items-center" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                     <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
                     <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
                   </svg>
                 </span>
                 <span class="eye-icon-closed d-none align-items-center" aria-hidden="true">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                     <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7 7 0 0 0-2.79.588l.77.771A6 6 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755q-.247.248-.517.486z"/>
                     <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829zm-4.708 2.272L5.3 10.16a3.5 3.5 0 0 1-1.477-1.477L2.537 7.397q-.37.49-.691.956a13 13 0 0 0 1.66 2.043C4.12 11.332 5.88 12.5 8 12.5c1.69 0 3.208-.737 4.359-1.876l-.771-.77a6 6 0 0 1-5.176 1.488z"/>
                     <path d="M0 1.5 1.5 0l14.5 14.5L14.5 16 0 1.5z"/>
@@ -243,7 +243,7 @@
 
           <!-- Submit Button -->
           <div class="d-grid">
-            <button type="submit" class="btn btn-primary shadow-sm">
+            <button type="submit" class="btn btn-primary auth-submit-btn">
               Sign in
             </button>
           </div>

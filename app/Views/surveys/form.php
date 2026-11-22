@@ -1,4 +1,7 @@
 <?= $this->extend('layouts/modal_form') ?>
+<?= $this->section('styles') ?>
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/guidance-surveys.css'), 'attr') ?>">
+<?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <?php
 $externalUrl = trim((string) ($survey['external_url'] ?? ''));
@@ -11,17 +14,24 @@ $aiStatus = is_array($aiPrefillStatus ?? null) ? $aiPrefillStatus : ['available'
 $aiAvailable = !empty($aiStatus['available']);
 $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPrefillUrl : site_url('guidance/surveys/ai-prefill');
 ?>
-<div class="guidance-ui" x-data="SynapseSurveyBuilder(<?= esc(json_encode($questions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>, <?= esc(json_encode($survey['audience'] ?? 'all'), 'attr') ?>, <?= esc(json_encode(site_url('guidance/question-bank/catalog')), 'attr') ?>, <?= esc(json_encode($surveyMode), 'attr') ?>, <?= esc(json_encode($externalUrl), 'attr') ?>, <?= esc(json_encode($aiEndpoint), 'attr') ?>)">
-  <div class="alert alert-info small">In-app surveys collect encrypted identified responses visible only to authorized Guidance administrators and supervisors. External links (such as Google Forms) open on the external form provider. Publishing permanently freezes the configuration, audience, and availability window.</div>
+<div class="guidance-ui gs-editor" x-data="SynapseSurveyBuilder(<?= esc(json_encode($questions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?>, <?= esc(json_encode($survey['audience'] ?? 'all'), 'attr') ?>, <?= esc(json_encode(site_url('guidance/question-bank/catalog')), 'attr') ?>, <?= esc(json_encode($surveyMode), 'attr') ?>, <?= esc(json_encode($externalUrl), 'attr') ?>, <?= esc(json_encode($aiEndpoint), 'attr') ?>)">
+  <div class="gs-editor-intro" role="note">In-app surveys collect encrypted identified responses visible only to authorized Guidance administrators and supervisors. External links (such as Google Forms) open on the external form provider. Publishing permanently freezes the configuration, audience, and availability window.</div>
   <noscript><div class="alert alert-warning">Enable JavaScript to use the question builder.</div></noscript>
   <form action="<?= esc($formAction) ?>" method="post" data-modal-submit>
     <?= csrf_field() ?>
     <?php if ($survey !== null): ?><input type="hidden" name="version" value="<?= (int) $survey['version'] ?>"><?php endif; ?>
-    <div class="mb-3"><label for="surveyTitle" class="form-label">Title</label><input id="surveyTitle" name="title" class="form-control" maxlength="200" required value="<?= esc($survey['title'] ?? '') ?>"></div>
-    <div class="mb-3"><label for="surveyDescription" class="form-label">Description</label><textarea id="surveyDescription" name="description" class="form-control" maxlength="2000" rows="3"><?= esc($survey['description'] ?? '') ?></textarea></div>
-    <div class="mb-3"><label for="surveyAudience" class="form-label">Audience</label><select id="surveyAudience" name="audience" class="form-select" x-model="audience"><?php foreach (['all' => 'Students and employees', 'students' => 'Students', 'employees' => 'Employees'] as $value => $label): ?><option value="<?= esc($value) ?>" <?= ($survey['audience'] ?? 'all') === $value ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?></select></div>
-    <?= view('announcements/_targeting', ['targetRecord' => $survey ?? [], 'targetPrefix' => 'survey'], ['saveData' => false]) ?>
-    <div class="row g-3 mb-3">
+    <section class="gs-editor-section" aria-labelledby="surveyDetailsSection">
+      <div class="gs-section-head"><span class="gs-section-number" aria-hidden="true">01</span><h2 id="surveyDetailsSection" class="gs-section-title">Survey details</h2></div>
+      <div class="gs-field mb-3"><label for="surveyTitle" class="form-label">Title</label><input id="surveyTitle" name="title" class="form-control" maxlength="200" required value="<?= esc($survey['title'] ?? '') ?>"></div>
+      <div class="gs-field mb-3"><label for="surveyDescription" class="form-label">Description</label><textarea id="surveyDescription" name="description" class="form-control" maxlength="2000" rows="3"><?= esc($survey['description'] ?? '') ?></textarea></div>
+    </section>
+    <section class="gs-editor-section" aria-labelledby="surveyAudienceSection">
+      <div class="gs-section-head"><span class="gs-section-number" aria-hidden="true">02</span><h2 id="surveyAudienceSection" class="gs-section-title">Audience &amp; availability</h2></div>
+      <div class="gs-field mb-3"><label for="surveyAudience" class="form-label">Audience</label><select id="surveyAudience" name="audience" class="form-select" x-model="audience"><?php foreach (['all' => 'Students and employees', 'students' => 'Students', 'employees' => 'Employees'] as $value => $label): ?><option value="<?= esc($value) ?>" <?= ($survey['audience'] ?? 'all') === $value ? 'selected' : '' ?>><?= esc($label) ?></option><?php endforeach; ?></select></div>
+      <div class="gs-targeting">
+        <?= view('announcements/_targeting', ['targetRecord' => $survey ?? [], 'targetPrefix' => 'survey'], ['saveData' => false]) ?>
+      </div>
+      <div class="gs-date-fields row g-3 mb-3">
       <div class="col-md-6">
         <label for="surveyStartDisplay" class="form-label fw-semibold">Starts at (Asia/Manila)</label>
         <input type="text"
@@ -56,12 +66,15 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
                value="<?= esc($survey['ends_at'] ?? '') ?>">
         <div class="form-text">Leave empty for no scheduled end.</div>
       </div>
-    </div>
-    <div class="mb-3">
+      </div>
+    </section>
+    <section class="gs-editor-section" aria-labelledby="surveyDeliverySection">
+      <div class="gs-section-head"><span class="gs-section-number" aria-hidden="true">03</span><h2 id="surveyDeliverySection" class="gs-section-title">Delivery mode</h2></div>
+    <div class="gs-field mb-3">
       <div class="form-label fw-semibold">Survey Delivery Mode</div>
-      <div class="row g-2">
+      <div class="gs-mode-grid row g-2">
         <div class="col-md-6">
-          <label class="d-flex align-items-start gap-2 p-2 rounded border bg-body-tertiary h-100" style="cursor: pointer;">
+          <label class="gs-mode-choice d-flex align-items-start gap-2 h-100">
             <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="survey_mode" value="internal" x-model="surveyMode" @change="setMode('internal')">
             <span class="small">
               <strong class="d-block">In-App Questions (Encrypted)</strong>
@@ -70,7 +83,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
           </label>
         </div>
         <div class="col-md-6">
-          <label class="d-flex align-items-start gap-2 p-2 rounded border bg-body-tertiary h-100" style="cursor: pointer;">
+          <label class="gs-mode-choice d-flex align-items-start gap-2 h-100">
             <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="survey_mode" value="external" x-model="surveyMode" @change="setMode('external')">
             <span class="small">
               <strong class="d-block">Google Form / External Link</strong>
@@ -81,7 +94,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
       </div>
     </div>
 
-    <div class="border rounded p-3 mb-3 bg-body-tertiary" x-show="surveyMode === 'external'" x-cloak>
+    <div class="gs-external-panel gs-field" x-show="surveyMode === 'external'" x-cloak>
       <label for="surveyExternalUrl" class="form-label fw-semibold">Google Form / External Survey URL</label>
       <input id="surveyExternalUrl"
              name="external_url"
@@ -98,9 +111,11 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
       </div>
     </div>
 
-    <div x-show="surveyMode === 'internal'" x-cloak>
+    </section>
+    <section class="gs-editor-section" aria-labelledby="surveyQuestionsSection" x-show="surveyMode === 'internal'" x-cloak>
+    <div class="gs-section-head"><span class="gs-section-number" aria-hidden="true">04</span><h2 id="surveyQuestionsSection" class="gs-section-title">Question authoring</h2></div>
     <fieldset class="border-0 p-0 m-0" :disabled="surveyMode !== 'internal'">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div class="gs-question-toolbar d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
       <h6 class="mb-0">Questions <span class="text-muted small" x-text="questions.length + ' / 20'"></span></h6>
       <div class="d-flex flex-wrap gap-2">
         <?php if ($aiAvailable): ?>
@@ -115,7 +130,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
       <p class="small text-muted mb-3"><i class="bi bi-stars me-1" aria-hidden="true"></i><?= esc((string) $aiStatus['reason']) ?></p>
     <?php endif; ?>
     <?php if ($aiAvailable): ?>
-      <section class="border rounded p-3 mb-3 bg-body-tertiary" x-show="aiOpen" x-cloak aria-label="AI survey prefill">
+      <section class="gs-ai-panel" x-show="aiOpen" x-cloak aria-label="AI survey prefill">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
           <div>
             <strong class="d-block small">Prefill Questions from Text or File (AI)</strong>
@@ -131,7 +146,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
 
         <div class="mb-3">
           <label class="form-label small fw-semibold mb-1" for="surveyAiSourceFile">Or upload questionnaire file</label>
-          <div class="input-group">
+          <div class="gs-ai-upload">
             <input id="surveyAiSourceFile" type="file" class="form-control" x-ref="aiFileInput" accept=".txt,.md,.csv,.docx,.pdf" @change="onAiFileChange($event)" :disabled="aiBusy">
             <button type="button" class="btn btn-outline-secondary" x-show="aiFileName !== ''" @click="clearAiFile($refs.aiFileInput)" :disabled="aiBusy">Clear file</button>
           </div>
@@ -209,7 +224,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
         </ul>
       </section>
     <?php endif; ?>
-    <section class="border rounded p-3 mb-3" x-show="bankOpen" x-cloak aria-label="Question bank picker">
+    <section class="gs-bank-picker" x-show="bankOpen" x-cloak aria-label="Question bank picker">
       <p class="small text-muted">Select several questions and add them together, or add one copy at a time. Selections stay checked across pages and searches until added or cleared. Editing a copied question detaches its bank reference. Bank revisions and archiving never alter saved survey copies.</p>
       <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
         <button type="button" class="btn btn-primary btn-sm" @click="addSelectedBankQuestions()" :disabled="bankSelected.length === 0 || bankBusy">Add selected questions</button>
@@ -236,7 +251,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
     </section>
     <p class="small text-success" role="status" x-show="bankMessage" x-text="bankMessage"></p>
     <template x-for="(question, index) in questions" :key="index">
-      <fieldset class="border rounded p-3 mb-3">
+      <fieldset class="gs-question">
         <legend class="float-none w-auto fs-6 px-1" x-text="'Question ' + (index + 1)"></legend>
         <p class="small text-muted" x-show="question.bank_id" x-text="'Bank #' + question.bank_id + ' · revision ' + question.bank_revision + ' · independent survey copy'"></p>
         <template x-if="question.bank_id"><div><input type="hidden" :name="'questions[' + index + '][bank_id]'" :value="question.bank_id"><input type="hidden" :name="'questions[' + index + '][bank_revision]'" :value="question.bank_revision"></div></template>
@@ -273,8 +288,8 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
     </template>
     <button class="btn btn-outline-primary btn-sm mb-3" type="button" :disabled="questions.length >= 20" @click="questions.push({type:'text',label:'',required:true,options:[],scale_min_label:'',scale_max_label:''})">Add question</button>
     </fieldset>
-    </div>
-    <div class="form-actions"><a class="btn btn-outline-secondary" href="<?= esc($cancelUrl) ?>" data-app-modal-close>Cancel</a><button class="btn btn-primary" type="submit">Save draft</button></div>
+    </section>
+    <div class="form-actions gs-form-actions"><a class="btn btn-outline-secondary" href="<?= esc($cancelUrl) ?>" data-app-modal-close>Cancel</a><button class="btn btn-primary" type="submit">Save draft</button></div>
   </form>
 </div>
 <?= $this->endSection() ?>

@@ -1,0 +1,684 @@
+/* ==========================================================================
+   SYNAPSE — Employee Guidance Referral (.portal-referral-workspace)
+   Matches Profile & Settings and My Surveys: calm editorial sheets, hairline
+   dividers, container-responsive layout, tactile checklist items, and theme-
+   aware dynamic student rows (fixes dark-mode bg-white).
+   ========================================================================== */
+
+.portal-referral-workspace {
+  --rf-surface: var(--surface-color, #ffffff);
+  --rf-surface-subtle: #f8f9fb;
+  --rf-surface-footer: #f9fafc;
+  --rf-border: #e5e7eb;
+  --rf-border-subtle: #eff1f5;
+  --rf-border-input: #cfd5df;
+  --rf-heading: var(--heading-color, #111827);
+  --rf-text: var(--default-color, #1f2937);
+  --rf-muted: #5c6573;
+  --rf-accent: var(--fu-brand, #800000);
+  --rf-accent-tint: rgba(128, 0, 0, 0.045);
+  --rf-accent-border: rgba(128, 0, 0, 0.34);
+  --rf-success: #146c43;
+  --rf-warning: #9a5b13;
+  --rf-info: #076e83;
+  --rf-danger: #a61e2a;
+
+  container-type: inline-size;
+  container-name: rf-workspace;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-referral-workspace {
+  --rf-surface: #1c1c1c;
+  --rf-surface-subtle: #161616;
+  --rf-surface-footer: #181818;
+  --rf-border: rgba(255, 255, 255, 0.11);
+  --rf-border-subtle: rgba(255, 255, 255, 0.075);
+  --rf-border-input: rgba(255, 255, 255, 0.18);
+  --rf-heading: #f3f4f6;
+  --rf-text: #e2e4e8;
+  --rf-muted: #9ca3af;
+  --rf-accent: #e08a8a;
+  --rf-accent-tint: rgba(224, 138, 138, 0.09);
+  --rf-accent-border: rgba(224, 138, 138, 0.42);
+  --rf-success: #6ee7b7;
+  --rf-warning: #fbbf24;
+  --rf-info: #7dd3fc;
+  --rf-danger: #f87171;
+}
+
+.portal-referral-workspace [data-refresh-heading]:is(:focus, :focus-visible) {
+  outline: none;
+}
+
+/* --------------------------------------------------------------------------
+   Container-Responsive Two-Sheet Layout
+   -------------------------------------------------------------------------- */
+
+.rf-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.15rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.rf-sheet {
+  border-radius: 12px;
+  border: 1px solid var(--rf-border);
+  background: var(--rf-surface);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.rf-band {
+  padding: 1.35rem 1.55rem;
+  min-width: 0;
+}
+
+.rf-band + .rf-band {
+  border-top: 1px solid var(--rf-border);
+}
+
+/* Header band */
+.rf-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+}
+
+.rf-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+  color: var(--rf-heading);
+}
+
+.rf-subtitle {
+  margin: 0.22rem 0 0;
+  font-family: var(--mono-font, monospace);
+  font-size: 0.74rem;
+  color: var(--rf-muted);
+}
+
+.rf-confidential {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: var(--rf-success);
+  white-space: nowrap;
+}
+
+.rf-confidential i {
+  font-size: 0.76rem;
+}
+
+.rf-gate-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid rgba(180, 83, 9, 0.28);
+  background: rgba(245, 158, 11, 0.08);
+  font-size: 0.81rem;
+  line-height: 1.52;
+  color: var(--rf-text);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .rf-gate-notice {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: rgba(251, 191, 36, 0.09);
+}
+
+.rf-gate-notice > i {
+  flex-shrink: 0;
+  margin-top: 0.14rem;
+  color: var(--rf-warning);
+}
+
+/* --------------------------------------------------------------------------
+   Step Headings & Shared Controls
+   -------------------------------------------------------------------------- */
+
+.rf-step-label {
+  display: block;
+  margin: 0 0 0.45rem;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--rf-heading);
+}
+
+.rf-step-num {
+  display: inline-block;
+  margin-right: 0.32rem;
+  font-family: var(--mono-font, monospace);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rf-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rf-step-opt {
+  margin-left: 0.35rem;
+  font-family: var(--default-font, sans-serif);
+  font-size: 0.77rem;
+  font-weight: 500;
+  color: var(--rf-muted);
+}
+
+.rf-step-req {
+  margin-left: 0.2rem;
+  color: var(--rf-accent);
+  font-weight: 700;
+}
+
+.rf-step-help {
+  margin: 0 0 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.52;
+  color: var(--rf-muted);
+  max-width: 66ch;
+}
+
+.rf-field-note {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--rf-muted);
+}
+
+.rf-input,
+.rf-select {
+  width: 100%;
+  min-width: 0;
+  height: 39px;
+  padding: 0.44rem 0.75rem !important;
+  font-size: 0.86rem !important;
+  border-radius: 7px !important;
+  border: 1px solid var(--rf-border-input);
+  background-color: var(--rf-surface);
+  color: var(--rf-heading);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rf-select:not(.bd-select-toggle) {
+  padding-right: 2.1rem !important;
+}
+
+.rf-textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.65rem 0.8rem !important;
+  font-size: 0.87rem !important;
+  line-height: 1.6;
+  border-radius: 8px !important;
+  border: 1px solid var(--rf-border-input);
+  background-color: var(--rf-surface);
+  color: var(--rf-heading);
+  resize: vertical;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rf-input:hover:not(:disabled),
+.rf-select:hover:not(:disabled),
+.rf-textarea:hover:not(:disabled) {
+  border-color: var(--rf-muted);
+}
+
+.rf-input:focus,
+.rf-select:focus,
+.rf-textarea:focus {
+  border-color: var(--focus-color, #800000);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.16));
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.rf-input, .rf-select, .rf-textarea) {
+  background-color: #151515;
+  border-color: var(--rf-border-input);
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.rf-input, .rf-select, .rf-textarea):focus {
+  background-color: #1a1a1a;
+  border-color: #e08a8a;
+  box-shadow: 0 0 0 3px rgba(224, 138, 138, 0.2);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.rf-input, .rf-textarea)::placeholder {
+  color: #737a86;
+}
+
+.rf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 0.95rem !important;
+  font-size: 0.83rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 7px !important;
+  white-space: nowrap;
+}
+
+.rf-btn-xs {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 0.65rem !important;
+  font-size: 0.77rem !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  line-height: 1 !important;
+  white-space: nowrap;
+}
+
+.rf-btn-xs i {
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Step 1: Exact Student MIS ID Lookup & Roster
+   -------------------------------------------------------------------------- */
+
+.rf-lookup-panel {
+  margin-top: 0.95rem;
+  padding: 1rem 1.05rem;
+  border-radius: 10px;
+  border: 1px solid var(--rf-border);
+  background: var(--rf-surface-subtle);
+  min-width: 0;
+}
+
+.rf-sub-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rf-heading);
+}
+
+.rf-lookup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rf-lookup-row .rf-input {
+  flex: 1 1 14rem;
+  height: 38px;
+  font-family: var(--mono-font, monospace);
+  font-size: 0.8rem !important;
+}
+
+.rf-lookup-status {
+  margin-top: 0.45rem;
+  font-size: 0.79rem;
+  line-height: 1.45;
+  min-height: 0;
+}
+
+.rf-roster {
+  margin-top: 0.95rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--rf-border);
+}
+
+.rf-roster-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.rf-roster-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rf-heading);
+}
+
+.rf-roster-count {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--rf-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rf-roster-empty {
+  padding: 0.8rem 0.9rem;
+  border-radius: 8px;
+  border: 1px dashed var(--rf-border-input);
+  font-size: 0.8rem;
+  color: var(--rf-muted);
+}
+
+.rf-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+/* Dynamically created selected student rows (theme-safe in light & dark) */
+.rf-student-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--rf-border);
+  background: var(--rf-surface);
+  min-width: 0;
+}
+
+.rf-student-copy {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.rf-student-name {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--rf-heading);
+  overflow-wrap: anywhere;
+}
+
+.rf-student-meta {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.76rem;
+  color: var(--rf-muted);
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   Step 2: Tactile Presenting Concerns Grid
+   -------------------------------------------------------------------------- */
+
+.rf-concern-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+}
+
+.rf-concern-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.62rem;
+  margin: 0;
+  padding: 0.68rem 0.82rem;
+  border-radius: 8px;
+  border: 1px solid var(--rf-border);
+  background: var(--rf-surface);
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.rf-concern-item:hover {
+  border-color: var(--rf-border-input);
+  background: var(--rf-surface-subtle);
+}
+
+.rf-concern-item:has(input:checked) {
+  border-color: var(--rf-accent-border);
+  background: var(--rf-accent-tint);
+}
+
+.rf-concern-item .form-check-input {
+  float: none;
+  margin: 0.18rem 0 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.rf-concern-copy {
+  min-width: 0;
+}
+
+.rf-concern-label {
+  display: block;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.38;
+  color: var(--rf-heading);
+}
+
+.rf-concern-desc {
+  display: block;
+  margin-top: 0.12rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--rf-muted);
+}
+
+.rf-other-wrap {
+  margin-top: 0.75rem;
+}
+
+/* Step 4 & 5 spacing */
+.rf-field-group + .rf-field-group {
+  margin-top: 1.25rem;
+}
+
+/* Form Footer */
+.rf-form-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem 1rem;
+  padding: 0.95rem 1.55rem;
+  background: var(--rf-surface-footer);
+  border-top: 1px solid var(--rf-border);
+}
+
+.rf-footer-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.76rem;
+  color: var(--rf-muted);
+}
+
+.rf-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+/* --------------------------------------------------------------------------
+   My Submitted & Draft Referrals Sheet
+   -------------------------------------------------------------------------- */
+
+.rf-history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 1.15rem 1.35rem;
+  border-bottom: 1px solid var(--rf-border);
+}
+
+.rf-history-count {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--rf-muted);
+}
+
+.rf-history-empty {
+  padding: 1.75rem 1.35rem;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--rf-muted);
+}
+
+.rf-history-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.rf-history-row {
+  padding: 0.95rem 1.35rem;
+  min-width: 0;
+}
+
+.rf-history-row + .rf-history-row {
+  border-top: 1px solid var(--rf-border-subtle);
+}
+
+.rf-history-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.65rem;
+}
+
+.rf-history-num {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--rf-heading);
+}
+
+.rf-history-status {
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--rf-muted);
+}
+
+.rf-history-status.is-submitted {
+  color: var(--rf-accent);
+}
+
+.rf-history-status.is-received {
+  color: var(--rf-info);
+}
+
+.rf-history-status.is-triaged {
+  color: var(--rf-warning);
+}
+
+.rf-history-status.is-accepted {
+  color: var(--rf-success);
+}
+
+.rf-history-status.is-declined {
+  color: var(--rf-danger);
+}
+
+.rf-history-subject {
+  margin-top: 0.22rem;
+  font-size: 0.82rem;
+  color: var(--rf-text);
+  overflow-wrap: anywhere;
+}
+
+.rf-history-subject span {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.76rem;
+  color: var(--rf-muted);
+}
+
+.rf-history-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.65rem;
+  margin-top: 0.6rem;
+}
+
+.rf-history-hint {
+  font-size: 0.76rem;
+  text-transform: capitalize;
+  color: var(--rf-muted);
+}
+
+.rf-history-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* --------------------------------------------------------------------------
+   Container-Query Responsive Breakpoints
+   -------------------------------------------------------------------------- */
+
+@container rf-workspace (min-width: 520px) {
+  .rf-concern-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Standalone desktop / ultrawide: generous 2-column split with history rail */
+@container rf-workspace (min-width: 860px) {
+  .rf-layout {
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 1.25rem;
+  }
+}
+
+@container rf-workspace (max-width: 479.98px) {
+  .rf-band,
+  .rf-form-footer {
+    padding-inline: 1.1rem;
+  }
+
+  .rf-history-head,
+  .rf-history-row {
+    padding-inline: 1.1rem;
+  }
+
+  .rf-lookup-row .rf-btn {
+    width: 100%;
+  }
+
+  .rf-form-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rf-footer-note {
+    justify-content: center;
+  }
+
+  .rf-footer-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rf-footer-actions .rf-btn {
+    width: 100%;
+  }
+}

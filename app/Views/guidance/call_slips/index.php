@@ -221,17 +221,24 @@ $statusBadges = [
                             </div>
                         </template>
 
-                        <div x-show="!selected">
-                            <input type="text" class="form-control" x-model="query" @input.debounce.300ms="search()" placeholder="Search exact student/client by name or MIS ID...">
-                            <div class="list-group mt-1 shadow-sm" x-show="results.length > 0" style="max-height: 200px; overflow-y: auto;">
-                                <template x-for="p in results" :key="p.id">
-                                    <button type="button" class="list-group-item list-group-item-action py-2" @click="pick(p)">
-                                        <div class="fw-semibold small" x-text="p.first_name + ' ' + p.last_name"></div>
-                                        <div class="text-muted" style="font-size: 0.75rem;" x-text="(p.mis_id || 'ID #' + p.id) + (p.kind ? ' · ' + p.kind : '')"></div>
-                                    </button>
-                                </template>
+                        <div class="syn-person-lookup" data-person-lookup x-show="!selected">
+                            <div data-person-lookup-anchor>
+                                <input type="text" class="form-control" x-model="query" @input.debounce.300ms="search()" autocomplete="off" placeholder="Search exact student/client by name or MIS ID...">
                             </div>
-                            <div class="form-text" x-show="searching">Searching...</div>
+                            <div class="syn-person-lookup-menu"
+                                 data-person-lookup-menu
+                                 x-show="searching || results.length > 0"
+                                 style="display: none;">
+                                <div class="syn-person-lookup-status" role="status" x-show="searching">Searching local directory...</div>
+                                <div class="list-group syn-person-lookup-list" x-show="results.length > 0">
+                                    <template x-for="p in results" :key="p.id">
+                                        <button type="button" class="list-group-item list-group-item-action py-2" @click="pick(p)">
+                                            <div class="fw-semibold small" x-text="p.first_name + ' ' + p.last_name"></div>
+                                            <div class="text-muted" style="font-size: 0.75rem;" x-text="(p.mis_id || 'ID #' + p.id) + (p.kind ? ' · ' + p.kind : '')"></div>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

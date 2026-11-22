@@ -51,6 +51,7 @@
     let dirty = false;
     let ready = window.SynapseRealtime?.status === 'ready';
     let selectedAnalysis = '';
+    let selectedFilter = 'all';
     let review = null;
     let modal;
     let modalClosingReview = null;
@@ -105,9 +106,32 @@
       if (preferred && [...selector.options].some(option => option.value === preferred)) selector.value = preferred;
       selectedAnalysis = selector.value;
       target.querySelectorAll('[data-ai-analysis-value]').forEach(input => { input.value = selectedAnalysis; });
+      target.querySelectorAll('[data-ai-analysis-choice]').forEach(choice => {
+        const activeChoice = choice.dataset.aiAnalysisChoice === selectedAnalysis;
+        choice.classList.toggle('is-selected', activeChoice);
+        choice.setAttribute('aria-checked', activeChoice ? 'true' : 'false');
+      });
       const option = [...target.querySelectorAll('[data-ai-analysis-option]')].find(item => item.dataset.aiAnalysisOption === selectedAnalysis);
       const description = target.querySelector('[data-ai-analysis-description]');
       if (description && option) description.textContent = option.dataset.description || '';
+    }
+
+    function applyFilter(target = panel, preferred = selectedFilter) {
+      const tabs = [...target.querySelectorAll('[data-ai-filter]')];
+      if (!tabs.length) {
+        selectedFilter = 'all';
+        return;
+      }
+      const next = tabs.some(tab => tab.dataset.aiFilter === preferred) ? preferred : 'all';
+      selectedFilter = next;
+      tabs.forEach(tab => {
+        const isActive = tab.dataset.aiFilter === next;
+        tab.classList.toggle('is-active', isActive);
+        tab.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+      target.querySelectorAll('[data-ai-insight-card]').forEach(card => {
+        card.hidden = next !== 'all' && card.dataset.aiFilterGroup !== next;
+      });
     }
 
     function clearModal({ restoreFocus = false } = {}) {
@@ -158,7 +182,10 @@
       if (kind === 'panel') reconcileReview(template.content);
       target.replaceChildren(template.content);
       restore(target, state);
-      if (kind === 'panel') applyAnalysis(target, previousAnalysis);
+      if (kind === 'panel') {
+        applyAnalysis(target, previousAnalysis);
+        applyFilter(target, selectedFilter);
+      }
       return true;
     }
 
@@ -285,6 +312,23 @@
     }, { signal: events.signal });
 
     root.addEventListener('click', event => {
+      const choice = event.target.closest('[data-ai-analysis-choice]');
+      if (choice && panel.contains(choice)) {
+        event.preventDefault();
+        applyAnalysis(panel, choice.dataset.aiAnalysisChoice);
+        return;
+      }
+      const filterTab = event.target.closest('[data-ai-filter]');
+      if (filterTab && panel.contains(filterTab)) {
+        event.preventDefault();
+        applyFilter(panel, filterTab.dataset.aiFilter);
+        return;
+      }
+      if (event.target.closest('[data-ai-dismiss-baseline]') && baseline?.contains(event.target)) {
+        event.preventDefault();
+        baseline.replaceChildren();
+        return;
+      }
       const opener = event.target.closest('[data-ai-open-review]');
       if (opener && panel.contains(opener)) {
         event.preventDefault();
@@ -415,6 +459,7 @@
     }, { signal: events.signal });
 
     applyAnalysis();
+    applyFilter();
     schedule();
 
     return () => {

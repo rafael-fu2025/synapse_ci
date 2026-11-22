@@ -43,28 +43,29 @@ final class GuidanceController extends BaseController
         if ($user === null) {
             return \App\Services\AuthenticatedUser::denied($this->request, false, 'Please sign in to continue.', '/auth/login');
         }
-        $tenantId = $user['tenant_id'];
+        $tenantId = (int) $user['tenant_id'];
+        $actorId = (int) ($user['id'] ?? 0);
+        $hasOversight = ($user['role'] ?? '') === 'superadmin'
+            || in_array('guidance.cases.read_any', $user['permissions'] ?? [], true);
+
+        $rangeKey = (string) ($this->request->getGet('range') ?? '7d');
+        if (!in_array($rangeKey, ['7d', '30d', 'sy'], true)) {
+            $rangeKey = '7d';
+        }
+
         $db = \Config\Database::connect();
         $today = SchedulingClock::today();
 
         // Case counts are scoped to the counsellor unless the actor holds oversight,
         // so the cache key must carry that discriminator: one shared key would leak
         // a caseload's numbers into another counsellor's dashboard.
-        $scope = 'guidance.dashboard.' . ($user['role'] === 'superadmin'
-            || in_array('guidance.cases.read_any', $user['permissions'], true) ? '0' : (string) $user['id']);
+        $scope = 'guidance.dashboard.' . ($hasOversight ? '0' : (string) $actorId)
+            . ($rangeKey === '7d' ? '' : '.' . $rangeKey);
 
-        $metrics = DashboardCache::remember($scope, DashboardCache::TTL, static function () use ($db, $tenantId, $today, $user): array {
-            // Share the ownership and live-person boundary across every case-derived dataset.
-            $cases = $db->table('counselling_cases')
-                ->join('people', 'people.id = counselling_cases.person_id AND people.tenant_id = counselling_cases.tenant_id')
-                ->where('counselling_cases.tenant_id', $tenantId)
-                ->where('counselling_cases.deleted_at', null)->where('people.deleted_at', null);
-            if ($user['role'] !== 'superadmin' && !in_array('guidance.cases.read_any', $user['permissions'], true)) {
-                $cases->where('counselling_cases.counsellor_user_id', $user['id']);
-            }
-            $sessions = (clone $cases)
-                ->join('counselling_sessions', 'counselling_sessions.case_id = counselling_cases.id AND counselling_sessions.tenant_id = counselling_cases.tenant_id')
-                ->where('counselling_sessions.deleted_at', null);
+        $controller = $this;
+        $metrics = DashboardCache::remember($scope, DashboardCache::TTL, static function () use ($controller, $db, $tenantId, $actorId, $hasOversight, $today, $rangeKey): array {
+            $cases = $controller->scopedCasesBuilder($db, $tenantId, $actorId, $hasOversight);
+            $sessions = $controller->scopedSessionsBuilder($cases, $tenantId);
 
             // 1. Case counts
             $activeCases = (clone $cases)->whereIn('counselling_cases.status', ['open', 'active', 'monitoring'])->countAllResults();
@@ -83,8 +84,9 @@ final class GuidanceController extends BaseController
                 ->where('tenant_id', $tenantId)->where('target_module', 'guidance')
                 ->whereIn('status', ['submitted', 'acknowledged'])->countAllResults();
 
-            // 4. Completed sessions
+            // 4. Sessions (completed + in-progress)
             $completedSessions = (clone $sessions)->where('counselling_sessions.status', 'completed')->countAllResults();
+            $inProgressSessions = (clone $sessions)->where('counselling_sessions.status', 'in_progress')->countAllResults();
 
             // 5. Category breakdown
             $categoryCounts = array_fill_keys(['academic', 'personal', 'career', 'crisis', 'behavioral', 'family'], 0);
@@ -98,36 +100,129 @@ final class GuidanceController extends BaseController
             // 6. Recent cases
             $recentCases = (clone $cases)
                 ->join('users', 'users.id = counselling_cases.counsellor_user_id AND users.tenant_id = counselling_cases.tenant_id')
-                ->select('counselling_cases.id, counselling_cases.case_number, counselling_cases.category, counselling_cases.status')
+                ->select('counselling_cases.id, counselling_cases.case_number, counselling_cases.category, counselling_cases.status, counselling_cases.opened_at')
                 ->select('people.first_name, people.last_name, people.mis_id, users.username as counsellor_name')
                 ->orderBy('counselling_cases.opened_at', 'DESC')->limit(6)->get()->getResultArray();
 
-            // 7. Last 7 days session activity
-            // One bounded range read, bucketed on the Manila business day in PHP:
-            // started_at is stored as a UTC instant, so the Manila day is a UTC range.
-            $ranges = SchedulingClock::businessDayRanges(7);
-            $days = array_map(static fn (string $businessDay): string => date('M j', strtotime($businessDay)), array_keys($ranges));
-            $dailySessions = array_fill(0, count($ranges), 0);
-            foreach ((clone $sessions)
-                ->where('counselling_sessions.started_at >=', $ranges[array_key_first($ranges)][0])
-                ->where('counselling_sessions.started_at <', $ranges[array_key_last($ranges)][1])
-                ->select('counselling_sessions.started_at')->get()->getResultArray() as $sessionRow) {
-                $bucket = SchedulingClock::businessDayIndex((string) $sessionRow['started_at'], $ranges);
-                if ($bucket !== null) {
-                    $dailySessions[$bucket]++;
+            // 7. Operational queue / intake / cosign / appointment enrichments (defensive against partial test schemas)
+            $pendingIntakes = 0;
+            if ($db->tableExists('guidance_intake_referrals')) {
+                try {
+                    $pendingIntakes = (int) $db->table('guidance_intake_referrals')
+                        ->where('tenant_id', $tenantId)
+                        ->whereIn('status', ['submitted', 'received', 'triaged'])
+                        ->countAllResults();
+                } catch (\Throwable) {
+                    $pendingIntakes = 0;
                 }
             }
 
+            $pendingCosigns = 0;
+            if ($db->tableExists('guidance_form_instances')) {
+                try {
+                    $cosignQuery = $db->table('guidance_form_instances')
+                        ->where('tenant_id', $tenantId)
+                        ->where('status', 'pending_cosign');
+                    if (!$hasOversight) {
+                        $cosignQuery->where('assigned_supervisor_user_id', $actorId);
+                    }
+                    $pendingCosigns = (int) $cosignQuery->countAllResults();
+                } catch (\Throwable) {
+                    $pendingCosigns = 0;
+                }
+            }
+
+            $appointmentsToday = 0;
+            $pendingAppointmentsCount = 0;
+            $todaySchedule = [];
+            if ($db->tableExists('appointments')) {
+                try {
+                    $apptCountQuery = $db->table('appointments a')
+                        ->where('a.tenant_id', $tenantId)->where('a.deleted_at', null)
+                        ->where('a.unit', 'guidance')->where('a.local_date', $today);
+                    $pendingApptQuery = $db->table('appointments a')
+                        ->where('a.tenant_id', $tenantId)->where('a.deleted_at', null)
+                        ->where('a.unit', 'guidance')->where('a.status', 'requested');
+                    $schedQuery = $db->table('appointments a')
+                        ->join('people p', 'p.id = a.person_id AND p.tenant_id = a.tenant_id AND p.deleted_at IS NULL')
+                        ->where('a.tenant_id', $tenantId)->where('a.deleted_at', null)
+                        ->where('a.unit', 'guidance')->where('a.local_date', $today)
+                        ->whereNotIn('a.status', ['cancelled', 'no_show']);
+                    if (!$hasOversight) {
+                        $apptCountQuery->where('a.provider_user_id', $actorId);
+                        $pendingApptQuery->where('a.provider_user_id', $actorId);
+                        $schedQuery->where('a.provider_user_id', $actorId);
+                    }
+                    $appointmentsToday = (int) $apptCountQuery->countAllResults();
+                    $pendingAppointmentsCount = (int) $pendingApptQuery->countAllResults();
+                    $todaySchedule = $schedQuery
+                        ->select('a.id, a.starts_at, a.ends_at, a.status, a.type, a.reason, p.first_name, p.last_name, p.mis_id')
+                        ->orderBy('a.starts_at', 'ASC')->limit(5)->get()->getResultArray();
+                } catch (\Throwable) {
+                    $appointmentsToday = 0;
+                    $pendingAppointmentsCount = 0;
+                    $todaySchedule = [];
+                }
+            }
+
+            $activeQueuePreview = [];
+            if ($db->fieldExists('ticket_code', 'queue_entries') && $db->fieldExists('person_id', 'queue_entries')) {
+                try {
+                    $qPreview = $db->table('queue_entries qe')
+                        ->join('people p', 'p.id = qe.person_id AND p.tenant_id = qe.tenant_id AND p.deleted_at IS NULL')
+                        ->where('qe.tenant_id', $tenantId)->where('qe.unit', 'guidance')->where('qe.queue_date', $today)
+                        ->whereIn('qe.status', ['in_consultation', 'called', 'waiting']);
+
+                    $selectCols = 'qe.id, qe.ticket_code, qe.status, qe.priority, qe.called_at, qe.started_at, p.first_name, p.last_name, p.mis_id';
+                    if ($db->tableExists('student_profiles')) {
+                        $qPreview->join('student_profiles sp', 'sp.person_id = p.id', 'left');
+                        $selectCols .= ', sp.program, sp.year_level';
+                    }
+                    if ($db->tableExists('employee_profiles')) {
+                        $qPreview->join('employee_profiles ep', 'ep.person_id = p.id', 'left');
+                        $selectCols .= ', ep.department AS employee_dept';
+                    }
+                    if (!$hasOversight) {
+                        $qPreview->where(
+                            'EXISTS (SELECT 1 FROM ' . $db->prefixTable('counselling_cases') . ' cc WHERE cc.person_id = qe.person_id AND cc.tenant_id = qe.tenant_id AND cc.counsellor_user_id = ' . $actorId . ' AND cc.deleted_at IS NULL)',
+                            null,
+                            false
+                        );
+                    }
+                    $activeQueuePreview = $qPreview
+                        ->select($selectCols)
+                        ->orderBy("CASE qe.status WHEN 'in_consultation' THEN 1 WHEN 'called' THEN 2 ELSE 3 END", 'ASC', false)
+                        ->orderBy("CASE qe.priority WHEN 'emergency' THEN 1 WHEN 'urgent' THEN 2 ELSE 3 END", 'ASC', false)
+                        ->orderBy('qe.ticket_no', 'ASC')
+                        ->limit(4)->get()->getResultArray();
+                } catch (\Throwable) {
+                    $activeQueuePreview = [];
+                }
+            }
+
+            // 8. Session activity trajectory (7d default preserved; supports 30d & sy)
+            $trajectory = $controller->sessionTrajectory($sessions, $rangeKey);
+
             return [
-                'activeCases'       => $activeCases,
-                'closedCases'       => $closedCases,
-                'queueToday'        => $queueWaiting + $queueCalled,
-                'pendingReferrals'  => $pendingReferrals,
-                'completedSessions' => $completedSessions,
-                'categoryCounts'    => $categoryCounts,
-                'recentCases'       => $recentCases,
-                'chartDays'         => $days,
-                'chartSeries'       => $dailySessions,
+                'activeCases'              => $activeCases,
+                'closedCases'              => $closedCases,
+                'queueToday'               => $queueWaiting + $queueCalled,
+                'queueWaiting'             => $queueWaiting,
+                'queueCalled'              => $queueCalled,
+                'pendingReferrals'         => $pendingReferrals,
+                'completedSessions'        => $completedSessions,
+                'inProgressSessions'       => $inProgressSessions,
+                'pendingIntakes'           => $pendingIntakes,
+                'pendingCosigns'           => $pendingCosigns,
+                'appointmentsToday'        => $appointmentsToday,
+                'pendingAppointmentsCount' => $pendingAppointmentsCount,
+                'todaySchedule'            => $todaySchedule,
+                'activeQueuePreview'       => $activeQueuePreview,
+                'schoolYear'               => $trajectory['schoolYear'],
+                'categoryCounts'           => $categoryCounts,
+                'recentCases'              => $recentCases,
+                'chartDays'                => $trajectory['days'],
+                'chartSeries'              => $trajectory['series'],
             ];
         });
 
@@ -135,11 +230,145 @@ final class GuidanceController extends BaseController
             'title'       => 'Guidance Dashboard',
             'pageTitle'   => 'Guidance Workstation Dashboard',
             'user'        => $user,
+            'rangeKey'    => $rangeKey,
             'breadcrumbs' => [
                 ['label' => 'Guidance', 'url' => site_url('/guidance')],
                 ['label' => 'Dashboard', 'url' => ''],
             ],
         ]);
+    }
+
+    /**
+     * Lightweight JSON feed for in-place guidance dashboard session velocity switching (7d / 30d / sy).
+     */
+    public function sessionSeries(): \CodeIgniter\HTTP\ResponseInterface
+    {
+        $this->response->setHeader('Cache-Control', 'private, no-store');
+
+        $user = (new \App\Services\AuthenticatedUser())->current();
+        if ($user === null) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'message' => 'Please sign in to continue.',
+            ]);
+        }
+
+        $rangeKey = (string) ($this->request->getGet('range') ?? '7d');
+        if (!in_array($rangeKey, ['7d', '30d', 'sy'], true)) {
+            $rangeKey = '7d';
+        }
+
+        try {
+            $tenantId = (int) $user['tenant_id'];
+            $actorId = (int) ($user['id'] ?? 0);
+            $hasOversight = ($user['role'] ?? '') === 'superadmin'
+                || in_array('guidance.cases.read_any', $user['permissions'] ?? [], true);
+
+            $db = \Config\Database::connect();
+            $cacheKey = 'guidance.dashboard.series.' . ($hasOversight ? '0' : (string) $actorId) . '.' . $rangeKey;
+            $controller = $this;
+
+            $payload = DashboardCache::remember($cacheKey, DashboardCache::TTL, static function () use ($controller, $db, $tenantId, $actorId, $hasOversight, $rangeKey): array {
+                $cases = $controller->scopedCasesBuilder($db, $tenantId, $actorId, $hasOversight);
+                $sessions = $controller->scopedSessionsBuilder($cases, $tenantId);
+                return $controller->sessionTrajectory($sessions, $rangeKey);
+            });
+
+            return $this->response->setJSON($payload);
+        } catch (\Throwable) {
+            return $this->response->setStatusCode(503)->setJSON([
+                'message' => 'Unable to load session trajectory right now.',
+            ]);
+        }
+    }
+
+    private function scopedCasesBuilder(\CodeIgniter\Database\BaseConnection $db, int $tenantId, int $actorId, bool $hasOversight)
+    {
+        $cases = $db->table('counselling_cases')
+            ->join('people', 'people.id = counselling_cases.person_id AND people.tenant_id = counselling_cases.tenant_id')
+            ->where('counselling_cases.tenant_id', $tenantId)
+            ->where('counselling_cases.deleted_at', null)
+            ->where('people.deleted_at', null);
+
+        if (!$hasOversight) {
+            $cases->where('counselling_cases.counsellor_user_id', $actorId);
+        }
+
+        return $cases;
+    }
+
+    private function scopedSessionsBuilder($casesBuilder, int $tenantId)
+    {
+        return (clone $casesBuilder)
+            ->join('counselling_sessions', 'counselling_sessions.case_id = counselling_cases.id AND counselling_sessions.tenant_id = counselling_cases.tenant_id')
+            ->where('counselling_sessions.deleted_at', null);
+    }
+
+    /** @return array<string, mixed> */
+    private function sessionTrajectory($sessionsBuilder, string $rangeKey): array
+    {
+        $schoolYear = \App\Services\Clinic\PatientHistoryService::currentSchoolYear();
+
+        if ($rangeKey === 'sy') {
+            $syStartYear = (int) substr($schoolYear, 0, 4);
+            $manilaTz = SchedulingClock::timezone();
+            $utcTz = new \DateTimeZone('UTC');
+            $currentMonthStart = new \DateTimeImmutable(SchedulingClock::now()->format('Y-m-01 00:00:00'), $manilaTz);
+            $syStartMonth = new \DateTimeImmutable($syStartYear . '-06-01 00:00:00', $manilaTz);
+            $ranges = [];
+            $days = [];
+            for ($cursor = $syStartMonth; $cursor <= $currentMonthStart; $cursor = $cursor->modify('+1 month')) {
+                $next = $cursor->modify('+1 month');
+                $ranges[] = [
+                    $cursor->setTimezone($utcTz)->format('Y-m-d H:i:s'),
+                    $next->setTimezone($utcTz)->format('Y-m-d H:i:s'),
+                ];
+                $days[] = $cursor->format('M Y');
+            }
+        } else {
+            $dayCount = $rangeKey === '30d' ? 30 : 7;
+            $ranges = SchedulingClock::businessDayRanges($dayCount);
+            $days = array_map(static fn (string $businessDay): string => date('M j', strtotime($businessDay)), array_keys($ranges));
+        }
+
+        $series = array_fill(0, count($ranges), 0);
+        if ($ranges !== []) {
+            foreach ((clone $sessionsBuilder)
+                ->where('counselling_sessions.started_at >=', $ranges[array_key_first($ranges)][0])
+                ->where('counselling_sessions.started_at <', $ranges[array_key_last($ranges)][1])
+                ->select('counselling_sessions.started_at')->get()->getResultArray() as $sessionRow) {
+                $bucket = SchedulingClock::businessDayIndex((string) $sessionRow['started_at'], $ranges);
+                if ($bucket !== null) {
+                    $series[$bucket]++;
+                }
+            }
+        }
+
+        $total = array_sum($series);
+        $buckets = max(1, count($series));
+        $average = round($total / $buckets, 1);
+        $peakValue = $series !== [] ? max($series) : 0;
+        $peakIdx = $series !== [] ? array_search($peakValue, $series, true) : false;
+        $peakLabel = ($peakIdx !== false && isset($days[$peakIdx])) ? (string) $days[$peakIdx] : '—';
+
+        $subtitle = match ($rangeKey) {
+            '30d' => '30-day session & engagement trajectory · Manila business days',
+            'sy' => ($schoolYear !== '' ? 'SY ' . $schoolYear : 'School Year') . ' monthly guidance engagements',
+            default => '7-day session & engagement trajectory · Manila business days',
+        };
+
+        return [
+            'rangeKey'   => $rangeKey,
+            'days'       => $days,
+            'series'     => $series,
+            'schoolYear' => $schoolYear,
+            'subtitle'   => $subtitle,
+            'avgLabel'   => $rangeKey === 'sy' ? 'Monthly Average' : 'Daily Average',
+            'avgUnit'    => $rangeKey === 'sy' ? '/ month' : '/ day',
+            'total'      => $total,
+            'average'    => $average,
+            'peakValue'  => $peakValue,
+            'peakLabel'  => $peakLabel,
+        ];
     }
 
     /**

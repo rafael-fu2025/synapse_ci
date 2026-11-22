@@ -25,16 +25,16 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
 ?>
 
 <!-- Live KPI Counters -->
-<div class="row g-3 mb-4 queue-metrics" aria-label="Daily queue totals" data-queue-waiting-count="<?= count($summary['waiting']) ?>">
+<div class="row g-2 g-md-3 queue-metrics" aria-label="Daily queue totals" data-queue-waiting-count="<?= count($summary['waiting']) ?>">
   <?php foreach ($metrics as [$key, $label, $icon]): ?>
     <div class="col-6 col-md-4 col-xl-2">
       <div class="card queue-metric mb-0 h-100">
-        <div class="card-body d-flex align-items-center gap-3">
-          <span class="queue-metric-icon" aria-hidden="true"><i class="bi <?= $icon ?>"></i></span>
-          <div class="min-w-0">
-            <span class="queue-metric-label text-muted"><?= esc($label) ?></span>
-            <div class="queue-metric-value"><?= (int) $counts[$key] ?></div>
+        <div class="card-body">
+          <div class="queue-metric-head">
+            <span class="queue-metric-label"><?= esc($label) ?></span>
+            <span class="queue-metric-icon" aria-hidden="true"><i class="bi <?= $icon ?>"></i></span>
           </div>
+          <div class="queue-metric-value"><?= (int) $counts[$key] ?></div>
         </div>
       </div>
     </div>
@@ -44,6 +44,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
 <template data-queue-no-show-history data-count="<?= count($summary['no_show'] ?? []) ?>" data-date="<?= esc($queueDate ?? '', 'attr') ?>">
   <?= view('queue/_no_show_list', ['noShows' => $summary['no_show'] ?? []]) ?>
 </template>
+
 <!-- Kanban Columns -->
 <div class="row g-3 align-items-start queue-columns">
 
@@ -54,31 +55,36 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
         <h6 class="queue-column-title">Waiting Line</h6>
         <span class="queue-column-count" aria-label="Waiting patients"><?= count($summary['waiting']) ?></span>
       </div>
-      <div class="card-body p-2 queue-column-body">
+      <div class="card-body queue-column-body">
         <?php if (empty($summary['waiting'])): ?>
-          <div class="queue-column-empty text-muted small">
-            <i class="bi bi-inbox fs-2 d-block mb-1"></i>
+          <div class="queue-column-empty">
+            <i class="bi bi-inbox fs-2 d-block mb-1" aria-hidden="true"></i>
             No patients waiting
           </div>
         <?php else: ?>
           <?php foreach ($summary['waiting'] as $item): ?>
-            <div class="card border-0 shadow-sm mb-2 p-3 queue-ticket-card">
-              <div class="d-flex justify-content-between align-items-start mb-2">
-                <span class="badge bg-dark-subtle text-dark fs-6 fw-bold px-2 py-1">
-                  <?= esc($item['ticket_code']) ?>
-                </span>
-                <?php if ($item['priority'] === 'emergency'): ?>
-                  <span class="badge bg-danger">EMERGENCY</span>
-                <?php elseif ($item['priority'] === 'urgent'): ?>
-                  <span class="badge bg-warning text-dark">URGENT</span>
+            <?php
+              $priorityCardClass = match ($item['priority'] ?? 'routine') {
+                  'emergency' => 'queue-ticket-card--emergency',
+                  'urgent' => 'queue-ticket-card--urgent',
+                  default => '',
+              };
+            ?>
+            <div class="card queue-ticket-card <?= $priorityCardClass ?>">
+              <div class="q-ticket-head">
+                <span class="q-ticket-code"><?= esc($item['ticket_code']) ?></span>
+                <?php if (($item['priority'] ?? '') === 'emergency'): ?>
+                  <span class="q-priority-dot q-priority-dot--emergency">Emergency</span>
+                <?php elseif (($item['priority'] ?? '') === 'urgent'): ?>
+                  <span class="q-priority-dot q-priority-dot--urgent">Urgent</span>
                 <?php endif; ?>
               </div>
 
-              <div class="fw-semibold text-truncate mb-1">
+              <div class="q-ticket-patient text-truncate">
                 <?= esc($item['last_name'] . ', ' . $item['first_name']) ?>
               </div>
-              <div class="text-muted small mb-2">
-                ID: <?= esc($item['mis_id']) ?>
+              <div class="q-ticket-meta">
+                <span class="q-mono">ID: <?= esc($item['mis_id']) ?></span>
                 <?php if (!empty($item['program'])): ?>
                   · <?= esc($item['program']) ?>-<?= esc($item['year_level']) ?>
                 <?php elseif (!empty($item['employee_dept'])): ?>
@@ -86,13 +92,13 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                 <?php endif; ?>
               </div>
 
-              <div class="d-flex gap-1 mt-2 queue-card-actions">
+              <div class="queue-card-actions">
                 <button type="button"
                         class="btn btn-primary btn-sm w-100"
                         hx-post="<?= site_url($unit . '/queue/call/' . $item['id']) ?>"
                         hx-target="#queue-board-container"
                         hx-swap="innerHTML">
-                  <i class="bi bi-megaphone me-1"></i> Call Patient
+                  <i class="bi bi-megaphone" aria-hidden="true"></i> Call Patient
                 </button>
               </div>
               <?= view('queue/no_show_action', ['item' => $item, 'unit' => $unit]) ?>
@@ -107,49 +113,45 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
   <div class="col-12 col-md-6 col-xl-3">
     <div class="card queue-column">
       <div class="card-header queue-column-header">
-        <h6 class="queue-column-title">Called & Arriving</h6>
+        <h6 class="queue-column-title">Called &amp; Arriving</h6>
         <span class="queue-column-count" aria-label="Called patients"><?= count($summary['called']) ?></span>
       </div>
-      <div class="card-body p-2 queue-column-body">
+      <div class="card-body queue-column-body">
         <?php if (empty($summary['called'])): ?>
-          <div class="queue-column-empty text-muted small">
-            <i class="bi bi-bell-slash fs-2 d-block mb-1"></i>
+          <div class="queue-column-empty">
+            <i class="bi bi-bell-slash fs-2 d-block mb-1" aria-hidden="true"></i>
             No active calls
           </div>
         <?php else: ?>
           <?php foreach ($summary['called'] as $item): ?>
-            <div class="card border-0 shadow-sm mb-2 p-3 border-start border-warning border-4 queue-ticket-card">
-              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
-                <span class="badge bg-warning text-dark fs-6 fw-bold px-2 py-1">
-                  <?= esc($item['ticket_code']) ?>
-                </span>
-                <span class="badge queue-timestamp-badge small border">
-                  Called: <?= date('h:i A', strtotime($item['called_at'] ?? 'now')) ?>
-                </span>
+            <div class="card queue-ticket-card queue-ticket-card--called">
+              <div class="q-ticket-head">
+                <span class="q-ticket-code q-ticket-code--called"><?= esc($item['ticket_code']) ?></span>
+                <span class="q-ticket-time">Called <?= date('h:i A', strtotime($item['called_at'] ?? 'now')) ?></span>
               </div>
 
-              <div class="fw-semibold text-truncate mb-1">
+              <div class="q-ticket-patient text-truncate">
                 <?= esc($item['last_name'] . ', ' . $item['first_name']) ?>
               </div>
-              <div class="text-muted small mb-3">
+              <div class="q-ticket-meta q-mono">
                 ID: <?= esc($item['mis_id']) ?>
               </div>
 
-              <div class="d-flex gap-2 queue-card-actions">
+              <div class="queue-card-actions">
                 <?php if ($unit === 'guidance'): ?>
                   <?php if ($canOpenGuidanceSession): ?>
                     <a href="<?= site_url('/guidance/cases/choose-for-ticket/' . $item['id']) ?>" class="btn btn-success btn-sm flex-grow-1" data-app-modal-open>
-                      <i class="bi bi-play-circle me-1"></i> Start Visit
+                      <i class="bi bi-play-circle" aria-hidden="true"></i> Start Visit
                     </a>
                   <?php endif; ?>
                 <?php else: ?>
-                <button type="button"
-                        class="btn btn-success btn-sm flex-grow-1"
-                        hx-post="<?= site_url($unit . '/queue/start/' . $item['id']) ?>"
-                        hx-target="#queue-board-container"
-                        hx-swap="innerHTML">
-                  <i class="bi bi-play-circle me-1"></i> Start Visit
-                </button>
+                  <button type="button"
+                          class="btn btn-success btn-sm flex-grow-1"
+                          hx-post="<?= site_url($unit . '/queue/start/' . $item['id']) ?>"
+                          hx-target="#queue-board-container"
+                          hx-swap="innerHTML">
+                    <i class="bi bi-play-circle" aria-hidden="true"></i> Start Visit
+                  </button>
                 <?php endif; ?>
                 <form action="<?= site_url($unit . '/queue/skip/' . $item['id']) ?>" method="POST"
                       hx-post="<?= site_url($unit . '/queue/skip/' . $item['id']) ?>"
@@ -162,7 +164,7 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
                       data-confirm-tone="warning">
                   <?= csrf_field() ?>
                   <button type="submit" class="btn btn-outline-secondary btn-sm" title="Patient not answering - Recall allowed within 60 mins">
-                    <i class="bi bi-skip-forward me-1" aria-hidden="true"></i> Skip
+                    <i class="bi bi-skip-forward" aria-hidden="true"></i> Skip
                   </button>
                 </form>
               </div>
@@ -181,49 +183,48 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
         <h6 class="queue-column-title">In Consultation</h6>
         <span class="queue-column-count" aria-label="Patients in consultation"><?= count($summary['in_consultation']) ?></span>
       </div>
-      <div class="card-body p-2 queue-column-body">
+      <div class="card-body queue-column-body">
         <?php if (empty($summary['in_consultation'])): ?>
-          <div class="queue-column-empty text-muted small">
-            <i class="bi bi-person-check fs-2 d-block mb-1"></i>
+          <div class="queue-column-empty">
+            <i class="bi bi-person-check fs-2 d-block mb-1" aria-hidden="true"></i>
             No active session
           </div>
         <?php else: ?>
           <?php foreach ($summary['in_consultation'] as $item): ?>
-            <div class="card border-0 shadow-sm mb-2 p-3 border-start border-info border-4 queue-ticket-card">
-              <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap mb-2">
-                <span class="badge bg-info fs-6 fw-bold px-2 py-1">
-                  <?= esc($item['ticket_code']) ?>
-                </span>
-                <span class="badge queue-timestamp-badge small border">
-                  Started: <?= date('h:i A', strtotime($item['started_at'] ?? 'now')) ?>
-                </span>
+            <div class="card queue-ticket-card queue-ticket-card--session">
+              <div class="q-ticket-head">
+                <span class="q-ticket-code q-ticket-code--session"><?= esc($item['ticket_code']) ?></span>
+                <span class="q-ticket-time">Started <?= date('h:i A', strtotime($item['started_at'] ?? 'now')) ?></span>
               </div>
 
-              <div class="fw-semibold text-truncate mb-1">
+              <div class="q-ticket-patient text-truncate">
                 <?= esc($item['last_name'] . ', ' . $item['first_name']) ?>
               </div>
-              <div class="text-muted small mb-3">
+              <div class="q-ticket-meta q-mono">
                 ID: <?= esc($item['mis_id']) ?>
               </div>
 
-              <div class="d-flex gap-2 queue-card-actions">
+              <div class="queue-card-actions">
                 <?php if ($unit === 'clinic'): ?>
                   <form action="<?= site_url('/clinic/encounters/start-for-ticket/' . $item['id']) ?>" method="POST" class="flex-grow-1">
                     <?= csrf_field() ?>
-                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-clipboard2-pulse me-1"></i> Open Chart</button>
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                      <i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Open Chart
+                    </button>
                   </form>
                 <?php elseif ($canOpenGuidanceSession): ?>
                   <a href="<?= site_url('/guidance/cases/choose-for-ticket/' . $item['id']) ?>" class="btn btn-primary btn-sm flex-grow-1" data-app-modal-open>
-                    <i class="bi bi-clipboard2-pulse me-1"></i> Open Chart
+                    <i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Open Chart
                   </a>
                 <?php endif; ?>
                 <button type="button"
                         class="btn btn-outline-success btn-sm"
                         title="Complete consultation"
+                        aria-label="Complete consultation"
                         hx-post="<?= site_url($unit . '/queue/complete/' . $item['id']) ?>"
                         hx-target="#queue-board-container"
                         hx-swap="innerHTML">
-                  <i class="bi bi-check2"></i>
+                  <i class="bi bi-check2" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
@@ -251,35 +252,33 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
         </ul>
       </div>
 
-      <div class="tab-content card-body p-2 queue-column-body">
+      <div class="tab-content card-body queue-column-body">
         <!-- Skipped Tab -->
         <div class="tab-pane fade show active" id="tab-skipped">
           <?php if (empty($summary['skipped'])): ?>
-            <div class="queue-column-empty text-muted small">
-              <i class="bi bi-check2-all fs-2 d-block mb-1"></i>
+            <div class="queue-column-empty">
+              <i class="bi bi-check2-all fs-2 d-block mb-1" aria-hidden="true"></i>
               No skipped patients
             </div>
           <?php else: ?>
             <?php foreach ($summary['skipped'] as $item): ?>
-              <div class="card border-0 shadow-sm mb-2 p-3 queue-ticket-card">
-                <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-1">
-                  <span class="badge bg-secondary-subtle text-secondary fw-bold">
-                    <?= esc($item['ticket_code']) ?>
-                  </span>
-                  <span class="text-muted small" style="font-size: 0.75rem;">
-                    Recall by: <?= date('h:i A', strtotime($item['skip_until'] ?? 'now')) ?>
-                  </span>
+              <div class="card queue-ticket-card queue-ticket-card--skipped">
+                <div class="q-ticket-head">
+                  <span class="q-ticket-code"><?= esc($item['ticket_code']) ?></span>
+                  <span class="q-ticket-time">Recall by <?= date('h:i A', strtotime($item['skip_until'] ?? 'now')) ?></span>
                 </div>
-                <div class="text-truncate small fw-semibold">
+                <div class="q-ticket-patient text-truncate mb-2">
                   <?= esc($item['last_name'] . ', ' . $item['first_name']) ?>
                 </div>
-                <button type="button"
-                        class="btn btn-outline-primary btn-sm mt-2 w-100 py-1 queue-card-action-btn"
-                        hx-post="<?= site_url($unit . '/queue/recall/' . $item['id']) ?>"
-                        hx-target="#queue-board-container"
-                        hx-swap="innerHTML">
-                  <i class="bi bi-arrow-counterclockwise me-1"></i> Recall to Waiting
-                </button>
+                <div class="queue-card-actions">
+                  <button type="button"
+                          class="btn btn-outline-primary btn-sm w-100 queue-card-action-btn"
+                          hx-post="<?= site_url($unit . '/queue/recall/' . $item['id']) ?>"
+                          hx-target="#queue-board-container"
+                          hx-swap="innerHTML">
+                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Recall to Waiting
+                  </button>
+                </div>
                 <?= view('queue/no_show_action', ['item' => $item, 'unit' => $unit]) ?>
               </div>
             <?php endforeach; ?>
@@ -289,22 +288,18 @@ $canOpenGuidanceSession = is_array($queueActor) && (($queueActor['role'] ?? '') 
         <!-- Done Tab -->
         <div class="tab-pane fade" id="tab-done">
           <?php if (empty($summary['done'])): ?>
-            <div class="queue-column-empty text-muted small">
+            <div class="queue-column-empty">
               No completed visits today
             </div>
           <?php else: ?>
-            <div class="list-group list-group-flush">
+            <div class="q-done-list">
               <?php foreach (array_reverse($summary['done']) as $item): ?>
-                <div class="list-group-item bg-transparent p-2 border-bottom">
-                  <div class="d-flex justify-content-between align-items-center">
-                    <span class="badge bg-success-subtle text-success fw-bold">
-                      <?= esc($item['ticket_code']) ?>
-                    </span>
-                    <span class="text-muted small">
-                      <?= date('h:i A', strtotime($item['completed_at'] ?? 'now')) ?>
-                    </span>
+                <div class="q-done-item">
+                  <div class="q-done-head">
+                    <span class="q-ticket-code q-ticket-code--done"><?= esc($item['ticket_code']) ?></span>
+                    <span class="q-ticket-time"><?= date('h:i A', strtotime($item['completed_at'] ?? 'now')) ?></span>
                   </div>
-                  <div class="text-truncate small text-muted mt-1">
+                  <div class="q-done-name text-truncate">
                     <?= esc($item['last_name'] . ', ' . $item['first_name']) ?>
                   </div>
                 </div>

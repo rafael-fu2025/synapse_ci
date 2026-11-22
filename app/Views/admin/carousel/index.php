@@ -9,131 +9,152 @@
 
 <?= $this->section('content') ?>
 
-<section data-refresh-owner="carousel.admin" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<?php
+$activeSlideCount = 0;
+foreach ($slides as $s) {
+    if ((int) ($s['is_active'] ?? 0) === 1) {
+        $activeSlideCount++;
+    }
+}
+?>
+<section class="adm-workspace adm-carousel-workspace carousel-admin" data-refresh-owner="carousel.admin" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <div data-refresh-region="carousel.slides">
-<div class="row g-4 carousel-admin">
-
-  <!-- Full-width: Slide List only. Add opens a modal. -->
-  <div class="col-12">
-    <div class="card border-0 shadow-sm">
-      <div class="card-header bg-transparent d-flex justify-content-between align-items-center gap-2 py-3">
-        <div>
-          <span class="text-muted small">Drag rows or use Move up / Move down to reorder. Inactive slides are hidden from the login screen.</span>
+  <div class="adm-sheet">
+    <div class="adm-band">
+      <div class="adm-carousel-header">
+        <div class="adm-carousel-header-copy">
+          <h2 class="adm-intro-title">Slide Deck &amp; Display Order</h2>
+          <p class="adm-intro-desc">Drag rows or use Move up / Move down to reorder. Inactive slides are hidden from the login screen.</p>
         </div>
-        <span class="badge bg-primary-subtle text-primary"><?= count($slides) ?> total</span>
+        <div class="adm-carousel-counts">
+          <span class="adm-carousel-count-pill"><?= count($slides) ?> total</span>
+          <span class="adm-carousel-count-pill"><?= $activeSlideCount ?> active</span>
+        </div>
       </div>
+    </div>
 
-      <div class="card-body p-0">
-        <?php if (empty($slides)): ?>
-          <div class="text-center py-5 text-muted">
-            <i class="bi bi-images fs-1 d-block mb-2 opacity-50"></i>
-            No slides configured yet. The login screen will use default imagery.
+    <div class="adm-band p-0">
+      <?php if (empty($slides)): ?>
+        <div class="adm-carousel-empty">
+          <div class="adm-carousel-empty-icon" aria-hidden="true">
+            <i class="bi bi-images"></i>
           </div>
-        <?php else: ?>
-          <ul class="list-group list-group-flush" id="slideList">
-            <?php foreach ($slides as $position => $slide): ?>
-              <?php $slideTitle = $slide['title'] ?: 'Untitled Slide'; ?>
-              <?php $isProtected = $protectedSlides[(int) $slide['id']] ?? false; ?>
-              <li class="list-group-item d-flex align-items-center gap-3 py-3 slide-row<?= (int) $slide['is_active'] === 1 ? '' : ' slide-row-inactive' ?>" data-id="<?= esc($slide['id']) ?>" draggable="true">
-                <span class="drag-handle text-muted" style="cursor: grab;" data-bs-toggle="tooltip" data-bs-title="Drag to reorder">
-                  <i class="bi bi-grip-vertical fs-5"></i>
-                </span>
+          <p class="adm-carousel-empty-title">No slides configured yet</p>
+          <p class="adm-carousel-empty-desc">No slides configured yet. The login screen will use default imagery.</p>
+        </div>
+      <?php else: ?>
+        <ul class="list-group list-group-flush adm-carousel-list" id="slideList">
+          <?php foreach ($slides as $position => $slide): ?>
+            <?php $slideTitle = $slide['title'] ?: 'Untitled Slide'; ?>
+            <?php $isProtected = $protectedSlides[(int) $slide['id']] ?? false; ?>
+            <li class="list-group-item d-flex align-items-center gap-3 slide-row<?= (int) $slide['is_active'] === 1 ? '' : ' slide-row-inactive' ?>" data-id="<?= esc($slide['id']) ?>" draggable="true">
+              <span class="drag-handle" data-bs-toggle="tooltip" data-bs-title="Drag to reorder">
+                <i class="bi bi-grip-vertical fs-5" aria-hidden="true"></i>
+              </span>
 
-                <?php $hasDarkVariant = ! empty($slide['dark_image']); ?>
-                <div class="d-flex flex-shrink-0 slide-thumbnails<?= $hasDarkVariant ? '' : ' slide-thumbnails-single' ?>">
-                  <!-- Light thumb: front card in light mode, peeks out behind in dark mode -->
-                  <div class="slide-thumb slide-thumb-light" data-bs-toggle="tooltip" data-bs-title="Light mode variant">
-                    <img src="<?= base_url(esc($slide['light_image'])) ?>" alt="Light">
-                  </div>
-                  <!-- Dark thumb: front card in dark mode, peeks out behind in light mode -->
-                  <?php if ($hasDarkVariant): ?>
-                    <div class="slide-thumb slide-thumb-dark" data-bs-toggle="tooltip" data-bs-title="Dark mode variant">
-                      <img src="<?= base_url(esc($slide['dark_image'])) ?>" alt="Dark">
-                    </div>
-                  <?php endif; ?>
+              <?php $hasDarkVariant = ! empty($slide['dark_image']); ?>
+              <div class="d-flex flex-shrink-0 slide-thumbnails<?= $hasDarkVariant ? '' : ' slide-thumbnails-single' ?>">
+                <!-- Light thumb: front card in light mode, peeks out behind in dark mode -->
+                <div class="slide-thumb slide-thumb-light" data-bs-toggle="tooltip" data-bs-title="Light mode variant">
+                  <img src="<?= base_url(esc($slide['light_image'])) ?>" alt="Light">
                 </div>
+                <!-- Dark thumb: front card in dark mode, peeks out behind in light mode -->
+                <?php if ($hasDarkVariant): ?>
+                  <div class="slide-thumb slide-thumb-dark" data-bs-toggle="tooltip" data-bs-title="Dark mode variant">
+                    <img src="<?= base_url(esc($slide['dark_image'])) ?>" alt="Dark">
+                  </div>
+                <?php endif; ?>
+              </div>
 
-                <div class="flex-grow-1 slide-copy">
-                  <div class="fw-semibold text-dark slide-title"><?= esc($slideTitle) ?></div>
-                  <div class="text-muted small slide-subtitle"><?= esc($slide['subtitle'] ?: '—') ?></div>
-                  <span class="badge <?= $slide['fit_mode'] === 'cover' ? 'bg-info-subtle text-info' : 'bg-warning-subtle text-warning' ?> mt-1">
+              <div class="flex-grow-1 slide-copy">
+                <div class="fw-semibold text-dark slide-title"><?= esc($slideTitle) ?></div>
+                <div class="slide-subtitle"><?= esc($slide['subtitle'] ?: '—') ?></div>
+                <div class="slide-meta">
+                  <span class="adm-slide-chip <?= $slide['fit_mode'] === 'cover' ? 'adm-slide-chip-cover' : 'adm-slide-chip-contain' ?>">
+                    <i class="bi <?= $slide['fit_mode'] === 'cover' ? 'bi-aspect-ratio' : 'bi-bounding-box-circles' ?>" aria-hidden="true"></i>
                     <?= $slide['fit_mode'] === 'cover' ? 'Full Cover' : 'Contained + Blur' ?>
                   </span>
                   <?php if ($isProtected): ?>
-                    <span class="badge bg-dark-subtle text-dark mt-1">Default image &middot; protected</span>
+                    <span class="adm-slide-chip adm-slide-chip-protected">
+                      <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                      Default image &middot; protected
+                    </span>
                   <?php endif; ?>
                   <?php if ((int) $slide['is_active'] !== 1): ?>
-                    <span class="badge bg-secondary-subtle text-secondary mt-1">Hidden</span>
-                  <?php endif; ?>
-                </div>
-
-                <div class="d-flex align-items-center gap-1 flex-shrink-0 slide-actions">
-                  <div class="d-flex gap-1 slide-reorder" role="group" aria-label="Reorder <?= esc($slideTitle, 'attr') ?>">
-                    <button type="button" class="slide-btn" data-slide-move="up"
-                            aria-label="Move up: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Move up" <?= $position === 0 ? 'disabled' : '' ?>>
-                      <i class="bi bi-arrow-up" aria-hidden="true"></i>
-                    </button>
-                    <button type="button" class="slide-btn" data-slide-move="down"
-                            aria-label="Move down: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Move down" <?= $position === count($slides) - 1 ? 'disabled' : '' ?>>
-                      <i class="bi bi-arrow-down" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                  <?php if ($isProtected): ?>
-                    <span class="slide-btn slide-btn-primary" aria-disabled="true"
-                          data-bs-toggle="tooltip" data-bs-title="The permanent default image cannot be edited">
-                      <i class="bi bi-lock" aria-hidden="true"></i>
-                    </span>
-                  <?php else: ?>
-                    <a href="<?= site_url('/admin/carousel/' . $slide['id'] . '/edit') ?>"
-                       class="slide-btn slide-btn-primary"
-                       data-app-modal-open
-                       aria-label="Edit slide: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Edit slide">
-                      <i class="bi bi-pencil" aria-hidden="true"></i>
-                    </a>
-                  <?php endif; ?>
-
-                  <?php
-                  // The default image stays visible; only the platform owner may hide it.
-                  $canToggle = !$isProtected || (int) $slide['is_active'] !== 1 || $isSuperadmin;
-                  ?>
-                  <?php if ($canToggle): ?>
-                    <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/toggle') ?>" method="POST" class="d-inline" data-background-submit>
-                      <?= csrf_field() ?>
-                      <button type="submit" class="slide-btn slide-btn-success"
-                              aria-label="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>: <?= esc($slideTitle, 'attr') ?>"
-                              data-bs-toggle="tooltip" data-bs-title="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>">
-                        <i class="bi <?= (int) $slide['is_active'] === 1 ? 'bi-eye' : 'bi-eye-slash' ?>" aria-hidden="true"></i>
-                      </button>
-                    </form>
-                  <?php endif; ?>
-
-                  <?php if (!$isProtected || $isSuperadmin): ?>
-                    <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/delete') ?>" method="POST" class="d-inline" data-background-submit
-                                              data-confirm="<?= $isProtected ? 'Delete the slide carrying the permanent default login image? This cannot be undone.' : 'Delete this slide and its uploaded images? This cannot be undone.' ?>"
-                                              data-confirm-title="Delete carousel slide"
-                                              data-confirm-label="Delete slide"
-                                              data-confirm-tone="danger">
-                      <?= csrf_field() ?>
-                      <button type="submit" class="slide-btn slide-btn-danger" aria-label="Delete slide: <?= esc($slideTitle, 'attr') ?>"
-                              data-bs-toggle="tooltip" data-bs-title="Delete slide">
-                        <i class="bi bi-trash" aria-hidden="true"></i>
-                      </button>
-                    </form>
-                  <?php else: ?>
-                    <span class="slide-btn slide-btn-danger" aria-disabled="true"
-                          data-bs-toggle="tooltip" data-bs-title="Only a superadmin may delete the permanent default image">
-                      <i class="bi bi-lock" aria-hidden="true"></i>
+                    <span class="adm-slide-chip adm-slide-chip-hidden">
+                      <i class="bi bi-eye-slash" aria-hidden="true"></i>
+                      Hidden
                     </span>
                   <?php endif; ?>
                 </div>
-              </li>
-            <?php endforeach; ?>
-          </ul>
-        <?php endif; ?>
-      </div>
+              </div>
+
+              <div class="d-flex align-items-center gap-1 flex-shrink-0 slide-actions">
+                <div class="d-flex gap-1 slide-reorder" role="group" aria-label="Reorder <?= esc($slideTitle, 'attr') ?>">
+                  <button type="button" class="slide-btn" data-slide-move="up"
+                          aria-label="Move up: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Move up" <?= $position === 0 ? 'disabled' : '' ?>>
+                    <i class="bi bi-arrow-up" aria-hidden="true"></i>
+                  </button>
+                  <button type="button" class="slide-btn" data-slide-move="down"
+                          aria-label="Move down: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Move down" <?= $position === count($slides) - 1 ? 'disabled' : '' ?>>
+                    <i class="bi bi-arrow-down" aria-hidden="true"></i>
+                  </button>
+                </div>
+                <span class="slide-actions-divider" aria-hidden="true"></span>
+                <?php if ($isProtected): ?>
+                  <span class="slide-btn slide-btn-primary" aria-disabled="true"
+                        data-bs-toggle="tooltip" data-bs-title="The permanent default image cannot be edited">
+                    <i class="bi bi-lock" aria-hidden="true"></i>
+                  </span>
+                <?php else: ?>
+                  <a href="<?= site_url('/admin/carousel/' . $slide['id'] . '/edit') ?>"
+                     class="slide-btn slide-btn-primary"
+                     data-app-modal-open
+                     aria-label="Edit slide: <?= esc($slideTitle, 'attr') ?>" data-bs-toggle="tooltip" data-bs-title="Edit slide">
+                    <i class="bi bi-pencil" aria-hidden="true"></i>
+                  </a>
+                <?php endif; ?>
+
+                <?php
+                // The default image stays visible; only the platform owner may hide it.
+                $canToggle = !$isProtected || (int) $slide['is_active'] !== 1 || $isSuperadmin;
+                ?>
+                <?php if ($canToggle): ?>
+                  <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/toggle') ?>" method="POST" class="d-inline" data-background-submit>
+                    <?= csrf_field() ?>
+                    <button type="submit" class="slide-btn slide-btn-success"
+                            aria-label="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>: <?= esc($slideTitle, 'attr') ?>"
+                            data-bs-toggle="tooltip" data-bs-title="<?= (int) $slide['is_active'] === 1 ? 'Hide from login' : 'Show on login' ?>">
+                      <i class="bi <?= (int) $slide['is_active'] === 1 ? 'bi-eye' : 'bi-eye-slash' ?>" aria-hidden="true"></i>
+                    </button>
+                  </form>
+                <?php endif; ?>
+
+                <?php if (!$isProtected || $isSuperadmin): ?>
+                  <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/delete') ?>" method="POST" class="d-inline" data-background-submit
+                                            data-confirm="<?= $isProtected ? 'Delete the slide carrying the permanent default login image? This cannot be undone.' : 'Delete this slide and its uploaded images? This cannot be undone.' ?>"
+                                            data-confirm-title="Delete carousel slide"
+                                            data-confirm-label="Delete slide"
+                                            data-confirm-tone="danger">
+                    <?= csrf_field() ?>
+                    <button type="submit" class="slide-btn slide-btn-danger" aria-label="Delete slide: <?= esc($slideTitle, 'attr') ?>"
+                            data-bs-toggle="tooltip" data-bs-title="Delete slide">
+                      <i class="bi bi-trash" aria-hidden="true"></i>
+                    </button>
+                  </form>
+                <?php else: ?>
+                  <span class="slide-btn slide-btn-danger" aria-disabled="true"
+                        data-bs-toggle="tooltip" data-bs-title="Only a superadmin may delete the permanent default image">
+                    <i class="bi bi-lock" aria-hidden="true"></i>
+                  </span>
+                <?php endif; ?>
+              </div>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      <?php endif; ?>
     </div>
   </div>
-</div>
 </div>
 </section>
 

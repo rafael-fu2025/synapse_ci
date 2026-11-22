@@ -1,0 +1,498 @@
+/* ==========================================================================
+   SYNAPSE — Profile & Settings
+   Restrained editorial sheet layout: one calm surface, hairline dividers,
+   strong typographic hierarchy, container-responsive two-column split on wide
+   desktops, and honest native controls. Zero decorative bloat.
+   ========================================================================== */
+
+.ps-shell {
+  --ps-surface: var(--surface-color, #ffffff);
+  --ps-surface-subtle: #f8f9fb;
+  --ps-border: #e5e7eb;
+  --ps-border-subtle: #eff1f5;
+  --ps-border-input: #cfd5df;
+  --ps-heading: var(--heading-color, #111827);
+  --ps-text: var(--default-color, #1f2937);
+  --ps-muted: #5c6573;
+  --ps-accent: var(--fu-brand, #800000);
+  --ps-danger-text: #a61e2a;
+
+  container-type: inline-size;
+  container-name: ps-workspace;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .ps-shell {
+  --ps-surface: #1c1c1c;
+  --ps-surface-subtle: #161616;
+  --ps-border: rgba(255, 255, 255, 0.11);
+  --ps-border-subtle: rgba(255, 255, 255, 0.075);
+  --ps-border-input: rgba(255, 255, 255, 0.18);
+  --ps-heading: #f3f4f6;
+  --ps-text: #e2e4e8;
+  --ps-muted: #9ca3af;
+  --ps-accent: #e08a8a;
+  --ps-danger-text: #f87171;
+}
+
+.ps-shell [hidden] {
+  display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Single Unified Surface + Hairline Section Rhythm
+   -------------------------------------------------------------------------- */
+
+.ps-sheet {
+  border-radius: 12px;
+  border: 1px solid var(--ps-border);
+  background: var(--ps-surface);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ps-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.15rem 2.25rem;
+  padding: 1.5rem 1.6rem;
+  min-width: 0;
+}
+
+.ps-band + .ps-band {
+  border-top: 1px solid var(--ps-border);
+}
+
+.ps-band-intro {
+  min-width: 0;
+}
+
+.ps-band-heading-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+}
+
+.ps-band-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+  color: var(--ps-heading);
+}
+
+.ps-band-scope {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--ps-muted);
+}
+
+.ps-band-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--ps-muted);
+  max-width: 58ch;
+}
+
+.ps-band-content {
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Band 1: Profile Picture
+   -------------------------------------------------------------------------- */
+
+.ps-photo-form {
+  margin: 0;
+  min-width: 0;
+}
+
+.ps-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.15rem 1.4rem;
+}
+
+.ps-avatar-pair {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  flex-shrink: 0;
+}
+
+.ps-avatar-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.ps-avatar-img {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  border: 1px solid var(--ps-border);
+  background: var(--ps-surface-subtle);
+}
+
+.ps-avatar-preview-figure {
+  display: none;
+}
+
+.ps-avatar-pair:has([data-profile-photo-preview]:not([hidden])) .ps-avatar-preview-figure {
+  display: flex;
+}
+
+.ps-avatar-img-preview {
+  border-color: var(--ps-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ps-accent) 22%, transparent);
+}
+
+.ps-avatar-label {
+  display: none;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ps-muted);
+}
+
+.ps-avatar-pair:has([data-profile-photo-preview]:not([hidden])) .ps-avatar-label {
+  display: block;
+}
+
+.ps-avatar-label-new {
+  color: var(--ps-accent);
+  font-weight: 600;
+}
+
+.ps-photo-controls {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.ps-field-label {
+  display: block;
+  margin-bottom: 0.38rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ps-heading);
+}
+
+.ps-file-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  border-radius: 7px;
+  border: 1px solid var(--ps-border-input);
+  background-color: var(--ps-surface);
+  color: var(--ps-text);
+  padding: 0 0.75rem 0 0;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.ps-file-input::file-selector-button {
+  margin: 0 0.75rem 0 0;
+  padding: 0.48rem 0.85rem;
+  border: 0;
+  border-inline-end: 1px solid var(--ps-border-input);
+  border-radius: 0;
+  background: var(--ps-surface-subtle);
+  color: var(--ps-heading);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.ps-file-input:hover:not(:disabled)::file-selector-button {
+  background: var(--ps-border-subtle);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .ps-file-input {
+  background-color: #161616;
+  border-color: var(--ps-border-input);
+  color: var(--ps-text);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .ps-file-input::file-selector-button {
+  background: #242424;
+  border-inline-end-color: var(--ps-border-input);
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .ps-file-input:hover:not(:disabled)::file-selector-button {
+  background: #2e2e2e;
+}
+
+.ps-help-text {
+  margin: 0.42rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.48;
+  color: var(--ps-muted);
+}
+
+.ps-help-text strong {
+  color: var(--ps-text);
+  font-weight: 600;
+}
+
+/* Understated inline disclosure */
+.ps-disclosure {
+  margin-top: 0.55rem;
+  font-size: 0.79rem;
+  color: var(--ps-muted);
+}
+
+.ps-disclosure summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  cursor: pointer;
+  color: var(--ps-text);
+  font-weight: 500;
+  list-style: none;
+  text-decoration: underline;
+  text-decoration-color: var(--ps-border-input);
+  text-underline-offset: 3px;
+}
+
+.ps-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.ps-disclosure summary::after {
+  content: "";
+  width: 0.38rem;
+  height: 0.38rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+  opacity: 0.65;
+  transition: transform 0.16s ease;
+}
+
+.ps-disclosure[open] summary::after {
+  transform: rotate(225deg) translateY(-1px);
+}
+
+.ps-disclosure p {
+  margin: 0.45rem 0 0;
+  max-width: 56ch;
+  line-height: 1.58;
+  color: var(--ps-muted);
+}
+
+/* Live status line — targeted by attribute so JS className replacement never strips layout */
+.ps-shell [data-profile-photo-feedback] {
+  margin: 0.65rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.48;
+  overflow-wrap: anywhere;
+}
+
+.ps-shell [data-profile-photo-feedback].text-danger {
+  color: var(--ps-danger-text) !important;
+  font-weight: 500;
+}
+
+/* Photo action bar — upload and remove share one direct parent and identical height */
+.ps-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.ps-remove-form:not([hidden]) {
+  display: inline-flex;
+  margin-inline-start: auto !important;
+}
+
+.ps-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 0.9rem !important;
+  font-size: 0.83rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 7px !important;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Band 2: Read-Only University Profile Ledger
+   -------------------------------------------------------------------------- */
+
+.ps-ledger {
+  margin: 0;
+  border-top: 1px solid var(--ps-border-subtle);
+}
+
+.ps-ledger-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.15rem 1.25rem;
+  padding: 0.72rem 0;
+  border-bottom: 1px solid var(--ps-border-subtle);
+  min-width: 0;
+}
+
+.ps-ledger-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ps-ledger-row dt {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ps-muted);
+}
+
+.ps-ledger-row dd {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ps-heading);
+  overflow-wrap: anywhere;
+}
+
+.ps-mono {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.84rem !important;
+  font-weight: 500 !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Bands 3 & 4: Clean Editorial Forms
+   -------------------------------------------------------------------------- */
+
+.ps-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.95rem 0.85rem;
+}
+
+.ps-field {
+  min-width: 0;
+}
+
+.ps-input {
+  width: 100%;
+  min-width: 0;
+  height: 39px;
+  padding: 0.45rem 0.72rem !important;
+  font-size: 0.86rem !important;
+  border-radius: 7px !important;
+  border: 1px solid var(--ps-border-input);
+  background-color: var(--ps-surface);
+  color: var(--ps-heading);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.ps-input:hover:not(:disabled) {
+  border-color: var(--ps-muted);
+}
+
+.ps-input:focus {
+  background-color: var(--ps-surface);
+  border-color: var(--focus-color, #800000);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.16));
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .ps-input {
+  background-color: #151515;
+  border-color: var(--ps-border-input);
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .ps-input:focus {
+  background-color: #1a1a1a;
+  border-color: #e08a8a;
+  box-shadow: 0 0 0 3px rgba(224, 138, 138, 0.2);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .ps-input::placeholder {
+  color: #737a86;
+}
+
+.ps-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-top: 1.05rem;
+}
+
+/* --------------------------------------------------------------------------
+   Container-Query Responsive Breakpoints
+   -------------------------------------------------------------------------- */
+
+@container ps-workspace (min-width: 440px) {
+  .ps-ledger-row {
+    grid-template-columns: 9.5rem minmax(0, 1fr);
+    align-items: baseline;
+  }
+}
+
+@container ps-workspace (min-width: 540px) {
+  .ps-grid-emergency {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+
+  .ps-grid-directory {
+    grid-template-columns: minmax(0, 4.2fr) minmax(0, 7.8fr);
+  }
+}
+
+/* Wide desktop / standalone /portal/settings: classic two-column settings rhythm */
+@container ps-workspace (min-width: 780px) {
+  .ps-band {
+    grid-template-columns: minmax(13.5rem, 16.5rem) minmax(0, 1fr);
+    padding: 1.65rem 1.85rem;
+  }
+
+  .ps-band-scope {
+    display: inline-block;
+  }
+
+  .ps-ledger {
+    border-top: 0;
+  }
+
+  .ps-ledger-row:first-child {
+    padding-top: 0.15rem;
+  }
+}
+
+@container ps-workspace (max-width: 439.98px) {
+  .ps-band {
+    padding: 1.25rem 1.1rem;
+  }
+
+  .ps-remove-form:not([hidden]) {
+    margin-inline-start: 0 !important;
+  }
+
+  .ps-form-actions .ps-btn {
+    width: 100%;
+  }
+}

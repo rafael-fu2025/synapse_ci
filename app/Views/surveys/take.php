@@ -1,196 +1,283 @@
 <?= $this->extend('layouts/app') ?>
+<?= $this->section('page_actions') ?>
+<a href="<?= esc(site_url('portal/surveys'), 'attr') ?>" class="portal-back-btn">
+  <i class="bi bi-arrow-left" aria-hidden="true"></i>Back to My Surveys
+</a>
+<?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <?php
 $externalUrl = trim((string) ($survey['external_url'] ?? ''));
 $externalHost = $externalUrl !== '' ? (string) (parse_url($externalUrl, PHP_URL_HOST) ?? '') : '';
+$questionCount = is_array($survey['questions'] ?? null) ? count($survey['questions']) : 0;
+$endsAtDisplay = '';
+if (!empty($survey['ends_at'])) {
+    try {
+        $endsAtDisplay = (new \DateTimeImmutable((string) $survey['ends_at'], new \DateTimeZone('UTC')))
+            ->setTimezone(new \DateTimeZone('Asia/Manila'))
+            ->format('d M Y, g:i A') . ' (Manila)';
+    } catch (\Throwable) {
+        $endsAtDisplay = '';
+    }
+}
 ?>
-<div class="card"><div class="card-body pt-3">
-  <?php if (trim((string) ($survey['description'] ?? '')) !== ''): ?>
-    <p class="text-break mb-3"><?= nl2br(esc($survey['description'])) ?></p>
-  <?php endif; ?>
-  <?php if ($externalUrl !== ''): ?>
-    <div class="alert alert-info">
-      <strong>External Survey Link<?= $externalHost !== '' ? ' (' . esc($externalHost) . ')' : '' ?>:</strong>
-      This Guidance survey is hosted on an external form (such as Google Forms). Open the link below to submit your responses there, then optionally mark completion here to track your participation.
-    </div>
-    <div class="mb-3">
-      <a href="<?= esc($externalUrl, 'attr') ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-        <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open External Survey
-      </a>
-    </div>
-    <?php if ($survey['submitted']): ?>
-      <div class="alert alert-success">You marked this external survey as completed.</div>
-    <?php else: ?>
-      <form id="survey-response-form" autocomplete="off" method="post" action="<?= esc(site_url('portal/surveys/' . $survey['id'] . '/submit')) ?>" data-success-url="<?= esc(site_url('portal/surveys')) ?>" data-survey-submit data-confirm="Mark this external survey as completed? You should have already submitted the external form before confirming." data-confirm-title="Mark external survey completed" data-confirm-label="Mark completed">
-        <?= csrf_field() ?>
-        <div class="alert alert-danger d-none" role="alert" data-survey-error></div>
-        <button type="submit" class="btn btn-outline-primary">Mark as completed</button>
-      </form>
-    <?php endif; ?>
-  <?php elseif ($survey['submitted']): ?>
-    <?php
-      $submittedAtDisplay = '';
-      if (!empty($survey['submitted_at'])) {
-          try {
-              $submittedAtDisplay = (new \DateTimeImmutable((string) $survey['submitted_at'], new \DateTimeZone('UTC')))
-                  ->setTimezone(new \DateTimeZone('Asia/Manila'))
-                  ->format('d M Y, g:i A') . ' (Manila)';
-          } catch (\Throwable) {
-              $submittedAtDisplay = (string) $survey['submitted_at'];
+<div class="sv-take">
+  <div class="sv-take-sheet">
+
+    <!-- Band 1: Survey Context & Disclosure -->
+    <div class="sv-take-band">
+      <div class="sv-take-meta">
+        <span class="sv-take-meta-unit">
+          <?= view('partials/unit_vector_icon', ['unit' => 'guidance']) ?>Guidance Office
+        </span>
+        <?php if ($externalUrl !== ''): ?>
+          <span class="sv-take-meta-sep">External questionnaire<?= $externalHost !== '' ? ' · ' . esc($externalHost) : '' ?></span>
+        <?php elseif ($questionCount > 0): ?>
+          <span class="sv-take-meta-sep"><?= $questionCount ?> <?= $questionCount === 1 ? 'question' : 'questions' ?></span>
+        <?php endif; ?>
+        <?php if ($endsAtDisplay !== '' && empty($survey['submitted'])): ?>
+          <span class="sv-take-meta-sep">Closes <?= esc($endsAtDisplay) ?></span>
+        <?php endif; ?>
+      </div>
+
+      <?php if (trim((string) ($survey['description'] ?? '')) !== ''): ?>
+        <p class="sv-take-desc"><?= nl2br(esc($survey['description'])) ?></p>
+      <?php endif; ?>
+
+      <?php if ($externalUrl !== ''): ?>
+        <div class="sv-take-notice">
+          <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+          <div>
+            <span class="sv-take-notice-title">External Survey Link<?= $externalHost !== '' ? ' (' . esc($externalHost) . ')' : '' ?></span>
+            This Guidance survey is hosted on an external form (such as Google Forms). Open the link below to submit your responses there, then optionally mark completion here to track your participation.
+          </div>
+        </div>
+      <?php elseif ($survey['submitted']): ?>
+        <?php
+          $submittedAtDisplay = '';
+          if (!empty($survey['submitted_at'])) {
+              try {
+                  $submittedAtDisplay = (new \DateTimeImmutable((string) $survey['submitted_at'], new \DateTimeZone('UTC')))
+                      ->setTimezone(new \DateTimeZone('Asia/Manila'))
+                      ->format('d M Y, g:i A') . ' (Manila)';
+              } catch (\Throwable) {
+                  $submittedAtDisplay = (string) $survey['submitted_at'];
+              }
           }
-      }
-      $submittedAnswers = is_array($survey['submitted_answers'] ?? null) ? $survey['submitted_answers'] : null;
-    ?>
-    <div class="alert alert-success mb-4">
-      <div class="fw-semibold"><i class="bi bi-check-circle me-1" aria-hidden="true"></i>You have submitted this survey.</div>
-      <div class="small mt-1">
-        Your identified completion<?= $submittedAtDisplay !== '' ? ' on ' . esc($submittedAtDisplay) : '' ?> has been recorded. Answers cannot be changed after submission.
-      </div>
+          $submittedAnswers = is_array($survey['submitted_answers'] ?? null) ? $survey['submitted_answers'] : null;
+        ?>
+        <div class="sv-take-notice is-success">
+          <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+          <div>
+            <span class="sv-take-notice-title">You have submitted this survey.</span>
+            Your identified completion<?= $submittedAtDisplay !== '' ? ' on ' . esc($submittedAtDisplay) : '' ?> has been recorded. Answers cannot be changed after submission.
+          </div>
+        </div>
+      <?php else: ?>
+        <div class="sv-take-notice">
+          <i class="bi bi-shield-lock" aria-hidden="true"></i>
+          <div>This is an identified survey. Your name and answers are available to authorized Guidance administrators and supervisors. You may submit once; answers cannot be changed after submission.</div>
+        </div>
+      <?php endif; ?>
     </div>
-    <?php if ($submittedAnswers !== null && $submittedAnswers !== []): ?>
-      <h2 class="h6 fw-semibold mb-3">Your submitted answers</h2>
-      <div class="vstack gap-3 mb-3">
-        <?php foreach ($submittedAnswers as $answerIndex => $answer): ?>
-          <?php
-            $questionMeta = $survey['questions'][$answerIndex] ?? [];
-            $answerValue = $answer['value'] ?? null;
-            $answerType = (string) ($answer['type'] ?? ($questionMeta['type'] ?? 'text'));
-          ?>
-          <div class="border rounded p-3 bg-body-tertiary">
-            <div class="fw-semibold mb-2"><?= $answerIndex + 1 ?>. <?= esc((string) ($answer['question'] ?? ($questionMeta['label'] ?? 'Question'))) ?></div>
-            <?php if ($answerValue === null || $answerValue === '' || $answerValue === []): ?>
-              <span class="text-muted small">Not answered</span>
-            <?php elseif (is_array($answerValue)): ?>
-              <ul class="mb-0 ps-3">
-                <?php foreach ($answerValue as $item): ?>
-                  <li class="text-break"><?= esc((string) $item) ?></li>
-                <?php endforeach; ?>
-              </ul>
-            <?php elseif ($answerType === 'rating'): ?>
-              <?php
-                $ratingVal = (int) $answerValue;
-                $minAnchor = trim((string) ($questionMeta['scale_min_label'] ?? ''));
-                $maxAnchor = trim((string) ($questionMeta['scale_max_label'] ?? ''));
-                $ratingLabel = $ratingVal . ' / 5';
-                if ($ratingVal === 1 && $minAnchor !== '') {
-                    $ratingLabel .= ' — ' . $minAnchor;
-                } elseif ($ratingVal === 5 && $maxAnchor !== '') {
-                    $ratingLabel .= ' — ' . $maxAnchor;
-                }
-              ?>
-              <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1"><?= esc($ratingLabel) ?></span>
-            <?php else: ?>
-              <div class="text-break mb-0"><?= nl2br(esc((string) $answerValue)) ?></div>
-            <?php endif; ?>
-          </div>
-        <?php endforeach; ?>
-      </div>
-    <?php else: ?>
-      <p class="text-muted small mb-3">Your recorded submission could not be displayed right now.</p>
-    <?php endif; ?>
-  <?php else: ?>
-    <div class="alert alert-info">This is an identified survey. Your name and answers are available to authorized Guidance administrators and supervisors. You may submit once; answers cannot be changed after submission.</div>
-    <form id="survey-response-form" autocomplete="off" method="post" action="<?= esc(site_url('portal/surveys/' . $survey['id'] . '/submit')) ?>" data-success-url="<?= esc(site_url('portal/surveys')) ?>" data-survey-submit data-confirm="Submit your identified response? You cannot change it afterwards." data-confirm-title="Submit survey" data-confirm-label="Submit response">
-      <?= csrf_field() ?>
-      <div class="alert alert-danger d-none" role="alert" data-survey-error></div>
-      <?php foreach ($survey['questions'] as $index => $question): ?>
-        <fieldset class="mb-4"><legend class="fs-6 fw-semibold"><?= $index + 1 ?>. <?= esc($question['label']) ?><?= $question['required'] ? ' *' : '' ?></legend>
-        <?php if ($question['type'] === 'text'): ?>
-          <textarea name="answers[<?= $index ?>]" class="form-control" maxlength="2000" rows="4" aria-label="<?= esc($question['label']) ?>" <?= $question['required'] ? 'required' : '' ?>></textarea>
-        <?php elseif ($question['type'] === 'rating'): ?>
-          <?php
-            $minAnchor = trim((string) ($question['scale_min_label'] ?? ''));
-            $maxAnchor = trim((string) ($question['scale_max_label'] ?? ''));
-            $minAnchorId = 'survey-scale-min-' . $index;
-            $maxAnchorId = 'survey-scale-max-' . $index;
-            $hasAnchors = $minAnchor !== '' || $maxAnchor !== '';
-          ?>
-          <div class="pe-linear-scale<?= $hasAnchors ? ' has-anchors' : '' ?>" data-rating-scale>
-            <?php if ($minAnchor !== ''): ?>
-              <span class="pe-linear-scale-anchor pe-linear-scale-anchor--min" id="<?= $minAnchorId ?>">
-                <span class="pe-linear-scale-anchor-num" aria-hidden="true">1 — </span><?= esc($minAnchor) ?>
-              </span>
-            <?php endif; ?>
-            <div class="pe-linear-scale-options">
-              <?php for ($rating = 1; $rating <= 5; $rating++): ?>
-                <?php
-                  $describedBy = '';
-                  if ($rating === 1 && $minAnchor !== '') {
-                      $describedBy = $minAnchorId;
-                  } elseif ($rating === 5 && $maxAnchor !== '') {
-                      $describedBy = $maxAnchorId;
-                  }
-                ?>
-                <label class="pe-linear-scale-option">
-                  <span class="pe-linear-scale-number"><?= $rating ?></span>
-                  <span class="pe-linear-scale-control">
-                    <input type="radio"
-                           class="pe-linear-scale-radio"
-                           name="answers[<?= $index ?>]"
-                           value="<?= $rating ?>"
-                           <?= $describedBy !== '' ? 'aria-describedby="' . $describedBy . '"' : '' ?>
-                           <?= $question['required'] ? 'required' : '' ?>>
-                  </span>
-                </label>
-              <?php endfor; ?>
-            </div>
-            <?php if ($maxAnchor !== ''): ?>
-              <span class="pe-linear-scale-anchor pe-linear-scale-anchor--max" id="<?= $maxAnchorId ?>">
-                <span class="pe-linear-scale-anchor-num" aria-hidden="true">5 — </span><?= esc($maxAnchor) ?>
-              </span>
-            <?php endif; ?>
-          </div>
-        <?php else: ?>
-          <?php
-            $otherIndex = \App\Services\Guidance\SurveyQuestion::otherOptionIndex($question);
-            $hasExplicitOther = !empty($question['allow_other']);
-            $useDedicatedOther = $hasExplicitOther && $otherIndex === null;
-            $hasOtherControl = $useDedicatedOther || $otherIndex !== null;
-            $inputType = $question['type'] === 'single' ? 'radio' : 'checkbox';
-            $inputName = 'answers[' . $index . ']' . ($question['type'] === 'multiple' ? '[]' : '');
-            $reqAttr = $question['required'] && $question['type'] === 'single' ? 'required' : '';
-          ?>
-          <div data-choice-question="<?= $index ?>">
-            <?php foreach ($question['options'] as $option => $label): ?>
-              <?php $isOtherOpt = $otherIndex !== null && $option === $otherIndex; ?>
-              <label class="form-check mb-2">
-                <input class="form-check-input" type="<?= $inputType ?>" name="<?= $inputName ?>" value="<?= $option ?>" <?= $reqAttr ?> <?= $isOtherOpt ? 'data-other-option="1"' : '' ?>>
-                <span class="form-check-label"><?= esc($label) ?></span>
-              </label>
-            <?php endforeach; ?>
-            <?php if ($useDedicatedOther): ?>
-              <label class="form-check mb-2">
-                <input class="form-check-input" type="<?= $inputType ?>" name="<?= $inputName ?>" value="__other__" <?= $reqAttr ?> data-other-option="1">
-                <span class="form-check-label">Other (please specify)</span>
-              </label>
-            <?php endif; ?>
-            <?php if ($hasOtherControl): ?>
-              <div class="mt-2 ms-4 d-none" data-other-wrapper="<?= $index ?>">
-                <label class="visually-hidden" for="answerOther-<?= $index ?>">Please specify for <?= esc($question['label']) ?></label>
-                <input type="text"
-                       id="answerOther-<?= $index ?>"
-                       class="form-control form-control-sm"
-                       name="answers_other[<?= $index ?>]"
-                       maxlength="500"
-                       placeholder="Please specify your answer..."
-                       data-other-input="<?= $index ?>"
-                       disabled>
-              </div>
-            <?php endif; ?>
+
+    <!-- Band 2: External Actions, Submitted Receipt, or Active Response Form -->
+    <div class="sv-take-band">
+      <?php if ($externalUrl !== ''): ?>
+        <?php if ($survey['submitted']): ?>
+          <div class="sv-take-notice is-success mt-0 pt-0 border-0 mb-3">
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+            <div><span class="sv-take-notice-title mb-0">You marked this external survey as completed.</span></div>
           </div>
         <?php endif; ?>
-        </fieldset>
-      <?php endforeach; ?>
-      <div class="d-grid d-sm-flex flex-sm-wrap align-items-sm-center gap-2 mt-3">
-        <button type="submit" class="btn btn-primary">Submit identified response</button>
-        <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-outline-secondary">Back to surveys</a>
-      </div>
-    </form>
-  <?php endif; ?>
-  <?php if (!empty($externalUrl) || !empty($survey['submitted'])): ?>
-    <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-link mt-3 px-0">Back to surveys</a>
-  <?php endif; ?>
-</div></div>
+
+        <div class="sv-external-actions">
+          <a href="<?= esc($externalUrl, 'attr') ?>" target="_blank" rel="noopener noreferrer" class="btn btn-primary sv-take-btn">
+            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open External Survey
+          </a>
+
+          <?php if (!$survey['submitted']): ?>
+            <form id="survey-response-form" autocomplete="off" method="post" action="<?= esc(site_url('portal/surveys/' . $survey['id'] . '/submit')) ?>" data-success-url="<?= esc(site_url('portal/surveys')) ?>" data-survey-submit data-confirm="Mark this external survey as completed? You should have already submitted the external form before confirming." data-confirm-title="Mark external survey completed" data-confirm-label="Mark completed">
+              <?= csrf_field() ?>
+              <div class="alert alert-danger d-none sv-take-error" role="alert" data-survey-error></div>
+              <button type="submit" class="btn btn-outline-secondary sv-take-btn">Mark as completed</button>
+            </form>
+          <?php endif; ?>
+
+          <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-outline-secondary sv-take-btn">Back to surveys</a>
+        </div>
+
+      <?php elseif ($survey['submitted']): ?>
+        <?php if ($submittedAnswers !== null && $submittedAnswers !== []): ?>
+          <h2 class="sv-submitted-heading">Your submitted answers</h2>
+          <div class="sv-answer-list">
+            <?php foreach ($submittedAnswers as $answerIndex => $answer): ?>
+              <?php
+                $questionMeta = $survey['questions'][$answerIndex] ?? [];
+                $answerValue = $answer['value'] ?? null;
+                $answerType = (string) ($answer['type'] ?? ($questionMeta['type'] ?? 'text'));
+              ?>
+              <div class="sv-answer-row">
+                <p class="sv-answer-q">
+                  <span class="sv-question-num"><?= $answerIndex + 1 ?>.</span><?= esc((string) ($answer['question'] ?? ($questionMeta['label'] ?? 'Question'))) ?>
+                </p>
+                <div class="sv-answer-val">
+                  <?php if ($answerValue === null || $answerValue === '' || $answerValue === []): ?>
+                    <span class="sv-answer-empty">Not answered</span>
+                  <?php elseif (is_array($answerValue)): ?>
+                    <ul>
+                      <?php foreach ($answerValue as $item): ?>
+                        <li><?= esc((string) $item) ?></li>
+                      <?php endforeach; ?>
+                    </ul>
+                  <?php elseif ($answerType === 'rating'): ?>
+                    <?php
+                      $ratingVal = (int) $answerValue;
+                      $minAnchor = trim((string) ($questionMeta['scale_min_label'] ?? ''));
+                      $maxAnchor = trim((string) ($questionMeta['scale_max_label'] ?? ''));
+                      $ratingLabel = $ratingVal . ' / 5';
+                      if ($ratingVal === 1 && $minAnchor !== '') {
+                          $ratingLabel .= ' — ' . $minAnchor;
+                      } elseif ($ratingVal === 5 && $maxAnchor !== '') {
+                          $ratingLabel .= ' — ' . $maxAnchor;
+                      }
+                    ?>
+                    <div class="sv-rating-readout">
+                      <span class="sv-rating-dots" aria-hidden="true">
+                        <?php for ($dot = 1; $dot <= 5; $dot++): ?>
+                          <span class="sv-rating-dot<?= $dot <= $ratingVal ? ' is-filled' : '' ?>"></span>
+                        <?php endfor; ?>
+                      </span>
+                      <span class="sv-rating-text"><?= esc($ratingLabel) ?></span>
+                    </div>
+                  <?php else: ?>
+                    <div><?= nl2br(esc((string) $answerValue)) ?></div>
+                  <?php endif; ?>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php else: ?>
+          <p class="text-muted small mb-0">Your recorded submission could not be displayed right now.</p>
+        <?php endif; ?>
+
+        <div class="sv-take-actions">
+          <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-outline-secondary sv-take-btn">Back to surveys</a>
+        </div>
+
+      <?php else: ?>
+        <form id="survey-response-form" class="sv-take-form" autocomplete="off" method="post" action="<?= esc(site_url('portal/surveys/' . $survey['id'] . '/submit')) ?>" data-success-url="<?= esc(site_url('portal/surveys')) ?>" data-survey-submit data-confirm="Submit your identified response? You cannot change it afterwards." data-confirm-title="Submit survey" data-confirm-label="Submit response">
+          <?= csrf_field() ?>
+          <div class="alert alert-danger d-none sv-take-error" role="alert" data-survey-error></div>
+
+          <?php foreach ($survey['questions'] as $index => $question): ?>
+            <fieldset class="sv-question">
+              <legend class="sv-question-legend">
+                <span class="sv-question-num"><?= $index + 1 ?>.</span><?= esc($question['label']) ?><?php if ($question['required']): ?><span class="sv-question-req" aria-hidden="true">*</span><?php endif; ?>
+              </legend>
+
+              <?php if ($question['type'] === 'text'): ?>
+                <textarea name="answers[<?= $index ?>]" class="form-control sv-textarea" maxlength="2000" rows="4" placeholder="Write your response…" aria-label="<?= esc($question['label']) ?>" <?= $question['required'] ? 'required' : '' ?>></textarea>
+
+              <?php elseif ($question['type'] === 'rating'): ?>
+                <?php
+                  $minAnchor = trim((string) ($question['scale_min_label'] ?? ''));
+                  $maxAnchor = trim((string) ($question['scale_max_label'] ?? ''));
+                  $minAnchorId = 'survey-scale-min-' . $index;
+                  $maxAnchorId = 'survey-scale-max-' . $index;
+                  $hasAnchors = $minAnchor !== '' || $maxAnchor !== '';
+                ?>
+                <div class="pe-linear-scale<?= $hasAnchors ? ' has-anchors' : '' ?>" data-rating-scale>
+                  <?php if ($minAnchor !== ''): ?>
+                    <span class="pe-linear-scale-anchor pe-linear-scale-anchor--min" id="<?= $minAnchorId ?>">
+                      <span class="pe-linear-scale-anchor-num" aria-hidden="true">1 — </span><?= esc($minAnchor) ?>
+                    </span>
+                  <?php endif; ?>
+                  <div class="pe-linear-scale-options">
+                    <?php for ($rating = 1; $rating <= 5; $rating++): ?>
+                      <?php
+                        $describedBy = '';
+                        if ($rating === 1 && $minAnchor !== '') {
+                            $describedBy = $minAnchorId;
+                        } elseif ($rating === 5 && $maxAnchor !== '') {
+                            $describedBy = $maxAnchorId;
+                        }
+                      ?>
+                      <label class="pe-linear-scale-option">
+                        <span class="pe-linear-scale-number"><?= $rating ?></span>
+                        <span class="pe-linear-scale-control">
+                          <input type="radio"
+                                 class="pe-linear-scale-radio"
+                                 name="answers[<?= $index ?>]"
+                                 value="<?= $rating ?>"
+                                 <?= $describedBy !== '' ? 'aria-describedby="' . $describedBy . '"' : '' ?>
+                                 <?= $question['required'] ? 'required' : '' ?>>
+                        </span>
+                      </label>
+                    <?php endfor; ?>
+                  </div>
+                  <?php if ($maxAnchor !== ''): ?>
+                    <span class="pe-linear-scale-anchor pe-linear-scale-anchor--max" id="<?= $maxAnchorId ?>">
+                      <span class="pe-linear-scale-anchor-num" aria-hidden="true">5 — </span><?= esc($maxAnchor) ?>
+                    </span>
+                  <?php endif; ?>
+                </div>
+
+              <?php else: ?>
+                <?php
+                  $otherIndex = \App\Services\Guidance\SurveyQuestion::otherOptionIndex($question);
+                  $hasExplicitOther = !empty($question['allow_other']);
+                  $useDedicatedOther = $hasExplicitOther && $otherIndex === null;
+                  $hasOtherControl = $useDedicatedOther || $otherIndex !== null;
+                  $inputType = $question['type'] === 'single' ? 'radio' : 'checkbox';
+                  $inputName = 'answers[' . $index . ']' . ($question['type'] === 'multiple' ? '[]' : '');
+                  $reqAttr = $question['required'] && $question['type'] === 'single' ? 'required' : '';
+                ?>
+                <?php if ($question['type'] === 'multiple'): ?>
+                  <p class="sv-question-hint">Select all that apply.</p>
+                <?php endif; ?>
+                <div class="sv-choice-list" data-choice-question="<?= $index ?>">
+                  <?php foreach ($question['options'] as $option => $label): ?>
+                    <?php $isOtherOpt = $otherIndex !== null && $option === $otherIndex; ?>
+                    <label class="sv-choice">
+                      <input class="form-check-input" type="<?= $inputType ?>" name="<?= $inputName ?>" value="<?= $option ?>" <?= $reqAttr ?> <?= $isOtherOpt ? 'data-other-option="1"' : '' ?>>
+                      <span class="form-check-label"><?= esc($label) ?></span>
+                    </label>
+                  <?php endforeach; ?>
+                  <?php if ($useDedicatedOther): ?>
+                    <label class="sv-choice">
+                      <input class="form-check-input" type="<?= $inputType ?>" name="<?= $inputName ?>" value="__other__" <?= $reqAttr ?> data-other-option="1">
+                      <span class="form-check-label">Other (please specify)</span>
+                    </label>
+                  <?php endif; ?>
+                  <?php if ($hasOtherControl): ?>
+                    <div class="sv-other-wrap d-none" data-other-wrapper="<?= $index ?>">
+                      <label class="visually-hidden" for="answerOther-<?= $index ?>">Please specify for <?= esc($question['label']) ?></label>
+                      <input type="text"
+                             id="answerOther-<?= $index ?>"
+                             class="form-control sv-other-input"
+                             name="answers_other[<?= $index ?>]"
+                             maxlength="500"
+                             placeholder="Please specify your answer…"
+                             data-other-input="<?= $index ?>"
+                             disabled>
+                    </div>
+                  <?php endif; ?>
+                </div>
+              <?php endif; ?>
+            </fieldset>
+          <?php endforeach; ?>
+
+          <div class="sv-take-actions">
+            <button type="submit" class="btn btn-primary sv-take-btn">Submit identified response</button>
+            <a href="<?= esc(site_url('portal/surveys')) ?>" class="btn btn-outline-secondary sv-take-btn">Back to surveys</a>
+            <p class="sv-take-footnote">You’ll confirm once before your response is recorded.</p>
+          </div>
+        </form>
+      <?php endif; ?>
+    </div>
+
+  </div>
+</div>
 <?= $this->endSection() ?>
 <?= $this->section('scripts') ?>
 <?php if (!$survey['submitted']): ?>

@@ -1,74 +1,288 @@
-/* Workstation task board: NiceAdmin Kanban structure, Synapse theme tokens. */
-.teams-workspace { min-width: 0; }
-.teams-intro { border-top: 3px solid var(--fu-brand); }
-.teams-eyebrow { color: var(--fu-maroon-accent); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.teams-members { display: inline-flex; align-items: center; padding: .5rem .8rem; background: var(--na-primary-soft); color: var(--fu-maroon-accent); border-radius: 4px; font-size: .8rem; font-weight: 600; }
-.teams-board { display: grid; grid-template-columns: repeat(4, minmax(250px, 1fr)); gap: 1rem; overflow-x: auto; align-items: start; padding-bottom: .75rem; }
-.teams-column { border: 1px solid var(--border-color); border-radius: 4px; background: color-mix(in srgb, var(--surface-color) 80%, var(--background-color)); min-width: 0; }
-.teams-column-header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
-.teams-column-header h2 { display: inline-flex; align-items: center; gap: .5rem; font-size: .86rem; }
-.teams-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted-color); }
-.teams-status-dot.is-in_progress { background: var(--fu-maroon-accent); }
-.teams-status-dot.is-blocked { background: var(--warning-color); }
-.teams-status-dot.is-done { background: var(--success-color); }
-.teams-count { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 4px; background: var(--surface-color); color: var(--muted-color); border: 1px solid var(--border-color); font-size: .76rem; }
-.teams-column-body { padding: .75rem; display: grid; gap: .75rem; min-height: 5rem; }
-.teams-task[draggable="true"], .teams-drag-handle { cursor: grab; }
-.teams-drag-handle { touch-action: none; }
-.teams-task[data-task-dragging] { opacity: .55; outline: 2px dashed var(--fu-maroon-accent); cursor: grabbing; }
-.teams-column[data-task-drop-target] { outline: 2px solid var(--fu-maroon-accent); outline-offset: -2px; background: var(--na-primary-soft); }
-.teams-board[aria-busy="true"] { opacity: .7; }
-.teams-task { min-width: 0; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 4px; padding: 1rem; box-shadow: var(--na-shadow-sm); }
-.teams-task-title { font-size: .9rem; line-height: 1.45; margin-bottom: .55rem; overflow-wrap: anywhere; }
-.teams-task-title a { color: var(--heading-color); }
-.teams-task-title a:hover { color: var(--fu-maroon-accent); }
-.teams-task-excerpt { font-size: .8rem; color: var(--muted-color); margin-bottom: .8rem; overflow-wrap: anywhere; }
-.teams-task-meta { display: grid; gap: .4rem; font-size: .74rem; color: var(--muted-color); overflow-wrap: anywhere; }
-.teams-priority { display: inline-block; padding: .2rem .5rem; border-radius: 4px; background: var(--na-primary-soft); color: var(--fu-maroon-accent); font-size: .7rem; font-weight: 700; }
-.teams-priority.is-low { background: color-mix(in srgb, var(--muted-color), transparent 90%); color: var(--muted-color); }
-.teams-priority.is-high { background: color-mix(in srgb, var(--danger-color), transparent 90%); color: var(--danger-color); }
-.teams-column-empty { font-size: .8rem; color: var(--muted-color); text-align: center; margin: 1rem 0; }
-.teams-member-list { display: grid; gap: .5rem; margin: 0; }
-.teams-member-list li { display: flex; align-items: center; gap: .5rem; padding: .5rem 0; border-bottom: 1px solid var(--border-color); }
-.teams-member-list .avatar { width: 24px; height: 24px; border-radius: var(--radius-full); object-fit: cover; flex-shrink: 0; }
-.team-chat-members-summary { display: flex; align-items: center; justify-content: space-between; gap: .5rem; cursor: pointer; list-style: none; user-select: none; padding: .25rem 0; }
-.team-chat-members-summary::-webkit-details-marker,
-.team-chat-members-summary::marker { display: none; }
-.team-chat-members-summary:focus-visible { outline: 2px solid var(--fu-maroon-accent); outline-offset: 2px; border-radius: 4px; }
-.team-chat-members-chevron { transition: transform .2s ease; font-size: .75rem; color: var(--muted-color); flex-shrink: 0; }
-details[open] .team-chat-members-chevron { transform: rotate(180deg); }
-.team-chat-members-summary .avatar-group .avatar,
-.team-chat-members-summary .avatar-group .avatar-more { flex-shrink: 0; }
-.team-chat-info-btn {
-  color: var(--muted-color);
-  line-height: 1;
+/* Workstation Teams Workspace: Figma-aligned Synapse UI (Light & Dark).
+   Preserves all behavioral teams-/team-chat-/team-calendar- hooks and accessibility contracts. */
+
+/* --------------------------------------------------------------------------
+   1. Base Structural Hooks & Behavioral Guarantees
+   -------------------------------------------------------------------------- */
+.teams-workspace {
+  min-width: 0;
+}
+
+.teams-eyebrow {
+  color: var(--fu-maroon-accent);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.teams-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: .9rem;
+  overflow-x: auto;
+  align-items: start;
+  padding-bottom: .75rem;
+}
+
+.teams-column {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-color) 80%, var(--background-color));
+  min-width: 0;
+}
+
+.teams-column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  padding: .85rem .9rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.teams-column-header h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  font-size: .84rem;
+}
+
+.teams-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted-color);
+  flex-shrink: 0;
+}
+
+.teams-status-dot.is-in_progress {
+  background: var(--fu-maroon-accent);
+}
+
+.teams-status-dot.is-blocked {
+  background: var(--warning-color);
+}
+
+.teams-status-dot.is-done {
+  background: var(--success-color);
+}
+
+.teams-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm, 4px);
-  padding: 2px;
-  cursor: pointer;
-  font-size: .8rem;
-  transition: color var(--transition-fast, .15s ease);
+  min-width: 22px;
+  height: 22px;
+  padding: 0 .4rem;
+  border-radius: 999px;
+  background: var(--surface-color);
+  color: var(--muted-color);
+  border: 1px solid var(--border-color);
+  font-size: .72rem;
+  font-weight: 600;
 }
-.team-chat-info-btn:hover,
-.team-chat-info-btn:focus-visible {
+
+.teams-column-body {
+  padding: .65rem;
+  display: grid;
+  gap: .65rem;
+  min-height: 5rem;
+}
+
+.teams-task[draggable="true"],
+.teams-drag-handle {
+  cursor: grab;
+}
+
+.teams-drag-handle {
+  touch-action: none;
+}
+
+.teams-task[data-task-dragging] {
+  opacity: .55;
+  outline: 2px dashed var(--fu-maroon-accent);
+  cursor: grabbing;
+}
+
+.teams-column[data-task-drop-target] {
+  outline: 2px solid var(--fu-maroon-accent);
+  outline-offset: -2px;
+  background: var(--na-primary-soft);
+}
+
+.teams-board[aria-busy="true"] {
+  opacity: .7;
+}
+
+.teams-task {
+  min-width: 0;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: .9rem;
+}
+
+.teams-task-title {
+  font-size: .88rem;
+  line-height: 1.45;
+  margin-bottom: .45rem;
+  overflow-wrap: anywhere;
+}
+
+.teams-task-title a {
   color: var(--heading-color);
-  outline: none;
+  text-decoration: none;
 }
+
+.teams-task-title a:hover {
+  color: var(--fu-maroon-accent);
+}
+
+.teams-task-excerpt {
+  font-size: .78rem;
+  color: var(--muted-color);
+  margin-bottom: .7rem;
+  overflow-wrap: anywhere;
+}
+
+.teams-task-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  font-size: .74rem;
+  color: var(--muted-color);
+  overflow-wrap: anywhere;
+}
+
+.teams-priority {
+  display: inline-flex;
+  align-items: center;
+  padding: .16rem .5rem;
+  border-radius: 999px;
+  background: var(--na-primary-soft);
+  color: var(--fu-maroon-accent);
+  font-size: .7rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.teams-column-empty {
+  font-size: .78rem;
+  color: var(--muted-color);
+  text-align: center;
+  margin: 1.15rem .5rem;
+}
+
+.teams-member-list {
+  display: grid;
+  gap: .15rem;
+  margin: 0;
+}
+
+.teams-member-list li {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  padding: .45rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.teams-member-list li:last-child {
+  border-bottom: 0;
+}
+
+.teams-member-list .avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full, 50%);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* Chat base hooks (kept strictly compatible with team-chat.test.cjs geometry/alignment contracts) */
+.team-chat-members-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  padding: .25rem 0;
+}
+
+.team-chat-members-summary::-webkit-details-marker,
+.team-chat-members-summary::marker {
+  display: none;
+}
+
+.team-chat-members-summary:focus-visible {
+  outline: 2px solid var(--fu-maroon-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.team-chat-members-chevron {
+  transition: transform .2s ease;
+  font-size: .75rem;
+  color: var(--muted-color);
+  flex-shrink: 0;
+}
+
+details[open] .team-chat-members-chevron {
+  transform: rotate(180deg);
+}
+
+.team-chat-members-summary .avatar-group .avatar,
+.team-chat-members-summary .avatar-group .avatar-more {
+  flex-shrink: 0;
+}
+
+.team-chat-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-color);
+  font-size: .8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .15s ease, background-color .15s ease;
+}
+
+.team-chat-info-btn:hover {
+  color: var(--heading-color);
+  background: var(--na-primary-soft);
+}
+
+.team-chat-info-btn:focus-visible,
+.team-chat-reply-button:focus-visible {
+  outline: 2px solid var(--focus-color, var(--fu-maroon-accent));
+  outline-offset: 2px;
+}
+
 .team-chat-info-popover {
   --bs-popover-bg: var(--surface-color, #ffffff);
-  --bs-popover-color: var(--default-color, #2d3a4e);
-  --bs-popover-border-color: var(--border-color, #e0e0e0);
-  --bs-popover-body-color: var(--default-color, #2d3a4e);
+  --bs-popover-color: var(--default-color, #334155);
+  --bs-popover-border-color: var(--border-color, #e3e6ec);
+  --bs-popover-body-color: var(--default-color, #334155);
   background-color: var(--surface-color, #ffffff);
-  color: var(--default-color, #2d3a4e);
-  border: 1px solid var(--border-color, #e0e0e0);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
-  font-size: 0.78rem;
-  line-height: 1.4;
+  color: var(--default-color, #334155);
+  border: 1px solid var(--border-color, #e3e6ec);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  font-size: .78rem;
+  line-height: 1.45;
   max-width: 290px;
 }
+
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .team-chat-info-popover {
   --bs-popover-bg: #1c1c1c;
   --bs-popover-color: #f0f0f0;
@@ -77,161 +291,4274 @@ details[open] .team-chat-members-chevron { transform: rotate(180deg); }
   background-color: #1c1c1c;
   color: #f0f0f0;
   border-color: #484848;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
 }
-[data-chat-connection]:empty { display: none; }
-[data-chat-connection]:not(:empty) { display: block; margin-top: .2rem; }
-.teams-preserve { white-space: pre-wrap; overflow-wrap: anywhere; }
-.teams-status-select { width: auto; min-width: 160px; }
-.teams-comment { padding: .85rem; margin-bottom: .7rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface-color); }
-.teams-activity { padding-left: 1.2rem; font-size: .82rem; }
-.teams-activity li { padding: .5rem 0; }
+
+[data-chat-connection]:empty {
+  display: none;
+}
+
+[data-chat-connection]:not(:empty) {
+  display: block;
+  margin-top: .15rem;
+}
+
+.teams-preserve {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.teams-status-select {
+  width: auto;
+  min-width: 150px;
+}
+
+.teams-comment {
+  padding: .85rem;
+  margin-bottom: .7rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--surface-color);
+}
+
+.teams-activity {
+  padding-left: 1.2rem;
+  font-size: .8rem;
+}
+
+.teams-activity li {
+  padding: .4rem 0;
+}
+
+.team-chat-layout {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+}
+
+.team-chat-main {
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.team-chat-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+  padding: .95rem 1.4rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.team-chat-channel {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .6rem .75rem;
+  border-radius: 8px;
+  color: var(--fu-maroon-accent);
+  background: var(--na-primary-soft);
+  font-size: .83rem;
+  font-weight: 700;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.team-chat-channel i {
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.team-chat-tools {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+  padding: .5rem 1.4rem;
+}
+
+.team-chat-tools:has([data-chat-older][hidden]):has([data-chat-history-status]:empty) {
+  padding: 0;
+}
+
+.team-chat-log {
+  position: relative;
+  height: clamp(320px, 54vh, 640px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1.25rem 1.4rem;
+  overflow-anchor: none;
+}
+
+.team-chat-message {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .85rem;
+  min-width: 0;
+}
+
+.team-chat-message.is-own {
+  justify-content: flex-end;
+}
+
+.team-chat-bubble {
+  max-width: min(82%, 640px, calc(100% - 36px));
+  min-width: 120px;
+  padding: .75rem 1rem;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--default-color);
+  font-size: .85rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.team-chat-message.is-own .team-chat-bubble {
+  background: var(--na-primary-soft);
+  border-color: color-mix(in srgb, var(--fu-maroon-accent), transparent 75%);
+}
+
+.team-chat-message.is-targeted .team-chat-bubble,
+.team-chat-message:focus-visible .team-chat-bubble {
+  outline: 2px solid var(--focus-color, var(--fu-maroon-accent));
+  outline-offset: 2px;
+}
+
+.team-chat-message:focus {
+  outline: none;
+}
+
+.team-chat-message-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .4rem .7rem;
+  margin-bottom: .35rem;
+  font-size: .75rem;
+}
+
+.team-chat-message-header time {
+  color: var(--muted-color);
+  font-size: .68rem;
+}
+
+.team-chat-task {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  margin-top: .55rem;
+  margin-right: .35rem;
+  padding: .28rem .6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: .75rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.team-chat-day {
+  margin: .7rem 0 1rem;
+  text-align: center;
+  color: var(--muted-color);
+  font-size: .72rem;
+  font-weight: 600;
+}
+
+.team-chat-unread-divider {
+  text-align: center;
+  margin: .8rem 0;
+  padding: .35rem;
+  color: var(--fu-maroon-accent);
+  border-block: 1px solid var(--border-color);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.team-chat-composer {
+  padding: .95rem 1.4rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.team-chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+
+.team-chat-composer textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  line-height: 1.5rem;
+  padding: .5rem .8rem;
+  min-height: 2.5rem;
+  max-height: 7.2rem;
+  overflow-y: hidden;
+  border-radius: 4px;
+}
+
+.team-chat-input-row>.header-action-wrap {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+/* Keep .team-chat-icon-button aligned with .header-action (#notificationBell) geometry */
+.team-chat-icon-button {
+  padding: 0;
+  line-height: 1;
+}
+
+:is(.team-chat-icon-button, .team-chat-info-btn, .team-chat-reply-button)>.bi {
+  display: block;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+}
+
+:is(.team-chat-icon-button, .team-chat-info-btn, .team-chat-reply-button)>.bi::before {
+  display: block;
+  line-height: 1;
+  vertical-align: 0;
+}
+
+.team-chat-icon-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.team-chat-icon-button:focus-visible {
+  outline: 2px solid var(--accent-color, var(--fu-maroon-accent));
+  outline-offset: 2px;
+}
+
+.team-chat-task-picker {
+  width: min(560px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--heading-color);
+  background: var(--surface-color);
+  box-shadow: 0 1.25rem 3rem rgb(0 0 0 / 22%);
+  overflow-y: auto;
+}
+
+.team-chat-task-picker::backdrop {
+  background: rgb(15 23 42 / 48%);
+}
+
+.team-chat-task-modal-header,
+.team-chat-task-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.team-chat-task-modal-header {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.team-chat-task-modal-header .header-action {
+  flex-shrink: 0;
+}
+
+.team-chat-task-modal-body {
+  padding: 1rem 1.25rem;
+}
+
+.team-chat-task-modal-footer {
+  border-top: 1px solid var(--border-color);
+}
+
+.team-chat-task-picker .team-chat-task-results {
+  max-height: min(320px, 40dvh);
+  margin-top: .75rem;
+}
+
+.team-chat-task-picker .team-chat-task-results:empty {
+  min-height: 3rem;
+}
+
+.team-chat-mention-picker {
+  padding: .6rem;
+  margin-bottom: .75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface-color);
+}
+
+.team-chat-task-results,
+.team-chat-mention-picker {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.team-chat-task-option {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .6rem .25rem;
+  font-size: .84rem;
+  overflow-wrap: anywhere;
+}
+
+.team-chat-mention-option {
+  display: block;
+  width: 100%;
+  padding: .5rem .65rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--heading-color);
+  text-align: left;
+}
+
+.team-chat-mention-option[aria-selected="true"] {
+  background: var(--na-primary-soft);
+}
+
+.team-chat-mention {
+  color: var(--fu-maroon-accent);
+  background: var(--na-primary-soft);
+  border-radius: 4px;
+  padding: 0 .2rem;
+  font-weight: 600;
+}
+
+.team-chat-selected-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.team-chat-selected-tasks:not(:empty) {
+  margin-bottom: .65rem;
+}
+
+.team-chat-task-chip {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.team-chat-reply-preview,
+.team-chat-reply-quote {
+  border-inline-start: 3px solid var(--fu-maroon-accent);
+  border-radius: 4px;
+  padding: .45rem .7rem;
+  margin-bottom: .55rem;
+  background: var(--na-primary-soft);
+  font-size: .78rem;
+  overflow-wrap: anywhere;
+}
+
+.team-chat-reply-preview {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.team-chat-reply-preview[hidden] {
+  display: none;
+}
+
+.team-chat-reply-quote p,
+.team-chat-reply-preview p {
+  margin: .15rem 0 0;
+  white-space: pre-wrap;
+  max-height: 4.5em;
+  overflow: auto;
+}
+
+.team-chat-reply-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted-color);
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.team-chat-reply-button:hover {
+  color: var(--icon-hover-color, var(--heading-color));
+  background: var(--na-primary-soft);
+}
+
+.team-chat-reply-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.team-chat-message.is-own .team-chat-reply-button {
+  order: -1;
+}
+
+.team-chat-update-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem 1.4rem;
+}
+
+/* Calendar base hooks */
+.team-calendar-layout {
+  display: grid;
+  grid-template-columns: 276px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+}
+
+.team-calendar-main {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.team-calendar-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+  padding: .95rem 1.35rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.team-calendar-scroll {
+  overflow-x: auto;
+}
+
+.team-calendar-grid {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  min-width: 700px;
+}
+
+.team-calendar-grid th {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: .7rem .5rem;
+  color: var(--muted-color);
+  background: var(--table-header-bg);
+  text-align: center;
+}
+
+.team-calendar-grid td {
+  vertical-align: top;
+  height: 132px;
+  padding: .5rem;
+  border: 1px solid var(--border-color);
+  background: var(--surface-color);
+}
+
+.team-calendar-grid.is-week td {
+  height: 360px;
+}
+
+.team-calendar-grid td.is-today {
+  box-shadow: inset 0 2.5px 0 var(--fu-maroon-accent);
+}
+
+.team-calendar-day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .45rem;
+  font-size: .78rem;
+}
+
+.team-calendar-day-heading time {
+  font-weight: 700;
+  color: var(--heading-color);
+}
+
+.team-calendar-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--muted-color);
+  text-decoration: none;
+}
+
+.team-calendar-add:hover {
+  background: var(--na-primary-soft);
+  color: var(--fu-maroon-accent);
+}
+
+.team-calendar-day-items {
+  margin: 0;
+  display: grid;
+  gap: .35rem;
+}
+
+.team-calendar-item {
+  display: block;
+  border-inline-start: 3px solid var(--fu-maroon-accent);
+  border-radius: 6px;
+  padding: .38rem .48rem;
+  background: var(--na-primary-soft);
+  color: var(--heading-color);
+  font-size: .73rem;
+  line-height: 1.35;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.team-calendar-item:hover {
+  color: var(--fu-maroon-accent);
+  outline: 1px solid var(--fu-maroon-accent);
+}
+
+.team-calendar-item-meta {
+  display: block;
+  margin-bottom: .15rem;
+  font-size: .65rem;
+  font-weight: 700;
+}
+
+.team-calendar-item.is-complete>span:last-child {
+  text-decoration: line-through;
+  opacity: .75;
+}
+
+.team-calendar-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: .45rem;
+  background: var(--fu-maroon-accent);
+}
+
+.team-calendar-key.is-task {
+  background: var(--muted-color);
+}
+
+.team-calendar-agenda-day {
+  padding: 1rem 1.35rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.team-calendar-agenda-day ul {
+  display: grid;
+  gap: .5rem;
+}
+
+.team-calendar-agenda .team-calendar-item {
+  font-size: .82rem;
+  padding: .68rem .85rem;
+}
+
+.team-calendar-participants {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
 @media (max-width: 767.98px) {
   .teams-workspace :is(.form-control, .form-select, .bd-select .bd-select-toggle, .btn) {
     min-height: 40px;
   }
+
   .teams-workspace .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
+
   .teams-workspace .bd-select {
     width: 100%;
   }
 }
+
 @media (max-width: 575.98px) {
-  .teams-board { grid-template-columns: minmax(0, 1fr); overflow-x: visible; }
+  .teams-board {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: visible;
+  }
 }
 
-/* NiceAdmin-inspired department channel and chronological message pane. */
-.team-chat-layout { display: grid; grid-template-columns: 245px minmax(0, 1fr); gap: 1rem; align-items: start; }
-.team-chat-main { min-width: 0; overflow: hidden; }
-.team-chat-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
-.team-chat-channel { display: flex; align-items: center; gap: .45rem; padding: .8rem .5rem; border-radius: 4px; color: var(--fu-maroon-accent); background: var(--na-primary-soft); font-size: .85rem; font-weight: 700; overflow-wrap: anywhere; }
-.team-chat-channel i { color: var(--icon-accent-color); }
-.team-chat-tools { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .5rem; padding: .6rem; }
-.team-chat-log { position: relative; height: clamp(300px, 52vh, 650px); overflow-y: auto; overflow-x: hidden; padding: 1rem; background: color-mix(in srgb, var(--surface-color), var(--muted-color) 3%); overflow-anchor: none; }
-.team-chat-message { display: flex; align-items: center; gap: .5rem; margin-bottom: .9rem; min-width: 0; }
-.team-chat-message.is-own { justify-content: flex-end; }
-.team-chat-bubble { max-width: min(85%, 650px, calc(100% - 36px)); min-width: 120px; padding: .8rem 1rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 4px; color: var(--default-color); font-size: .88rem; overflow-wrap: anywhere; }
-.team-chat-message.is-own .team-chat-bubble { background: var(--na-primary-soft); border-color: color-mix(in srgb, var(--fu-maroon-accent), transparent 75%); }
-.team-chat-message.is-targeted .team-chat-bubble, .team-chat-message:focus-visible .team-chat-bubble { outline: 2px solid var(--focus-color); outline-offset: 2px; }
-.team-chat-message:focus { outline: none; }
-.team-chat-message-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .7rem; margin-bottom: .5rem; font-size: .75rem; }
-.team-chat-message-header time { color: var(--muted-color); font-size: .7rem; }
-.team-chat-task { display: block; margin-top: .6rem; padding-top: .5rem; border-top: 1px solid var(--border-color); font-size: .78rem; }
-.team-chat-day { margin: .6rem 0 1rem; text-align: center; color: var(--muted-color); font-size: .75rem; font-weight: 600; }
-.team-chat-unread-divider { text-align: center; margin: .75rem 0; padding: .35rem; color: var(--fu-maroon-accent); border-block: 1px solid var(--border-color); font-size: .75rem; font-weight: 700; }
-.team-chat-composer { padding: 1rem; border-top: 1px solid var(--border-color); }
-.team-chat-input-row { display: flex; align-items: center; gap: .6rem; }
-.team-chat-composer textarea { flex: 1; min-width: 0; resize: none; line-height: 1.5rem; padding: .6rem .8rem; min-height: 2.5rem; max-height: 7.2rem; overflow-y: hidden; border-radius: 4px; }
-.team-chat-input-row > .header-action-wrap { display: flex; align-items: center; flex: 0 0 auto; }
-.team-chat-icon-button { padding: 0; line-height: 1; }
-:is(.team-chat-icon-button, .team-chat-info-btn, .team-chat-reply-button) > .bi { display: block; width: 1em; height: 1em; line-height: 1; }
-:is(.team-chat-icon-button, .team-chat-info-btn, .team-chat-reply-button) > .bi::before { display: block; line-height: 1; vertical-align: 0; }
-.team-chat-info-btn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 22px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted-color); font-size: .8rem; line-height: 1; cursor: pointer; }
-.team-chat-info-btn:hover { color: var(--icon-hover-color); background: var(--na-primary-soft); }
-.team-chat-info-btn:focus-visible, .team-chat-reply-button:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 2px; }
-.team-chat-icon-button:disabled { opacity: .5; cursor: not-allowed; }
-.team-chat-icon-button:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
-.team-chat-task-picker { width: min(560px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 0; border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--heading-color); background: var(--surface-color); box-shadow: 0 1rem 3rem rgb(0 0 0 / 20%); overflow-y: auto; }
-.team-chat-task-picker::backdrop { background: rgb(0 0 0 / 45%); }
-.team-chat-task-modal-header, .team-chat-task-modal-footer { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem; }
-.team-chat-task-modal-header { border-bottom: 1px solid var(--border-color); }
-.team-chat-task-modal-header .header-action { flex-shrink: 0; }
-.team-chat-task-modal-body { padding: 1rem; }
-.team-chat-task-modal-footer { border-top: 1px solid var(--border-color); }
-.team-chat-task-picker .team-chat-task-results { max-height: min(320px, 40dvh); margin-top: .75rem; }
-.team-chat-task-picker .team-chat-task-results:empty { min-height: 3rem; }
-.team-chat-mention-picker { padding: .75rem; margin-bottom: .75rem; border: 1px solid var(--border-color); border-radius: .65rem; background: var(--surface-color); }
-.team-chat-task-results, .team-chat-mention-picker { max-height: 220px; overflow-y: auto; }
-.team-chat-task-option { display: flex; align-items: center; gap: .6rem; padding: .6rem .25rem; font-size: .85rem; overflow-wrap: anywhere; }
-.team-chat-mention-option { display: block; width: 100%; padding: .5rem; border: 0; border-radius: .35rem; background: transparent; color: var(--heading-color); text-align: left; }
-.team-chat-mention-option[aria-selected="true"] { background: var(--na-primary-soft); }
-.team-chat-mention { color: var(--fu-maroon-accent); background: var(--na-primary-soft); border-radius: .2rem; font-weight: 600; }
-.team-chat-selected-tasks { display: flex; flex-wrap: wrap; gap: .4rem; }
-.team-chat-selected-tasks:not(:empty) { margin-bottom: .65rem; }
-.team-chat-task-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
-.team-chat-reply-preview, .team-chat-reply-quote { border-inline-start: 3px solid var(--fu-maroon-accent); padding: .5rem .7rem; margin-bottom: .6rem; background: var(--na-primary-soft); font-size: .8rem; overflow-wrap: anywhere; }
-.team-chat-reply-preview { display: flex; justify-content: space-between; gap: .5rem; }
-.team-chat-reply-preview[hidden] { display: none; }
-.team-chat-reply-quote p, .team-chat-reply-preview p { margin: .2rem 0 0; white-space: pre-wrap; max-height: 4.5em; overflow: auto; }
-.team-chat-reply-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--muted-color); font-size: 1.1rem; line-height: 1; cursor: pointer; }
-.team-chat-reply-button:hover { color: var(--icon-hover-color); background: var(--na-primary-soft); }
-.team-chat-reply-button:disabled { opacity: .5; cursor: not-allowed; }
-.team-chat-message.is-own .team-chat-reply-button { order: -1; }
-.team-chat-update-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; padding: .5rem 1rem; }
-@media (max-width: 1199.98px) { .team-chat-layout { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 575.98px) {
-  .team-chat-log { padding: .6rem; }
-  .team-chat-bubble { max-width: calc(100% - 36px); padding: .65rem; }
+/* --------------------------------------------------------------------------
+   2. Figma Redesign Semantic Tokens (Light & Achromatic Dark)
+   -------------------------------------------------------------------------- */
+.tws-workspace,
+.tws-editor,
+.tws-detail,
+.tws-form-actions {
+  --tws-surface: var(--surface-color, #ffffff);
+  --tws-subtle: #f8f9fb;
+  --tws-well: #f1f3f7;
+  --tws-border: #e3e6ec;
+  --tws-hairline: #edf0f5;
+  --tws-input-border: #d5dae3;
+  --tws-heading: #0f172a;
+  --tws-text: #334155;
+  --tws-muted: #64748b;
+  --tws-brand: #800000;
+  --tws-brand-hover: #690000;
+  --tws-brand-soft: #fdf2f2;
+  --tws-brand-border: #f5d0d0;
+  --tws-accent: #800000;
+  --tws-warning: #b45309;
+  --tws-warning-soft: #fffbeb;
+  --tws-warning-border: #fde68a;
+  --tws-success: #047857;
+  --tws-success-soft: #ecfdf5;
+  --tws-success-border: #a7f3d0;
+  --tws-danger: #b91c1c;
+  --tws-danger-soft: #fef2f2;
+  --tws-danger-border: #fecaca;
+  --tws-sky: #0369a1;
+  --tws-sky-soft: #f0f9ff;
+  --tws-sky-border: #bae6fd;
+  --tws-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --tws-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --tws-shadow-md: 0 10px 26px -6px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
+  min-width: 0;
+  color: var(--tws-text);
 }
 
-/* Keep chat readable on neutral surfaces without changing the shared brand palette. */
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .team-chat-message.is-own .team-chat-bubble {
-  background: var(--table-hover-bg);
-  border-color: var(--border-color);
-}
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .team-chat-channel {
-  color: var(--default-color);
-  background: var(--table-hover-bg);
-}
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.team-chat-sidebar .teams-eyebrow, .team-chat-unread-divider) {
-  color: var(--default-color);
-}
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.team-chat-mention, .team-chat-reply-preview, .team-chat-reply-quote) {
-  color: var(--default-color);
-  background: var(--table-hover-bg);
-  border-inline-start-color: var(--muted-color);
-}
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .team-chat-mention-option[aria-selected="true"] {
-  background: var(--table-hover-bg);
+:is(.tws-workspace, .tws-editor, .tws-detail) {
+  container-type: inline-size;
 }
 
-/* NiceAdmin calendar layout: filter rail and calendar card. */
-.team-calendar-layout { display: grid; grid-template-columns: 245px minmax(0, 1fr); gap: 1rem; align-items: start; }
-.team-calendar-main { min-width: 0; overflow: hidden; }
-.team-calendar-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .85rem; padding: 1rem; border-bottom: 1px solid var(--border-color); }
-.team-calendar-scroll { overflow-x: auto; }
-.team-calendar-grid { border-collapse: collapse; table-layout: fixed; width: 100%; min-width: 700px; }
-.team-calendar-grid th { font-size: .75rem; text-transform: uppercase; padding: .75rem .5rem; color: var(--muted-color); background: var(--table-header-bg); text-align: center; }
-.team-calendar-grid td { vertical-align: top; height: 135px; padding: .5rem; border: 1px solid var(--border-color); background: var(--surface-color); }
-.team-calendar-grid.is-week td { height: 350px; }
-.team-calendar-grid td.is-other-month { background: color-mix(in srgb, var(--surface-color), var(--muted-color) 5%); }
-.team-calendar-grid td.is-today { box-shadow: inset 0 3px var(--fu-maroon-accent); }
-.team-calendar-day-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: .4rem; font-size: .8rem; }
-.team-calendar-day-heading time { font-weight: 700; color: var(--heading-color); }
-.team-calendar-day-heading time[aria-current] { color: var(--fu-maroon-accent); }
-.team-calendar-add { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 4px; color: var(--muted-color); }
-.team-calendar-add:hover { background: var(--na-primary-soft); color: var(--icon-hover-color); }
-.team-calendar-day-items { margin: 0; display: grid; gap: .4rem; }
-.team-calendar-item { display: block; border-inline-start: 3px solid var(--fu-maroon-accent); border-radius: 4px; padding: .4rem; background: var(--na-primary-soft); color: var(--heading-color); font-size: .75rem; line-height: 1.35; overflow-wrap: anywhere; }
-.team-calendar-item:hover { color: var(--fu-maroon-accent); outline: 1px solid var(--fu-maroon-accent); }
-.team-calendar-item.is-task { border-inline-start-color: var(--muted-color); background: color-mix(in srgb, var(--surface-color), var(--muted-color) 9%); }
-.team-calendar-item-meta { display: block; margin-bottom: .2rem; font-size: .67rem; font-weight: 700; }
-.team-calendar-item.is-complete > span:last-child { text-decoration: line-through; }
-.team-calendar-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .45rem; background: var(--fu-maroon-accent); }
-.team-calendar-key.is-task { background: var(--muted-color); }
-.team-calendar-agenda-day { padding: 1rem; border-bottom: 1px solid var(--border-color); }
-.team-calendar-agenda-day ul { display: grid; gap: .5rem; }
-.team-calendar-agenda .team-calendar-item { font-size: .85rem; padding: .7rem; }
-.team-calendar-participants { max-height: 220px; overflow-y: auto; padding: .25rem; }
-[data-theme="dark"] .team-calendar-grid th { background: #303030; }
+.tws-workspace {
+  container-name: tws-workspace;
+}
 
-/* Brand fills stay maroon; text on dark cards needs a separate contrast token. */
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(
-  .teams-eyebrow, .teams-members, .teams-priority:not(.is-low):not(.is-high),
-  .teams-task-title a, .teams-task-title a:hover,
-  .team-chat-channel, .team-chat-unread-divider, .team-chat-mention,
-  .team-calendar-day-heading time[aria-current], .team-calendar-item, .team-calendar-item:hover
-) {
-  color: var(--primary-text-color);
+.tws-editor {
+  container-name: tws-editor;
 }
-@media (max-width: 1199.98px) {
-  .team-calendar-layout { grid-template-columns: minmax(0, 1fr); }
-  .team-calendar-layout > aside { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; }
+
+.tws-detail {
+  container-name: tws-detail;
 }
-@media (max-width: 575.98px) {
-  .team-calendar-layout > aside { grid-template-columns: minmax(0, 1fr); }
-  .team-calendar-toolbar { padding: .75rem; }
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.tws-workspace, .tws-editor, .tws-detail, .tws-form-actions) {
+  --tws-surface: #1c1c1c;
+  --tws-subtle: #222222;
+  --tws-well: #262626;
+  --tws-border: rgba(255, 255, 255, 0.11);
+  --tws-hairline: rgba(255, 255, 255, 0.075);
+  --tws-input-border: rgba(255, 255, 255, 0.18);
+  --tws-heading: #f3f4f6;
+  --tws-text: #d1d5db;
+  --tws-muted: #9ca3af;
+  --tws-brand: #800000;
+  --tws-brand-hover: #991b1b;
+  --tws-brand-soft: rgba(224, 138, 138, 0.12);
+  --tws-brand-border: rgba(224, 138, 138, 0.28);
+  --tws-accent: #e08a8a;
+  --tws-warning: #fbbf24;
+  --tws-warning-soft: rgba(251, 191, 36, 0.12);
+  --tws-warning-border: rgba(251, 191, 36, 0.26);
+  --tws-success: #6ee7b7;
+  --tws-success-soft: rgba(110, 231, 183, 0.12);
+  --tws-success-border: rgba(110, 231, 183, 0.26);
+  --tws-danger: #fca5a5;
+  --tws-danger-soft: rgba(252, 165, 165, 0.12);
+  --tws-danger-border: rgba(252, 165, 165, 0.26);
+  --tws-sky: #7dd3fc;
+  --tws-sky-soft: rgba(125, 211, 252, 0.12);
+  --tws-sky-border: rgba(125, 211, 252, 0.26);
+  --tws-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --tws-shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.4);
+  --tws-shadow-md: 0 12px 28px rgba(0, 0, 0, 0.55);
+}
+
+/* --------------------------------------------------------------------------
+   3. Shared Sheet, Header, Avatars & Unified Pill Navigation
+   -------------------------------------------------------------------------- */
+/* Reclaim outer page-title vertical space on Teams screens (keep <h1> for screen readers) */
+.app-shell .main-content:has(.tws-workspace) > .pagetitle,
+.app-shell .fixture-container:has(> .tws-workspace) > .fixture-page-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px !important;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tws-workspace .tws-sheet {
+  min-width: 0;
+  border: 1px solid var(--tws-border);
+  border-radius: 14px;
+  background: var(--tws-surface);
+  box-shadow: var(--tws-shadow-xs);
+}
+
+.tws-workspace .tws-band {
+  padding: 1.15rem 1.5rem;
+  min-width: 0;
+}
+
+.tws-workspace .tws-intro {
+  padding: 1.15rem 1.5rem;
+}
+
+.tws-workspace .tws-intro-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem 1.25rem;
+}
+
+.tws-workspace .tws-intro-primary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem 1.1rem;
+  min-width: 0;
+}
+
+.tws-workspace .tws-intro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .55rem .75rem;
+  margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tws-workspace .tws-primary-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: .4rem .9rem;
+  border-radius: 8px;
+  font-size: .81rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-title-block {
+  min-width: 0;
+}
+
+:is(.tws-workspace, .tws-detail) .tws-eyebrow {
+  display: block;
+  margin-bottom: .18rem;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-intro-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -.01em;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .tws-count {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .74rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--tws-muted);
+}
+
+/* Initials avatars (5 balanced tones) */
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .64rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-avatar--sm {
+  width: 22px;
+  height: 22px;
+  font-size: .6rem;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-avatar.is-maroon {
+  background: #800000;
+  color: #ffffff;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-avatar.is-emerald {
+  background: #047857;
+  color: #ffffff;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-avatar.is-sky {
+  background: #0369a1;
+  color: #ffffff;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-avatar.is-amber {
+  background: #b45309;
+  color: #ffffff;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-avatar.is-slate {
+  background: #475569;
+  color: #ffffff;
+}
+
+/* Inline overlapping avatar-stack roster popover */
+.tws-workspace .tws-roster-details {
+  position: relative;
+  border: 0;
+  margin: 0;
+}
+
+.tws-workspace .tws-roster-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .26rem .65rem .26rem .35rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 999px;
+  background: var(--tws-subtle);
+  cursor: pointer;
+  list-style: none;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.tws-workspace .tws-roster-pill::-webkit-details-marker,
+.tws-workspace .tws-roster-pill::marker {
+  display: none;
+}
+
+.tws-workspace .tws-roster-pill:hover {
+  border-color: var(--tws-input-border);
+  background: var(--tws-well);
+}
+
+.tws-workspace .tws-roster-pill:focus-visible {
+  outline: 2px solid var(--tws-accent);
+  outline-offset: 2px;
+}
+
+.tws-workspace .tws-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tws-workspace .tws-avatar-stack .tws-avatar {
+  width: 24px;
+  height: 24px;
+  font-size: .58rem;
+  border: 2px solid var(--tws-surface);
+  margin-left: -7px;
+}
+
+.tws-workspace .tws-avatar-stack .tws-avatar:first-child {
+  margin-left: 0;
+}
+
+.tws-workspace .tws-roster-chevron {
+  font-size: .68rem;
+  color: var(--tws-muted);
+  transition: transform .18s ease;
+}
+
+.tws-workspace .tws-roster-details[open] .tws-roster-chevron {
+  transform: rotate(180deg);
+}
+
+.tws-workspace .tws-roster-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: min(320px, calc(100vw - 2rem));
+  max-height: 400px;
+  overflow-y: auto;
+  padding: .9rem 1rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 12px;
+  background: var(--tws-surface);
+  box-shadow: var(--tws-shadow-md);
+}
+
+.tws-workspace .tws-member-count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .28rem .7rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 999px;
+  background: var(--tws-subtle);
+}
+
+.tws-workspace .tws-online-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tws-success);
+  flex-shrink: 0;
+}
+
+/* Compact operational privacy shield pill */
+.tws-workspace .tws-notice--compact {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  margin: 0;
+  padding: .34rem .75rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 999px;
+  background: var(--tws-subtle);
+  font-size: .74rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--tws-muted);
+  max-width: 100%;
+}
+
+.tws-workspace .tws-notice--compact>i {
+  color: var(--tws-accent);
+  font-size: .8rem;
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-notice--compact>p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Unified pill tab bar + view switch */
+.tws-workspace .tws-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65rem 1rem;
+  padding: .6rem 1.5rem;
+  border-block: 1px solid var(--tws-border);
+  background: var(--tws-surface);
+}
+
+.tws-workspace .tws-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .35rem;
+  min-width: 0;
+}
+
+.tws-workspace .tws-nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: .42rem .85rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: .81rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--tws-muted);
+  text-decoration: none;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.tws-workspace .tws-nav-link:hover {
+  background: var(--tws-well);
+  color: var(--tws-heading);
+}
+
+.tws-workspace .tws-nav-link[aria-current="page"] {
+  background: var(--tws-brand);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(128, 0, 0, 0.24);
+}
+
+.tws-workspace .tws-nav-link[aria-current="page"]:hover {
+  background: var(--tws-brand-hover);
+  color: #ffffff;
+}
+
+.tws-workspace .tws-nav-link:focus-visible,
+.tws-workspace .tws-display-link:focus-visible {
+  outline: 2px solid var(--tws-accent);
+  outline-offset: 2px;
+}
+
+.tws-workspace .tws-nav-link [data-chat-unread] {
+  padding: .12rem .42rem;
+  border-radius: 999px;
+  background: var(--tws-well) !important;
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--tws-heading) !important;
+}
+
+.tws-workspace .tws-nav-link[aria-current="page"] [data-chat-unread] {
+  background: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+.tws-workspace .tws-view-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: .2rem;
+  gap: .15rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 8px;
+  background: var(--tws-well);
+}
+
+.tws-workspace .tws-display-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .38rem;
+  min-height: 30px;
+  padding: .28rem .7rem;
+  border-radius: 6px;
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--tws-muted);
+  text-decoration: none;
+  transition: background-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.tws-workspace .tws-display-link:hover {
+  color: var(--tws-heading);
+}
+
+.tws-workspace .tws-display-link[aria-current] {
+  background: var(--tws-surface);
+  color: var(--tws-heading);
+  box-shadow: var(--tws-shadow-xs);
+}
+
+.tws-workspace .tws-tz-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: .28rem .65rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 999px;
+  background: var(--tws-subtle);
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .7rem;
+  color: var(--tws-muted);
+}
+
+/* --------------------------------------------------------------------------
+   4. Compact Filter Toolbar & Feedback
+   -------------------------------------------------------------------------- */
+.tws-workspace .tws-filter-band {
+  padding: .85rem 1.5rem;
+  margin: 0;
+  background: var(--tws-subtle);
+  border-bottom: 1px solid var(--tws-border);
+}
+
+.tws-workspace .tws-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.25fr) minmax(0, 1.1fr) auto;
+  gap: .65rem;
+  align-items: center;
+}
+
+.tws-workspace .tws-filter-grid>div {
+  min-width: 0;
+}
+
+.tws-workspace .tws-search-field {
+  position: relative;
+}
+
+.tws-workspace .tws-input-icon {
+  position: absolute;
+  top: 50%;
+  left: .75rem;
+  transform: translateY(-50%);
+  color: var(--tws-muted);
+  font-size: .82rem;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tws-workspace .tws-search-input {
+  padding-left: 2.15rem !important;
+}
+
+.tws-workspace .tws-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.tws-workspace .tws-filter-actions .btn {
+  min-height: 38px;
+  padding-inline: .9rem;
+  font-size: .8rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.tws-workspace .tws-feedback {
+  padding: .35rem 1.5rem;
+  border-bottom: 1px solid var(--tws-hairline);
+  font-size: .72rem;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-feedback :is(p, [data-filter-status]) {
+  margin: 0 !important;
+  font-size: .72rem !important;
+  color: var(--tws-muted) !important;
+}
+
+/* Crisp Figma secondary & table action buttons inside Teams */
+html body :is(.tws-workspace, .tws-editor, .tws-detail, .tws-form-actions) .btn.btn-outline-secondary {
+  background-color: var(--tws-surface) !important;
+  border: 1px solid var(--tws-border) !important;
+  color: var(--tws-text) !important;
+  box-shadow: var(--tws-shadow-xs);
+}
+
+html body :is(.tws-workspace, .tws-editor, .tws-detail, .tws-form-actions) .btn.btn-outline-secondary:hover,
+html body :is(.tws-workspace, .tws-editor, .tws-detail, .tws-form-actions) .btn.btn-outline-secondary:focus-visible {
+  background-color: var(--tws-well) !important;
+  border-color: var(--tws-input-border) !important;
+  color: var(--tws-heading) !important;
+}
+
+html body .tws-workspace .tws-action-cell .btn.btn-outline-primary {
+  background-color: var(--tws-surface) !important;
+  border: 1px solid var(--tws-border) !important;
+  color: var(--tws-heading) !important;
+  box-shadow: var(--tws-shadow-xs);
+}
+
+html body .tws-workspace .tws-action-cell .btn.btn-outline-primary:hover,
+html body .tws-workspace .tws-action-cell .btn.btn-outline-primary:focus-visible {
+  background-color: var(--tws-brand-soft) !important;
+  border-color: var(--tws-brand-border) !important;
+  color: var(--tws-accent) !important;
+}
+
+html body :is(.tws-workspace, .tws-editor, .tws-detail, .tws-form-actions) .btn.btn-outline-secondary.btn-outline-secondary[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *),
+html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-primary[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *) {
+  color: currentColor !important;
+}
+
+/* --------------------------------------------------------------------------
+   5. List View Telemetry KPI Deck
+   -------------------------------------------------------------------------- */
+.tws-workspace .tws-kpi-deck {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--tws-border);
+  background: var(--tws-surface);
+}
+
+.tws-workspace .tws-kpi-cell {
+  display: flex;
+  flex-direction: column;
+  gap: .22rem;
+  padding: 1rem 1.35rem;
+  min-width: 0;
+  border-right: 1px solid var(--tws-hairline);
+}
+
+.tws-workspace .tws-kpi-cell:last-child {
+  border-right: 0;
+}
+
+.tws-workspace .tws-kpi-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .42rem;
+  font-size: .72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-kpi-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--tws-muted);
+}
+
+.tws-workspace .tws-kpi-dot.is-brand {
+  background: var(--tws-accent);
+}
+
+.tws-workspace .tws-kpi-dot.is-danger {
+  background: var(--tws-danger);
+}
+
+.tws-workspace .tws-kpi-dot.is-success {
+  background: var(--tws-success);
+}
+
+.tws-workspace .tws-kpi-value {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .tws-kpi-value.is-brand {
+  color: var(--tws-accent);
+}
+
+.tws-workspace .tws-kpi-value.is-danger {
+  color: var(--tws-danger);
+}
+
+.tws-workspace .tws-kpi-value.is-success {
+  color: var(--tws-success);
+}
+
+.tws-workspace .tws-kpi-sub {
+  font-size: .72rem;
+  color: var(--tws-muted);
+}
+
+/* --------------------------------------------------------------------------
+   6. Results Header, Kanban Board & Cards
+   -------------------------------------------------------------------------- */
+.tws-workspace .tws-results {
+  border-top: 0;
+}
+
+.tws-workspace .tws-results-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .45rem 1rem;
+  padding: .95rem 1.5rem .8rem;
+}
+
+.tws-workspace .tws-results-head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .35rem .75rem;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-section-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .9rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--tws-heading);
+  overflow-wrap: anywhere;
+}
+
+.tws-workspace .tws-board-help {
+  margin: 0;
+  padding: 0;
+  font-size: .73rem;
+  line-height: 1.5;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-board-help kbd {
+  padding: .1rem .35rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 4px;
+  background: var(--tws-subtle);
+  color: var(--tws-heading);
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .68rem;
+}
+
+.tws-workspace .tws-board-band {
+  min-width: 0;
+  padding: 0 1.5rem 1.25rem;
+}
+
+.tws-workspace .teams-board {
+  grid-template-columns: repeat(4, minmax(248px, 1fr));
+  gap: .85rem;
+  overflow-x: auto;
+  padding-bottom: .5rem;
+}
+
+.tws-workspace .teams-column {
+  border: 1px solid var(--tws-border);
+  border-radius: 12px;
+  background: var(--tws-subtle);
+}
+
+.tws-workspace .teams-column-header {
+  padding: .75rem .85rem;
+  border-bottom: 1px solid var(--tws-border);
+}
+
+.tws-workspace .tws-column-title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 0;
+}
+
+.tws-workspace .teams-column-header h2 {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .teams-count {
+  min-width: 22px;
+  height: 20px;
+  padding: 0 .45rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 999px;
+  background: var(--tws-surface);
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .69rem;
+  font-weight: 600;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-column-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--tws-muted);
+  text-decoration: none;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.tws-workspace .tws-column-add:hover {
+  background: var(--tws-well);
+  color: var(--tws-heading);
+}
+
+.tws-workspace .teams-column-body {
+  padding: .65rem;
+  gap: .65rem;
+}
+
+/* Kanban Task Card */
+.tws-workspace .teams-task {
+  padding: .9rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 10px;
+  background: var(--tws-surface);
+  box-shadow: var(--tws-shadow-xs);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.tws-workspace .teams-task:hover {
+  border-color: var(--tws-input-border);
+  box-shadow: var(--tws-shadow-sm);
+}
+
+.tws-workspace .tws-task-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+
+.tws-workspace .tws-task-top-left {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  min-width: 0;
+}
+
+.tws-workspace .tws-drag-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tws-muted);
+  font-size: .85rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-drag-icon-btn:hover {
+  background: var(--tws-well);
+  color: var(--tws-heading);
+}
+
+.tws-workspace .tws-drag-icon-btn:focus-visible {
+  outline: 2px solid var(--tws-accent);
+  outline-offset: 2px;
+}
+
+.tws-workspace .teams-task-title {
+  margin-bottom: .4rem;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .85rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.tws-workspace .teams-task-title a {
+  color: var(--tws-heading);
+  text-decoration: none;
+}
+
+.tws-workspace .teams-task-title a:hover {
+  color: var(--tws-accent);
+}
+
+.tws-workspace .teams-task-excerpt {
+  margin-bottom: .65rem;
+  font-size: .77rem;
+  line-height: 1.55;
+  color: var(--tws-muted);
+}
+
+/* Checklist progress bar (Kanban, List, Inspector) */
+.tws-workspace .tws-card-checklist {
+  margin-bottom: .7rem;
+}
+
+.tws-workspace .tws-card-checklist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .28rem;
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-card-checklist-count {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+}
+
+.tws-workspace .tws-card-checklist-count.is-complete {
+  color: var(--tws-success);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-progress-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--tws-well);
+  overflow: hidden;
+}
+
+:is(.tws-workspace, .tws-detail) .tws-progress-track--inline {
+  display: inline-block;
+  width: 48px;
+  height: 4px;
+  vertical-align: middle;
+  margin-right: .35rem;
+}
+
+:is(.tws-workspace, .tws-detail) .tws-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tws-brand);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-progress-fill.is-complete {
+  background: var(--tws-success);
+}
+
+/* Card footer (assignee + due pill) & actions */
+.tws-workspace .tws-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem .5rem;
+  padding-top: .65rem;
+  border-top: 1px solid var(--tws-hairline);
+  font-size: .73rem;
+}
+
+.tws-workspace .tws-card-assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  min-width: 0;
+  color: var(--tws-text);
+  font-weight: 600;
+}
+
+.tws-workspace .tws-card-assignee-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.tws-workspace .tws-due-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: .14rem .45rem;
+  border-radius: 6px;
+  background: var(--tws-well);
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--tws-muted);
+  white-space: nowrap;
+}
+
+.tws-workspace .tws-due-pill.tws-overdue {
+  background: var(--tws-danger-soft);
+  color: var(--tws-danger);
+  border: 1px solid var(--tws-danger-border);
+}
+
+.tws-workspace .tws-task-actions {
+  margin-top: .65rem;
+  display: flex;
+}
+
+.tws-workspace .tws-card-edit-link {
+  width: 100%;
+  min-height: 30px;
+  padding: .24rem .6rem;
+  border-radius: 7px;
+  font-size: .73rem;
+  font-weight: 600;
+  border-color: var(--tws-border);
+  color: var(--tws-text);
+  background: var(--tws-subtle);
+}
+
+.tws-workspace .tws-card-edit-link:hover {
+  border-color: var(--tws-input-border);
+  background: var(--tws-well);
+  color: var(--tws-heading);
+}
+
+/* Priority, Status & ID Pills (Figma Badge/Priority & Badge/Status) */
+:is(.tws-workspace, .tws-detail) .tws-task-id {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .7rem;
+  font-weight: 500;
+  color: var(--tws-muted);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-id-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .18rem .52rem;
+  border-radius: 6px;
+  background: var(--tws-well);
+  border: 1px solid var(--tws-border);
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--tws-muted);
+}
+
+:is(.tws-workspace, .tws-detail) .teams-priority {
+  display: inline-flex;
+  align-items: center;
+  padding: .16rem .52rem;
+  border-radius: 999px;
+  font-size: .69rem;
+  font-weight: 700;
+  line-height: 1.35;
+  background: var(--tws-brand-soft);
+  color: var(--tws-accent);
+  border: 1px solid var(--tws-brand-border);
+}
+
+:is(.tws-workspace, .tws-detail) .teams-priority.is-low {
+  background: var(--tws-well);
+  color: var(--tws-muted);
+  border-color: var(--tws-border);
+}
+
+:is(.tws-workspace, .tws-detail) .teams-priority.is-high {
+  background: var(--tws-danger-soft);
+  color: var(--tws-danger);
+  border-color: var(--tws-danger-border);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .38rem;
+  padding: .16rem .58rem;
+  border-radius: 999px;
+  background: var(--tws-well);
+  border: 1px solid var(--tws-border);
+  font-size: .72rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--tws-text);
+  white-space: nowrap;
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status.is-in_progress,
+:is(.tws-workspace, .tws-detail) .tws-status.is-scheduled {
+  background: var(--tws-brand-soft);
+  border-color: var(--tws-brand-border);
+  color: var(--tws-accent);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status.is-blocked {
+  background: var(--tws-warning-soft);
+  border-color: var(--tws-warning-border);
+  color: var(--tws-warning);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status.is-done {
+  background: var(--tws-success-soft);
+  border-color: var(--tws-success-border);
+  color: var(--tws-success);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status.is-cancelled {
+  background: var(--tws-danger-soft);
+  border-color: var(--tws-danger-border);
+  color: var(--tws-danger);
+}
+
+.tws-workspace .teams-status-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--tws-muted);
+}
+
+.tws-workspace .teams-status-dot.is-in_progress {
+  background: var(--tws-accent);
+}
+
+.tws-workspace .teams-status-dot.is-blocked {
+  background: var(--tws-warning);
+}
+
+.tws-workspace .teams-status-dot.is-done {
+  background: var(--tws-success);
+}
+
+.tws-workspace .teams-column[data-task-drop-target] {
+  outline-color: var(--tws-accent);
+  background: color-mix(in srgb, var(--tws-subtle) 90%, var(--tws-accent) 10%);
+}
+
+.tws-workspace .teams-task[data-task-dragging] {
+  outline-color: var(--tws-accent);
+}
+
+.tws-workspace .tws-pagination-band {
+  padding: .75rem 1.5rem 1.15rem;
+  border-top: 1px solid var(--tws-hairline);
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .tws-field-note {
+  margin: .3rem 0 .75rem;
+  font-size: .76rem;
+  line-height: 1.6;
+  color: var(--tws-muted);
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   7. List Table (Strict Zebra & Transparent Cell Contract)
+   -------------------------------------------------------------------------- */
+.tws-workspace .tws-table-wrap {
+  min-width: 0;
+  width: 100%;
+}
+
+.tws-workspace .tws-table {
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--tws-text);
+  --bs-table-border-color: var(--tws-hairline);
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: .81rem;
+  line-height: 1.55;
+}
+
+.tws-workspace .tws-table th {
+  padding: .68rem .75rem;
+  border-block: 1px solid var(--tws-border);
+  background: var(--tws-subtle);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--tws-muted);
+}
+
+html body .tws-workspace .tws-table.table>thead>tr>th {
+  --bs-table-bg: var(--tws-subtle);
+  background-color: var(--tws-subtle) !important;
+  color: var(--tws-muted) !important;
+  border-color: var(--tws-border);
+  box-shadow: none;
+}
+
+/* Zebra contract: rows alternate surfaces; every td stays transparent with box-shadow: none */
+html body .tws-workspace .tws-table.table>tbody>tr>td {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.tws-workspace .tws-table>tbody>tr:nth-of-type(odd) {
+  background-color: var(--tws-subtle);
+}
+
+.tws-workspace .tws-table>tbody>tr:nth-of-type(even) {
+  background-color: var(--tws-surface);
+}
+
+.tws-workspace .tws-task-table th:nth-child(1) {
+  width: 32%;
+}
+
+.tws-workspace .tws-task-table th:nth-child(2) {
+  width: 14%;
+}
+
+.tws-workspace .tws-task-table th:nth-child(3) {
+  width: 11%;
+}
+
+.tws-workspace .tws-task-table th:nth-child(4) {
+  width: 18%;
+}
+
+.tws-workspace .tws-task-table th:nth-child(5) {
+  width: 15%;
+}
+
+.tws-workspace .tws-task-table th:nth-child(6) {
+  width: 10%;
+}
+
+.tws-workspace .tws-table td {
+  padding: .88rem .75rem;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.tws-workspace .tws-table :is(th, td):first-child {
+  padding-left: 1.5rem;
+}
+
+.tws-workspace .tws-table :is(th, td):last-child {
+  padding-right: 1.5rem;
+}
+
+.tws-workspace .tws-task-link {
+  --table-link-color: var(--tws-heading);
+  display: block;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .84rem;
+  line-height: 1.45;
+  font-weight: 600;
+  color: var(--tws-heading);
+  text-decoration: none;
+}
+
+.tws-workspace .tws-task-link:hover {
+  --table-link-color: var(--tws-accent);
+  color: var(--tws-accent);
+}
+
+.tws-workspace .tws-task-submeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .22rem;
+}
+
+.tws-workspace .tws-inline-check {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .69rem;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-table-assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  font-weight: 500;
+  color: var(--tws-text);
+}
+
+.tws-workspace .tws-cell-label {
+  display: none;
+}
+
+.tws-workspace .tws-action-cell .btn {
+  min-height: 30px;
+  padding: .28rem .65rem;
+  font-size: .74rem;
+  font-weight: 600;
+  border-radius: 7px;
+}
+
+.tws-workspace .tws-empty-cell {
+  padding: 2.5rem 1rem !important;
+  text-align: center;
+  color: var(--tws-muted);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-date {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tws-workspace .teams-member-list {
+  min-width: 0;
+}
+
+.tws-workspace .teams-member-list li {
+  flex-wrap: wrap;
+  padding-block: .52rem;
+  border-color: var(--tws-hairline);
+  font-size: .8rem;
+  line-height: 1.45;
+}
+
+.tws-workspace .teams-member-list li>span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tws-workspace .teams-member-list li>small {
+  margin-left: auto;
+  font-size: .7rem;
+  color: var(--tws-muted);
+}
+
+/* --------------------------------------------------------------------------
+   8. Form Controls, Modals, 2-Column Inspector & Editor
+   -------------------------------------------------------------------------- */
+:is(.tws-workspace, .tws-editor, .tws-detail) .form-label {
+  margin-bottom: .35rem;
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--tws-heading);
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) :is(.form-control, .form-select, .bd-select .bd-select-toggle) {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--tws-input-border);
+  border-radius: 8px !important;
+  background-color: var(--tws-surface);
+  font-size: .83rem;
+  color: var(--tws-text);
+}
+
+/* Chat textarea keeps 4px restrained corners per team-chat.test.cjs */
+.tws-workspace .team-chat-composer textarea.form-control {
+  border-radius: 4px !important;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .bd-select {
+  width: 100%;
+  min-width: 0;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) .bd-select .bd-select-toggle {
+  width: 100%;
+  padding: .44rem .75rem !important;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) :is(.bd-select-label, .bd-select-menu .dropdown-item) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+:is(.tws-workspace, .tws-editor, .tws-detail) :is(.form-control, .form-select):focus,
+:is(.tws-workspace, .tws-editor, .tws-detail) .bd-select .bd-select-toggle:is(:focus-visible, [aria-expanded="true"]) {
+  border-color: var(--tws-accent);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.14));
+}
+
+:is(.tws-editor, .tws-detail) :is(.form-text, textarea.form-control) {
+  font-size: .79rem;
+  line-height: 1.65;
+}
+
+:is(.tws-editor, .tws-detail) .form-text {
+  color: var(--tws-muted);
+}
+
+/* Generous modal widths on desktop for 2-column inspector & structured editors */
+@media (min-width: 768px) {
+  #appFormModal .modal-dialog:has(.tws-detail) {
+    max-width: min(820px, calc(100vw - 2rem));
+  }
+
+  #appFormModal .modal-dialog:has(.tws-editor) {
+    max-width: min(680px, calc(100vw - 2rem));
+  }
+}
+
+.modal-body:has(> .tws-editor),
+.modal-body:has(> .tws-detail) {
+  padding: 0;
+}
+
+/* Editor (Create/Edit Task & Event) */
+.tws-editor .tws-editor-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  margin: 0;
+  padding: .85rem 1.35rem;
+  background: var(--tws-subtle);
+  font-size: .78rem;
+  line-height: 1.55;
+  color: var(--tws-muted);
+}
+
+.tws-editor .tws-editor-intro>i {
+  color: var(--tws-accent);
+  margin-top: .15rem;
+  flex-shrink: 0;
+}
+
+.tws-editor .tws-editor-intro>p {
+  margin: 0;
+}
+
+.tws-editor .tws-editor-section {
+  padding: 1.2rem 1.35rem;
+  border-top: 1px solid var(--tws-hairline);
+}
+
+.tws-editor fieldset.tws-editor-section>legend.tws-section-head {
+  float: left;
+  width: 100%;
+  padding: 0;
+}
+
+.tws-editor fieldset.tws-editor-section>legend.tws-section-head+* {
+  clear: both;
+}
+
+.tws-editor .tws-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+.tws-editor .tws-section-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--tws-brand-soft);
+  border: 1px solid var(--tws-brand-border);
+  color: var(--tws-accent);
+  font-size: .9rem;
+  flex-shrink: 0;
+}
+
+.tws-editor .tws-section-sub {
+  margin: .1rem 0 0;
+  font-size: .75rem;
+  font-weight: 400;
+  color: var(--tws-muted);
+  line-height: 1.45;
+}
+
+.tws-editor .tws-field {
+  min-width: 0;
+  margin-bottom: .95rem;
+}
+
+.tws-editor .tws-field:last-child {
+  margin-bottom: 0;
+}
+
+.tws-editor :is(.tws-field-grid, .tws-date-fields) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .85rem;
+}
+
+.tws-editor :is(.tws-field-grid, .tws-date-fields)>div {
+  min-width: 0;
+}
+
+/* Checklist card (shared by Editor & Inspector) */
+:is(.tws-editor, .tws-detail) .tws-checklist-card {
+  padding: 1rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 10px;
+  background: var(--tws-subtle);
+}
+
+:is(.tws-editor, .tws-detail) .tws-checklist-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .4rem;
+  margin-bottom: .55rem;
+}
+
+:is(.tws-editor, .tws-detail) .tws-checklist-summary {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--tws-muted);
+}
+
+:is(.tws-editor, .tws-detail) .tws-checklist-summary.is-complete {
+  color: var(--tws-success);
+}
+
+.tws-editor .tws-checklist-editor {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tws-editor .tws-checklist-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .55rem;
+  margin-bottom: .55rem;
+}
+
+.tws-editor .tws-checklist-row input[type="checkbox"] {
+  margin: 0;
+}
+
+.tws-editor .tws-checklist-row .btn {
+  min-height: 36px;
+  padding-inline: .65rem;
+  border-radius: 7px;
+}
+
+.tws-editor .tws-add-item-btn {
+  margin-top: .25rem;
+  border-radius: 7px;
+  font-weight: 600;
+}
+
+/* Event participant card picker */
+.tws-editor .tws-participant-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .5rem;
+  padding: .25rem 0;
+}
+
+.tws-editor .tws-participant-card {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  margin: 0;
+  padding: .55rem .7rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 9px;
+  background: var(--tws-surface);
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.tws-editor .tws-participant-card:hover {
+  border-color: var(--tws-input-border);
+  background: var(--tws-subtle);
+}
+
+.tws-editor .tws-participant-card:has(input:checked) {
+  border-color: var(--tws-brand-border);
+  background: var(--tws-brand-soft);
+}
+
+.tws-editor .tws-participant-card .form-check-input {
+  margin: 0;
+  float: none;
+  flex-shrink: 0;
+}
+
+.tws-editor .tws-participant-card-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tws-editor .tws-participant-card-name {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--tws-heading);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tws-editor .tws-participant-card-meta small {
+  font-size: .69rem;
+  line-height: 1.3;
+}
+
+/* 2-Column Detail Inspector (DOM order keeps rail first for [move, comments] contract; Grid places main left & rail right) */
+.tws-detail .tws-inspector-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(240px, 1fr);
+  align-items: stretch;
+}
+
+.tws-detail .tws-inspector-main {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  background: var(--tws-surface);
+}
+
+.tws-detail .tws-inspector-rail {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  border-left: 1px solid var(--tws-border);
+  background: var(--tws-subtle);
+  padding: 1.2rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.tws-detail .tws-detail-head {
+  padding: 1.25rem 1.35rem 1rem;
+  background: var(--tws-surface);
+}
+
+.tws-detail .tws-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .45rem;
+  margin-bottom: .65rem;
+}
+
+.tws-detail .tws-detail-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.08rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--tws-heading);
+  overflow-wrap: anywhere;
+}
+
+.tws-detail .tws-rail-block {
+  padding-bottom: 1.05rem;
+  border-bottom: 1px solid var(--tws-border);
+}
+
+.tws-detail .tws-rail-block:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.tws-detail .tws-rail-label {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--tws-muted);
+}
+
+.tws-detail .tws-inline-form {
+  display: flex;
+  align-items: stretch;
+  gap: .5rem;
+  margin-bottom: .45rem;
+}
+
+.tws-detail .tws-inline-form--rail {
+  flex-direction: column;
+}
+
+.tws-detail .tws-inline-form--rail>.btn {
+  width: 100%;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.tws-detail .tws-inline-form> :is(select, .bd-select) {
+  flex: 1;
+  min-width: 0;
+}
+
+.tws-detail .tws-inline-form>.btn {
+  flex: 0 0 auto;
+  font-size: .8rem;
+}
+
+.tws-detail .tws-meta-ledger {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .8rem 1rem;
+  margin: 0;
+}
+
+.tws-detail .tws-meta-ledger--rail {
+  grid-template-columns: minmax(0, 1fr);
+  gap: .85rem;
+}
+
+.tws-detail .tws-meta-ledger>div {
+  min-width: 0;
+}
+
+.tws-detail .tws-meta-ledger dt {
+  margin-bottom: .22rem;
+  font-size: .69rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--tws-muted);
+}
+
+.tws-detail .tws-meta-ledger dd {
+  margin: 0;
+  font-size: .82rem;
+  line-height: 1.5;
+  color: var(--tws-heading);
+  overflow-wrap: anywhere;
+}
+
+.tws-detail .tws-rail-heading-wrap dt {
+  font-size: .84rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--tws-heading);
+  margin-bottom: 0;
+}
+
+.tws-detail .tws-rail-person {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  font-weight: 600;
+}
+
+.tws-detail .tws-meta-note {
+  display: block;
+  font-size: .7rem;
+  color: var(--tws-muted);
+}
+
+.tws-detail .tws-detail-section {
+  padding: 1.05rem 1.35rem;
+  border-top: 1px solid var(--tws-hairline);
+}
+
+.tws-detail .tws-detail-text {
+  margin: .55rem 0 0;
+  font-size: .83rem;
+  line-height: 1.7;
+  color: var(--tws-text);
+}
+
+.tws-detail .tws-checklist-view {
+  display: grid;
+  gap: .55rem;
+  margin: .75rem 0 0;
+}
+
+.tws-detail .tws-checklist-view li {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  font-size: .82rem;
+  line-height: 1.55;
+}
+
+.tws-detail .tws-checklist-view li.is-done>span {
+  text-decoration: line-through;
+  color: var(--tws-muted);
+}
+
+.tws-detail .tws-checklist-view li>i {
+  flex-shrink: 0;
+  margin-top: .15rem;
+}
+
+.tws-detail .tws-checklist-view li>span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tws-detail .tws-comment-form {
+  margin-top: .75rem;
+}
+
+.tws-detail .tws-comment-form-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  margin-top: .55rem;
+}
+
+.tws-detail .tws-comment-form-footer .form-text {
+  flex: 1 1 200px;
+}
+
+.tws-detail .tws-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tws-detail .tws-inline-actions .btn {
+  font-size: .79rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.tws-detail .tws-discussion {
+  margin-top: .85rem;
+}
+
+.tws-detail .teams-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: .65rem;
+  padding: .85rem 0;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--tws-hairline);
+  border-radius: 0;
+  background: transparent;
+  font-size: .82rem;
+  line-height: 1.6;
+}
+
+.tws-detail .tws-comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.tws-detail .tws-comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .25rem .75rem;
+  margin-bottom: .3rem;
+  font-size: .78rem;
+  color: var(--tws-heading);
+}
+
+.tws-detail .tws-comment-head time {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .68rem;
+  color: var(--tws-muted);
+}
+
+.tws-detail .tws-activity {
+  border-top: 1px solid var(--tws-border);
+}
+
+.tws-detail .tws-activity>summary {
+  padding: .95rem 1.35rem;
+  font-size: .81rem;
+  font-weight: 600;
+  color: var(--tws-heading);
+  cursor: pointer;
+}
+
+.tws-detail .tws-activity .tws-detail-section {
+  border: 0;
+  padding-top: 0;
+}
+
+.tws-detail .teams-activity {
+  margin-bottom: 0;
+  font-size: .79rem;
+  line-height: 1.6;
+}
+
+.tws-detail .teams-activity small {
+  color: var(--tws-muted);
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .69rem;
+}
+
+.tws-detail .tws-participant-list {
+  display: grid;
+  gap: .45rem;
+  margin: .7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tws-detail .tws-participant-list li {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--tws-heading);
+  overflow-wrap: anywhere;
+}
+
+.tws-detail .tws-cancelled-banner {
+  display: flex;
+  align-items: center;
+  padding: .65rem .85rem;
+  border-radius: 8px;
+  border: 1px solid var(--tws-danger-border);
+  background: var(--tws-danger-soft);
+  color: var(--tws-danger);
+  font-size: .81rem;
+  font-weight: 600;
+}
+
+.tws-detail .tws-detail-note {
+  display: flex;
+  align-items: flex-start;
+  gap: .55rem;
+  padding: .7rem .85rem;
+  border-radius: 8px;
+  background: var(--tws-subtle);
+  border: 1px solid var(--tws-hairline);
+}
+
+.tws-detail .tws-detail-note>i {
+  color: var(--tws-accent);
+  margin-top: .15rem;
+  flex-shrink: 0;
+}
+
+.tws-detail .tws-cancel-form {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--tws-border);
+}
+
+.tws-form-actions,
+.modal-footer>.tws-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: .55rem;
+  margin: 0;
+  padding: .9rem 1.35rem;
+}
+
+.modal-footer:has(> .tws-form-actions) {
+  padding: 0;
+}
+
+.tws-form-actions .btn {
+  min-height: 38px;
+  padding-inline: 1rem;
+  font-size: .82rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.modal-body:has(> :is(.tws-editor, .tws-detail))> :is(.alert, [data-modal-error]):not(.d-none) {
+  margin: 1rem 1.35rem;
+}
+
+/* --------------------------------------------------------------------------
+   9. Team Chat Redesign (Figma 03 · Team Chat + Strict Test Contracts)
+   -------------------------------------------------------------------------- */
+.tws-workspace .team-chat-layout {
+  grid-template-columns: 272px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+}
+
+.tws-workspace .team-chat-sidebar {
+  min-width: 0;
+  border-right: 1px solid var(--tws-border);
+  background: var(--tws-subtle);
+}
+
+.tws-workspace .tws-chat-sidebar-band {
+  padding: 1rem 1.05rem;
+}
+
+.tws-workspace .tws-chat-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+
+.tws-workspace .team-chat-sidebar .teams-eyebrow {
+  margin-bottom: 0;
+  font-size: .68rem;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-sidebar-label {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .team-chat-channel {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .58rem .75rem;
+  border: 1px solid var(--tws-brand-border);
+  border-radius: 10px;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--tws-accent);
+  background: var(--tws-brand-soft);
+}
+
+.tws-workspace .tws-channel-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tws-workspace .tws-channel-unread {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 .4rem;
+  border-radius: 999px;
+  background: var(--tws-brand);
+  color: #ffffff;
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .68rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-channel-unread[data-count="0"] {
+  display: none;
+}
+
+.tws-workspace .tws-chat-guidelines-card {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  margin-top: .7rem;
+  padding: .65rem .75rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 10px;
+  background: var(--tws-surface);
+  font-size: .73rem;
+  line-height: 1.48;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-chat-guidelines-card > i {
+  color: var(--tws-accent);
+  margin-top: .12rem;
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-chat-guidelines-card > p {
+  margin: 0;
+}
+
+.tws-workspace .tws-chat-refs {
+  margin-top: 1.05rem;
+  padding-top: .9rem;
+  border-top: 1px solid var(--tws-hairline);
+}
+
+.tws-workspace .tws-chat-ref-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .4rem;
+  margin: .55rem 0 0;
+}
+
+.tws-workspace .tws-chat-ref-list > li {
+  min-width: 0;
+}
+
+.tws-workspace .tws-chat-ref-link {
+  display: flex;
+  align-items: center;
+  gap: .42rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: .46rem .62rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 9px;
+  background: var(--tws-surface);
+  color: var(--tws-heading);
+  font-size: .75rem;
+  text-decoration: none;
+  box-shadow: var(--tws-shadow-xs);
+  transition: border-color .15s ease;
+}
+
+.tws-workspace .tws-chat-ref-link:hover {
+  border-color: var(--tws-accent);
+  color: var(--tws-accent);
+}
+
+.tws-workspace .tws-chat-ref-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tws-accent);
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-chat-ref-id {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .71rem;
+  font-weight: 700;
+  color: var(--tws-accent);
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-chat-ref-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.tws-workspace .tws-chat-members {
+  margin-top: 1.05rem;
+  padding-top: .9rem;
+  border-top: 1px solid var(--tws-hairline);
+}
+
+.tws-workspace .tws-chat-members .teams-member-list {
+  gap: .25rem;
+}
+
+.tws-workspace .tws-chat-member-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .38rem .4rem !important;
+  border-bottom: 0 !important;
+  border-radius: 8px;
+}
+
+.tws-workspace .tws-chat-member-row:hover {
+  background: var(--tws-well);
+}
+
+.tws-workspace .tws-chat-member-row .avatar {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--tws-border);
+}
+
+.tws-workspace .tws-chat-member-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.tws-workspace .tws-chat-member-name {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--tws-heading);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tws-workspace .tws-chat-member-role {
+  margin-left: 0 !important;
+  font-size: .68rem;
+  color: var(--tws-muted);
+  line-height: 1.25;
+}
+
+/* Chat Main Stream & Header */
+.tws-workspace .team-chat-main {
+  background: var(--tws-surface);
+}
+
+.tws-workspace .team-chat-header {
+  padding: .78rem 1.35rem;
+  border-color: var(--tws-border);
+  background: var(--tws-surface);
+}
+
+.tws-workspace .tws-chat-header-title {
+  min-width: 0;
+}
+
+.tws-workspace .team-chat-header h2 {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .98rem;
+  font-weight: 700;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .tws-chat-header-sub {
+  margin-top: .12rem;
+  font-size: .75rem;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-chat-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .15rem .45rem;
+  margin-top: .15rem;
+}
+
+.tws-workspace .tws-chat-header-meta:empty {
+  display: none;
+}
+
+.tws-workspace .team-chat-header [data-chat-connection],
+.tws-workspace .team-chat-header [data-chat-history-status] {
+  font-size: .69rem;
+  margin-top: 0;
+}
+
+.tws-workspace .tws-chat-header-meta > [data-chat-connection]:not(:empty) + [data-chat-history-status]:not(:empty)::before {
+  content: "·";
+  margin-right: .45rem;
+  opacity: .65;
+}
+
+.tws-workspace .tws-chat-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .45rem;
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-channel-hash {
+  color: var(--tws-accent);
+  font-weight: 700;
+}
+
+.tws-workspace .team-chat-header .btn {
+  min-height: 32px;
+  padding: .3rem .72rem;
+  font-size: .75rem;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+.tws-workspace .team-chat-log {
+  height: clamp(300px, 50vh, 620px);
+  padding: 1rem 1.35rem;
+  background: var(--tws-subtle);
+}
+
+/* Date & Unread Pill Separators */
+.tws-workspace .team-chat-day {
+  width: fit-content;
+  max-width: 100%;
+  margin: .65rem auto 1rem;
+  padding: .22rem .85rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 999px;
+  background: var(--tws-surface);
+  box-shadow: var(--tws-shadow-xs);
+  color: var(--tws-muted);
+  font-size: .7rem;
+  font-weight: 600;
+}
+
+.tws-workspace .team-chat-unread-divider {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  width: 100%;
+  margin: .95rem 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+}
+
+.tws-workspace .team-chat-unread-divider::before,
+.tws-workspace .team-chat-unread-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--tws-brand-border);
+}
+
+.tws-workspace .tws-unread-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: .2rem .85rem;
+  border: 1px solid var(--tws-brand-border);
+  border-radius: 999px;
+  background: var(--tws-brand-soft);
+  color: var(--tws-accent);
+  font-size: .71rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Message Rows, Pastel Incoming Avatars & Cards */
+.tws-workspace .team-chat-message {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: .9rem;
+  min-width: 0;
+}
+
+.tws-workspace .tws-msg-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  margin-top: 2px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .68rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.tws-workspace .tws-msg-avatar.is-emerald { background: #dcfce7; color: #047857; }
+.tws-workspace .tws-msg-avatar.is-sky { background: #e0f2fe; color: #0369a1; }
+.tws-workspace .tws-msg-avatar.is-amber { background: #fef3c7; color: #b45309; }
+.tws-workspace .tws-msg-avatar.is-maroon { background: #fee2e2; color: #800000; }
+.tws-workspace .tws-msg-avatar.is-slate { background: #e2e8f0; color: #475569; }
+
+.tws-workspace .team-chat-bubble {
+  max-width: min(76%, 620px, calc(100% - 76px));
+  padding: .78rem 1rem;
+  border-color: var(--tws-border);
+  border-radius: 12px;
+  background: var(--tws-surface);
+  font-size: .835rem;
+  line-height: 1.52;
+  color: var(--tws-text);
+  box-shadow: var(--tws-shadow-xs);
+}
+
+.tws-workspace .team-chat-message.is-own .team-chat-bubble {
+  max-width: min(76%, 620px, calc(100% - 40px));
+  border-color: var(--tws-brand-border);
+  background: var(--tws-brand-soft);
+}
+
+.tws-workspace .team-chat-message-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .3rem .5rem;
+  margin-bottom: .38rem;
+  font-size: .78rem;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .team-chat-message.is-own .team-chat-message-header {
+  justify-content: space-between;
+}
+
+.tws-workspace .team-chat-message.is-own .team-chat-message-header strong {
+  color: var(--tws-accent);
+}
+
+.tws-workspace .team-chat-message.is-own .team-chat-message-header strong::after {
+  content: " (You)";
+  font-weight: 700;
+  opacity: 1;
+}
+
+.tws-workspace .tws-msg-role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .08rem .45rem;
+  border-radius: 6px;
+  background: var(--tws-well);
+  border: 1px solid var(--tws-border);
+  font-size: .65rem;
+  font-weight: 600;
+  color: var(--tws-muted);
+  line-height: 1.35;
+}
+
+.tws-workspace .team-chat-message-header time {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .67rem;
+  color: var(--tws-muted);
+}
+
+/* Embedded Full-Width Linked Task Card Inside Message */
+.tws-workspace .team-chat-task {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  width: 100%;
+  margin-top: .62rem;
+  margin-right: 0;
+  padding: .5rem .75rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 8px;
+  background: var(--tws-subtle);
+  color: var(--tws-heading);
+  font-size: .78rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.tws-workspace .team-chat-task:hover {
+  border-color: var(--tws-accent);
+  background: var(--tws-surface);
+}
+
+.tws-workspace .team-chat-task::after {
+  content: "→";
+  margin-left: auto;
+  color: var(--tws-accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-chat-task-id {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .74rem;
+  font-weight: 700;
+  color: var(--tws-accent);
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-chat-task-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tws-workspace .team-chat-message.is-own .team-chat-task {
+  background: var(--tws-surface);
+}
+
+/* Reply Quote Card & Circular Reply Action */
+.tws-workspace .team-chat-reply-quote {
+  border: 1px solid var(--tws-border);
+  border-inline-start: 3px solid var(--tws-brand);
+  border-radius: 8px;
+  padding: .48rem .72rem;
+  margin-bottom: .55rem;
+  background: var(--tws-surface);
+  color: var(--tws-text);
+  font-size: .76rem;
+}
+
+.tws-workspace .team-chat-reply-quote strong {
+  color: var(--tws-accent);
+  font-size: .74rem;
+}
+
+.tws-workspace .team-chat-reply-quote p {
+  color: var(--tws-muted);
+}
+
+.tws-workspace .team-chat-reply-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--tws-border);
+  border-radius: 50%;
+  background: var(--tws-surface);
+  color: var(--tws-muted);
+  font-size: .92rem;
+  box-shadow: var(--tws-shadow-xs);
+}
+
+.tws-workspace .team-chat-reply-button:hover {
+  border-color: var(--tws-accent);
+  color: var(--tws-accent);
+  background: var(--tws-brand-soft);
+}
+
+/* Update Bar (hidden height when [data-chat-new] is hidden) */
+.tws-workspace .team-chat-update-bar {
+  padding: .4rem 1.35rem;
+  justify-content: center;
+  border-top: 1px solid var(--tws-hairline);
+}
+
+.tws-workspace .team-chat-update-bar:has(> [data-chat-new][hidden]) {
+  padding: 0;
+  border-top: 0;
+}
+
+/* Unified Framed Composer Card */
+.tws-workspace .team-chat-composer {
+  padding: .75rem 1.35rem .85rem;
+  border-top: 1px solid var(--tws-border);
+  background: var(--tws-surface);
+}
+
+.tws-workspace .tws-composer-card {
+  border: 1px solid var(--tws-input-border);
+  border-radius: 12px;
+  background: var(--tws-surface);
+  box-shadow: var(--tws-shadow-xs);
+  padding: .55rem .7rem .48rem;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.tws-workspace .tws-composer-card:focus-within {
+  border-color: var(--tws-accent);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.12));
+}
+
+.tws-workspace .team-chat-composer textarea.form-control {
+  line-height: 1.5rem;
+  min-height: 36px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none !important;
+  border-radius: 4px !important;
+  padding: .35rem .55rem;
+}
+
+.tws-workspace .team-chat-composer textarea.form-control:focus {
+  border-color: transparent;
+  box-shadow: none !important;
+}
+
+.tws-workspace .tws-composer-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .35rem .75rem;
+  margin-top: .45rem;
+  padding-top: .42rem;
+  border-top: 1px solid var(--tws-hairline);
+  font-size: .71rem;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-composer-hint {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tws-workspace .tws-composer-hint > i {
+  color: var(--tws-accent);
+}
+
+.tws-workspace .tws-composer-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .65rem;
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .68rem;
+}
+
+.tws-workspace .tws-composer-status [data-chat-send-status]:empty {
+  display: none;
+}
+
+/* Selected task reference chips inside composer (rose-maroon pill matching Figma) */
+html body .tws-workspace .team-chat-task-chip.btn.btn-outline-secondary {
+  background-color: var(--tws-brand-soft) !important;
+  border: 1px solid var(--tws-brand-border) !important;
+  color: var(--tws-accent) !important;
+  border-radius: 7px;
+  font-size: .74rem;
+  font-weight: 600;
+  padding: .22rem .6rem;
+  min-height: 28px;
+  box-shadow: none;
+}
+
+html body .tws-workspace .team-chat-task-chip.btn.btn-outline-secondary:hover {
+  border-color: var(--tws-accent) !important;
+}
+
+/* Preserve exact .header-action default styles for [data-chat-add-task] & [data-chat-send] per team-chat.test.cjs */
+
+.tws-workspace .team-chat-task-picker {
+  border-color: var(--tws-border);
+  border-radius: 12px;
+  background: var(--tws-surface);
+  color: var(--tws-text);
+}
+
+.tws-workspace :is(.team-chat-task-modal-header, .team-chat-task-modal-footer) {
+  border-color: var(--tws-border);
+  padding: 1rem 1.25rem;
+}
+
+.tws-workspace .team-chat-task-modal-body {
+  padding: 1rem 1.25rem;
+}
+
+.tws-workspace .team-chat-task-option {
+  padding: .62rem .2rem;
+  border-bottom: 1px solid var(--tws-hairline);
+  font-size: .81rem;
+}
+
+.tws-workspace .team-chat-mention-picker {
+  padding: .55rem;
+  border-color: var(--tws-border);
+  background: var(--tws-surface);
+}
+
+.tws-workspace .team-chat-mention-option {
+  font-size: .82rem;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .team-chat-mention-option[aria-selected="true"] {
+  background: var(--tws-well);
+}
+
+.tws-workspace .team-chat-mention {
+  background: var(--tws-brand-soft);
+  color: var(--tws-accent);
+  padding: .02rem .28rem;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.tws-workspace .team-chat-reply-preview {
+  border: 1px solid var(--tws-brand-border);
+  border-inline-start: 3px solid var(--tws-brand);
+  border-radius: 8px;
+  background: var(--tws-brand-soft);
+  color: var(--tws-heading);
+}
+
+.tws-workspace [data-chat-error] {
+  margin-inline: 1.35rem !important;
+  font-size: .79rem;
+}
+
+/* Strict Dark Chat Neutral Surface Contract (html[data-theme="dark"] + legacy body.dark-mode):
+   All 6 checked chat surfaces use strictly achromatic dark bg (r===g===b <= 60) and light ink (>= 200),
+   with own bubble exactly #262626 (rgb(38, 38, 38)). */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-message:not(.is-own) .team-chat-bubble {
+  background: #1c1c1c;
+  border-color: #323232;
+  color: #e5e5e5;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-message.is-own .team-chat-bubble {
+  background: #262626;
+  border-color: #3a3a3a;
+  color: #f0f0f0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-message.is-own .team-chat-message-header strong {
+  color: #f0f0f0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-channel {
+  background: #262626;
+  border-color: #3a3a3a;
+  color: #f0f0f0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-sidebar .teams-eyebrow {
+  color: #e5e5e5;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-unread-divider {
+  background: transparent;
+  border: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-unread-divider::before,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-unread-divider::after {
+  background: #343434;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .tws-unread-pill {
+  background: #262626;
+  border-color: #3a3a3a;
+  color: #e5e5e5;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-composer textarea.form-control,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-composer textarea.form-control:focus {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: var(--tws-heading) !important;
+  box-shadow: none !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace :is(.team-chat-mention, .team-chat-reply-preview) {
+  background: #262626;
+  color: #f0f0f0;
+  border-inline-start-color: #888888;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-reply-quote {
+  background: #1c1c1c;
+  border-color: #343434;
+  border-inline-start-color: #888888;
+  color: #f0f0f0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-reply-quote strong {
+  color: #f0f0f0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .team-chat-mention-option[aria-selected="true"] {
+  background: #262626;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .tws-msg-avatar.is-emerald { background: rgba(110, 231, 183, 0.16); color: #6ee7b7; }
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .tws-msg-avatar.is-sky { background: rgba(125, 211, 252, 0.16); color: #7dd3fc; }
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .tws-msg-avatar.is-amber { background: rgba(251, 191, 36, 0.16); color: #fbbf24; }
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .tws-msg-avatar.is-maroon { background: rgba(224, 138, 138, 0.18); color: #e08a8a; }
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .tws-workspace .tws-msg-avatar.is-slate { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+
+/* --------------------------------------------------------------------------
+   10. Team Calendar Redesign (Schedule Rail, Coming Up Strip, Spacious Grid)
+   -------------------------------------------------------------------------- */
+.tws-workspace .team-calendar-layout {
+  grid-template-columns: 264px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+}
+
+.tws-workspace .team-calendar-layout>aside {
+  min-width: 0;
+  display: block;
+  border-right: 1px solid var(--tws-border);
+  background: var(--tws-subtle);
+}
+
+.tws-workspace .team-calendar-layout>aside>.tws-band {
+  padding: 1.1rem 1.2rem;
+}
+
+.tws-workspace .team-calendar-layout>aside>.tws-band+.tws-band {
+  border-top: 1px solid var(--tws-border);
+}
+
+.tws-workspace .team-calendar-layout>aside p {
+  font-size: .75rem;
+  line-height: 1.6;
+}
+
+/* Coming Up horizontal strip inside live-refreshed results region */
+.tws-workspace .tws-cal-upcoming-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem .85rem;
+  padding: .75rem 1.35rem;
+  border-bottom: 1px solid var(--tws-border);
+  background: var(--tws-subtle);
+}
+
+.tws-workspace .tws-upcoming-strip-label {
+  flex: 0 0 auto;
+}
+
+.tws-workspace .tws-upcoming-list {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: .5rem;
+}
+
+.tws-workspace .tws-upcoming-item {
+  display: flex;
+  align-items: stretch;
+  gap: .55rem;
+  padding: .46rem .65rem;
+  border: 1px solid var(--tws-border);
+  border-radius: 8px;
+  background: var(--tws-surface);
+  text-decoration: none;
+  min-width: 0;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.tws-workspace .tws-upcoming-item:hover {
+  border-color: var(--tws-accent);
+  box-shadow: var(--tws-shadow-xs);
+}
+
+.tws-workspace .tws-upcoming-bar {
+  width: 3px;
+  border-radius: 999px;
+  background: var(--tws-brand);
+  flex-shrink: 0;
+}
+
+.tws-workspace .tws-upcoming-item.is-task .tws-upcoming-bar {
+  background: var(--tws-sky);
+}
+
+.tws-workspace .tws-upcoming-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tws-workspace .tws-upcoming-title {
+  font-size: .77rem;
+  font-weight: 600;
+  color: var(--tws-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tws-workspace .tws-upcoming-meta {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .66rem;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .tws-calendar-summary {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .71rem;
+  line-height: 1.7;
+}
+
+/* Main Calendar Toolbar & Grid */
+.tws-workspace .team-calendar-main {
+  border: 0;
+  border-radius: 0;
+  background: var(--tws-surface);
+}
+
+.tws-workspace .team-calendar-toolbar {
+  padding: .9rem 1.35rem;
+  border-color: var(--tws-border);
+}
+
+.tws-workspace .tws-cal-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .65rem .9rem;
+}
+
+.tws-workspace .tws-cal-nav-group {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+}
+
+.tws-workspace .team-calendar-toolbar h2 {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .team-calendar-toolbar .btn {
+  font-size: .76rem;
+  font-weight: 600;
+  border-radius: 7px;
+}
+
+.tws-workspace .team-calendar-scroll {
+  position: relative;
+}
+
+.tws-workspace .team-calendar-grid th {
+  padding: .68rem .5rem;
+  border-bottom: 1px solid var(--tws-border);
+  background: var(--tws-subtle);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .team-calendar-grid td {
+  padding: .5rem;
+  border-color: var(--tws-border);
+  background: var(--tws-surface);
+}
+
+.tws-workspace .team-calendar-grid td.is-other-month {
+  background: var(--tws-subtle);
+}
+
+.tws-workspace .team-calendar-grid td.is-other-month .team-calendar-day-heading time {
+  color: var(--tws-muted);
+}
+
+.tws-workspace .team-calendar-grid td.is-today {
+  box-shadow: inset 0 2.5px 0 var(--tws-brand);
+}
+
+.tws-workspace .team-calendar-day-heading {
+  font-family: var(--mono-font, "JetBrains Mono", monospace);
+  font-size: .74rem;
+}
+
+.tws-workspace .team-calendar-day-heading time {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 .25rem;
+  border-radius: 999px;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .team-calendar-day-heading time[aria-current="date"] {
+  background: var(--tws-brand);
+  color: #ffffff;
+}
+
+.tws-workspace .team-calendar-add {
+  min-width: 26px;
+  min-height: 26px;
+  color: var(--tws-muted);
+}
+
+.tws-workspace .team-calendar-add:hover {
+  background: var(--tws-well);
+  color: var(--tws-heading);
+}
+
+.tws-workspace .team-calendar-item {
+  border-radius: 6px;
+  border-inline-start-color: var(--tws-brand);
+  background: var(--tws-brand-soft);
+  font-size: .73rem;
+  line-height: 1.42;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .team-calendar-item.is-task {
+  border-inline-start-color: var(--tws-sky);
+  background: var(--tws-sky-soft);
+}
+
+.tws-workspace .team-calendar-item:hover {
+  outline-color: var(--tws-accent);
+  color: var(--tws-accent);
+}
+
+.tws-workspace .team-calendar-item-meta {
+  font-size: .65rem;
+  font-weight: 700;
+  color: var(--tws-accent);
+}
+
+.tws-workspace .team-calendar-item.is-task .team-calendar-item-meta {
+  color: var(--tws-sky);
+}
+
+.tws-workspace .team-calendar-key.is-event {
+  background: var(--tws-brand);
+}
+
+.tws-workspace .team-calendar-key.is-task {
+  background: var(--tws-sky);
+}
+
+.tws-workspace .team-calendar-agenda-day {
+  padding: 1.05rem 1.35rem;
+  border-color: var(--tws-hairline);
+}
+
+.tws-workspace .team-calendar-agenda-day h3 {
+  margin-bottom: .75rem;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: .84rem;
+  color: var(--tws-heading);
+}
+
+.tws-workspace .team-calendar-agenda .team-calendar-item {
+  padding: .68rem .85rem;
+  font-size: .81rem;
+}
+
+/* --------------------------------------------------------------------------
+   11. Responsive Container Queries (Zero Overflow across 1280/768/390/320/350)
+   -------------------------------------------------------------------------- */
+@container tws-workspace (max-width: 859.98px) {
+  .tws-workspace :is(.team-chat-layout, .team-calendar-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tws-workspace .team-chat-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--tws-border);
+  }
+
+  .tws-workspace .team-calendar-layout>aside {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-right: 0;
+    border-bottom: 1px solid var(--tws-border);
+  }
+
+  .tws-workspace .team-calendar-layout>aside>.tws-band {
+    border-top: 0;
+  }
+
+  .tws-workspace .team-calendar-layout>aside>.tws-band:nth-child(even) {
+    border-left: 1px solid var(--tws-border);
+  }
+
+  .tws-workspace .team-calendar-layout>aside>.tws-band:nth-child(n + 3) {
+    border-top: 1px solid var(--tws-border);
+  }
+}
+
+@container tws-workspace (max-width: 859.98px) {
+  .tws-workspace .tws-filter-grid {
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+  }
+
+  .tws-workspace .tws-filter-actions {
+    align-self: center;
+  }
+
+  .tws-workspace .tws-kpi-deck {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tws-workspace .tws-kpi-cell:nth-child(2) {
+    border-right: 0;
+  }
+
+  .tws-workspace .tws-kpi-cell:nth-child(n + 3) {
+    border-top: 1px solid var(--tws-hairline);
+  }
+
+  /* Responsive List table (retains role="table" + alternating row zebra surfaces) */
+  .tws-workspace .tws-task-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tws-workspace .tws-task-table,
+  .tws-workspace .tws-task-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .tws-workspace .tws-task-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .75rem;
+    padding: 1rem 1.5rem;
+  }
+
+  .tws-workspace .tws-task-table tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0;
+  }
+
+  .tws-workspace :is(.tws-title-cell, .tws-action-cell, .tws-empty-cell) {
+    grid-column: 1 / -1;
+  }
+
+  .tws-workspace .tws-cell-label {
+    display: block;
+    margin-bottom: .2rem;
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--tws-muted);
+  }
+
+  .tws-workspace .tws-action-cell .tws-cell-label {
+    display: none;
+  }
+}
+
+@container tws-workspace (max-width: 699.98px) {
+  .tws-workspace .teams-board {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-x: visible;
+  }
+
+  .tws-workspace .tws-navigation {
+    align-items: flex-start;
+  }
+
+  .tws-workspace .team-calendar-layout>aside {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tws-workspace .team-calendar-layout>aside>.tws-band:nth-child(even) {
+    border-left: 0;
+  }
+
+  .tws-workspace .team-calendar-layout>aside>.tws-band+.tws-band {
+    border-top: 1px solid var(--tws-border);
+  }
+}
+
+@container tws-workspace (max-width: 519.98px) {
+
+  .tws-workspace .tws-band,
+  .tws-workspace .tws-intro {
+    padding: 1rem;
+  }
+
+  .tws-workspace :is(.tws-navigation, .tws-filter-band, .tws-feedback, .tws-results-head, .tws-board-band, .tws-pagination-band) {
+    padding-inline: 1rem;
+  }
+
+  .tws-workspace .tws-roster-panel {
+    position: static;
+    width: 100%;
+    margin-top: .5rem;
+    box-shadow: none;
+  }
+
+  .tws-workspace .tws-intro-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .tws-workspace .tws-intro-actions .tws-primary-cta {
+    width: 100%;
+  }
+
+  .tws-workspace .tws-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: .35rem;
+  }
+
+  .tws-workspace .tws-nav-link {
+    font-size: .76rem;
+    padding: .4rem .6rem;
+    justify-content: flex-start;
+  }
+
+  .tws-workspace .tws-nav-link>i {
+    margin-right: .35rem !important;
+  }
+
+  .tws-workspace .tws-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tws-workspace .tws-filter-actions .btn {
+    flex: 1;
+  }
+
+  .tws-workspace .tws-task-table tbody tr {
+    padding-inline: 1rem;
+  }
+
+  .tws-workspace :is(.team-chat-header, .team-chat-tools, .team-chat-log, .team-chat-update-bar, .team-chat-composer, .team-calendar-toolbar, .tws-cal-upcoming-strip, .team-calendar-agenda-day) {
+    padding-inline: 1rem;
+  }
+
+  .tws-workspace .tws-upcoming-list {
+    flex-basis: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tws-workspace .tws-msg-avatar {
+    width: 26px;
+    height: 26px;
+    font-size: .62rem;
+  }
+
+  .tws-workspace .team-chat-message {
+    gap: .45rem;
+  }
+
+  .tws-workspace .team-chat-bubble {
+    max-width: calc(100% - 70px);
+    padding: .65rem .8rem;
+  }
+
+  .tws-workspace .team-chat-message.is-own .team-chat-bubble {
+    max-width: calc(100% - 38px);
+  }
+
+  .tws-workspace .team-chat-task-picker {
+    width: min(560px, calc(100vw - 1rem));
+  }
+
+  .tws-workspace :is(.team-chat-task-modal-header, .team-chat-task-modal-body, .team-chat-task-modal-footer) {
+    padding-inline: 1rem;
+  }
+
+  .tws-workspace [data-chat-error] {
+    margin-inline: 1rem !important;
+  }
+
+  .tws-workspace .tws-kpi-cell {
+    padding: .85rem 1rem;
+  }
+}
+
+@container tws-workspace (max-width: 359.98px) {
+  .tws-workspace .tws-task-table tbody tr {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tws-workspace .tws-kpi-deck {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tws-workspace .tws-kpi-cell {
+    border-right: 0;
+    border-top: 1px solid var(--tws-hairline);
+  }
+
+  .tws-workspace .tws-kpi-cell:first-child {
+    border-top: 0;
+  }
+}
+
+@container tws-editor (max-width: 559.98px) {
+  .tws-editor :is(.tws-editor-intro, .tws-editor-section) {
+    padding-inline: 1rem;
+  }
+
+  .tws-editor :is(.tws-field-grid, .tws-date-fields, .tws-participant-picker) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container tws-detail (max-width: 639.98px) {
+  .tws-detail .tws-inspector-grid {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tws-detail .tws-inspector-main {
+    order: 1;
+  }
+
+  .tws-detail .tws-inspector-rail {
+    order: 2;
+    border-left: 0;
+    border-top: 1px solid var(--tws-border);
+    padding: 1.1rem 1rem;
+  }
+
+  .tws-detail :is(.tws-detail-head, .tws-detail-section, .tws-activity > summary) {
+    padding-inline: 1rem;
+  }
+
+  .tws-detail .tws-meta-ledger--rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container tws-detail (max-width: 419.98px) {
+  .tws-detail .tws-meta-ledger--rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 519.98px) {
+
+  .tws-form-actions,
+  .modal-footer>.tws-form-actions {
+    padding-inline: 1rem;
+  }
+
+  .tws-form-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .modal-body:has(> :is(.tws-editor, .tws-detail))> :is(.alert, [data-modal-error]):not(.d-none) {
+    margin-inline: 1rem;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   12. Desktop App-Shell Viewport Lock (Non-scrolling outer page on web view;
+       only internal panes — chat stream, kanban columns, list rows, calendar
+       grid/agenda — scroll cleanly inside the fixed workspace frame)
+   -------------------------------------------------------------------------- */
+@media (min-width: 992px) and (min-height: 600px) {
+  .app-shell #main.main:has(.tws-workspace) {
+    height: calc(100dvh - var(--header-height, 64px));
+    min-height: 0;
+  }
+
+  .app-shell .main-content:has(.tws-workspace) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    padding: .85rem 1.25rem;
+  }
+
+  .app-shell .main-content:has(.tws-workspace) > .alert {
+    flex-shrink: 0;
+    margin-bottom: .5rem;
+  }
+
+  .app-shell .main-content:has(.tws-workspace) > .section:has(.tws-workspace) {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-shell .main-content:has(.tws-workspace) > .section:has(.tws-workspace) > :not(.tws-workspace) {
+    flex-shrink: 0;
+  }
+
+  .app-shell .fixture-container:not([style*="max-width"]):has(> .tws-workspace) {
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 32px);
+    min-height: 0;
+  }
+
+  .tws-workspace {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-shell .main-content:has(.tws-workspace) > .section:has(.tws-workspace) > :not(.tws-workspace) ~ .tws-workspace {
+    min-height: 620px;
+  }
+
+  .tws-workspace .tws-sheet {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  @container tws-workspace (min-width: 860px) {
+    .tws-workspace .tws-intro {
+      flex-shrink: 0;
+      padding: .55rem 1.25rem;
+      position: relative;
+      z-index: 25;
+      border-radius: 13px 13px 0 0;
+    }
+
+    .tws-workspace .tws-intro-title {
+      font-size: 1.02rem;
+    }
+
+    .tws-workspace .tws-navigation {
+      flex-shrink: 0;
+      padding: .38rem 1.25rem;
+      position: relative;
+      z-index: 20;
+    }
+
+    .tws-workspace .tws-filter-band {
+      flex-shrink: 0;
+      padding: .58rem 1.25rem;
+      position: relative;
+      z-index: 15;
+    }
+
+    .tws-workspace .tws-feedback {
+      flex-shrink: 0;
+      padding: .24rem 1.25rem;
+    }
+
+    .tws-workspace [data-filter-region="notice"] {
+      flex-shrink: 0;
+    }
+
+    /* Kanban Board & List View: pinned header/filter/pagination, internal scroll */
+    .tws-workspace .tws-results {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: 0 0 13px 13px;
+    }
+
+    .tws-workspace .tws-kpi-deck {
+      flex-shrink: 0;
+    }
+
+    .tws-workspace .tws-kpi-cell {
+      padding: .62rem 1.25rem;
+      gap: .15rem;
+    }
+
+    .tws-workspace .tws-kpi-value {
+      font-size: 1.25rem;
+    }
+
+    .tws-workspace .tws-results-head {
+      flex-shrink: 0;
+      padding: .55rem 1.25rem .45rem;
+    }
+
+    .tws-workspace .tws-board-band {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 0 1.25rem .7rem;
+    }
+
+    .tws-workspace .teams-board {
+      flex: 1 1 0;
+      min-height: 0;
+      height: 100%;
+      align-items: stretch;
+      padding-bottom: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .tws-workspace .teams-column {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .tws-workspace .teams-column-header {
+      flex-shrink: 0;
+      padding: .65rem .8rem;
+    }
+
+    .tws-workspace .teams-column-body {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      align-content: start;
+      scrollbar-width: thin;
+      scrollbar-color: var(--tws-input-border) transparent;
+    }
+
+    .tws-workspace .tws-table-wrap {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--tws-input-border) transparent;
+    }
+
+    .tws-workspace .tws-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .tws-workspace .tws-pagination-band {
+      flex-shrink: 0;
+      padding: .45rem 1.25rem;
+      background: var(--tws-surface);
+    }
+
+    .tws-workspace .tws-pagination-band [data-table-pagination] {
+      margin-top: 0 !important;
+    }
+
+    /* Team Chat: Meta Messenger viewport lock — only message stream scrolls */
+    .tws-workspace .team-chat-layout {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
+      border-radius: 0 0 13px 13px;
+    }
+
+    .tws-workspace .team-chat-sidebar {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--tws-input-border) transparent;
+    }
+
+    .tws-workspace .team-chat-main {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .tws-workspace .team-chat-header,
+    .tws-workspace .team-chat-tools,
+    .tws-workspace .team-chat-update-bar,
+    .tws-workspace .team-chat-composer,
+    .tws-workspace [data-chat-error] {
+      flex-shrink: 0;
+    }
+
+    .tws-workspace .team-chat-log {
+      flex: 1 1 0;
+      height: auto;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--tws-input-border) transparent;
+    }
+
+    .tws-workspace .team-chat-message:last-child {
+      margin-bottom: 0;
+    }
+
+    /* Team Calendar: full-viewport grid with pinned toolbar & sidebar */
+    .tws-workspace .team-calendar-layout {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: hidden;
+      border-radius: 0 0 13px 13px;
+    }
+
+    .tws-workspace .team-calendar-layout > aside {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--tws-input-border) transparent;
+    }
+
+    .tws-workspace .team-calendar-layout > aside > .tws-band {
+      padding: .7rem 1rem;
+    }
+
+    .tws-workspace .team-calendar-layout > aside .tws-sidebar-label {
+      margin-bottom: .5rem !important;
+    }
+
+    .tws-workspace .team-calendar-layout > aside .form-label {
+      margin-bottom: .2rem;
+      font-size: .74rem;
+    }
+
+    .tws-workspace .team-calendar-layout > aside :is(.form-control, .form-select, .bd-select .bd-select-toggle) {
+      min-height: 34px;
+      padding-block: .3rem !important;
+      font-size: .8rem;
+    }
+
+    .tws-workspace .team-calendar-layout > aside .mb-3 {
+      margin-bottom: .5rem !important;
+    }
+
+    .tws-workspace .team-calendar-layout > aside .btn-primary {
+      min-height: 34px;
+      padding-block: .35rem;
+      font-size: .8rem;
+    }
+
+    .tws-workspace .team-calendar-layout > aside .mt-3 {
+      margin-top: .5rem !important;
+      font-size: .71rem;
+      line-height: 1.45;
+    }
+
+    .tws-workspace .tws-calendar-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .25rem .85rem;
+      margin-bottom: .4rem;
+    }
+
+    .tws-workspace .tws-calendar-legend p {
+      margin: 0 !important;
+      font-size: .72rem;
+      line-height: 1.4;
+    }
+
+    .tws-workspace .tws-calendar-summary {
+      font-size: .69rem;
+      line-height: 1.5;
+    }
+
+    .tws-workspace .team-calendar-main {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .tws-workspace .team-calendar-toolbar {
+      flex-shrink: 0;
+      padding: .62rem 1.25rem;
+    }
+
+    .tws-workspace .tws-cal-upcoming-strip {
+      flex-shrink: 0;
+      padding: .48rem 1.25rem;
+    }
+
+    .tws-workspace .team-calendar-scroll {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-x: auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      display: flex;
+      flex-direction: column;
+      scrollbar-width: thin;
+      scrollbar-color: var(--tws-input-border) transparent;
+    }
+
+    .tws-workspace .team-calendar-grid {
+      flex: 1 0 auto;
+      height: 100%;
+    }
+
+    .tws-workspace .team-calendar-grid thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: .48rem .45rem;
+    }
+
+    .tws-workspace .team-calendar-grid td {
+      height: auto;
+      min-height: 80px;
+      padding: .36rem .45rem;
+    }
+
+    .tws-workspace .team-calendar-grid.is-week td {
+      height: 100%;
+      min-height: 240px;
+    }
+
+    .tws-workspace .team-calendar-agenda {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: var(--tws-input-border) transparent;
+    }
+  }
 }

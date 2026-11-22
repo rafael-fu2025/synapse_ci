@@ -1,0 +1,1757 @@
+/* ==========================================================================
+   SYNAPSE — Medicine Inventory Workstation (.inv-workspace / .inv-modal-form)
+   Clean architectural design for Medicine Catalog, Medicine Detail (FEFO
+   Batches, Operations, Stock Movements), Setup-Pending view, and all 5
+   Inventory Modals. Uses solid opaque surfaces, zero translucent washes on
+   buttons/badges/notices, zero pill counters, custom BalaySelect dropdowns,
+   and canonical modal/pagination styles.
+   Imported after core/synapse-theme.css.
+   ========================================================================== */
+
+.inv-workspace,
+.inv-page-actions,
+.inv-modal-form,
+.inv-modal-shell,
+.inv-unavailable,
+#appFormModal .modal-footer > .inv-modal-actions {
+  --inv-card: #ffffff;
+  --inv-subtle: #f8f9fb;
+  --inv-muted: #f1f2f5;
+  --inv-muted-hover: #f4f4f6;
+  --inv-border: #e2e4e9;
+  --inv-hairline: #eef0f4;
+  --inv-input-border: #cfd5df;
+  --inv-fg: #111827;
+  --inv-fg-secondary: #374151;
+  --inv-muted-fg: #6b7280;
+  --inv-brand: #800000;
+  --inv-brand-hover: #6b0000;
+  --inv-brand-ring: rgba(128, 0, 0, 0.18);
+  --inv-emerald: #146c43;
+  --inv-amber: #d97706;
+  --inv-amber-text: #b45309;
+  --inv-crimson: #b91c1c;
+  --inv-crimson-hover: #991b1b;
+  --inv-slate: #475569;
+  --inv-zinc: #64748b;
+  --inv-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  color: var(--inv-fg-secondary);
+  min-width: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(
+  .inv-workspace,
+  .inv-page-actions,
+  .inv-modal-form,
+  .inv-modal-shell,
+  .inv-unavailable,
+  #appFormModal .modal-footer > .inv-modal-actions
+) {
+  --inv-card: #161618;
+  --inv-subtle: #1c1c1f;
+  --inv-muted: #242428;
+  --inv-muted-hover: #1f1f23;
+  --inv-border: #2e2e33;
+  --inv-hairline: #252529;
+  --inv-input-border: #3a3a40;
+  --inv-fg: #f4f4f5;
+  --inv-fg-secondary: #d4d4d8;
+  --inv-muted-fg: #a1a1aa;
+  --inv-brand: #800000;
+  --inv-brand-hover: #991b1b;
+  --inv-brand-ring: rgba(248, 113, 113, 0.25);
+  --inv-emerald: #34d399;
+  --inv-amber: #f59e0b;
+  --inv-amber-text: #fbbf24;
+  --inv-crimson: #f87171;
+  --inv-crimson-hover: #dc2626;
+  --inv-slate: #94a3b8;
+  --inv-zinc: #a1a1aa;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--inv-fg-secondary);
+}
+
+.inv-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.inv-workspace :is(h2, h3, h4, strong),
+.inv-modal-shell :is(h2, h3, h4, strong),
+.inv-unavailable :is(h2, h3, strong) {
+  color: var(--inv-fg);
+}
+
+.inv-workspace .text-muted,
+.inv-modal-shell .text-muted,
+.inv-unavailable .text-muted {
+  color: var(--inv-muted-fg) !important;
+}
+
+.inv-mono {
+  font-family: var(--inv-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Solid Opaque Button System (Zero translucent backgrounds)
+   ========================================================================== */
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn:not(.btn-close):not(.inv-combobox-toggle) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0 0.88rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow: none;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+html body :is(.inv-page-actions, section.inv-workspace, #appFormModal .inv-modal-shell) .btn.btn-sm:not(.btn-close):not(.inv-combobox-toggle) {
+  min-height: 30px;
+  padding: 0 0.68rem;
+  font-size: 0.76rem;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn.btn-primary {
+  --bs-btn-bg: var(--inv-brand);
+  --bs-btn-border-color: var(--inv-brand);
+  --bs-btn-color: #ffffff;
+  background: var(--inv-brand) !important;
+  border: 1px solid var(--inv-brand) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn.btn-primary:hover:not(:disabled) {
+  background: var(--inv-brand-hover) !important;
+  border-color: var(--inv-brand-hover) !important;
+  color: #ffffff !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn.btn-danger {
+  --bs-btn-bg: #b91c1c;
+  --bs-btn-border-color: #b91c1c;
+  --bs-btn-color: #ffffff;
+  background: #b91c1c !important;
+  border: 1px solid #b91c1c !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn.btn-danger:hover:not(:disabled) {
+  background: #991b1b !important;
+  border-color: #991b1b !important;
+  color: #ffffff !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn:is(.btn-outline-secondary, .btn-outline-primary) {
+  --bs-btn-bg: var(--inv-card);
+  --bs-btn-border-color: var(--inv-input-border);
+  --bs-btn-color: var(--inv-fg);
+  background: var(--inv-card) !important;
+  border: 1px solid var(--inv-input-border) !important;
+  color: var(--inv-fg) !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn:is(.btn-outline-secondary, .btn-outline-primary):hover:not(:disabled) {
+  background: var(--inv-muted) !important;
+  border-color: var(--inv-input-border) !important;
+  color: var(--inv-fg) !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  #appFormModal .inv-modal-shell
+) .btn.btn-outline-danger {
+  --bs-btn-bg: var(--inv-card);
+  --bs-btn-border-color: var(--inv-crimson);
+  --bs-btn-color: var(--inv-crimson);
+  background: var(--inv-card) !important;
+  border: 1px solid var(--inv-crimson) !important;
+  color: var(--inv-crimson) !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  #appFormModal .inv-modal-shell
+) .btn.btn-outline-danger:hover:not(:disabled) {
+  background: var(--inv-muted) !important;
+  border-color: var(--inv-crimson) !important;
+  color: var(--inv-crimson) !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  .inv-unavailable,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+)[class] .btn:is(.btn-outline-secondary, .btn-outline-primary)[class] i.bi:not(.badge) {
+  color: var(--inv-muted-fg) !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  #appFormModal .inv-modal-shell
+)[class] .btn.btn-outline-danger[class] i.bi:not(.badge) {
+  color: var(--inv-crimson) !important;
+}
+
+html body :is(
+  .inv-page-actions,
+  section.inv-workspace,
+  #appFormModal .inv-modal-shell,
+  #appFormModal .modal-footer > .inv-modal-actions
+) .btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Inline Status Dot & Indicator System (Zero translucent chips / zero pills)
+   ========================================================================== */
+.inv-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--inv-zinc);
+}
+
+.inv-status-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.inv-status-inline--active { color: var(--inv-emerald); }
+.inv-status-inline--active .inv-dot { background: var(--inv-emerald); }
+
+.inv-status-inline--archived { color: var(--inv-muted-fg); }
+.inv-status-inline--archived .inv-dot { background: var(--inv-zinc); }
+
+.inv-status-inline--warn { color: var(--inv-amber-text); }
+.inv-status-inline--warn .inv-dot { background: var(--inv-amber); }
+
+.inv-status-inline--danger { color: var(--inv-crimson); }
+.inv-status-inline--danger .inv-dot { background: var(--inv-crimson); }
+
+.inv-status-inline--quarantined { color: var(--inv-slate); }
+.inv-status-inline--quarantined .inv-dot { background: var(--inv-slate); }
+
+.inv-status-inline--brand { color: var(--inv-brand); }
+.inv-status-inline--brand .inv-dot { background: var(--inv-brand); }
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .inv-status-inline--brand {
+  color: #f87171;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .inv-status-inline--brand .inv-dot {
+  background: #f87171;
+}
+
+/* ==========================================================================
+   1. Workspace Header Subtitle, Filter Command Bar & Live Status
+   ========================================================================== */
+.inv-lead-note {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--inv-muted-fg);
+}
+
+.inv-toolbar-card {
+  padding: 0.9rem 1.05rem;
+  border-radius: 10px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+}
+
+.inv-filter-form {
+  display: grid;
+  grid-template-columns: minmax(15rem, 2.2fr) minmax(12rem, 1.3fr) minmax(6.5rem, 0.6fr) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.inv-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.34rem;
+  min-width: 0;
+}
+
+.inv-filter-label {
+  margin: 0;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--inv-muted-fg);
+}
+
+.inv-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.inv-search-icon {
+  position: absolute;
+  left: 0.78rem;
+  color: var(--inv-muted-fg);
+  font-size: 0.82rem;
+  pointer-events: none;
+}
+
+html body section.inv-workspace .inv-search-input.form-control {
+  padding-left: 2.15rem;
+  min-height: 36px;
+  font-size: 0.82rem;
+  border-radius: 0.25rem;
+  background: var(--inv-card);
+  border-color: var(--inv-input-border);
+  color: var(--inv-fg);
+}
+
+html body section.inv-workspace .inv-search-input.form-control:focus {
+  border-color: var(--inv-brand);
+  box-shadow: 0 0 0 3px var(--inv-brand-ring);
+}
+
+html body section.inv-workspace .bd-select {
+  width: 100%;
+}
+
+html body section.inv-workspace .bd-select .bd-select-toggle {
+  min-height: 36px;
+  border-radius: 0.25rem;
+  font-size: 0.82rem;
+  background: var(--inv-card);
+  border-color: var(--inv-input-border);
+  color: var(--inv-fg);
+}
+
+.inv-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.inv-live-status {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--inv-muted-fg);
+  min-height: 1.1rem;
+}
+
+.inv-live-status:empty {
+  display: none;
+}
+
+/* Solid left-bordered error/notice panels (zero translucent washes) */
+.inv-alert-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.72rem 1rem;
+  border-radius: 6px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  border-left: 3px solid var(--inv-crimson);
+  color: var(--inv-fg);
+  font-size: 0.82rem;
+}
+
+.inv-alert-error[hidden] {
+  display: none !important;
+}
+
+/* ==========================================================================
+   2. Architectural 4-Column KPI Metric Strip
+   ========================================================================== */
+.inv-results-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.inv-kpi-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inv-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.inv-kpi-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.9rem 1.05rem;
+  border-radius: 10px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  min-width: 0;
+}
+
+.inv-kpi-card[data-active="true"][data-tone="amber"] {
+  border-top: 2px solid var(--inv-amber);
+}
+
+.inv-kpi-card[data-active="true"][data-tone="crimson"] {
+  border-top: 2px solid var(--inv-crimson);
+}
+
+.inv-kpi-card[data-active="true"][data-tone="slate"] {
+  border-top: 2px solid var(--inv-slate);
+}
+
+.inv-kpi-card[data-active="true"][data-tone="emerald"] {
+  border-top: 2px solid var(--inv-emerald);
+}
+
+.inv-kpi-card[data-active="true"][data-tone="brand"] {
+  border-top: 2px solid var(--inv-brand);
+}
+
+.inv-kpi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.inv-kpi-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--inv-muted-fg);
+  line-height: 1.3;
+  margin: 0;
+}
+
+.inv-kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-hairline);
+  color: var(--inv-muted-fg);
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.inv-kpi-card[data-active="true"][data-tone="amber"] .inv-kpi-icon { color: var(--inv-amber-text); }
+.inv-kpi-card[data-active="true"][data-tone="crimson"] .inv-kpi-icon { color: var(--inv-crimson); }
+.inv-kpi-card[data-active="true"][data-tone="slate"] .inv-kpi-icon { color: var(--inv-slate); }
+.inv-kpi-card[data-active="true"][data-tone="emerald"] .inv-kpi-icon { color: var(--inv-emerald); }
+
+.inv-kpi-metric-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.inv-kpi-value {
+  font-family: var(--inv-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.65rem !important;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: var(--inv-fg);
+}
+
+.inv-kpi-unit {
+  font-size: 0.74rem;
+  color: var(--inv-muted-fg);
+}
+
+.inv-kpi-sub {
+  font-size: 0.72rem;
+  color: var(--inv-muted-fg);
+  line-height: 1.35;
+}
+
+.inv-scope-note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--inv-muted-fg);
+}
+
+/* ==========================================================================
+   3. Architectural Card & Ledger Tables (Catalog + Detail)
+   ========================================================================== */
+.inv-card {
+  border-radius: 10px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  overflow: hidden;
+}
+
+.inv-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.9rem 1.2rem;
+  background: var(--inv-card);
+  border-bottom: 1px solid var(--inv-border);
+}
+
+.inv-card-header-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.inv-card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem;
+}
+
+.inv-card-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--inv-fg);
+}
+
+.inv-card-count {
+  font-family: var(--inv-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--inv-muted-fg);
+}
+
+.inv-card-sub {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.42;
+  color: var(--inv-muted-fg);
+}
+
+.inv-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.inv-table {
+  width: 100%;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--inv-fg-secondary);
+}
+
+html body section.inv-workspace .table.inv-table > thead > tr > th {
+  background: var(--inv-subtle) !important;
+  background-color: var(--inv-subtle) !important;
+  color: var(--inv-muted-fg) !important;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  padding: 0.62rem 0.8rem;
+  border-bottom: 1px solid var(--inv-border) !important;
+  white-space: nowrap;
+}
+
+html body section.inv-workspace .table.inv-table > thead > tr > th:first-child,
+.inv-table > tbody > tr > :first-child {
+  padding-left: 1.2rem;
+}
+
+html body section.inv-workspace .table.inv-table > thead > tr > th:last-child,
+.inv-table > tbody > tr > :last-child {
+  padding-right: 1.2rem;
+}
+
+.inv-table > tbody > tr > :is(th, td) {
+  padding: 0.84rem 0.8rem;
+  border-bottom: 1px solid var(--inv-hairline);
+  background: transparent;
+  vertical-align: top;
+}
+
+.inv-table > tbody > tr:last-child > :is(th, td) {
+  border-bottom: 0;
+}
+
+.inv-table > tbody > tr:not(.inv-empty-row):hover > :is(th, td) {
+  background: var(--inv-muted-hover);
+}
+
+.inv-empty-cell {
+  text-align: center;
+  padding: 2.35rem 1.25rem !important;
+  color: var(--inv-muted-fg);
+  font-size: 0.83rem;
+}
+
+/* Medicine Name Cell */
+.inv-med-cell {
+  min-width: 13rem;
+}
+
+.inv-med-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+html body section.inv-workspace .table.inv-table :is(td, th) a.inv-med-link {
+  font-weight: 600;
+  color: var(--inv-fg) !important;
+  text-decoration: none;
+}
+
+html body section.inv-workspace .table.inv-table :is(td, th) a.inv-med-link:hover,
+html body section.inv-workspace .table.inv-table :is(td, th) a.inv-med-link:focus-visible {
+  color: var(--inv-brand) !important;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) section.inv-workspace .table.inv-table :is(td, th) a.inv-med-link:hover,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) section.inv-workspace .table.inv-table :is(td, th) a.inv-med-link:focus-visible {
+  color: #f87171 !important;
+}
+
+.inv-med-generic {
+  display: block;
+  margin-top: 0.16rem;
+  font-size: 0.74rem;
+  color: var(--inv-muted-fg);
+}
+
+.inv-med-status-row {
+  margin-top: 0.28rem;
+}
+
+.inv-cell-primary {
+  font-weight: 500;
+  color: var(--inv-fg);
+}
+
+.inv-cell-sub {
+  display: block;
+  margin-top: 0.14rem;
+  font-size: 0.74rem;
+  color: var(--inv-muted-fg);
+}
+
+.inv-unit-code {
+  display: inline-block;
+  font-family: var(--inv-mono);
+  font-size: 0.76rem;
+  color: var(--inv-fg-secondary);
+}
+
+/* Usable Stock + Health Meter */
+.inv-stock-cell {
+  min-width: 7.2rem;
+}
+
+.inv-stock-num {
+  font-family: var(--inv-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--inv-fg);
+}
+
+.inv-stock-num--muted {
+  font-weight: 600;
+  color: var(--inv-fg-secondary);
+}
+
+.inv-stock-track {
+  width: 100%;
+  max-width: 5.5rem;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--inv-muted);
+  overflow: hidden;
+  margin: 0.3rem 0 0.2rem auto;
+}
+
+.inv-stock-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--inv-emerald);
+}
+
+.inv-stock-fill[data-tone="amber"] { background: var(--inv-amber); }
+.inv-stock-fill[data-tone="crimson"] { background: var(--inv-crimson); }
+.inv-stock-fill[data-tone="muted"] { background: var(--inv-zinc); }
+
+/* Expiry Column */
+.inv-expiry-cell {
+  min-width: 8.5rem;
+}
+
+.inv-expiry-iso {
+  font-family: var(--inv-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--inv-fg);
+  white-space: nowrap;
+}
+
+.inv-expiry-iso--danger {
+  color: var(--inv-crimson);
+}
+
+.inv-expiry-flag {
+  margin-top: 0.25rem;
+}
+
+/* Alerts Column */
+.inv-alerts-cell {
+  min-width: 10.5rem;
+}
+
+.inv-alert-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.26rem;
+}
+
+.inv-no-alerts {
+  font-size: 0.75rem;
+  color: var(--inv-muted-fg);
+}
+
+/* Row Actions */
+.inv-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.inv-mobile-label {
+  display: none;
+}
+
+/* Pagination Band — preserves canonical .pagination */
+.inv-pagination-band {
+  padding: 0.85rem 1.2rem;
+  background: var(--inv-card);
+  border-top: 1px solid var(--inv-border);
+}
+
+.inv-pagination-band > [data-table-pagination] {
+  margin-top: 0 !important;
+}
+
+.inv-standalone-pagination > [data-table-pagination] {
+  margin-top: 0.25rem !important;
+}
+
+/* ==========================================================================
+   4. Medicine Detail Screen (app/Views/inventory/show.php)
+   ========================================================================== */
+.inv-detail-hero {
+  border-radius: 10px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  overflow: hidden;
+}
+
+.inv-detail-hero-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--inv-hairline);
+}
+
+.inv-detail-title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  min-width: 0;
+}
+
+.inv-detail-name {
+  margin: 0;
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--inv-fg);
+  overflow-wrap: anywhere;
+}
+
+.inv-detail-unit-meta {
+  font-family: var(--inv-mono);
+  font-size: 0.75rem;
+  color: var(--inv-muted-fg);
+  padding: 0.24rem 0.55rem;
+  border-radius: 4px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+}
+
+.inv-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+  background: var(--inv-card);
+}
+
+.inv-spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  padding: 0.8rem 1rem;
+  border-right: 1px solid var(--inv-hairline);
+  border-bottom: 1px solid var(--inv-hairline);
+  min-width: 0;
+}
+
+.inv-spec-item:last-child {
+  border-right: 0;
+}
+
+.inv-spec-item dt {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--inv-muted-fg);
+}
+
+.inv-spec-item dd {
+  margin: 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--inv-fg);
+  overflow-wrap: anywhere;
+}
+
+.inv-detail-hero-foot {
+  padding: 0.65rem 1.2rem;
+  background: var(--inv-subtle);
+  font-size: 0.75rem;
+  color: var(--inv-muted-fg);
+  line-height: 1.45;
+}
+
+/* Near-expiry / clinical accounting note bar */
+.inv-note-bar {
+  padding: 0.72rem 1rem;
+  border-radius: 6px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  border-left: 3px solid var(--inv-slate);
+  font-size: 0.78rem;
+  line-height: 1.48;
+  color: var(--inv-fg-secondary);
+}
+
+.inv-note-bar--warn {
+  border-left-color: var(--inv-amber);
+}
+
+.inv-detail-summary-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+/* Detail Ledger Links & Signed Quantities */
+html body section.inv-workspace .table.inv-table :is(td, th) a.inv-ref-link {
+  color: var(--inv-brand) !important;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+html body section.inv-workspace .table.inv-table :is(td, th) a.inv-ref-link:hover,
+html body section.inv-workspace .table.inv-table :is(td, th) a.inv-ref-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) section.inv-workspace .table.inv-table :is(td, th) a.inv-ref-link {
+  color: #fca5a5 !important;
+}
+
+.inv-batch-link {
+  white-space: nowrap;
+}
+
+.inv-actor-cell {
+  min-width: 8.75rem;
+}
+
+.inv-delta {
+  font-family: var(--inv-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inv-delta--pos { color: var(--inv-emerald); }
+.inv-delta--neg { color: var(--inv-crimson); }
+.inv-delta--zero { color: var(--inv-muted-fg); }
+
+.inv-op-head {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  flex-wrap: wrap;
+}
+
+.inv-op-id {
+  font-family: var(--inv-mono);
+  font-weight: 700;
+  color: var(--inv-fg);
+}
+
+.inv-movement-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  padding: 0.85rem 1.2rem;
+  background: var(--inv-card);
+  border-top: 1px solid var(--inv-border);
+}
+
+.inv-movement-footer > [data-table-pagination] {
+  margin-top: 0 !important;
+  flex: 1 1 20rem;
+}
+
+.inv-movement-perpage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inv-movement-perpage label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--inv-muted-fg);
+  white-space: nowrap;
+}
+
+.inv-movement-perpage .bd-select {
+  width: 5.5rem !important;
+}
+
+/* ==========================================================================
+   5. Canonical Inventory Modals (catalog, receive, adjust, status, reverse)
+   ========================================================================== */
+#appFormModal:has(.inv-modal-shell) .modal-content {
+  border-radius: var(--radius-lg, 0.25rem);
+  border: 1px solid var(--inv-border, #e2e4e9);
+  background: var(--inv-card, #ffffff);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #appFormModal:has(.inv-modal-shell) .modal-content {
+  border-color: #2e2e33;
+  background: #161618;
+}
+
+#appFormModal:has(.inv-modal-shell) .modal-header {
+  padding: 1.05rem 1.35rem;
+  border-bottom: 1px solid var(--border-color, #e4e4e7);
+}
+
+#appFormModal:has(.inv-modal-shell) .modal-body {
+  padding: 1.2rem 1.35rem;
+}
+
+.inv-modal-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.inv-modal-lead {
+  margin: 0;
+  font-size: 0.81rem;
+  line-height: 1.5;
+  color: var(--inv-muted-fg);
+}
+
+/* Context Header Strip inside Action Modals */
+.inv-modal-context {
+  padding: 0.8rem 0.95rem;
+  border-radius: 6px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.inv-modal-context-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--inv-fg);
+  overflow-wrap: anywhere;
+}
+
+.inv-modal-context-meta {
+  margin: 0;
+  font-size: 0.77rem;
+  color: var(--inv-muted-fg);
+  line-height: 1.45;
+}
+
+.inv-modal-dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem 1rem;
+  margin: 0.25rem 0 0;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--inv-hairline);
+}
+
+.inv-modal-dl-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.inv-modal-dl-item--full {
+  grid-column: 1 / -1;
+}
+
+.inv-modal-dl-item dt {
+  margin: 0;
+  font-size: 0.69rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--inv-muted-fg);
+}
+
+.inv-modal-dl-item dd {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--inv-fg);
+  overflow-wrap: anywhere;
+}
+
+/* Solid Opaque Left-Bordered Notice Callouts (Replaces translucent Bootstrap alerts) */
+.inv-notice {
+  padding: 0.72rem 0.92rem;
+  border-radius: 6px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+  border-left: 3px solid var(--inv-slate);
+  color: var(--inv-fg-secondary);
+  font-size: 0.78rem;
+  line-height: 1.48;
+}
+
+.inv-notice--warn {
+  border-left-color: var(--inv-amber);
+}
+
+.inv-notice--brand {
+  border-left-color: var(--inv-brand);
+}
+
+.inv-notice-title {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.79rem;
+  font-weight: 700;
+  color: var(--inv-fg);
+}
+
+/* Numbered Modal Sections */
+.inv-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+
+.inv-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inv-form-section--panel {
+  padding: 0.95rem 1rem;
+  border-radius: 6px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+}
+
+.inv-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--inv-hairline);
+}
+
+.inv-section-num {
+  font-family: var(--inv-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--inv-brand);
+  padding: 0.1rem 0.36rem;
+  border-radius: 3px;
+  background: var(--inv-muted);
+  border: 1px solid var(--inv-border);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .inv-section-num {
+  color: #fca5a5;
+}
+
+.inv-section-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--inv-fg);
+}
+
+.inv-section-desc {
+  margin: -0.25rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: var(--inv-muted-fg);
+}
+
+.inv-modal-form .form-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--inv-fg);
+  margin-bottom: 0.3rem;
+}
+
+.inv-modal-form .form-text {
+  font-size: 0.73rem;
+  color: var(--inv-muted-fg);
+  margin-top: 0.28rem;
+}
+
+html body #appFormModal .inv-modal-form :is(.form-control, .form-select) {
+  border-radius: 0.25rem;
+  border-color: var(--inv-input-border);
+  background: var(--inv-card);
+  color: var(--inv-fg);
+  font-size: 0.83rem;
+}
+
+html body #appFormModal .inv-modal-form :is(.form-control, .form-select):focus {
+  border-color: var(--inv-brand);
+  box-shadow: 0 0 0 3px var(--inv-brand-ring);
+}
+
+html body #appFormModal .inv-modal-form .bd-select {
+  width: 100%;
+}
+
+html body #appFormModal .inv-modal-form .bd-select .bd-select-toggle {
+  min-height: 38px;
+  border-radius: 0.25rem;
+  border-color: var(--inv-input-border);
+  background: var(--inv-card);
+  color: var(--inv-fg);
+  font-size: 0.83rem;
+}
+
+/* Catalog Combobox (Clean Neutral Trigger + Floating Opaque Menu) */
+.inv-combobox {
+  position: relative;
+}
+
+html body #appFormModal .inv-modal-form .inv-combobox .form-control {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+html body #appFormModal .inv-modal-form .inv-combobox-toggle {
+  min-width: 38px;
+  padding: 0 0.65rem;
+  background: var(--inv-subtle) !important;
+  border: 1px solid var(--inv-input-border) !important;
+  border-left: 0 !important;
+  border-top-right-radius: 0.25rem !important;
+  border-bottom-right-radius: 0.25rem !important;
+  color: var(--inv-muted-fg) !important;
+  box-shadow: none !important;
+}
+
+html body #appFormModal .inv-modal-form .inv-combobox-toggle:hover {
+  background: var(--inv-muted) !important;
+  color: var(--inv-fg) !important;
+}
+
+.inv-combobox-menu {
+  max-height: 240px;
+  overflow-y: auto;
+  top: 100%;
+  left: 0;
+  z-index: 1065;
+  margin-top: 2px;
+  padding: 0.25rem;
+  background: var(--inv-card) !important;
+  border: 1px solid var(--inv-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.14) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .inv-combobox-menu {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45) !important;
+}
+
+.inv-combobox-menu .dropdown-header {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--inv-muted-fg);
+}
+
+.inv-combobox-menu .dropdown-item {
+  border-radius: 4px;
+  font-size: 0.79rem;
+  color: var(--inv-fg-secondary);
+  padding: 0.45rem 0.6rem;
+}
+
+.inv-combobox-menu .dropdown-item:hover,
+.inv-combobox-menu .dropdown-item:focus {
+  background: var(--inv-muted) !important;
+  color: var(--inv-fg) !important;
+}
+
+.inv-combobox-tag {
+  flex-shrink: 0;
+  font-family: var(--inv-mono);
+  font-size: 0.67rem;
+  font-weight: 600;
+  padding: 0.12rem 0.42rem;
+  border-radius: 3px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+  color: var(--inv-muted-fg);
+}
+
+.inv-combobox-tag--existing {
+  background: var(--inv-brand);
+  border-color: var(--inv-brand);
+  color: #ffffff;
+}
+
+/* Radio Choice Cards & Attestation Box (reverse.php) */
+.inv-choice-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.inv-choice-legend {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--inv-fg);
+  margin-bottom: 0.2rem;
+}
+
+.inv-choice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.8rem 0.92rem;
+  border-radius: 6px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+  margin: 0;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.inv-choice-card:has(input:checked) {
+  background: var(--inv-card);
+  border-color: var(--inv-brand);
+  box-shadow: inset 0 0 0 1px var(--inv-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .inv-choice-card:has(input:checked) {
+  border-color: #dc2626;
+  box-shadow: inset 0 0 0 1px #dc2626;
+}
+
+.inv-choice-card .form-check-input {
+  margin: 0.2rem 0 0 !important;
+  float: none !important;
+  flex-shrink: 0;
+}
+
+.inv-choice-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.inv-choice-card .form-check-label {
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--inv-fg);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.inv-attestation-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.8rem 0.92rem;
+  border-radius: 6px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+  border-left: 3px solid var(--inv-crimson);
+  margin: 0;
+}
+
+.inv-attestation-box .form-check-input {
+  margin: 0.2rem 0 0 !important;
+  float: none !important;
+  flex-shrink: 0;
+}
+
+.inv-attestation-box .form-check-label {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--inv-fg);
+  cursor: pointer;
+}
+
+/* Canonical Modal Footer (Matches Clinic Announcements & Referrals) */
+.inv-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.35rem;
+  background: var(--surface-color, #ffffff);
+  border-top: 1px solid var(--border-color, #e4e4e7);
+}
+
+#appFormModal .modal-footer:has(> .inv-modal-actions) {
+  padding: 1rem 1.35rem !important;
+  background: var(--surface-color, #ffffff);
+  border-top: 1px solid var(--border-color, #e4e4e7);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #appFormModal .modal-footer:has(> .inv-modal-actions) {
+  background: var(--surface-color, #1c1c1c);
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+#appFormModal .modal-footer > .inv-modal-actions.modal-footer-actions {
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border-top: 0 !important;
+}
+
+html body #appFormModal .modal-footer > .inv-modal-actions .btn:not(.btn-close) {
+  min-height: 38px;
+  padding: 0 1rem;
+  font-size: 0.83rem;
+  border-radius: var(--bs-btn-border-radius, 0.25rem);
+}
+
+/* ==========================================================================
+   6. Setup Pending / Unavailable State (app/Views/inventory/unavailable.php)
+   ========================================================================== */
+.inv-unavailable {
+  max-width: 680px;
+}
+
+.inv-unavailable-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.5rem 1.65rem;
+  border-radius: 10px;
+  background: var(--inv-card);
+  border: 1px solid var(--inv-border);
+  border-left: 3px solid var(--inv-amber);
+}
+
+.inv-unavailable-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.inv-unavailable-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 6px;
+  background: var(--inv-subtle);
+  border: 1px solid var(--inv-border);
+  color: var(--inv-amber-text);
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.inv-unavailable-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--inv-fg);
+}
+
+.inv-unavailable-msg {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--inv-fg-secondary);
+  line-height: 1.55;
+}
+
+/* ==========================================================================
+   7. Responsive Tablet & 390px Mobile Layouts (Zero Horizontal Overflow)
+   ========================================================================== */
+@media (max-width: 1199.98px) {
+  .inv-filter-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inv-filter-field--search,
+  .inv-filter-actions {
+    grid-column: 1 / -1;
+  }
+
+  .inv-filter-actions > .btn {
+    flex: 1 1 8rem;
+  }
+
+  .inv-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inv-spec-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .inv-spec-item:nth-child(3n) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .inv-page-actions {
+    width: 100%;
+  }
+
+  .inv-page-actions .btn {
+    flex: 1 1 auto;
+    min-height: 40px !important;
+  }
+
+  .inv-toolbar-card {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .inv-filter-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html body section.inv-workspace .inv-search-input.form-control,
+  html body section.inv-workspace .bd-select .bd-select-toggle,
+  html body section.inv-workspace .inv-filter-actions .btn {
+    min-height: 40px;
+  }
+
+  .inv-kpi-grid {
+    gap: 0.55rem;
+  }
+
+  .inv-kpi-card {
+    padding: 0.78rem 0.85rem;
+    gap: 0.4rem;
+  }
+
+  .inv-kpi-value {
+    font-size: 1.4rem !important;
+  }
+
+  .inv-spec-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inv-spec-item:nth-child(3n) {
+    border-right: 1px solid var(--inv-hairline);
+  }
+
+  .inv-spec-item:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .inv-card-header {
+    padding: 0.82rem 0.95rem;
+  }
+
+  .inv-table-wrap {
+    overflow-x: visible;
+  }
+
+  /* Bespoke Mobile Architectural Cards for Catalog & Detail Tables */
+  html body section.inv-workspace .table.inv-table,
+  html body section.inv-workspace .table.inv-table > tbody {
+    display: block;
+    width: 100%;
+  }
+
+  html body section.inv-workspace .table.inv-table > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.75rem;
+    background: var(--inv-subtle);
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody > tr.inv-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 0.75rem;
+    margin: 0 !important;
+    padding: 0.9rem 0.95rem;
+    border-radius: 8px;
+    background: var(--inv-card);
+    border: 1px solid var(--inv-border);
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody > tr.inv-empty-row {
+    display: block;
+    background: var(--inv-card);
+    border: 1px solid var(--inv-border);
+    border-radius: 8px;
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody > tr.inv-empty-row > td {
+    display: block;
+    border: 0;
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody > tr.inv-row > :is(th, td) {
+    display: block !important;
+    padding: 0 !important;
+    border: 0 !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    text-align: left !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody > tr.inv-row > .inv-cell-full {
+    grid-column: 1 / -1;
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody > tr.inv-row > .inv-cell-header {
+    grid-column: 1 / -1;
+    padding-bottom: 0.6rem !important;
+    border-bottom: 1px solid var(--inv-hairline) !important;
+  }
+
+  html body section.inv-workspace .table.inv-table > tbody > tr.inv-row > .inv-cell-actions {
+    grid-column: 1 / -1;
+    padding-top: 0.65rem !important;
+    border-top: 1px solid var(--inv-hairline) !important;
+  }
+
+  .inv-mobile-label {
+    display: block;
+    margin-bottom: 0.22rem;
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--inv-muted-fg);
+  }
+
+  .inv-stock-track {
+    margin: 0.3rem auto 0.2rem 0;
+  }
+
+  .inv-row-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .inv-row-actions > .btn {
+    flex: 1 1 6.5rem;
+    min-height: 40px !important;
+  }
+
+  .inv-pagination-band,
+  .inv-movement-footer {
+    padding: 0.8rem 0.95rem;
+  }
+
+  .inv-movement-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .inv-movement-footer > [data-table-pagination] {
+    flex: 0 0 auto;
+  }
+
+  .inv-movement-perpage .btn {
+    min-height: 40px !important;
+  }
+
+  .inv-workspace .pagination {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .inv-workspace .pagination .page-link {
+    min-height: 38px;
+    min-width: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .inv-modal-dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inv-modal-form .form-control,
+  .inv-modal-form .form-select,
+  .inv-modal-form .bd-select .bd-select-toggle {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .inv-modal-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .inv-modal-actions > .btn {
+    width: 100%;
+    min-height: 40px !important;
+  }
+
+  .inv-unavailable-card .btn {
+    width: 100%;
+    min-height: 40px !important;
+  }
+}

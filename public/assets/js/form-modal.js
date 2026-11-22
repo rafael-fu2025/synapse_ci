@@ -291,6 +291,7 @@
     window.BalaySelect?.init(root);
     window.BalayDatepicker?.init(root);
     window.BalayDateTimePicker?.init(root);
+    window.BalayDateRangePicker?.init(root);
     window.SynapseCarouselForm?.init(root);
     initCatalogComboboxes(root);
   }
@@ -363,6 +364,7 @@
     root.addEventListener('hidden.bs.modal', () => {
       record.controller.abort();
       window.SynapseCarouselForm?.destroy(root);
+      window.BalayDateRangePicker?.destroy(root);
       window.BalaySelect?.destroy(root);
       if (window.Alpine) Alpine.mutateDom(() => Alpine.destroyTree(root));
       modal.dispose();
@@ -429,6 +431,7 @@
       window.BalaySelect?.init(record.root);
       window.BalayDatepicker?.init(record.root);
       window.BalayDateTimePicker?.init(record.root);
+      window.BalayDateRangePicker?.init(record.root);
       window.SynapseCarouselForm?.init(record.root);
       initCatalogComboboxes(record.root);
       if (record.root.classList.contains('show')) focusField(record.root);
