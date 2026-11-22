@@ -1,4 +1,4 @@
-﻿/*! NiceAdmin v3 modular stylesheet entry point */
+/*! NiceAdmin v3 modular stylesheet entry point */
 /*
  * The imported modules preserve the audited rule order while making ownership
  * explicit. Keep this stable URL for the existing static HTML routes.
@@ -14,7 +14,24 @@
 @import url("core/synapse-theme.css");
 @import url("datepicker.css");
 @import url("datetimepicker.css");
+@import url("date-range-picker.css");
 @import url("core/synapse-widgets.css");
+@import url("pages/profile-settings.css");
+@import url("pages/portal-surveys.css");
+@import url("pages/portal-referrals.css");
+@import url("pages/portal-announcements.css");
+@import url("pages/portal-appointments.css");
+@import url("pages/portal-visits.css");
+@import url("pages/admin-workspace.css");
+@import url("pages/ai-insights.css");
+@import url("pages/referrals-workspace.css");
+@import url("pages/clinic-reports.css");
+@import url("pages/clinic-isolation.css");
+@import url("pages/clinic-inventory.css");
+@import url("pages/appointments-workspace.css");
+@import url("pages/clinic-patients.css");
+@import url("pages/clinic-encounters.css");
+@import url("pages/clinic-dashboard.css");
 @import url("navigation.css");
 @import url("loading.css");
 @import url("toast.css");

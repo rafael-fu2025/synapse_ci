@@ -21,6 +21,7 @@ catch (error) {
 }
 const publicRoot = path.join(root, 'public');
 const screenshots = path.join(root, 'writable/report-design-preview');
+const captureScreenshots = process.env.REPORT_EXPORT_SCREENSHOTS === '1';
 const units = ['clinic', 'guidance', 'bmg'];
 const labels = { clinic: 'Clinic', guidance: 'Guidance', bmg: 'BMG' };
 const fixtures = new Map();
@@ -46,6 +47,11 @@ function renderView(allowedUnits) {
 function esc($value) { return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function site_url($path) { return '/' . ltrim($path, '/'); }
 function csrf_field() { return '<input type="hidden" name="csrf_test" value="synthetic-csrf">'; }
+function view($name, array $data = []) {
+    if ($name !== 'partials/unit_vector_icon') { throw new RuntimeException('Unexpected partial'); }
+    extract($data, EXTR_SKIP);
+    ob_start(); require dirname($GLOBALS['argv'][1], 2) . '/partials/unit_vector_icon.php'; return ob_get_clean();
+}
 class ExportLayoutStub {
     public function extend($layout) {
         if ($layout !== 'layouts/app') { throw new RuntimeException('Unexpected layout'); }
@@ -80,6 +86,7 @@ echo (new ExportLayoutStub())->render($argv[1], json_decode($argv[2], true, 512,
     <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="/assets/js/custom-dropdown.js"></script>
     <script src="/assets/js/datepicker.js"></script>
+    <script src="/assets/js/date-range-picker.js"></script>
     <script>
       window.exportSubmissions = [];
       document.querySelector('[data-operational-export]').addEventListener('submit', event => {
@@ -95,7 +102,7 @@ echo (new ExportLayoutStub())->render($argv[1], json_decode($argv[2], true, 512,
 }
 
 before(async () => {
-  fs.accessSync(screenshots, fs.constants.W_OK);
+  if (captureScreenshots) fs.accessSync(screenshots, fs.constants.W_OK);
   fixtures.set('all', renderView(units));
   for (const unit of units) fixtures.set(unit, renderView([unit]));
   server = http.createServer((req, res) => {
@@ -159,9 +166,18 @@ async function open(t, role, viewport) {
   t.after(() => assert.deepEqual(errors, [], 'Local assets and scripts must load without errors'));
   await page.goto(`${origin}/fixture?role=${role}`);
   await page.waitForFunction(() => document.querySelector('#export-unit').dataset.bdSelect &&
-    document.querySelector('#export-from-display').closest('.dp-wrap') &&
-    document.querySelector('#export-to-display').closest('.dp-wrap'));
+    document.querySelector('#export-date-range').closest('.drp-wrap'));
   await page.evaluate(() => document.fonts.ready);
+  const coverage = page.locator('#export-scope-title, #exportScopeAccordion');
+  assert.equal(await coverage.locator('i.bi').count(), 0, 'Department coverage must not depend on icon-font glyphs');
+  const icons = coverage.locator('svg');
+  assert.equal(await icons.count(), (await page.locator('#exportScopeAccordion .accordion-button').count()) + 1);
+  const vectorIcons = await icons.evaluateAll(elements => elements.map(svg => ({
+    hidden: svg.getAttribute('aria-hidden'), focusable: svg.getAttribute('focusable'),
+    width: svg.getBoundingClientRect().width, height: svg.getBoundingClientRect().height,
+    geometry: svg.querySelectorAll('path, ellipse').length, viewBox: svg.getAttribute('viewBox')
+  })));
+  assert.ok(vectorIcons.every(icon => icon.hidden === 'true' && icon.focusable === 'false' && icon.geometry > 0 && icon.viewBox && icon.width >= 10 && icon.height >= 10), JSON.stringify(vectorIcons));
   return page;
 }
 
@@ -186,16 +202,25 @@ async function selectUnit(page, label) {
   }
 }
 
-async function pickDate(page, field, iso, display) {
-  const input = page.locator(`#export-${field}-display`);
-  assert.equal(await page.locator(`#export-${field}`).getAttribute('type'), 'hidden');
+async function pickRange(page, from, to, display) {
+  const input = page.locator('#export-date-range');
+  for (const field of ['from', 'to']) assert.equal(await page.locator(`#export-${field}`).getAttribute('type'), 'hidden');
   await input.focus();
   await page.keyboard.press('ArrowDown');
-  await page.locator('.dp-popup:visible').waitFor();
+  const popup = page.locator(`[id="${await input.getAttribute('aria-controls')}"]`);
+  await popup.waitFor({ state: 'visible' });
+  assert.equal(await popup.locator('.drp-calendar:visible').count(), page.viewportSize().width < 680 ? 1 : 2);
   await noOverflow(page);
-  await page.locator(`.dp-popup:visible td[data-date="${iso}"]`).click();
+  await popup.locator(`.drp-cell[data-date="${from}"]`).click();
+  assert.equal(await popup.isVisible(), true, 'The start pick must keep the calendar open');
+  assert.equal(await input.evaluate(el => el.validity.valid), false);
+  assert.equal(await page.locator('#export-from').inputValue(), '');
+  assert.equal(await page.locator('#export-to').inputValue(), '');
+  await popup.locator(`.drp-cell[data-date="${to}"]`).click();
+  assert.equal(await popup.isVisible(), false);
   assert.equal(await input.inputValue(), display);
-  assert.equal(await page.locator(`#export-${field}`).inputValue(), iso);
+  assert.equal(await page.locator('#export-from').inputValue(), from);
+  assert.equal(await page.locator('#export-to').inputValue(), to);
 }
 
 async function submitBoth(page, unit, from, to) {
@@ -232,19 +257,82 @@ test('PHP-rendered report exports', { concurrency: false, timeout: 100_000 }, as
       const page = await open(t, 'all', viewport);
       assert.deepEqual(await page.locator('#export-unit option').evaluateAll(options => options.map(o => o.value)), ['all', ...units]);
       assert.equal(await page.locator('#export-unit').inputValue(), 'all');
-      assert.equal(await page.locator('#export-from-display').inputValue(), '01/01/2030');
-      assert.equal(await page.locator('#export-to-display').inputValue(), '31/01/2030');
+      const range = page.locator('#export-date-range');
+      assert.equal(await range.inputValue(), '01/01/2030 – 31/01/2030');
+      assert.equal(await range.getAttribute('data-daterangepicker'), '');
+      assert.equal(await range.getAttribute('data-target'), '#export-from');
+      assert.equal(await range.getAttribute('data-range-end'), '#export-to');
+      assert.equal(await range.getAttribute('data-max-days'), '31');
+      assert.equal(await range.getAttribute('name'), null);
+      assert.equal(await range.evaluate(el => el.required), true);
+      assert.equal(await page.locator('#export-from-display, #export-to-display').count(), 0);
       await noOverflow(page);
       await selectUnit(page, 'Guidance');
       assert.equal(await page.locator('#export-unit').inputValue(), 'guidance');
-      await pickDate(page, 'from', '2030-01-08', '08/01/2030');
-      await pickDate(page, 'to', '2030-01-22', '22/01/2030');
+      await pickRange(page, '2030-01-08', '2030-01-22', '08/01/2030 – 22/01/2030');
+      await submitBoth(page, 'guidance', '2030-01-08', '2030-01-22');
+      const submitted = await page.evaluate(() => window.exportSubmissions.length);
+      for (const value of ['08/01/2030 – ', '22/01/2030 – 08/01/2030', '01/01/2030 – 01/02/2030']) {
+        await range.fill(value);
+        assert.equal(await range.evaluate(el => el.validity.valid), false);
+        assert.equal(await page.locator('#export-from').inputValue(), '');
+        assert.equal(await page.locator('#export-to').inputValue(), '');
+        for (const format of ['pdf', 'csv']) await page.locator(`button[name="format"][value="${format}"]`).click();
+        assert.equal(await page.evaluate(() => window.exportSubmissions.length), submitted, 'Invalid ranges must not submit stale dates');
+      }
+      await range.fill('08/01/2030 – 22/01/2030');
+      await range.press('ArrowDown');
+      const popup = page.locator(`[id="${await range.getAttribute('aria-controls')}"]`);
+      await popup.getByRole('button', { name: 'Clear', exact: true }).click();
+      assert.equal(await range.inputValue(), '');
+      assert.equal(await page.locator('#export-from').inputValue(), '');
+      assert.equal(await page.locator('#export-to').inputValue(), '');
+      await page.locator('button[name="format"][value="pdf"]').click();
+      assert.equal(await page.evaluate(() => window.exportSubmissions.length), submitted);
+      await range.fill('08/01/2030 – 22/01/2030');
+      await range.press('Tab');
       await submitBoth(page, 'guidance', '2030-01-08', '2030-01-22');
       await noOverflow(page);
+
+      // Verify department coverage accordion behavior with auto-closing
+      const clinicCollapse = page.locator('#collapse-export-clinic');
+      const guidanceCollapse = page.locator('#collapse-export-guidance');
+      const bmgCollapse = page.locator('#collapse-export-bmg');
+
+      assert.equal(await clinicCollapse.isVisible(), true);
+      assert.equal(await guidanceCollapse.isVisible(), false);
+      assert.equal(await bmgCollapse.isVisible(), false);
+
+      // Open Guidance: Guidance expands, Clinic auto-closes
+      await page.locator('#export-guidance-title').click();
+      await page.waitForFunction(() => !document.querySelector('#collapse-export-clinic').classList.contains('show') &&
+        document.querySelector('#collapse-export-guidance').classList.contains('show'));
+      assert.equal(await guidanceCollapse.isVisible(), true);
+      assert.equal(await clinicCollapse.isVisible(), false);
+
+      // Open BMG: BMG expands, Guidance auto-closes
+      await page.locator('#export-bmg-title').click();
+      await page.waitForFunction(() => !document.querySelector('#collapse-export-guidance').classList.contains('show') &&
+        document.querySelector('#collapse-export-bmg').classList.contains('show'));
+      assert.equal(await bmgCollapse.isVisible(), true);
+      assert.equal(await guidanceCollapse.isVisible(), false);
+
       await page.evaluate(() => window.scrollTo(0, 0));
-      const file = path.join(screenshots, `report-exports-${name}.png`);
-      await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
-      console.log(`Screenshot: ${file}`);
+      if (captureScreenshots) {
+        const file = path.join(screenshots, `report-exports-${name}.png`);
+        await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
+        console.log(`Screenshot: ${file}`);
+      }
+      if (name === 'desktop') {
+        await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+        await noOverflow(page);
+        if (captureScreenshots) {
+          const darkFile = path.join(screenshots, 'report-exports-dark.png');
+          await page.screenshot({ path: darkFile, fullPage: true, animations: 'disabled' });
+          console.log(`Screenshot: ${darkFile}`);
+        }
+        await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+      }
     });
   }
   for (const unit of units) {

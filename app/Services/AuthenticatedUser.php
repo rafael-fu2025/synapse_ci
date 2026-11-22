@@ -16,6 +16,7 @@ final class AuthenticatedUser
     public const REAUTHENTICATION_MESSAGE = 'Your session could not be validated. Please sign in again to continue.';
     public const AUTHENTICATION_MESSAGE = 'Please sign in to continue.';
     private const ROTATION_HANDOFF_SECONDS = 15;
+    private const MAX_DOCUMENT_HANDOFF_RETRIES = 1;
 
     /** Return a refreshed, credential-free session identity, or clear invalid authentication. */
     public function current(): ?array
@@ -145,20 +146,26 @@ final class AuthenticatedUser
         $rotatedAt = session()->get('_auth_rotated_at');
         $age = is_int($rotatedAt) ? time() - $rotatedAt : null;
         if (!$authenticated && $age !== null && $age >= 0 && $age <= self::ROTATION_HANDOFF_SECONDS) {
-            // This ID stays anonymous. Only safe reads may be retried with the browser's current cookie.
-            $response = service('response')->setStatusCode(409)->setHeader('Cache-Control', 'no-store')
-                ->setHeader('X-Synapse-Session', 'rotated')->setHeader('Retry-After', '1');
-            foreach (['X-Synapse-Auth', 'X-Synapse-Login', 'Location'] as $header) $response->removeHeader($header);
-            if (!self::isBackgroundRequest($request) && strtoupper($request->getMethod()) === 'GET') {
-                $retryUrl = esc(current_url(true)->__toString(), 'attr');
-                return $response->setContentType('text/html', 'UTF-8')->setBody(
-                    '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="1">'
-                    . '<title>Renewing Session</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;">'
-                    . '<p>Your session is being renewed. Redirecting…</p>'
-                    . '<p><a href="' . $retryUrl . '">Continue</a></p></body></html>'
-                );
+            $isDocumentGet = !self::isBackgroundRequest($request) && strtoupper($request->getMethod()) === 'GET';
+            $docRetries = session()->get('_auth_handoff_doc_retries');
+            $canRetryDocument = !$isDocumentGet || !is_int($docRetries) || $docRetries < self::MAX_DOCUMENT_HANDOFF_RETRIES;
+            if ($canRetryDocument) {
+                // This ID stays anonymous. Only safe reads may be retried with the browser's current cookie.
+                $response = service('response')->setStatusCode(409)->setHeader('Cache-Control', 'no-store')
+                    ->setHeader('X-Synapse-Session', 'rotated')->setHeader('Retry-After', '1');
+                foreach (['X-Synapse-Auth', 'X-Synapse-Login', 'Location'] as $header) $response->removeHeader($header);
+                if ($isDocumentGet) {
+                    session()->set('_auth_handoff_doc_retries', (is_int($docRetries) ? $docRetries : 0) + 1);
+                    $retryUrl = esc(current_url(true)->__toString(), 'attr');
+                    return $response->setContentType('text/html', 'UTF-8')->setBody(
+                        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="1">'
+                        . '<title>Renewing Session</title></head><body style="font-family:system-ui,sans-serif;padding:2rem;">'
+                        . '<p>Your session is being renewed. Redirecting…</p>'
+                        . '<p><a href="' . $retryUrl . '">Continue</a></p></body></html>'
+                    );
+                }
+                return $response->setJSON(['message' => 'Your session is being renewed. Please retry this request.']);
             }
-            return $response->setJSON(['message' => 'Your session is being renewed. Please retry this request.']);
         }
         $reason = $authenticated ? null : self::noticeReason();
         if (!$authenticated) {

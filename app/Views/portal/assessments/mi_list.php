@@ -1,8 +1,8 @@
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<a href="<?= esc(site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm">
-  <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to Portal
+<a href="<?= esc(site_url('/portal'), 'attr') ?>" class="portal-back-btn">
+  <i class="bi bi-arrow-left" aria-hidden="true"></i>Back to My Health Portal
 </a>
 <?= $this->endSection() ?>
 

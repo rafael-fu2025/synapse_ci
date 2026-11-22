@@ -1,171 +1,1074 @@
-/* Shared Clinic and Guidance queue, using the NiceAdmin theme tokens. */
-.queue-metric.card {
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow: var(--na-shadow-sm);
+/* ==========================================================================
+   SYNAPSE — Clinic & Guidance Queue Board (queue.css)
+   Clean architectural design for /clinic/queue and /guidance/queue:
+   - Solid opaque surfaces in light & dark mode (zero translucent washes)
+   - Solid Foundation University maroon (#800000) active tabs (zero pastel wash)
+   - Clear button hierarchy defeating legacy synapse-theme outline fills
+   - Preserves viewport-filling 4-column desktop board (min-width: 1200px),
+     transparent/0px-radius KPI icons, dark-mode tab contrast, and 390px layout.
+   Loaded after style.css (after core/synapse-theme.css).
+   ========================================================================== */
+
+:root {
+  --q-card: #ffffff;
+  --q-subtle: #f8f9fb;
+  --q-muted: #f1f2f5;
+  --q-muted-hover: #eceef2;
+  --q-border: #e2e4e9;
+  --q-hairline: #eef0f4;
+  --q-input-border: #cfd5df;
+  --q-fg: #111827;
+  --q-fg-secondary: #374151;
+  --q-muted-fg: #6b7280;
+  --q-brand: #800000;
+  --q-brand-hover: #6b0000;
+  --q-brand-deep: #5a0000;
+  --q-brand-ring: rgba(128, 0, 0, 0.18);
+  --q-emerald: #146c43;
+  --q-emerald-hover: #0f5635;
+  --q-amber: #d97706;
+  --q-amber-text: #b45309;
+  --q-crimson: #b91c1c;
+  --q-sky: #0369a1;
+  --q-slate: #475569;
+  --q-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
 }
-.queue-metric > .card-body { padding: 1rem; min-height: 96px; }
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) {
+  --q-card: #161618;
+  --q-subtle: #1c1c1f;
+  --q-muted: #242428;
+  --q-muted-hover: #2a2a30;
+  --q-border: #2e2e33;
+  --q-hairline: #252529;
+  --q-input-border: #3a3a40;
+  --q-fg: #f4f4f5;
+  --q-fg-secondary: #d4d4d8;
+  --q-muted-fg: #a1a1aa;
+  --q-brand: #800000;
+  --q-brand-hover: #991b1b;
+  --q-brand-deep: #5a0000;
+  --q-brand-ring: rgba(248, 113, 113, 0.25);
+  --q-emerald: #34d399;
+  --q-emerald-hover: #15803d;
+  --q-amber: #f59e0b;
+  --q-amber-text: #fbbf24;
+  --q-crimson: #f87171;
+  --q-sky: #38bdf8;
+  --q-slate: #94a3b8;
+}
+
+.q-mono {
+  font-family: var(--q-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Solid Opaque Button System (Beats legacy synapse-theme outline fills)
+   ========================================================================== */
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn:not(.btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0 0.85rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow: none;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-sm:not(.btn-close) {
+  min-height: 32px;
+  padding: 0 0.68rem;
+  font-size: 0.775rem;
+}
+
+/* Primary solid maroon */
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-primary {
+  background: var(--q-brand) !important;
+  border: 1px solid var(--q-brand) !important;
+  color: #ffffff !important;
+}
+
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-primary:hover:not(:disabled),
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-primary:focus-visible:not(:disabled) {
+  background: var(--q-brand-hover) !important;
+  border-color: var(--q-brand-hover) !important;
+  color: #ffffff !important;
+}
+
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-primary:disabled {
+  opacity: 0.55;
+}
+
+/* Success solid emerald */
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-success {
+  background: #146c43 !important;
+  border: 1px solid #146c43 !important;
+  color: #ffffff !important;
+}
+
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-success:hover,
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-success:focus-visible {
+  background: #0f5635 !important;
+  border-color: #0f5635 !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-success {
+  background: #15803d !important;
+  border-color: #15803d !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-success:hover,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-success:focus-visible {
+  background: #166534 !important;
+  border-color: #166534 !important;
+}
+
+/* Neutral outline (Cancel, Skip, No-show history trigger) */
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-outline-secondary {
+  background: var(--q-card) !important;
+  border: 1px solid var(--q-input-border) !important;
+  color: var(--q-fg-secondary) !important;
+}
+
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-outline-secondary:hover,
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal) .btn.btn-outline-secondary:focus-visible {
+  background: var(--q-muted) !important;
+  border-color: var(--q-border) !important;
+  color: var(--q-fg) !important;
+}
+
+/* Brand outline (New Walk-in, Recall to Waiting, Return to today's queue) */
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-primary {
+  background: var(--q-card) !important;
+  border: 1px solid var(--q-brand) !important;
+  color: var(--q-brand) !important;
+}
+
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-primary:hover,
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-primary:focus-visible {
+  background: var(--q-brand) !important;
+  border-color: var(--q-brand) !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-primary {
+  background: var(--q-card) !important;
+  border-color: #b91c1c !important;
+  color: #fca5a5 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-primary:hover,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-primary:focus-visible {
+  background: var(--q-brand) !important;
+  border-color: var(--q-brand) !important;
+  color: #ffffff !important;
+}
+
+/* Success outline (Complete consultation check button) */
+html body #queue-board-container .btn.btn-outline-success {
+  background: var(--q-card) !important;
+  border: 1px solid var(--q-emerald) !important;
+  color: var(--q-emerald) !important;
+}
+
+html body #queue-board-container .btn.btn-outline-success:hover,
+html body #queue-board-container .btn.btn-outline-success:focus-visible {
+  background: #146c43 !important;
+  border-color: #146c43 !important;
+  color: #ffffff !important;
+}
+
+/* Calm crimson outline for Mark no-show (NEVER screaming solid red fill on every card) */
+html body #queue-board-container .btn.btn-outline-danger {
+  background: var(--q-card) !important;
+  border: 1px solid var(--q-border) !important;
+  color: var(--q-crimson) !important;
+}
+
+html body #queue-board-container .btn.btn-outline-danger:hover,
+html body #queue-board-container .btn.btn-outline-danger:focus-visible {
+  background: #b91c1c !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+}
+
+/* Beat legacy synapse-theme line 536 white-icon override on outline buttons (specificity 0,8,3 > 0,7,2) */
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-primary.btn-outline-primary[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *),
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-secondary.btn-outline-secondary[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *),
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-success.btn-outline-success[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *),
+html body :is(.q-page-actions, .queue-board-toolbar, #queue-board-container, #walkinModal, .q-error-wrap) .btn.btn-outline-danger.btn-outline-danger[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *) {
+  color: currentColor !important;
+}
+
+/* Change person button inside #walkinModal (defeats legacy solid maroon .btn-link) */
+html body #walkinModal .btn.queue-change-person.queue-change-person[class] {
+  background: var(--q-card) !important;
+  border: 1px solid var(--q-input-border) !important;
+  color: var(--q-crimson) !important;
+  text-decoration: none !important;
+  min-height: 32px;
+  padding: 0 0.68rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+html body #walkinModal .btn.queue-change-person.queue-change-person[class]:hover,
+html body #walkinModal .btn.queue-change-person.queue-change-person[class]:focus-visible {
+  background: var(--q-muted) !important;
+  border-color: var(--q-crimson) !important;
+  color: var(--q-crimson) !important;
+}
+
+/* ==========================================================================
+   Board Toolbar & Action Error Notice
+   ========================================================================== */
+.q-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.queue-board-toolbar {
+  background: var(--q-card);
+  border: 1px solid var(--q-border);
+  border-radius: 0.375rem;
+  padding: 0.72rem 1rem;
+  margin-bottom: 0.9rem !important;
+}
+
+.queue-board-title {
+  color: var(--q-fg);
+  font-size: 0.94rem;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.queue-board-subtitle {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--q-muted-fg);
+  margin-top: 0.1rem;
+}
+
+.queue-date-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--q-muted-fg);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.queue-date-input {
+  width: 10.5rem;
+  max-width: 100%;
+  min-height: 34px;
+  background-color: var(--q-card) !important;
+  border: 1px solid var(--q-input-border) !important;
+  border-radius: 0.25rem !important;
+  color: var(--q-fg) !important;
+  font-family: var(--q-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  box-shadow: none !important;
+}
+
+.queue-date-input:focus {
+  border-color: var(--q-brand) !important;
+  box-shadow: 0 0 0 3px var(--q-brand-ring) !important;
+}
+
+.queue-history-count-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 0.35rem;
+  border: 1px solid var(--q-border);
+  border-radius: 0.2rem;
+  background: var(--q-subtle);
+  color: var(--q-fg);
+  font-family: var(--q-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+#queue-action-error.alert {
+  background: var(--q-subtle) !important;
+  border: 1px solid var(--q-border) !important;
+  border-left: 3px solid var(--q-amber) !important;
+  border-radius: 0.25rem;
+  color: var(--q-fg) !important;
+  font-size: 0.82rem;
+  padding: 0.68rem 0.95rem;
+  margin-bottom: 0.9rem;
+}
+
+/* ==========================================================================
+   Live KPI Strip (6 Metrics — Transparent 0px-radius icons per test contract)
+   ========================================================================== */
+.queue-metrics {
+  margin-bottom: 0.9rem !important;
+}
+
+.queue-metric.card {
+  background: var(--q-card);
+  border: 1px solid var(--q-border);
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-metric.card {
+  box-shadow: none;
+}
+
+.queue-metric>.card-body {
+  padding: 0.78rem 0.95rem;
+  min-height: 76px;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.35rem !important;
+}
+
+.queue-metric-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
 .queue-metric-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--muted-color);
-  font-size: 1.2rem;
+  background: transparent;
+  border-radius: 0px;
+  color: var(--q-muted-fg);
+  font-size: 1rem;
+  line-height: 1;
 }
-.queue-metric-label { display: block; font-size: .72rem; font-weight: 600; line-height: 1.4; }
-.queue-metric-value { margin-top: .25rem; color: var(--heading-color); font-size: 1.65rem; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+
+.queue-metric-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  color: var(--q-muted-fg) !important;
+}
+
+.queue-metric-value {
+  margin-top: 0;
+  color: var(--q-fg);
+  font-family: var(--q-mono);
+  font-size: 1.48rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   4-Column Kanban Board & Desktop Viewport-Fill Geometry (min-width: 1200px)
+   ========================================================================== */
 .queue-columns .queue-column {
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--surface-color) 80%, var(--background-color));
+  border: 1px solid var(--q-border);
+  border-radius: 0.375rem;
+  background: var(--q-subtle);
   box-shadow: none;
   overflow: hidden;
 }
-.queue-column > .queue-column-header {
+
+.queue-column>.queue-column-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: .5rem;
+  gap: 0.5rem;
   min-height: 59px;
-  padding: 1rem;
-  background: transparent;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0.85rem 1rem;
+  background: var(--q-card);
+  border-bottom: 1px solid var(--q-border);
 }
-.queue-column-title { display: inline-flex; align-items: center; gap: .5rem; margin: 0; color: var(--heading-color); font-size: .86rem; font-weight: 700; }
 
-.queue-column-count { display: inline-flex; align-items: center; justify-content: center; min-width: 25px; height: 25px; padding: 0 .35rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--surface-color); color: var(--muted-color); font-size: .76rem; font-weight: 400; font-variant-numeric: tabular-nums; }
-.queue-column-body { min-height: 280px; max-height: 700px; overflow-y: auto; }
+.queue-column-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--q-fg);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.queue-column-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 0.38rem;
+  border: 1px solid var(--q-border);
+  border-radius: 0.25rem;
+  background: var(--q-subtle);
+  color: var(--q-fg-secondary);
+  font-family: var(--q-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-column-body {
+  min-height: 280px;
+  max-height: 700px;
+  overflow-y: auto;
+  padding: 0.65rem !important;
+}
+
 @media (min-width: 1200px) {
   .app-shell .main-content:has(#queue-board-container) {
     display: flex;
     flex-direction: column;
     height: max(650px, calc(100dvh - var(--header-height)));
   }
-  .main-content > .section:has(#queue-board-container),
+
+  .main-content>.section:has(#queue-board-container),
   #queue-board-container {
     display: flex;
     flex-direction: column;
     flex: 1;
     min-height: 0;
   }
-  #queue-board-container > :not(.queue-columns) { flex-shrink: 0; }
-  #queue-board-container > .queue-columns {
+
+  #queue-board-container> :not(.queue-columns) {
+    flex-shrink: 0;
+  }
+
+  #queue-board-container>.queue-columns {
     --bs-gutter-y: 0;
     flex: 1;
     min-height: 0;
     align-items: stretch !important;
   }
-  #queue-board-container > .queue-columns > [class*="col-"] { display: flex; height: 100%; min-height: 0; }
-  #queue-board-container .queue-column { flex: 1; min-width: 0; min-height: 0; margin-bottom: 0; }
-  #queue-board-container .queue-column-header { flex-shrink: 0; }
-  #queue-board-container .queue-column-body { flex: 1; min-height: 0; max-height: none; }
-}
-.queue-history-drawer.offcanvas {
-  --bs-offcanvas-width: min(440px, 100vw);
-  background: var(--surface-color);
-  color: var(--default-color);
-  border-left: 1px solid var(--border-color);
-}
-.queue-history-drawer .offcanvas-header { flex-shrink: 0; gap: 1rem; border-color: var(--border-color) !important; }
-.queue-history-drawer .offcanvas-title { color: var(--heading-color); }
-.queue-history-drawer .offcanvas-body { min-height: 0; overscroll-behavior-y: contain; }
-.queue-history-drawer .list-group-item { color: var(--default-color); background: transparent; border-color: var(--border-color); }
-.queue-history-name { min-width: 0; overflow-wrap: anywhere; }
-@media (max-width: 575.98px) {
-  .queue-history-drawer.offcanvas { --bs-offcanvas-width: 100vw; }
-}
-.queue-column-empty { padding: 1.5rem .5rem; text-align: center; }
-.queue-column-empty > .bi { display: none !important; }
-.queue-column > .queue-column-header:has(.queue-history-tabs) { padding: 0; }
-.queue-history-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; align-self: stretch; }
-.queue-history-tabs .nav-item { display: flex; min-width: 0; }
-.queue-history-tabs .nav-item + .nav-item { border-left: 1px solid var(--border-color); }
-.queue-history-tabs .nav-link { display: flex; align-items: center; justify-content: center; gap: .4rem; width: 100%; min-height: 58px; padding: .75rem .5rem; color: var(--muted-color); font-size: .8rem; font-weight: 600; background: transparent; border-radius: 0; border-bottom: 3px solid transparent; }
-.queue-history-tabs .nav-link.active { color: var(--fu-maroon-accent); background: var(--na-primary-soft); border-bottom-color: var(--fu-maroon-accent); }
-.queue-history-tabs .nav-link:hover:not(.active) { background: var(--surface-color); color: var(--heading-color); }
-.queue-history-tabs .nav-link:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -4px; }
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-history-tabs .nav-link {
-  color: #ffffff;
-}
-.queue-history-tabs .nav-link:not(.active) .queue-column-count { background: transparent; }
-@media (min-width: 1200px) and (max-width: 1450px) {
-  .queue-metric > .card-body { flex-direction: column; align-items: flex-start !important; gap: .6rem !important; }
+
+  #queue-board-container>.queue-columns>[class*="col-"] {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+  }
+
+  #queue-board-container .queue-column {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    margin-bottom: 0;
+  }
+
+  #queue-board-container .queue-column-header {
+    flex-shrink: 0;
+  }
+
+  #queue-board-container .queue-column-body {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
 }
 
-.queue-board-title { color: var(--heading-color); }
-.queue-date-input { width: 10rem; max-width: 100%; }
+/* ==========================================================================
+   Skipped / Done Column Header Tabs — Solid Maroon Active Tab
+   (Preserves equal widths, active/inactive bg+underline distinction, and
+    dark-mode rgb(255, 255, 255) color contract on both tabs)
+   ========================================================================== */
+.queue-column>.queue-column-header:has(.queue-history-tabs) {
+  padding: 0;
+}
+
+.queue-history-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  align-self: stretch;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queue-history-tabs .nav-item {
+  display: flex;
+  min-width: 0;
+}
+
+.queue-history-tabs .nav-item+.nav-item {
+  border-left: 1px solid var(--q-border);
+}
+
+.queue-history-tabs .nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 58px;
+  padding: 0.75rem 0.5rem;
+  color: var(--q-fg-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--q-card);
+  border-radius: 0;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  transition: none !important;
+}
+
+.queue-history-tabs .nav-link:hover:not(.active) {
+  background: var(--q-muted);
+  color: var(--q-fg);
+}
+
+.queue-history-tabs .nav-link.active,
+.queue-history-tabs .nav-link.active:hover,
+.queue-history-tabs .nav-link.active:focus-visible {
+  background: #800000 !important;
+  color: #ffffff !important;
+  border-bottom: 3px solid #5a0000 !important;
+}
+
+.queue-history-tabs .nav-link.active .queue-column-count {
+  background: #660000 !important;
+  border-color: #9e2a2a !important;
+  color: #ffffff !important;
+}
+
+.queue-history-tabs .nav-link:focus-visible {
+  outline: 2px solid var(--q-brand);
+  outline-offset: -3px;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-history-tabs .nav-link {
+  color: #ffffff;
+  background: var(--q-card);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-history-tabs .nav-link:hover:not(.active) {
+  background: var(--q-muted);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   Architectural Queue Ticket Cards
+   ========================================================================== */
 .queue-ticket-card {
-  background-color: var(--surface-color);
-  color: var(--default-color);
+  background-color: var(--q-card);
+  border: 1px solid var(--q-border) !important;
+  border-left: 3px solid var(--q-border) !important;
+  border-radius: 0.35rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  color: var(--q-fg-secondary);
+  padding: 0.82rem 0.85rem !important;
+  margin-bottom: 0.6rem !important;
 }
-.queue-timestamp-badge {
-  background-color: var(--background-color);
-  color: var(--default-color);
-  border-color: var(--border-color) !important;
-  font-weight: 500;
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-ticket-card {
+  box-shadow: none !important;
 }
-.queue-priority-urgent { color: #8a5300; }
-.queue-priority-emergency { color: #b42318; }
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-priority-urgent { color: #facc15; }
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-priority-emergency { color: #ff8080; }
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .queue-ticket-card .badge.bg-secondary-subtle {
-  background-color: var(--bs-secondary-bg) !important;
-  color: var(--default-color) !important;
+
+.queue-ticket-card:last-child {
+  margin-bottom: 0 !important;
 }
+
+.queue-ticket-card--emergency {
+  border-left-color: var(--q-crimson) !important;
+}
+
+.queue-ticket-card--urgent,
+.queue-ticket-card--called {
+  border-left-color: var(--q-amber) !important;
+}
+
+.queue-ticket-card--session {
+  border-left-color: var(--q-sky) !important;
+}
+
+.queue-ticket-card--skipped {
+  border-left-color: var(--q-slate) !important;
+}
+
+.q-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.48rem;
+}
+
+.q-ticket-code {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.16rem 0.48rem;
+  border: 1px solid var(--q-border);
+  border-radius: 0.25rem;
+  background: var(--q-subtle);
+  color: var(--q-fg);
+  font-family: var(--q-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.q-ticket-code--called {
+  border-color: var(--q-amber);
+  color: var(--q-amber-text);
+}
+
+.q-ticket-code--session {
+  border-color: var(--q-sky);
+  color: var(--q-sky);
+}
+
+.q-ticket-code--done {
+  border-color: var(--q-emerald);
+  color: var(--q-emerald);
+}
+
+.q-priority-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  font-size: 0.71rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.q-priority-dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.q-priority-dot--emergency {
+  color: var(--q-crimson);
+}
+
+.q-priority-dot--urgent {
+  color: var(--q-amber-text);
+}
+
+.q-priority-dot--urgent::before {
+  background: var(--q-amber);
+}
+
+.q-ticket-time {
+  font-family: var(--q-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: var(--q-muted-fg);
+  white-space: nowrap;
+}
+
+.q-ticket-patient {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--q-fg);
+  line-height: 1.3;
+  margin-bottom: 0.16rem;
+}
+
+.q-ticket-meta {
+  font-size: 0.75rem;
+  color: var(--q-muted-fg);
+  line-height: 1.35;
+  margin-bottom: 0.65rem;
+  overflow-wrap: anywhere;
+}
+
 .queue-card-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: .5rem;
+  gap: 0.42rem;
 }
-.queue-card-actions > form {
+
+.queue-card-actions>form {
   display: inline-flex;
   margin: 0;
 }
-.queue-change-person {
-  min-height: 36px;
-  padding: .25rem .65rem;
-  display: inline-flex;
-  align-items: center;
+
+.q-noshow-form {
+  margin-top: 0.42rem;
 }
 
+.queue-column-empty {
+  padding: 2rem 0.75rem;
+  text-align: center;
+  color: var(--q-muted-fg);
+  font-size: 0.8rem;
+}
+
+.queue-column-empty>.bi {
+  display: none !important;
+}
+
+/* Done List Items */
+.q-done-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.q-done-item {
+  padding: 0.65rem 0.75rem;
+  background: var(--q-card);
+  border: 1px solid var(--q-border);
+  border-left: 3px solid var(--q-emerald);
+  border-radius: 0.3rem;
+}
+
+.q-done-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.q-done-name {
+  font-size: 0.81rem;
+  font-weight: 500;
+  color: var(--q-fg-secondary);
+  margin-top: 0.25rem;
+}
+
+/* ==========================================================================
+   No-Show History Offcanvas Drawer (width: min(440px, 100vw))
+   ========================================================================== */
+.queue-history-drawer.offcanvas {
+  --bs-offcanvas-width: min(440px, 100vw);
+  background: var(--q-card);
+  color: var(--q-fg-secondary);
+  border-left: 1px solid var(--q-border);
+}
+
+.queue-history-drawer .offcanvas-header {
+  flex-shrink: 0;
+  gap: 0.75rem;
+  padding: 0.95rem 1.2rem;
+  background: var(--q-subtle);
+  border-bottom: 1px solid var(--q-border) !important;
+}
+
+.queue-history-drawer .offcanvas-title {
+  color: var(--q-fg);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.queue-history-drawer-meta {
+  padding: 0.85rem 1.2rem 0.75rem;
+  border-bottom: 1px solid var(--q-hairline);
+}
+
+.queue-history-drawer-meta p {
+  font-size: 0.79rem;
+  color: var(--q-muted-fg);
+  line-height: 1.45;
+}
+
+.queue-history-drawer .offcanvas-body {
+  min-height: 0;
+  padding: 0.75rem 1.2rem;
+  overscroll-behavior-y: contain;
+}
+
+.queue-history-drawer .list-group-item {
+  color: var(--q-fg-secondary);
+  background: transparent;
+  border-color: var(--q-hairline);
+}
+
+.queue-history-name {
+  min-width: 0;
+  color: var(--q-fg);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 575.98px) {
+  .queue-history-drawer.offcanvas {
+    --bs-offcanvas-width: 100vw;
+  }
+}
+
+/* ==========================================================================
+   Walk-In Patient Registration Modal (#walkinModal)
+   Canonical radius (var(--radius-lg, 0.25rem)), solid opaque surfaces,
+   floating syn-person-lookup-menu preserved, zero pastel washes.
+   ========================================================================== */
+#walkinModal .modal-content {
+  background: var(--q-card);
+  border: 1px solid var(--q-border);
+  border-radius: var(--radius-lg, 0.25rem);
+  color: var(--q-fg-secondary);
+}
+
+#walkinModal .modal-header {
+  padding: 0.95rem 1.35rem;
+  background: var(--q-subtle);
+  border-bottom: 1px solid var(--q-border) !important;
+}
+
+#walkinModal .modal-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--q-fg);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#walkinModal .modal-title i {
+  color: var(--q-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) #walkinModal .modal-title i {
+  color: #f87171;
+}
+
+#walkinModal .modal-body {
+  padding: 1.15rem 1.35rem;
+}
+
+#walkinModal .modal-footer {
+  padding: 1rem 1.35rem;
+  background: var(--q-subtle);
+  border-top: 1px solid var(--q-border);
+  gap: 0.5rem;
+}
+
+#walkinModal .form-label {
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--q-fg);
+  margin-bottom: 0.35rem;
+}
+
+#walkinModal .input-group-text {
+  background: var(--q-subtle);
+  border-color: var(--q-input-border);
+  color: var(--q-muted-fg);
+}
+
+#walkinModal input.form-control {
+  background: var(--q-card);
+  border-color: var(--q-input-border);
+  color: var(--q-fg);
+  font-size: 0.85rem;
+  min-height: 38px;
+  box-shadow: none;
+}
+
+#walkinModal input.form-control:focus {
+  border-color: var(--q-brand);
+  box-shadow: 0 0 0 3px var(--q-brand-ring);
+}
+
+#walkinModal .form-text {
+  font-size: 0.76rem;
+  color: var(--q-muted-fg);
+}
+
+.q-lookup-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Selected Patient Card (preserves .card selector contract for queue-walkin.test.cjs) */
+#walkinModal .card.q-selected-patient {
+  background: var(--q-subtle) !important;
+  border: 1px solid var(--q-border) !important;
+  border-left: 3px solid var(--q-brand) !important;
+  border-radius: 0.3rem;
+  padding: 0.85rem 0.95rem;
+  margin-bottom: 1rem;
+  box-shadow: none;
+}
+
+.q-selected-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.44rem;
+  border: 1px solid var(--q-border);
+  border-radius: 0.2rem;
+  background: var(--q-card);
+  color: var(--q-fg-secondary);
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.q-selected-name {
+  margin: 0.35rem 0 0.12rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--q-fg);
+}
+
+.q-selected-mis {
+  font-size: 0.77rem;
+  color: var(--q-muted-fg);
+}
+
+/* Triage Priority Options */
+.q-priority-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.q-priority-option {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  margin: 0;
+  background: var(--q-subtle);
+  border: 1px solid var(--q-border);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+.q-priority-option:has(input:checked) {
+  background: var(--q-card);
+  border-color: var(--q-brand);
+}
+
+.q-priority-option .form-check-input {
+  margin: 0;
+  float: none;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.q-priority-option .form-check-label {
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--q-fg);
+  cursor: pointer;
+}
+
+.queue-priority-urgent {
+  color: var(--q-amber-text) !important;
+}
+
+.queue-priority-emergency {
+  color: var(--q-crimson) !important;
+}
+
+#walkinModal .alert.q-walkin-feedback {
+  background: var(--q-subtle) !important;
+  border: 1px solid var(--q-border) !important;
+  border-left: 3px solid var(--q-crimson) !important;
+  border-radius: 0.25rem;
+  color: var(--q-fg) !important;
+  font-size: 0.81rem;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.9rem;
+}
+
+/* ==========================================================================
+   Error Fallback View (queue/error.php)
+   ========================================================================== */
+.q-error-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.q-error-wrap .alert {
+  width: 100%;
+  margin: 0;
+  background: var(--q-subtle) !important;
+  border: 1px solid var(--q-border) !important;
+  border-left: 3px solid var(--q-amber) !important;
+  border-radius: 0.25rem;
+  color: var(--q-fg) !important;
+  font-size: 0.84rem;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints (Mobile 390px — Zero Horizontal Overflow)
+   ========================================================================== */
 @media (max-width: 767.98px) {
   .queue-board-toolbar {
     align-items: stretch !important;
+    padding: 0.82rem 0.88rem;
   }
+
   .queue-board-controls {
     width: 100%;
     justify-content: space-between;
   }
+
   .queue-date-field {
     flex: 1 1 11rem;
     min-width: 0;
   }
+
+  .queue-date-field>.dp-wrap,
+  .queue-date-field>.dp-wrap>.queue-date-input,
   .queue-date-input {
+    flex: 1 1 auto;
     width: 100%;
     min-height: 40px;
   }
 
-  .queue-board-controls .btn {
-    min-height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .queue-board-controls .btn.queue-history-trigger {
-    min-height: 40px;
-    justify-content: center;
-  }
+  .queue-board-controls .btn,
+  .queue-board-controls .btn.queue-history-trigger,
+  .q-page-actions .btn,
   .queue-ticket-card :is(.queue-card-actions .btn, form .btn, .queue-card-action-btn) {
     min-height: 40px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  }
+
+  .q-priority-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .q-page-actions {
+    width: 100%;
+  }
+
+  .q-page-actions .btn {
+    flex: 1 1 auto;
   }
 }
 
 @media (max-width: 419.98px) {
+
   .queue-history-trigger,
   .queue-date-field {
     flex: 1 1 100%;

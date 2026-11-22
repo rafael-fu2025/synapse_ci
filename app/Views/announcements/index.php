@@ -1,10 +1,19 @@
 <?php require __DIR__ . '/_dates.php'; ?>
+<?php $useRedesignedAnnouncements = in_array($unit, ['guidance', 'clinic'], true); ?>
 <?= $this->extend('layouts/app') ?>
+<?php if ($useRedesignedAnnouncements): ?>
+<?= $this->section('styles') ?>
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/guidance-announcements.css'), 'attr') ?>">
+<?= $this->endSection() ?>
+<?php endif; ?>
 <?= $this->section('page_actions') ?>
 <a class="btn btn-primary btn-sm" href="<?= esc($baseUrl . '/create') ?>" data-app-modal-open><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>New draft</a>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <?php $refreshOwner = 'announcements.staff.' . $unit; ?>
+<?php if ($useRedesignedAnnouncements): ?>
+<?php require __DIR__ . '/_guidance_index.php'; ?>
+<?php else: ?>
 <section data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 <p class="text-muted"><?= esc(ucfirst($unit)) ?> announcements only. Published content is immutable; archive and create a new announcement for corrections.</p>
 <div data-refresh-region="announcements.list">
@@ -45,4 +54,5 @@
 <?php endif; ?>
 </div>
 </section>
+<?php endif; ?>
 <?= $this->endSection() ?>

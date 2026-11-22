@@ -5,31 +5,31 @@
 <?= $this->endSection() ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap align-items-center gap-2">
+<div class="q-page-actions">
   <button type="button"
           id="queue-call-next"
-          class="btn btn-primary"
+          class="btn btn-primary btn-sm"
           <?= empty($summary['waiting']) ? 'disabled' : '' ?>
           hx-post="<?= site_url($unit . '/queue/call-next') ?>"
           hx-include="#queueDateFilter_iso"
           hx-target="#queue-board-container"
           hx-swap="innerHTML">
-    <i class="bi bi-megaphone-fill me-1"></i> Call Next Patient
+    <i class="bi bi-megaphone-fill" aria-hidden="true"></i> Call Next Patient
   </button>
 
-  <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#walkinModal">
-    <i class="bi bi-person-plus-fill me-1"></i> New Walk-in
+  <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#walkinModal">
+    <i class="bi bi-person-plus-fill" aria-hidden="true"></i> New Walk-in
   </button>
 </div>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3 queue-board-toolbar">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 queue-board-toolbar">
   <div>
-    <h2 class="h5 fw-bold mb-0 queue-board-title">
+    <h2 class="queue-board-title">
       <?= ($unit === 'clinic') ? 'University Clinic Queue Board' : 'Guidance & Counseling Queue Board' ?>
     </h2>
-    <span class="text-muted small">
+    <span class="queue-board-subtitle">
       Daily queue · Refreshes automatically
     </span>
   </div>
@@ -37,27 +37,27 @@
   <div class="d-flex flex-wrap align-items-center gap-2 queue-board-controls">
     <?= view('queue/no_show_history', ['noShows' => $summary['no_show'] ?? [], 'queueDate' => $queueDate]) ?>
     <div class="d-flex align-items-center gap-2 queue-date-field">
-    <label for="queueDateFilter" class="form-label small text-muted mb-0">Date:</label>
-    <!-- Custom date picker: visible trigger + ISO hidden value.
-         The HTMX trigger lives on the hidden input so the request always
-         carries the ISO date under its original param name. -->
-    <input type="text"
-           id="queueDateFilter"
-           class="form-control form-control-sm queue-date-input"
-           data-datepicker
-           data-target="#queueDateFilter_iso">
-    <input type="hidden"
-           name="date"
-           id="queueDateFilter_iso"
-           value="<?= esc($queueDate) ?>"
-           hx-get="<?= site_url($unit . '/queue/board') ?>"
-           hx-target="#queue-board-container"
-           hx-trigger="change">
+      <label for="queueDateFilter" class="queue-date-label">Date</label>
+      <!-- Custom date picker: visible trigger + ISO hidden value.
+           The HTMX trigger lives on the hidden input so the request always
+           carries the ISO date under its original param name. -->
+      <input type="text"
+             id="queueDateFilter"
+             class="form-control form-control-sm queue-date-input"
+             data-datepicker
+             data-target="#queueDateFilter_iso">
+      <input type="hidden"
+             name="date"
+             id="queueDateFilter_iso"
+             value="<?= esc($queueDate) ?>"
+             hx-get="<?= site_url($unit . '/queue/board') ?>"
+             hx-target="#queue-board-container"
+             hx-trigger="change">
     </div>
   </div>
 </div>
 
-<div id="queue-action-error" class="alert alert-warning" role="alert" hidden></div>
+<div id="queue-action-error" class="alert" data-banner-dismiss="off" role="alert" hidden></div>
 
 <!-- Queue-only invalidation refresh; 15s fallback / 60s ready reconciliation. -->
 <div id="queue-board-container"
@@ -74,10 +74,10 @@
 <!-- Walk-In Patient Registration Modal -->
 <div class="modal fade" id="walkinModal" tabindex="-1" aria-labelledby="walkinModalLabel" aria-hidden="true" x-data="walkinSearch()">
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-    <div class="modal-content border-0 shadow">
-      <div class="modal-header border-bottom">
-        <h5 class="modal-title fw-bold" id="walkinModalLabel">
-          <i class="bi bi-ticket-perforated text-primary me-2"></i> Register Walk-in Patient
+    <div class="modal-content shadow">
+      <div class="modal-header">
+        <h5 class="modal-title" id="walkinModalLabel">
+          <i class="bi bi-ticket-perforated" aria-hidden="true"></i> Register Walk-in Patient
         </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" :disabled="submitting"></button>
       </div>
@@ -86,84 +86,90 @@
         <?= csrf_field() ?>
         <input type="hidden" name="person_id" :value="selectedPerson?.id">
 
-        <div class="modal-body p-3 p-sm-4" :inert="submitting || committed">
-          <div class="alert alert-warning" role="alert" x-show="feedback" x-text="feedback" x-cloak></div>
-          <!-- Search box -->
+        <div class="modal-body" :inert="submitting || committed">
+          <div class="alert q-walkin-feedback" data-banner-dismiss="off" role="alert" x-show="feedback" x-text="feedback" x-cloak></div>
+
+          <!-- Search box + Floating Results Popover -->
           <div class="mb-3">
-            <label class="form-label fw-semibold">Search Student or Employee</label>
-            <div class="input-group">
-              <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
-              <input type="text"
-                     class="form-control"
-                     placeholder="Type Student ID, Employee ID, or Name..."
-                     x-model="searchTerm"
-                     maxlength="150"
-                     @input="cancelSearch()"
-                     @input.debounce.300ms="searchPatient()">
-            </div>
-            <div class="form-text small text-muted">Searches the local student and employee directory. No MIS connection is required.</div>
-          </div>
-
-          <!-- Loading state -->
-          <div x-show="loading" class="text-center py-3 text-muted small" role="status" x-cloak>
-            <div class="spinner-border spinner-border-sm text-primary me-2" aria-hidden="true"></div>
-            Searching local directory...
-          </div>
-          <div x-show="searchError" x-text="searchError" class="alert alert-warning small" role="alert" x-cloak></div>
-          <div x-show="searchComplete && !loading && !searchError && !results.length && !selectedPerson"
-               class="text-muted small py-3" role="status" x-cloak>No matching students or employees found.</div>
-
-          <!-- Results list -->
-          <div x-show="results.length > 0 && !selectedPerson" class="list-group mb-3 shadow-sm border" style="max-height: 200px; overflow-y: auto;">
-            <template x-for="p in results" :key="p.id">
-              <button type="button"
-                      class="list-group-item list-group-item-action p-2 d-flex justify-content-between align-items-center"
-                      @click="selectPerson(p)">
-                <div>
-                  <div class="fw-semibold" x-text="p.last_name + ', ' + p.first_name"></div>
-                  <small class="text-muted" x-text="'ID: ' + p.mis_id + ' (' + p.kind.toUpperCase() + ')'"></small>
-                </div>
-                <span class="badge bg-primary-subtle text-primary">Select</span>
-              </button>
-            </template>
-          </div>
-
-          <!-- Selected Patient Card -->
-          <div x-show="selectedPerson" style="display: none;" class="card border-primary-subtle bg-primary-subtle p-3 mb-3">
-            <div class="d-flex justify-content-between align-items-start gap-2">
-              <div>
-                <span class="badge bg-primary text-white text-uppercase" x-text="selectedPerson?.kind || ''"></span>
-                <h6 class="fw-bold text-dark mt-1 mb-0" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name) : ''"></h6>
-                <div class="text-muted small" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></div>
+            <label for="walkinSearchInput" class="form-label">Search Student or Employee</label>
+            <div class="syn-person-lookup" data-person-lookup>
+              <div class="input-group" data-person-lookup-anchor>
+                <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
+                <input type="text"
+                       id="walkinSearchInput"
+                       class="form-control"
+                       placeholder="Type Student ID, Employee ID, or Name..."
+                       x-model="searchTerm"
+                       autocomplete="off"
+                       maxlength="150"
+                       @input="cancelSearch()"
+                       @input.debounce.300ms="searchPatient()">
               </div>
-              <button type="button" class="btn btn-sm btn-link text-danger queue-change-person" @click="changePerson()">Change</button>
+              <div class="syn-person-lookup-menu"
+                   data-person-lookup-menu
+                   x-show="!selectedPerson && (loading || searchError || (searchComplete && !loading && !results.length) || results.length > 0)"
+                   style="display: none;">
+                <div x-show="loading" class="syn-person-lookup-status q-lookup-loading" role="status" x-cloak>
+                  <div class="spinner-border spinner-border-sm text-primary" aria-hidden="true"></div>
+                  <span>Searching local directory...</span>
+                </div>
+                <div x-show="searchError" x-text="searchError" class="syn-person-lookup-status text-danger" role="alert" x-cloak></div>
+                <div x-show="searchComplete && !loading && !searchError && !results.length && !selectedPerson"
+                     class="syn-person-lookup-status" role="status" x-cloak>No matching students or employees found.</div>
+                <div x-show="results.length > 0 && !selectedPerson" class="list-group syn-person-lookup-list">
+                  <template x-for="p in results" :key="p.id">
+                    <button type="button"
+                            class="list-group-item list-group-item-action p-2 d-flex justify-content-between align-items-center"
+                            @click="selectPerson(p)">
+                      <div>
+                        <div class="fw-semibold" x-text="p.last_name + ', ' + p.first_name"></div>
+                        <small class="text-muted q-mono" x-text="'ID: ' + p.mis_id + ' (' + p.kind.toUpperCase() + ')'"></small>
+                      </div>
+                      <span class="syn-person-lookup-select">Select</span>
+                    </button>
+                  </template>
+                </div>
+              </div>
+            </div>
+            <div class="form-text">Searches the local student and employee directory. No MIS connection is required.</div>
+          </div>
+
+          <!-- Selected Patient Card (.card preserved for queue-walkin.test.cjs) -->
+          <div x-show="selectedPerson" style="display: none;" class="card q-selected-patient">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <div style="min-width: 0;">
+                <span class="q-selected-kind" x-text="selectedPerson?.kind || ''"></span>
+                <h6 class="q-selected-name" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name) : ''"></h6>
+                <div class="q-selected-mis q-mono" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></div>
+              </div>
+              <button type="button" class="btn btn-sm queue-change-person flex-shrink-0" @click="changePerson()">Change</button>
             </div>
           </div>
 
           <!-- Priority Selection -->
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Triage Priority</label>
-            <div class="d-flex flex-wrap gap-3">
-              <div class="form-check">
+          <div class="mb-1">
+            <label class="form-label">Triage Priority</label>
+            <div class="q-priority-group">
+              <div class="form-check q-priority-option">
                 <input class="form-check-input" type="radio" name="priority" id="priRoutine" value="routine" checked>
                 <label class="form-check-label" for="priRoutine">Routine</label>
               </div>
-              <div class="form-check">
+              <div class="form-check q-priority-option">
                 <input class="form-check-input" type="radio" name="priority" id="priUrgent" value="urgent">
-                <label class="form-check-label queue-priority-urgent fw-semibold" for="priUrgent">Urgent</label>
+                <label class="form-check-label queue-priority-urgent" for="priUrgent">Urgent</label>
               </div>
-              <div class="form-check">
+              <div class="form-check q-priority-option">
                 <input class="form-check-input" type="radio" name="priority" id="priEmergency" value="emergency">
-                <label class="form-check-label queue-priority-emergency fw-semibold" for="priEmergency">Emergency</label>
+                <label class="form-check-label queue-priority-emergency" for="priEmergency">Emergency</label>
               </div>
             </div>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" :disabled="submitting">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="!selectedPerson || submitting || committed">
-            <i class="bi bi-plus-circle me-1"></i> Issue Queue Ticket
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" :disabled="submitting">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm" :disabled="!selectedPerson || submitting || committed">
+            <i class="bi bi-plus-circle" aria-hidden="true"></i> Issue Queue Ticket
           </button>
         </div>
       </form>

@@ -408,7 +408,7 @@
     if (adapter.canRefresh && !await adapter.canRefresh(request)) return status('blocked', request, { reason: 'owner-busy' });
     try {
       const result = await adapter.refresh(request);
-      if (result && typeof result === 'object' && typeof result.status === 'string') return result;
+      if (result && typeof result === 'object' && typeof result.status === 'string') return status(result.status, request, result);
       return status(result === true ? 'refreshed' : 'failed', request, { reason: result === true ? undefined : 'adapter' });
     } catch (error) {
       return status('failed', request, { reason: error.message || 'adapter' });

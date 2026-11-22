@@ -1,0 +1,1206 @@
+/* ==========================================================================
+   SYNAPSE — Clinic Periodic & CHED Report (.cr-workspace)
+   Solid opaque architectural reporting system: zero translucent fills on
+   buttons/badges/callouts, zero pill counters, bespoke interactive SVG
+   Monthly Encounter Volume chart, and clean print layout.
+   Imported after core/synapse-theme.css.
+   ========================================================================== */
+
+.cr-workspace,
+.cr-page-actions {
+  --cr-card: #ffffff;
+  --cr-subtle: #f8f9fb;
+  --cr-muted: #f1f2f5;
+  --cr-muted-hover: #f4f4f6;
+  --cr-border: #e2e4e9;
+  --cr-hairline: #eef0f4;
+  --cr-input-border: #cfd5df;
+  --cr-fg: #111827;
+  --cr-fg-secondary: #374151;
+  --cr-muted-fg: #6b7280;
+  --cr-brand: #800000;
+  --cr-brand-hover: #6b0000;
+  --cr-brand-ring: rgba(128, 0, 0, 0.18);
+  --cr-ink: #27272a;
+  --cr-neutral-bar: #71717a;
+  --cr-emerald: #146c43;
+  --cr-amber: #d97706;
+  --cr-amber-text: #b45309;
+  --cr-rose: #b91c1c;
+  --cr-grid: #eceef2;
+  --cr-axis: #d4d4d8;
+  --cr-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  color: var(--cr-fg-secondary);
+  min-width: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.cr-workspace, .cr-page-actions) {
+  --cr-card: #161618;
+  --cr-subtle: #1c1c1f;
+  --cr-muted: #242428;
+  --cr-muted-hover: #1f1f23;
+  --cr-border: #2e2e33;
+  --cr-hairline: #252529;
+  --cr-input-border: #3a3a40;
+  --cr-fg: #f4f4f5;
+  --cr-fg-secondary: #d4d4d8;
+  --cr-muted-fg: #a1a1aa;
+  --cr-brand: #800000;
+  --cr-brand-hover: #991b1b;
+  --cr-brand-ring: rgba(248, 113, 113, 0.25);
+  --cr-ink: #e4e4e7;
+  --cr-neutral-bar: #71717a;
+  --cr-emerald: #10b981;
+  --cr-amber: #f59e0b;
+  --cr-amber-text: #fbbf24;
+  --cr-rose: #ef4444;
+  --cr-grid: #252529;
+  --cr-axis: #3f3f46;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--cr-fg-secondary);
+}
+
+.cr-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.cr-workspace :is(h2, h3, strong) {
+  color: var(--cr-fg);
+}
+
+.cr-mono {
+  font-family: var(--cr-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Solid Opaque Button System (Page Actions + Horizon Controls)
+   ========================================================================== */
+.cr-pdf-form {
+  display: inline-flex;
+  margin: 0;
+}
+
+html body :is(.cr-page-actions, section.cr-workspace[data-cr-workspace]) .btn:not(.btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-height: 36px;
+  padding: 0 0.9rem;
+  border-radius: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow: none;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+html body :is(.cr-page-actions, section.cr-workspace[data-cr-workspace]) .btn.btn-primary {
+  background: var(--cr-brand) !important;
+  border: 1px solid var(--cr-brand) !important;
+  color: #ffffff !important;
+}
+
+html body :is(.cr-page-actions, section.cr-workspace[data-cr-workspace]) .btn.btn-primary:hover {
+  background: var(--cr-brand-hover) !important;
+  border-color: var(--cr-brand-hover) !important;
+  color: #ffffff !important;
+}
+
+html body :is(.cr-page-actions, section.cr-workspace[data-cr-workspace]) .btn.btn-outline-secondary {
+  background: var(--cr-card) !important;
+  border: 1px solid var(--cr-input-border) !important;
+  color: var(--cr-fg) !important;
+}
+
+html body :is(.cr-page-actions, section.cr-workspace[data-cr-workspace]) .btn.btn-outline-secondary:hover {
+  background: var(--cr-muted) !important;
+  border-color: var(--cr-input-border) !important;
+  color: var(--cr-fg) !important;
+}
+
+html body :is(.cr-page-actions, section.cr-workspace[data-cr-workspace])[class] .btn.btn-outline-secondary[class] i.bi:not(.badge) {
+  color: var(--cr-muted-fg) !important;
+}
+
+html body section.cr-workspace[data-cr-workspace] .btn.btn-outline-danger {
+  background: var(--cr-card) !important;
+  border: 1px solid var(--cr-rose) !important;
+  color: var(--cr-rose) !important;
+}
+
+/* ==========================================================================
+   1. Instant-Switch Reporting Horizon Bar
+   ========================================================================== */
+.cr-horizon-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cr-horizon-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.cr-horizon-tabs-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.cr-horizon-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--cr-muted-fg);
+  white-space: nowrap;
+}
+
+.cr-preset-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.22rem;
+  border-radius: 7px;
+  background: var(--cr-muted);
+  border: 1px solid var(--cr-border);
+}
+
+.cr-preset-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0.3rem 0.78rem;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--cr-muted-fg);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.cr-preset-tab:hover {
+  color: var(--cr-fg);
+}
+
+.cr-preset-tab.is-active,
+.cr-preset-tab.is-active:hover {
+  background: var(--cr-brand);
+  border-color: var(--cr-brand);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.cr-live-status {
+  font-size: 0.76rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-live-status:empty {
+  display: none;
+}
+
+.cr-custom-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.9rem 1.05rem;
+  border-radius: 8px;
+  background: var(--cr-card);
+  border: 1px solid var(--cr-border);
+}
+
+.cr-custom-form[hidden] {
+  display: none !important;
+}
+
+.cr-date-field {
+  flex: 1 1 11rem;
+  max-width: 15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.cr-date-field .form-label {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--cr-muted-fg);
+}
+
+.cr-date-field .form-control {
+  min-height: 36px;
+  border-radius: 0.25rem;
+  border: 1px solid var(--cr-input-border);
+  background: var(--cr-card);
+  color: var(--cr-fg);
+  font-size: 0.825rem;
+}
+
+.cr-date-field .form-control:focus {
+  border-color: var(--cr-brand);
+  box-shadow: 0 0 0 3px var(--cr-brand-ring);
+}
+
+.cr-error-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: 6px;
+  background: var(--cr-card);
+  border: 1px solid var(--cr-border);
+  border-left: 3px solid var(--cr-rose);
+  color: var(--cr-rose);
+  font-size: 0.81rem;
+}
+
+/* Loading state during in-place horizon switch */
+[data-cr-body].is-loading {
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.cr-body-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Coverage Strip */
+.cr-coverage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  padding: 0.62rem 1rem;
+  border-radius: 8px;
+  background: var(--cr-card);
+  border: 1px solid var(--cr-border);
+  font-size: 0.8rem;
+  color: var(--cr-fg-secondary);
+}
+
+.cr-coverage-item {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.cr-coverage-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cr-muted-fg);
+}
+
+.cr-coverage-tz,
+.cr-coverage-sep {
+  color: var(--cr-muted-fg);
+}
+
+/* ==========================================================================
+   2. Communicable Cluster Advisories (Solid Card + Left Accent Bar)
+   ========================================================================== */
+.cr-advisory {
+  background: var(--cr-card);
+  border: 1px solid var(--cr-border);
+  border-left: 3px solid var(--cr-rose);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cr-advisory-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.cr-advisory-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--cr-fg);
+}
+
+.cr-advisory-title i {
+  color: var(--cr-rose);
+}
+
+.cr-advisory-window {
+  font-size: 0.74rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-advisory-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.55rem;
+}
+
+.cr-advisory-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  background: var(--cr-subtle);
+  border: 1px solid var(--cr-border);
+}
+
+.cr-advisory-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.cr-advisory-copy strong {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.cr-advisory-copy span {
+  font-size: 0.74rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-advisory-count {
+  font-family: var(--cr-mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--cr-rose);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   3. Four Architectural KPI Cards (Solid Opaque Surfaces)
+   ========================================================================== */
+.cr-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.cr-kpi-card {
+  background: var(--cr-card);
+  border: 1px solid var(--cr-border);
+  border-radius: 10px;
+  padding: 1.05rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.cr-kpi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cr-kpi-label {
+  font-size: 0.77rem;
+  font-weight: 500;
+  color: var(--cr-muted-fg);
+}
+
+.cr-kpi-icon {
+  font-size: 0.92rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-kpi-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.cr-kpi-value {
+  font-family: var(--cr-mono);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums;
+  color: var(--cr-fg);
+}
+
+.cr-kpi-rate {
+  font-family: var(--cr-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--cr-emerald);
+}
+
+.cr-kpi-unit {
+  font-size: 0.8rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-split-bar {
+  display: flex;
+  height: 5px;
+  gap: 2px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--cr-muted);
+  margin: 0.1rem 0;
+}
+
+.cr-split-seg--brand {
+  background: var(--cr-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cr-split-seg--brand {
+  background: #dc2626;
+}
+
+.cr-split-seg--neutral {
+  background: var(--cr-neutral-bar);
+}
+
+.cr-kpi-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: auto;
+  padding-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-kpi-meta strong {
+  font-family: var(--cr-mono);
+  font-weight: 600;
+  color: var(--cr-fg-secondary);
+}
+
+/* ==========================================================================
+   4. Report Panels & Custom Interactive SVG Monthly Telemetry
+   ========================================================================== */
+.cr-panel {
+  background: var(--cr-card);
+  border: 1px solid var(--cr-border);
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.cr-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--cr-hairline);
+}
+
+.cr-panel-title {
+  margin: 0;
+  font-size: 0.94rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--cr-fg);
+}
+
+.cr-panel-sub {
+  margin-top: 0.16rem;
+  font-size: 0.77rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-panel-count {
+  font-family: var(--cr-mono);
+  font-size: 0.74rem;
+  color: var(--cr-muted-fg);
+  white-space: nowrap;
+}
+
+.cr-panel-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem 1.25rem;
+}
+
+.cr-metric-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.08rem;
+}
+
+.cr-metric-k {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cr-muted-fg);
+}
+
+.cr-metric-v {
+  font-family: var(--cr-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--cr-fg);
+}
+
+.cr-panel-body {
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+/* Custom SVG Chart */
+.cr-chart-stage {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.cr-chart-svg-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.cr-viz-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.cr-viz-grid {
+  stroke: var(--cr-grid);
+  stroke-width: 1;
+}
+
+.cr-viz-axis {
+  stroke: var(--cr-axis);
+  stroke-width: 1;
+}
+
+.cr-viz-tick {
+  fill: var(--cr-muted-fg);
+  font-family: var(--cr-mono);
+  font-size: 10.5px;
+}
+
+.cr-viz-xlabel {
+  fill: var(--cr-muted-fg);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.cr-viz-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.cr-viz-bar-group {
+  outline: none;
+  transition: opacity 0.14s ease;
+}
+
+.cr-viz-svg.has-focus .cr-viz-bar-group:not(.is-focused) {
+  opacity: 0.34;
+}
+
+.cr-viz-bar {
+  fill: var(--cr-brand);
+}
+
+.cr-viz-bar--peak {
+  fill: #640000;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cr-viz-bar {
+  fill: #b91c1c;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cr-viz-bar--peak {
+  fill: #dc2626;
+}
+
+.cr-viz-val {
+  fill: var(--cr-muted-fg);
+  font-family: var(--cr-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.cr-viz-val--peak {
+  fill: var(--cr-fg);
+  font-weight: 700;
+}
+
+.cr-viz-avg-line {
+  stroke: var(--cr-muted-fg);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.cr-viz-avg-bg {
+  fill: var(--cr-card);
+  stroke: var(--cr-border);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.cr-viz-avg-text {
+  fill: var(--cr-fg-secondary);
+  font-family: var(--cr-mono);
+  font-size: 10px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Solid Opaque Floating Tooltip */
+.cr-chart-tooltip {
+  position: absolute;
+  z-index: 10;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  min-width: 170px;
+  padding: 0.55rem 0.72rem;
+  border-radius: 6px;
+  background: var(--cr-card);
+  border: 1px solid var(--cr-border);
+  box-shadow: 0 8px 24px -6px rgba(9, 9, 11, 0.16);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cr-chart-tooltip {
+  background: #1f1f23;
+  border-color: #3a3a40;
+  box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.55);
+}
+
+.cr-tt-head {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cr-muted-fg);
+}
+
+.cr-tt-val {
+  font-family: var(--cr-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--cr-fg);
+  margin-top: 0.1rem;
+}
+
+.cr-tt-meta {
+  font-size: 0.71rem;
+  color: var(--cr-muted-fg);
+  margin-top: 0.15rem;
+}
+
+/* Compact Neutral Month Ledger Grid */
+.cr-month-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  border: 1px solid var(--cr-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--cr-border);
+  gap: 1px;
+}
+
+.cr-month-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: var(--cr-card);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.cr-month-label {
+  width: 100%;
+  padding: 0.48rem 0.55rem;
+  background: var(--cr-subtle);
+  border-bottom: 1px solid var(--cr-border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cr-muted-fg);
+  white-space: nowrap;
+}
+
+.cr-month-val {
+  display: block;
+  padding-top: 0.55rem;
+  font-family: var(--cr-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--cr-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.cr-month-share {
+  display: block;
+  padding-bottom: 0.55rem;
+  font-family: var(--cr-mono);
+  font-size: 0.7rem;
+  color: var(--cr-muted-fg);
+  margin-top: 0.08rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.cr-month-cell.is-focused,
+.cr-month-cell.is-focused .cr-month-label {
+  background: var(--cr-muted);
+}
+
+/* ==========================================================================
+   5. 2x2 Analytical Breakdown Tables & Clearances
+   ========================================================================== */
+.cr-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.cr-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.cr-data-table {
+  width: 100%;
+  font-size: 0.815rem;
+  color: var(--cr-fg-secondary);
+}
+
+html body section.cr-workspace[data-cr-workspace] .table.cr-data-table > thead > tr > th {
+  background: var(--cr-subtle) !important;
+  background-color: var(--cr-subtle) !important;
+  color: var(--cr-muted-fg) !important;
+  font-size: 0.73rem;
+  font-weight: 600;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  padding: 0.58rem 0.85rem;
+  border-bottom: 1px solid var(--cr-border) !important;
+  white-space: nowrap;
+}
+
+html body section.cr-workspace[data-cr-workspace] .table.cr-data-table > thead > tr > th:first-child,
+.cr-data-table > tbody > tr > td:first-child {
+  padding-left: 1.25rem;
+}
+
+html body section.cr-workspace[data-cr-workspace] .table.cr-data-table > thead > tr > th:last-child,
+.cr-data-table > tbody > tr > td:last-child {
+  padding-right: 1.25rem;
+}
+
+.cr-data-table > tbody > tr > td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--cr-hairline);
+  background: transparent;
+}
+
+.cr-data-table > tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+
+.cr-data-table > tbody > tr:hover > td {
+  background: var(--cr-muted-hover);
+}
+
+.cr-label-cell {
+  color: var(--cr-fg);
+  font-weight: 500;
+}
+
+.cr-col-bar {
+  width: 34%;
+  min-width: 7.5rem;
+}
+
+.cr-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.cr-bar-track {
+  display: block;
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--cr-muted);
+  overflow: hidden;
+}
+
+.cr-bar-track--thin {
+  height: 4px;
+  margin-top: 0.28rem;
+}
+
+.cr-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
+.cr-bar-fill--brand {
+  background: var(--cr-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cr-bar-fill--brand {
+  background: #dc2626;
+}
+
+.cr-bar-fill--ink {
+  background: var(--cr-ink);
+}
+
+.cr-bar-fill--rose {
+  background: var(--cr-rose);
+}
+
+.cr-bar-pct {
+  font-family: var(--cr-mono);
+  font-size: 0.73rem;
+  color: var(--cr-muted-fg);
+  min-width: 2.8rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cr-num-cell {
+  font-family: var(--cr-mono);
+  font-weight: 700;
+  color: var(--cr-fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cr-mobile-pct {
+  display: none;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--cr-muted-fg);
+  margin-top: 0.1rem;
+}
+
+.cr-num-muted {
+  font-family: var(--cr-mono);
+  color: var(--cr-muted-fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cr-unit-text {
+  font-family: var(--default-font, sans-serif);
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-med-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.cr-rank {
+  font-family: var(--cr-mono);
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: var(--cr-muted-fg);
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+.cr-med-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cr-med-name {
+  display: block;
+  color: var(--cr-fg);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+/* Communicable & Clearances Panel */
+.cr-communicable-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cr-subblock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cr-subblock--clearances {
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--cr-hairline);
+}
+
+.cr-subblock-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.cr-subblock-title {
+  margin: 0;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cr-muted-fg);
+}
+
+.cr-iso-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.cr-iso-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cr-iso-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--cr-fg);
+}
+
+/* Solid 3-Segment Clearance Coverage Bar */
+.cr-clearance-bar {
+  display: flex;
+  height: 9px;
+  gap: 2px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--cr-muted);
+}
+
+.cr-cl-seg--cleared { background: var(--cr-emerald); }
+.cr-cl-seg--pending { background: var(--cr-amber); }
+.cr-cl-seg--hold { background: var(--cr-rose); }
+
+.cr-clearance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.cr-clearance-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 6px;
+  background: var(--cr-subtle);
+  border: 1px solid var(--cr-border);
+}
+
+.cr-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--cr-fg-secondary);
+}
+
+.cr-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.cr-status-line[data-tone="cleared"] { color: var(--cr-emerald); }
+.cr-status-line[data-tone="pending"] { color: var(--cr-amber-text); }
+.cr-status-line[data-tone="hold"] { color: var(--cr-rose); }
+
+.cr-clearance-num {
+  font-family: var(--cr-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--cr-fg);
+}
+
+.cr-clearance-pct {
+  font-family: var(--cr-mono);
+  font-size: 0.71rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 2rem 1rem;
+  font-size: 0.82rem;
+  color: var(--cr-muted-fg);
+}
+
+.cr-empty-td {
+  text-align: center;
+  padding: 1.5rem 1rem !important;
+  color: var(--cr-muted-fg);
+  font-size: 0.81rem;
+}
+
+.cr-empty-inline {
+  font-size: 0.81rem;
+  color: var(--cr-muted-fg);
+}
+
+/* ==========================================================================
+   6. Responsive Breakpoints & Print Layout
+   ========================================================================== */
+@media (max-width: 1199.98px) {
+  .cr-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 991.98px) {
+  .cr-breakdown-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 639.98px) {
+  .cr-page-actions {
+    width: 100%;
+  }
+
+  .cr-pdf-form {
+    flex: 1 1 auto;
+  }
+
+  .cr-pdf-form .btn,
+  .cr-page-actions > .btn {
+    flex: 1 1 auto;
+    white-space: nowrap;
+  }
+
+  .cr-preset-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .cr-preset-tab {
+    justify-content: center;
+    padding-inline: 0.45rem;
+  }
+
+  .cr-preset-tab:nth-child(-n+3) {
+    grid-column: span 2;
+  }
+
+  .cr-preset-tab:nth-child(n+4) {
+    grid-column: span 3;
+  }
+
+  .cr-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cr-panel-head,
+  .cr-panel-body {
+    padding-inline: 1rem;
+  }
+
+  .cr-panel-metrics {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cr-metric-inline {
+    align-items: flex-start;
+  }
+
+  .cr-month-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .cr-col-bar {
+    display: none;
+  }
+
+  .cr-mobile-pct {
+    display: block;
+  }
+
+  .cr-clearance-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cr-date-field {
+    max-width: none;
+    flex-basis: 100%;
+  }
+
+  .cr-date-submit,
+  .cr-date-submit .btn {
+    width: 100%;
+  }
+}
+
+@media print {
+  .cr-panel,
+  .cr-kpi-card,
+  .cr-advisory,
+  .cr-coverage-bar {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+}

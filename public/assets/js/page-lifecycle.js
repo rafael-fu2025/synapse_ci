@@ -67,6 +67,7 @@
     window.BalaySelect?.init(root);
     window.BalayDatepicker?.init(root);
     window.BalayDateTimePicker?.init(root);
+    window.BalayDateRangePicker?.init(root);
   }
   function destroy(root) {
     if (!root) return;
@@ -86,10 +87,23 @@
       editor?.disable?.();
       editors.delete(element);
     });
+    window.BalayDateRangePicker?.destroy(root);
     window.BalaySelect?.destroy(root);
     // Datepicker owns removal cleanup; Alpine/HTMX own their respective trees.
   }
   window.SynapsePageLifecycle = { init, destroy };
   document.addEventListener('synapse:page-load', event => init(event.detail?.root));
   document.addEventListener('synapse:before-swap', event => destroy(event.detail?.root));
+  document.addEventListener('click', event => {
+    document.querySelectorAll('details.tws-roster-details[open]').forEach(details => {
+      if (!details.contains(event.target)) details.open = false;
+    });
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    document.querySelectorAll('details.tws-roster-details[open]').forEach(details => {
+      details.open = false;
+      details.querySelector('summary')?.focus();
+    });
+  });
 })();

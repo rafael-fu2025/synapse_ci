@@ -1,0 +1,1247 @@
+/* ==========================================================================
+   SYNAPSE — My Appointments & Appointment Detail (.pa-workspace / .pa-detail)
+   Unified editorial sheet matching Profile & Settings, My Surveys, Guidance
+   Referral, and Announcements: one calm surface, hairline dividers, aligned
+   custom dropdown filters, tabular dates/times, and plain typographic status
+   indicators without decorative badge pills.
+   ========================================================================== */
+
+.pa-workspace,
+.pa-detail,
+.pa-req {
+  --pa-surface: var(--surface-color, #ffffff);
+  --pa-surface-subtle: #f8f9fb;
+  --pa-surface-muted: #fafbfc;
+  --pa-border: #e5e7eb;
+  --pa-border-subtle: #eff1f5;
+  --pa-border-input: #cfd5df;
+  --pa-heading: var(--heading-color, #111827);
+  --pa-text: var(--default-color, #1f2937);
+  --pa-muted: #5c6573;
+  --pa-accent: var(--fu-brand, #800000);
+  --pa-accent-tint: rgba(128, 0, 0, 0.048);
+  --pa-success: #146c43;
+  --pa-warning: #9a5b13;
+  --pa-info: #1d5d8f;
+  --pa-danger: #b42318;
+}
+
+.pa-workspace {
+  container-type: inline-size;
+  container-name: pa-workspace;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.pa-workspace, .pa-detail, .pa-req) {
+  --pa-surface: #1c1c1c;
+  --pa-surface-subtle: #161616;
+  --pa-surface-muted: #181818;
+  --pa-border: rgba(255, 255, 255, 0.11);
+  --pa-border-subtle: rgba(255, 255, 255, 0.075);
+  --pa-border-input: rgba(255, 255, 255, 0.18);
+  --pa-heading: #f3f4f6;
+  --pa-text: #e2e4e8;
+  --pa-muted: #9ca3af;
+  --pa-accent: #e08a8a;
+  --pa-accent-tint: rgba(224, 138, 138, 0.095);
+  --pa-success: #6ee7b7;
+  --pa-warning: #fbbf24;
+  --pa-info: #7dd3fc;
+  --pa-danger: #f87171;
+}
+
+/* --------------------------------------------------------------------------
+   Guidance Call Slips Awaiting Acknowledgment Sheet
+   -------------------------------------------------------------------------- */
+
+.pa-workspace .pa-callslip-sheet {
+  border-radius: 12px;
+  border: 1px solid var(--pa-border);
+  background: var(--pa-surface);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.pa-workspace .pa-callslip-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.85rem 1.35rem;
+  background: var(--pa-surface-subtle);
+}
+
+.pa-workspace .pa-callslip-head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.pa-workspace .pa-callslip-head-left > i {
+  font-size: 0.92rem;
+  color: var(--pa-warning);
+}
+
+.pa-workspace .pa-callslip-title {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-workspace .pa-callslip-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--pa-warning);
+}
+
+.pa-workspace .pa-callslip-sep {
+  color: var(--pa-muted);
+}
+
+.pa-workspace .pa-callslip-head-right {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.pa-workspace .pa-callslip-link {
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--pa-accent);
+  text-decoration: none;
+}
+
+.pa-workspace .pa-callslip-link:hover {
+  text-decoration: underline;
+}
+
+.pa-workspace .pa-callslip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--pa-muted);
+  cursor: pointer;
+}
+
+.pa-workspace .pa-callslip-toggle:hover {
+  color: var(--pa-heading);
+}
+
+.pa-workspace .pa-callslip-list {
+  border-top: 1px solid var(--pa-border);
+}
+
+.pa-workspace .pa-callslip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 1rem;
+  padding: 0.78rem 1.35rem;
+}
+
+.pa-workspace .pa-callslip-row + .pa-callslip-row {
+  border-top: 1px solid var(--pa-border-subtle);
+}
+
+.pa-workspace .pa-callslip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.38rem;
+  font-size: 0.81rem;
+  color: var(--pa-text);
+  min-width: 0;
+}
+
+.pa-workspace .pa-callslip-num {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-workspace .pa-callslip-time {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.77rem;
+  color: var(--pa-muted);
+}
+
+.pa-workspace .pa-callslip-purpose {
+  color: var(--pa-text);
+}
+
+.pa-workspace .pa-callslip-state {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--pa-warning);
+}
+
+/* --------------------------------------------------------------------------
+   Unified Editorial Sheet (#my-appointments.pa-sheet)
+   -------------------------------------------------------------------------- */
+
+.pa-workspace .pa-sheet {
+  border-radius: 12px;
+  border: 1px solid var(--pa-border);
+  background: var(--pa-surface);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.pa-workspace .pa-band {
+  padding: 1.4rem 1.55rem;
+  min-width: 0;
+}
+
+.pa-workspace .pa-intro {
+  margin-bottom: 1.05rem;
+}
+
+.pa-workspace .pa-intro-title {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+  color: var(--pa-heading);
+}
+
+.pa-workspace .pa-intro-desc {
+  margin: 0.24rem 0 0;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  color: var(--pa-muted);
+}
+
+/* Filter Grid & Controls */
+.pa-workspace .pa-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.75rem;
+  align-items: end;
+}
+
+.pa-workspace .pa-filter-field {
+  min-width: 0;
+}
+
+.pa-workspace .pa-filter-label {
+  display: block;
+  margin-bottom: 0.34rem;
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-workspace .pa-filter-field .form-select,
+.pa-workspace .pa-filter-field .bd-select .bd-select-toggle {
+  height: 36px;
+  min-height: 36px;
+  font-size: 0.83rem !important;
+  border-radius: 7px !important;
+}
+
+.pa-workspace .pa-filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pa-workspace .pa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 0.9rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 7px !important;
+  white-space: nowrap;
+}
+
+.pa-workspace .pa-btn.pa-btn-sm {
+  height: 31px;
+  min-height: 31px;
+  padding: 0 0.72rem !important;
+  font-size: 0.78rem !important;
+  border-radius: 6px !important;
+}
+
+.pa-workspace [data-filter-status]:not([hidden]) {
+  margin: 0.55rem 0 0;
+  font-size: 0.77rem;
+  color: var(--pa-muted);
+}
+
+.pa-workspace [data-filter-error]:not([hidden]) {
+  margin: 0.75rem 0 0;
+  padding: 0.65rem 0.88rem;
+  font-size: 0.81rem;
+  border-radius: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   Appointments Ledger Table & Empty State
+   -------------------------------------------------------------------------- */
+
+.pa-workspace .pa-results-region {
+  border-top: 1px solid var(--pa-border);
+  min-width: 0;
+}
+
+.pa-workspace .pa-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.pa-workspace .pa-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  color: var(--pa-text);
+}
+
+.pa-workspace .pa-table thead th {
+  padding: 0.68rem 0.6rem;
+  background: var(--pa-surface-subtle);
+  border-bottom: 1px solid var(--pa-border);
+  font-size: 0.71rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pa-muted);
+  white-space: nowrap;
+}
+
+.pa-workspace .pa-table thead th:first-child,
+.pa-workspace .pa-table tbody td:first-child {
+  padding-left: 1.35rem;
+}
+
+.pa-workspace .pa-table thead th:last-child,
+.pa-workspace .pa-table tbody td:last-child {
+  padding-right: 1.35rem;
+}
+
+.pa-workspace .pa-table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.pa-workspace .pa-table > tbody > tr:nth-of-type(odd):not(:hover) {
+  background-color: var(--table-stripe-bg);
+}
+
+.pa-workspace .pa-table tbody tr + tr {
+  border-top: 1px solid var(--pa-border-subtle);
+}
+
+.pa-workspace .pa-table tbody tr:hover {
+  background: var(--pa-surface-subtle);
+}
+
+.pa-workspace .pa-table tbody td {
+  padding: 0.88rem 0.6rem;
+  vertical-align: middle;
+}
+
+/* Column 1: Service + Unit Icon + Assigned Provider */
+.pa-workspace .pa-service-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pa-workspace .pa-unit-icon {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.14rem;
+  flex-shrink: 0;
+  color: var(--pa-muted);
+}
+
+.pa-workspace .pa-service-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.pa-workspace .pa-service-name {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.32;
+  color: var(--pa-heading);
+}
+
+.pa-workspace .pa-service-provider {
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--pa-muted);
+}
+
+/* Column 2: Date & Time */
+.pa-workspace .pa-datetime-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.pa-workspace .pa-date {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pa-workspace .pa-time {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.75rem;
+  color: var(--pa-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pa-workspace .pa-schedule-note {
+  font-size: 0.73rem;
+  line-height: 1.36;
+  color: var(--pa-muted);
+  max-width: 22ch;
+}
+
+/* Column 3: Type (Plain typographic label, no pill box) */
+.pa-workspace .pa-type-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--pa-text);
+}
+
+/* Column 4: Status (Quiet dot + typographic status, no colored Bootstrap badge) */
+.pa-workspace .pa-status,
+.pa-detail .pa-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--pa-muted);
+}
+
+.pa-workspace .pa-status::before,
+.pa-detail .pa-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.pa-workspace .pa-status.is-requested,
+.pa-detail .pa-status.is-requested {
+  color: var(--pa-warning);
+}
+
+.pa-workspace .pa-status.is-confirmed,
+.pa-detail .pa-status.is-confirmed {
+  color: var(--pa-accent);
+}
+
+.pa-workspace .pa-status.is-queue,
+.pa-detail .pa-status.is-queue {
+  color: var(--pa-info);
+}
+
+.pa-workspace .pa-status.is-completed,
+.pa-detail .pa-status.is-completed {
+  color: var(--pa-success);
+}
+
+.pa-workspace .pa-status.is-inactive,
+.pa-detail .pa-status.is-inactive {
+  color: var(--pa-muted);
+}
+
+.pa-workspace .pa-status.is-danger,
+.pa-detail .pa-status.is-danger {
+  color: var(--pa-danger);
+}
+
+/* Column 5: Actions */
+.pa-workspace .pa-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.pa-workspace .pa-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 0.68rem !important;
+  font-size: 0.77rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 6px !important;
+}
+
+/* Empty State inside Sheet */
+.pa-workspace .pa-empty {
+  text-align: center;
+  padding: 2.6rem 1.35rem;
+}
+
+.pa-workspace .pa-empty > i {
+  display: block;
+  font-size: 1.65rem;
+  color: var(--pa-muted);
+  opacity: 0.72;
+  margin-bottom: 0.6rem;
+}
+
+.pa-workspace .pa-empty h3 {
+  margin: 0;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-workspace .pa-empty p {
+  margin: 0.35rem auto 0;
+  max-width: 34rem;
+  font-size: 0.83rem;
+  line-height: 1.6;
+  color: var(--pa-muted);
+}
+
+.pa-workspace .pa-empty .pa-btn {
+  margin-top: 0.95rem;
+}
+
+/* Pagination Band */
+.pa-workspace .pa-pagination-band {
+  padding: 0.85rem 1.55rem 1.15rem;
+  border-top: 1px solid var(--pa-border-subtle);
+}
+
+/* --------------------------------------------------------------------------
+   Appointment Detail Modal (.pa-detail)
+   -------------------------------------------------------------------------- */
+
+.pa-detail .pa-detail-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.pa-detail .pa-detail-ref {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: var(--pa-muted);
+}
+
+.pa-detail .pa-detail-schedule {
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.1rem;
+  border-radius: 10px;
+  border: 1px solid var(--pa-border);
+  background: var(--pa-surface-subtle);
+}
+
+.pa-detail .pa-detail-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  font-size: 0.79rem;
+  font-weight: 600;
+  color: var(--pa-muted);
+  margin-bottom: 0.25rem;
+}
+
+.pa-detail .pa-detail-unit .pa-unit-icon {
+  width: 0.98rem;
+  height: 0.98rem;
+}
+
+.pa-detail .pa-detail-date {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.04rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--pa-heading);
+}
+
+.pa-detail .pa-detail-time {
+  margin-top: 0.18rem;
+  font-family: var(--mono-font, monospace);
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: var(--pa-text);
+}
+
+.pa-detail .pa-detail-hint {
+  display: block;
+  margin-top: 0.22rem;
+  font-family: var(--default-font, sans-serif);
+  font-size: 0.77rem;
+  color: var(--pa-muted);
+}
+
+.pa-detail .pa-detail-dl {
+  margin: 0;
+  border-top: 1px solid var(--pa-border-subtle);
+}
+
+.pa-detail .pa-detail-dl > dt,
+.pa-detail .pa-detail-dl > dd {
+  padding-top: 0.62rem;
+  padding-bottom: 0.62rem;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--pa-border-subtle);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.pa-detail .pa-detail-dl > dt {
+  font-weight: 600;
+  color: var(--pa-muted);
+}
+
+.pa-detail .pa-detail-dl > dd {
+  color: var(--pa-heading);
+}
+
+.pa-detail .pa-detail-note {
+  margin: 1rem 0 0;
+  font-size: 0.79rem;
+  line-height: 1.55;
+  color: var(--pa-muted);
+}
+
+.pa-detail .pa-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--pa-border);
+}
+
+/* --------------------------------------------------------------------------
+   Container-Query Responsive Breakpoints (.pa-workspace)
+   -------------------------------------------------------------------------- */
+
+@container pa-workspace (min-width: 660px) {
+  .pa-workspace .pa-filter-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.25fr) minmax(0, 1.15fr) 115px auto;
+  }
+}
+
+@container pa-workspace (max-width: 659.98px) {
+  .pa-workspace .pa-filter-actions {
+    grid-column: 1 / -1;
+  }
+
+  .pa-workspace .pa-filter-actions .pa-btn {
+    width: 100%;
+  }
+}
+
+@container pa-workspace (max-width: 619.98px) {
+  .pa-workspace .pa-band {
+    padding: 1.15rem 1.05rem;
+  }
+
+  .pa-workspace .pa-callslip-head,
+  .pa-workspace .pa-callslip-row,
+  .pa-workspace .pa-pagination-band {
+    padding-inline: 1.05rem;
+  }
+
+  .pa-workspace .pa-callslip-action,
+  .pa-workspace .pa-callslip-action form,
+  .pa-workspace .pa-callslip-action .pa-btn {
+    width: 100%;
+  }
+
+  /* Transform appointment rows into clean stacked ledger cards on narrow screens */
+  .pa-workspace .pa-table thead {
+    display: none;
+  }
+
+  .pa-workspace .pa-table,
+  .pa-workspace .pa-table tbody,
+  .pa-workspace .pa-table tr,
+  .pa-workspace .pa-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .pa-workspace .pa-table tbody tr {
+    padding: 1rem 1.05rem;
+  }
+
+  .pa-workspace .pa-table tbody td,
+  .pa-workspace .pa-table tbody td:first-child,
+  .pa-workspace .pa-table tbody td:last-child {
+    padding: 0;
+    text-align: left !important;
+  }
+
+  .pa-workspace .pa-table tbody td + td {
+    margin-top: 0.55rem;
+  }
+
+  .pa-workspace .pa-actions {
+    width: 100%;
+    justify-content: flex-start;
+    padding-top: 0.65rem;
+    margin-top: 0.2rem;
+    border-top: 1px solid var(--pa-border-subtle);
+  }
+}
+
+@container pa-workspace (max-width: 419.98px) {
+  .pa-workspace .pa-filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================================
+   SYNAPSE — Guidance Call Slips (.pa-callslips)
+   Unified editorial sheet with underline status tabs and hairline-divided
+   call-slip rows matching My Surveys and Announcements.
+   ========================================================================== */
+
+.pa-callslips .pa-cs-header-band {
+  padding-bottom: 0;
+}
+
+.pa-callslips .pa-cs-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1.25rem;
+}
+
+.pa-callslips .pa-cs-copy {
+  min-width: 0;
+  flex: 1 1 18rem;
+}
+
+.pa-callslips .pa-cs-summary {
+  flex-shrink: 0;
+  padding-top: 0.1rem;
+}
+
+.pa-callslips .pa-cs-total {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--pa-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Underline Status Tabs */
+.pa-callslips .pa-cs-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 1.35rem;
+  margin-top: 1.05rem;
+}
+
+.pa-callslips .pa-cs-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.55rem 0.05rem 0.68rem;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--pa-muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+
+.pa-callslips .pa-cs-tab:hover {
+  color: var(--pa-heading);
+}
+
+.pa-callslips .pa-cs-tab.is-active {
+  color: var(--pa-heading);
+  border-bottom-color: var(--pa-accent);
+}
+
+.pa-callslips .pa-cs-tab-count {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--pa-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-callslips .pa-cs-tab.is-active .pa-cs-tab-count {
+  color: var(--pa-accent);
+  font-weight: 600;
+}
+
+/* Call Slips Ledger */
+.pa-callslips .pa-cs-ledger {
+  display: flex;
+  flex-direction: column;
+}
+
+.pa-callslips .pa-cs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  padding: 1.2rem 1.55rem;
+  min-width: 0;
+  transition: background-color 0.12s ease;
+}
+
+.pa-callslips .pa-cs-row + .pa-cs-row {
+  border-top: 1px solid var(--pa-border-subtle);
+}
+
+.pa-callslips .pa-cs-row:hover {
+  background: var(--pa-surface-subtle);
+}
+
+.pa-callslips .pa-cs-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.34rem;
+  min-width: 0;
+  flex: 1 1 18rem;
+}
+
+.pa-callslips .pa-cs-row-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.85rem;
+}
+
+.pa-callslips .pa-cs-ident {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.38rem;
+}
+
+.pa-callslips .pa-cs-number {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-callslips .pa-cs-instance {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.76rem;
+  color: var(--pa-muted);
+}
+
+.pa-callslips .pa-cs-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--pa-muted);
+}
+
+.pa-callslips .pa-cs-schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-family: var(--mono-font, monospace);
+  font-size: 0.79rem;
+  color: var(--pa-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-callslips .pa-cs-schedule > i {
+  font-size: 0.82rem;
+  color: var(--pa-muted);
+}
+
+.pa-callslips .pa-cs-purpose strong {
+  color: var(--pa-heading);
+  font-weight: 600;
+}
+
+.pa-callslips .pa-cs-ack-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  font-size: 0.77rem;
+  color: var(--pa-muted);
+}
+
+.pa-callslips .pa-cs-ack-note > i {
+  font-size: 0.88rem;
+  color: var(--pa-success);
+}
+
+.pa-callslips .pa-cs-actions {
+  flex-shrink: 0;
+}
+
+.pa-callslips .pa-cs-actions form {
+  margin: 0;
+}
+
+@container pa-workspace (max-width: 559.98px) {
+  .pa-callslips .pa-cs-row {
+    padding: 1.05rem 1.05rem;
+  }
+
+  .pa-callslips .pa-cs-tabs {
+    gap: 0.15rem 0.95rem;
+  }
+
+  .pa-callslips .pa-cs-tab {
+    font-size: 0.81rem;
+    padding: 0.5rem 0 0.6rem;
+  }
+
+  .pa-callslips .pa-cs-actions,
+  .pa-callslips .pa-cs-actions form,
+  .pa-callslips .pa-cs-actions .pa-btn {
+    width: 100%;
+  }
+}
+
+/* ==========================================================================
+   SYNAPSE — Appointment Request Modal Form (.pa-req)
+   Matches .pa-detail and portal editorial sheets: calm unit intro band,
+   hairline identity row, aligned date/time/select controls, and clean footer.
+   ========================================================================== */
+
+.pa-req {
+  display: block;
+  min-width: 0;
+}
+
+.pa-req .pa-req-intro {
+  padding: 0.95rem 1.1rem;
+  margin-bottom: 1.1rem;
+  border-radius: 10px;
+  border: 1px solid var(--pa-border);
+  background: var(--pa-surface-subtle);
+}
+
+.pa-req .pa-req-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: var(--pa-muted);
+  margin-bottom: 0.2rem;
+}
+
+.pa-req .pa-req-unit .pa-unit-icon {
+  width: 0.96rem;
+  height: 0.96rem;
+}
+
+.pa-req .pa-req-heading {
+  display: block;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.96rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--pa-heading);
+}
+
+.pa-req .pa-req-note {
+  margin: 0.22rem 0 0;
+  font-size: 0.81rem;
+  line-height: 1.55;
+  color: var(--pa-muted);
+}
+
+.pa-req .pa-req-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  padding: 0.82rem 1.05rem;
+  margin-bottom: 1.15rem;
+  border-radius: 9px;
+  border: 1px solid var(--pa-border);
+  background: var(--pa-surface);
+}
+
+.pa-req .pa-req-identity-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.pa-req .pa-req-identity-eyebrow {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--pa-muted);
+}
+
+.pa-req .pa-req-identity-name {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-req .pa-req-identity-id {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--pa-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pa-req .pa-req-section {
+  margin-bottom: 1.05rem;
+}
+
+.pa-req .pa-req-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.05rem;
+}
+
+.pa-req .pa-req-field {
+  min-width: 0;
+}
+
+.pa-req .pa-req-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-req .pa-req-optional {
+  font-weight: 400;
+  color: var(--pa-muted);
+}
+
+.pa-req .pa-req-input,
+.pa-req .dp-wrap .form-control,
+.pa-req .dtp-wrap .form-control {
+  height: 38px;
+  min-height: 38px;
+  font-size: 0.85rem !important;
+  border-radius: 7px !important;
+  border-color: var(--pa-border-input);
+}
+
+.pa-req .pa-req-textarea {
+  padding: 0.6rem 0.82rem !important;
+  font-size: 0.85rem !important;
+  line-height: 1.55;
+  border-radius: 8px !important;
+  border-color: var(--pa-border-input);
+  resize: vertical;
+}
+
+.pa-req .pa-req-help {
+  display: block;
+  margin-top: 0.32rem;
+  font-size: 0.76rem;
+  line-height: 1.48;
+  color: var(--pa-muted);
+}
+
+/* Staff Patient Lookup inside Modal */
+.pa-req .pa-req-search-wrap {
+  position: relative;
+}
+
+.pa-req .pa-req-search-icon {
+  position: absolute;
+  left: 0.78rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.86rem;
+  color: var(--pa-muted);
+  pointer-events: none;
+}
+
+.pa-req .pa-req-search-input {
+  padding-left: 2.2rem !important;
+}
+
+.pa-req .pa-req-search-status {
+  margin: 0;
+  font-size: 0.77rem;
+  color: var(--pa-muted);
+}
+
+.pa-req .pa-req-results {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pa-req .pa-req-result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.pa-req .pa-req-result-row + .pa-req-result-row {
+  border-top: 1px solid var(--pa-border-subtle);
+}
+
+.pa-req .pa-req-result-row:hover {
+  background: var(--pa-surface-subtle);
+}
+
+.pa-req .pa-req-result-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.pa-req .pa-req-result-copy strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--pa-heading);
+}
+
+.pa-req .pa-req-result-copy small {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.74rem;
+  color: var(--pa-muted);
+}
+
+.pa-req .pa-req-result-action {
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: var(--pa-accent);
+  flex-shrink: 0;
+}
+
+.pa-req .pa-req-urgent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.48rem;
+  margin: 0.15rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--pa-border-subtle);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--pa-muted);
+}
+
+.pa-req .pa-req-urgent > i {
+  flex-shrink: 0;
+  margin-top: 0.14rem;
+}
+
+.pa-req .pa-req-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--pa-border);
+}
+
+.pa-req .pa-req-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 1rem !important;
+  font-size: 0.83rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 7px !important;
+}
+
+.pa-req .pa-req-btn-sm {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 0.72rem !important;
+  font-size: 0.77rem !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+}
+
+@media (max-width: 575.98px) {
+  .pa-req .pa-req-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pa-req .pa-req-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .pa-req .pa-req-actions .pa-req-btn {
+    width: 100%;
+  }
+}

@@ -3,12 +3,16 @@
 <?= $this->section('content') ?>
 <section class="ai-insights" data-ai-workspace data-panel-url="<?= esc(site_url($basePath . '/panel'), 'attr') ?>" aria-label="<?= esc($unitLabel . ' AI insights and program planning', 'attr') ?>">
   <header class="ai-insights__header">
-    <div>
-      <p class="ai-insights__eyebrow mb-1">Staff workspace</p>
-      <h2 class="h4 mb-1"><?= esc($unitLabel) ?> AI insights</h2>
+    <div class="ai-insights__header-copy">
+      <div class="ai-insights__title-row">
+        <h2 class="h4 mb-1"><?= esc($unitLabel) ?> AI insights</h2>
+        <span class="ai-insights__period-pill"><i class="bi bi-calendar3" aria-hidden="true"></i> <?= esc($comparisonMonthLabel) ?> – <?= esc($completedMonthLabel) ?></span>
+      </div>
       <p class="mb-0 text-muted">Review approved aggregate activity from <?= esc($comparisonMonthLabel) ?> and <?= esc($completedMonthLabel) ?>. The current month is not included.</p>
     </div>
-    <span class="ai-insights__privacy"><i class="bi bi-shield-check" aria-hidden="true"></i> Aggregate data only</span>
+    <div class="ai-insights__header-meta">
+      <span class="ai-insights__privacy"><i class="bi bi-shield-check" aria-hidden="true"></i> Aggregate data only</span>
+    </div>
   </header>
 
   <details class="ai-insights__how" data-ai-key="how-this-works">
@@ -33,14 +37,17 @@
 
   <noscript><div class="alert alert-warning">Turn on JavaScript to preview data, generate drafts, or review them. Other department functions are unaffected.</div></noscript>
   <p data-ai-feedback role="status" aria-live="polite" aria-atomic="true" class="alert alert-info small" hidden></p>
-  <div data-ai-baseline></div>
-  <div data-ai-panel><?= view('ai/panel', ['recoverableSnapshots' => $recoverableSnapshots ?? []] + compact('unit', 'basePath', 'analyses', 'legacyAnalysisFixture', 'profile', 'ready', 'reason', 'jobs', 'insights', 'canGenerate', 'canReview', 'canApprove', 'presentationNow')) ?></div>
+
+  <div class="ai-insights__workbench">
+    <div data-ai-panel><?= view('ai/panel', ['recoverableSnapshots' => $recoverableSnapshots ?? []] + compact('unit', 'basePath', 'analyses', 'legacyAnalysisFixture', 'profile', 'ready', 'reason', 'jobs', 'insights', 'canGenerate', 'canReview', 'canApprove', 'presentationNow')) ?></div>
+    <div data-ai-baseline></div>
+  </div>
 
   <div class="modal fade ai-insights__review-modal" id="ai-insight-review-modal" data-ai-review-modal tabindex="-1" aria-labelledby="ai-insight-review-title" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
       <div class="modal-content">
         <div class="modal-header">
-          <div>
+          <div class="ai-insights__modal-head-copy">
             <p class="ai-insights__eyebrow mb-1">Staff review</p>
             <h2 class="modal-title h5 mb-0" id="ai-insight-review-title" data-ai-review-modal-title>AI draft</h2>
           </div>
@@ -53,7 +60,10 @@
           <div data-ai-review-modal-body></div>
         </div>
         <div class="modal-footer ai-insights__review-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+          <div class="ai-insights__review-footer-left">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            <span class="ai-insights__review-footer-note">Accepting records your review; approving a program draft does not publish or send anything.</span>
+          </div>
           <div class="ai-insights__review-actions" data-ai-review-modal-actions></div>
         </div>
       </div>

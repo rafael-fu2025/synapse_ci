@@ -319,6 +319,47 @@ test('referral live search shows failure, retry, no matches and clears selection
   assert.equal(await modal.getByRole('button', { name: 'Change', exact: true }).isVisible(), false);
 });
 
+test('switching referral folder tabs updates only the data table without reloading the screen', { timeout: 30000 }, async t => {
+  const page = await pageFor(t, 'clinic', 'light');
+  await page.evaluate(() => {
+    window.refTabRefs = {
+      main: document.querySelector('#main'),
+      owner: document.querySelector('[data-refresh-owner]'),
+      table: document.querySelector('[data-live-table]'),
+      search: document.querySelector('#referralSearch'),
+    };
+  });
+  const startReq = requests.length;
+
+  // Click Sent tab -> should fetch only ?fragment=1&tab=sent and keep #main & controls intact
+  await page.locator('[data-table-tab="sent"]').click();
+  await page.waitForFunction(() => new URL(location.href).searchParams.get('tab') === 'sent' &&
+    document.querySelector('[data-table-tab="sent"]')?.getAttribute('aria-current') === 'page' &&
+    document.querySelectorAll('tbody form, tbody [data-app-modal-open]').length === 0);
+
+  // Click Closed / History tab -> should fetch only ?fragment=1&tab=history and render closed row
+  await page.locator('[data-table-tab="history"]').click();
+  await page.waitForFunction(() => new URL(location.href).searchParams.get('tab') === 'history' &&
+    document.querySelector('[data-table-tab="history"]')?.getAttribute('aria-current') === 'page' &&
+    document.querySelector('tbody')?.textContent.includes('REF-5'));
+
+  const tabRequests = requests.slice(startReq).filter(u => u.pathname === '/clinic/referrals');
+  assert.equal(tabRequests.length, 2, 'Two lightweight fragment fetches only');
+  assert.equal(tabRequests.every(u => u.searchParams.get('fragment') === '1'), true);
+  assert.deepEqual(tabRequests.map(u => u.searchParams.get('tab')), ['sent', 'history']);
+  assert.equal(await page.evaluate(() =>
+    window.refTabRefs.main === document.querySelector('#main') &&
+    window.refTabRefs.owner === document.querySelector('[data-refresh-owner]') &&
+    window.refTabRefs.table === document.querySelector('[data-live-table]') &&
+    window.refTabRefs.search === document.querySelector('#referralSearch')), true, 'Screen and filter bar must not reload');
+
+  // Browser Back returns to Sent tab in-place without reloading #main
+  await page.goBack();
+  await page.waitForFunction(() => new URL(location.href).searchParams.get('tab') === 'sent' &&
+    document.querySelector('[data-table-tab="sent"]')?.getAttribute('aria-current') === 'page');
+  assert.equal(await page.evaluate(() => window.refTabRefs.main === document.querySelector('#main')), true);
+});
+
 test('legacy referral route requires an explicit workstation, with no active sidebar default', async t => {
   const page = await pageFor(t, 'clinic', 'light');
   await page.goto(origin + '/referrals');

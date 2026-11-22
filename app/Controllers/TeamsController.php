@@ -119,7 +119,7 @@ final class TeamsController extends BaseController
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
             $owner = 'teams.tasks.' . $unit;
             if (config(\Config\RefreshRegions::class)->enables($owner)) {
-                $payload['refresh'] = $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === $owner || $id === null
+                $payload['refresh'] = $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === $owner
                     ? $this->refreshRegions($owner, ['navigation', 'results'])
                     : $this->refreshNavigation($redirect);
             }

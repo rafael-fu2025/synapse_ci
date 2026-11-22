@@ -73,7 +73,7 @@
       return `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${meta.filtered.toLocaleString()} matching records.`;
     }
     function syncFilters(url) {
-      for (const name of ['q', 'kind', 'status', 'per_page', 'tab']) {
+      for (const name of ['q', 'kind', 'status', 'unit', 'per_page', 'tab']) {
         const field = form.elements.namedItem(name);
         if (!field) continue;
         const fallback = name === 'tab' ? (endpoint.searchParams.get('tab') ?? 'incoming') : (name === 'per_page' ? '25' : (name === 'q' ? '' : 'all'));
@@ -84,6 +84,45 @@
     const regionalRoot = root.matches('[data-refresh-owner]') ? root : root.closest('[data-refresh-owner]');
     const regionalOwner = regionalRoot?.dataset.refreshOwner;
     const regionalName = results.dataset.refreshRegion;
+    const tabScope = regionalRoot || root;
+    function currentTab() {
+      return form.elements.namedItem('tab')?.value || endpoint.searchParams.get('tab') || 'incoming';
+    }
+    let committedTab = currentTab();
+    function syncTabs(activeTab, rawCounts) {
+      if (!activeTab) return;
+      const tabs = tabScope.querySelectorAll('a[data-table-tab]');
+      if (tabs.length) {
+        tabs.forEach(link => {
+          const isCurrent = link.dataset.tableTab === activeTab;
+          link.classList.toggle('active', isCurrent);
+          if (isCurrent) link.setAttribute('aria-current', 'page');
+          else link.removeAttribute('aria-current');
+        });
+        endpoint.searchParams.set('tab', activeTab);
+        root.dataset.endpoint = endpoint.href;
+        const resetLink = root.querySelector('a[data-table-reset]');
+        if (resetLink) {
+          const resetUrl = new URL(endpoint);
+          resetUrl.search = '';
+          resetUrl.searchParams.set('tab', activeTab);
+          resetLink.href = resetUrl.href;
+        }
+      }
+      if (rawCounts) {
+        try {
+          const counts = JSON.parse(rawCounts);
+          if (counts && typeof counts === 'object') {
+            tabScope.querySelectorAll('[data-folder-count]').forEach(badge => {
+              const key = badge.dataset.folderCount;
+              if (Object.hasOwn(counts, key) && Number.isFinite(Number(counts[key]))) {
+                badge.textContent = String(Number(counts[key]));
+              }
+            });
+          }
+        } catch (_) { /* Ignore malformed optional folder counts. */ }
+      }
+    }
     function remember(url, mode) {
       if (mode === 'none') return;
       const method = mode === 'push' && url.href !== location.href ? 'pushState' : 'replaceState';
@@ -130,10 +169,18 @@
           throw new Error('The table response could not be loaded. Reload this page.');
         }
         const meta = metadata(content);
+        const folderCounts = content.dataset.folderCounts;
         url.searchParams.set('page', String(meta.page));
         url.searchParams.set('per_page', String(meta.perPage));
         results.replaceChildren(...content.childNodes);
+        if (url.searchParams.has('tab')) {
+          committedTab = url.searchParams.get('tab');
+          syncTabs(committedTab, folderCounts);
+        } else if (folderCounts) {
+          syncTabs(committedTab, folderCounts);
+        }
         syncFilters(url);
+        if (regionalRoot?.hasAttribute('data-refresh-url')) regionalRoot.dataset.refreshUrl = url.href;
         remember(url, historyMode);
         failedUrl = null;
         busy(false, announce(meta));
@@ -186,7 +233,7 @@
         if (!form.reportValidity()) { invalidate(); busy(false, 'Please correct the filters before searching.'); return; }
         const destination = cleanUrl(page.href);
         const current = queryUrl();
-        const defaults = { q: '', kind: 'all', status: 'all', per_page: '25', tab: 'incoming' };
+        const defaults = { q: '', kind: 'all', status: 'all', unit: 'all', per_page: '25', tab: 'incoming' };
         const changed = Object.entries(defaults).some(([name, fallback]) =>
           (destination.searchParams.get(name) ?? fallback) !== (current.searchParams.get(name) ?? fallback));
         // Pagination belongs to the rendered filters. A newly typed term must
@@ -201,6 +248,29 @@
         load(failedUrl, failedHistoryMode);
       }
     }, options);
+    if (tabScope) {
+      tabScope.addEventListener('click', event => {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        const tabLink = event.target.closest('a[data-table-tab]');
+        if (!tabLink || !tabScope.contains(tabLink)) return;
+        event.preventDefault();
+        const nextTab = tabLink.dataset.tableTab;
+        if (!nextTab) return;
+        const destination = cleanUrl(tabLink.href);
+        destination.searchParams.set('tab', nextTab);
+        syncTabs(nextTab);
+        syncFilters(destination);
+        void load(destination, 'push').then(ok => {
+          if (ok !== true && controller === null) {
+            const fallbackUrl = new URL(endpoint);
+            fallbackUrl.search = '';
+            fallbackUrl.searchParams.set('tab', committedTab);
+            syncTabs(committedTab);
+            syncFilters(fallbackUrl);
+          }
+        });
+      }, options);
+    }
     window.addEventListener('popstate', event => {
       if (![endpoint.pathname, initialPath].includes(location.pathname) || !root.isConnected) return;
       const entry = event.state?.__synapseNavigation;
@@ -208,6 +278,9 @@
           entry.region.regions.length === 1 && entry.region.regions[0] === regionalName &&
           window.SynapseRefreshRegions?.enabled(regionalOwner)) return;
       const url = cleanUrl(location.href);
+      if (url.searchParams.has('tab') || tabScope.querySelector('a[data-table-tab]')) {
+        syncTabs(url.searchParams.get('tab') ?? 'incoming');
+      }
       syncFilters(url);
       load(url, 'none');
     }, options);

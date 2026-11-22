@@ -70,13 +70,28 @@
 }
 
 .bd-select .bd-select-toggle::after {
-  margin-left: 0.5em;
+  content: "";
+  display: inline-block;
+  width: 0.44rem;
+  height: 0.44rem;
+  margin-left: 0.65rem;
   flex-shrink: 0;
-  transition: transform 0.15s ease;
+  border: 0;
+  border-right: 1.65px solid currentColor;
+  border-bottom: 1.65px solid currentColor;
+  vertical-align: middle;
+  opacity: 0.62;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.bd-select .bd-select-toggle:hover::after,
+.bd-select .bd-select-toggle[aria-expanded="true"]::after {
+  opacity: 0.92;
 }
 
 .bd-select .bd-select-toggle[aria-expanded="true"]::after {
-  transform: rotate(180deg);
+  transform: translateY(2px) rotate(225deg);
 }
 
 .bd-select-label {
@@ -95,9 +110,10 @@
   z-index: 1100;
   max-height: 320px;
   overflow-y: auto;
+  padding: 0.3rem;
   border-radius: var(--radius-md, 0.25rem);
   background: var(--surface-color, #fff);
-  border: 1px solid var(--border-color);
+  border: 1px solid #d4d8e2;
   box-shadow: none;
 }
 
@@ -112,9 +128,10 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  margin: 0 -0.3rem 0.3rem;
   padding: 0.45rem 0.5rem;
   background: var(--surface-color, #fff);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .bd-select-search {
@@ -151,16 +168,39 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.65rem;
   white-space: normal;
   word-break: break-word;
-  padding-block: 0.42rem;
+  padding: 0.48rem 0.7rem;
+  border-radius: 5px;
+  font-size: 0.855rem;
+  line-height: 1.4;
+  color: var(--heading-color, #111827);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.bd-select-menu .dropdown-item + .dropdown-item {
+  margin-top: 2px;
+}
+
+.bd-select-menu .dropdown-item:hover,
+.bd-select-menu .dropdown-item:focus-visible {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.bd-select-menu .dropdown-item.active,
+.bd-select-menu .dropdown-item:active {
+  background: #f6eeee;
+  color: #111827;
+  font-weight: 600;
 }
 
 .bd-select-menu .dropdown-item.active::after {
   content: "\2713" / "";
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 700;
+  color: var(--fu-brand, #800000);
   flex-shrink: 0;
 }
 
@@ -170,11 +210,12 @@
 }
 
 .bd-select-menu .dropdown-header {
-  font-size: 0.72rem;
-  font-weight: 800;
+  font-size: 0.7rem;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--fu-maroon-light, #800000);
+  padding: 0.45rem 0.7rem 0.22rem;
+  color: var(--muted-color, #5c6573);
 }
 
 .bd-select-menu .bd-item-placeholder {
@@ -214,11 +255,18 @@
 }
 
 .dp-popup .bd-select-toggle {
-  padding: 0.34rem 1.7rem 0.34rem 0.5rem;
+  padding: 0.34rem 0.6rem 0.34rem 0.55rem;
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--heading-color, #1a1a1a);
   border-radius: var(--radius-sm, 0.25rem);
+}
+
+.dp-popup .bd-select-toggle::after,
+.dtp-popup .bd-select-toggle::after {
+  width: 0.36rem;
+  height: 0.36rem;
+  margin-left: 0.4rem;
 }
 
 .dp-popup .bd-select-menu {
@@ -226,22 +274,120 @@
 }
 
 .dp-popup .bd-select-menu .dropdown-item {
-  padding: 0.32rem 1rem;
+  padding: 0.34rem 0.65rem;
 }
 
 /* --- Dark mode ---------------------------------------------------------
    The picker and menus are appended to <body> and read the same
    :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) tokens as the rest of the system. Only the
    literal teal accents from the original build need remapping. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu {
+  background: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-search-wrap {
+  background: #1f1f1f;
+  border-bottom-color: rgba(255, 255, 255, 0.11);
+}
+
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-header,
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select .bd-select-toggle:hover {
   color: var(--default-color);
 }
 
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item {
+  color: #e5e7eb;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item:hover,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item:focus-visible {
+  background: #272727;
+  color: #ffffff;
+}
+
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item.active,
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item:active {
-  background: var(--fu-brand);
+  background: #2e2e2e;
   color: #ffffff;
+  font-weight: 600;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .bd-select-menu .dropdown-item.active::after {
+  color: #e08a8a;
+}
+
+/* --- Portal Editorial Select Styling -----------------------------------
+   Aligns select triggers and popovers inside portal screens with the calm
+   editorial surfaces (Profile & Settings, My Surveys, Guidance Referral,
+   Appointments, Announcements) without affecting non-portal flat widgets. */
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle {
+  border-radius: 7px !important;
+  border: 1px solid #cfd5df;
+  background-color: var(--surface-color, #ffffff);
+  color: var(--heading-color, #111827);
+  padding: 0.44rem 0.78rem !important;
+  font-size: 0.855rem;
+  line-height: 1.4;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
+}
+
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle.form-select-sm {
+  padding: 0.34rem 0.68rem !important;
+  font-size: 0.82rem;
+}
+
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle:hover:not(:disabled) {
+  border-color: #9ca3af;
+}
+
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle[aria-expanded="true"],
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle:focus-visible {
+  border-color: var(--focus-color, #800000);
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.16));
+}
+
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select-menu {
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid #d8dde6;
+  box-shadow: 0 10px 28px -8px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05) !important;
+}
+
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select-menu.bd-select-searchable {
+  padding-top: 0;
+}
+
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select-menu .bd-select-search-wrap {
+  margin: 0 -0.35rem 0.35rem;
+}
+
+:is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select-menu .dropdown-item {
+  border-radius: 6px;
+  padding: 0.5rem 0.72rem;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle {
+  background-color: #151515;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f3f4f6;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle[aria-expanded="true"],
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select .bd-select-toggle:focus-visible {
+  background-color: #1a1a1a;
+  border-color: #e08a8a;
+  box-shadow: 0 0 0 3px rgba(224, 138, 138, 0.2);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(#portal-workspace-pane, .portal-referral-workspace, .portal-engagement, .ps-shell, .pa-req, .adm-workspace, .adm-modal, .ai-settings-page) .bd-select-menu {
+  background: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 32px -6px rgba(0, 0, 0, 0.55) !important;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .dropdown-menu {
@@ -981,4 +1127,290 @@
   background: #242424;
   border-color: var(--default-color);
   color: #e0e0e0;
+}
+
+
+/* =========================================================
+ * Portal Staff Personal Session Banner (.portal-staff-session-banner)
+ * Calm editorial callout shown when a staff/admin member views
+ * their individual personal health account on the portal.
+ * ========================================================= */
+.portal-staff-session-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1.25rem;
+  border-radius: 12px;
+  background: var(--surface-color, #ffffff) !important;
+  border: 1px solid var(--border-color, #e5e7eb) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-staff-session-banner {
+  background: #1c1c1c !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+  box-shadow: none;
+}
+
+.portal-staff-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 260px;
+  flex: 1 1 auto;
+}
+
+.portal-staff-banner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  background: #fdf2f2;
+  border: 1px solid #fecaca;
+  color: var(--fu-brand, #800000);
+  font-size: 1.15rem;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-staff-banner-icon {
+  background: rgba(128, 0, 0, 0.2);
+  border-color: rgba(128, 0, 0, 0.38);
+  color: #f87171;
+}
+
+.portal-staff-banner-copy {
+  min-width: 0;
+}
+
+.portal-staff-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.portal-staff-banner-title {
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--heading-color, #111827) !important;
+  line-height: 1.35;
+  margin: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-staff-banner-title {
+  color: #f3f4f6 !important;
+}
+
+.portal-staff-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.70rem;
+  font-weight: 600;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-staff-banner-badge {
+  background: #252525;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #9ca3af;
+}
+
+.portal-staff-banner-desc {
+  margin: 0.2rem 0 0;
+  font-size: 0.80rem;
+  line-height: 1.45;
+  color: var(--muted-color, #6b7280) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-staff-banner-desc {
+  color: #9ca3af !important;
+}
+
+.portal-staff-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+html body .portal-staff-console-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 0.85rem !important;
+  border-radius: 7px !important;
+  font-size: 0.80rem !important;
+  font-weight: 600 !important;
+  line-height: 1.25;
+  text-decoration: none !important;
+  background: #ffffff !important;
+  border: 1px solid #d1d5db !important;
+  color: #1f2937 !important;
+  box-shadow: none !important;
+  transition: background-color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+html body .portal-staff-console-btn:hover {
+  background: #f9fafb !important;
+  border-color: #9ca3af !important;
+  color: #111827 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html body .portal-staff-console-btn:focus-visible {
+  outline: none;
+  border-color: var(--focus-color, #800000) !important;
+  box-shadow: 0 0 0 3px var(--focus-ring, rgba(128, 0, 0, 0.18)) !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-staff-console-btn {
+  background: #242424 !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #f3f4f6 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .portal-staff-console-btn:hover {
+  background: #2f2f2f !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+}
+
+.portal-staff-console-btn .unit-btn-icon,
+.portal-staff-console-btn i {
+  margin-right: 0.35rem;
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+
+@media (max-width: 640px) {
+  .portal-staff-session-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .portal-staff-banner-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .portal-staff-console-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ==========================================================================
+   Floating Person / Student / Employee Search Popover (Zero Dialog Resizing)
+   Shared across all modal dialogs with live directory search.
+   ========================================================================== */
+.syn-person-lookup {
+  position: relative;
+  min-width: 0;
+}
+
+.syn-person-lookup-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1085;
+  max-height: 250px;
+  overflow-y: auto;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #cfd5df;
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.2), 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+
+.syn-person-lookup-menu[data-popover-fixed="true"] {
+  position: fixed;
+  right: auto;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .syn-person-lookup-menu {
+  background: #1c1c1f;
+  border-color: #3a3a40;
+  box-shadow: 0 14px 32px -6px rgba(0, 0, 0, 0.6);
+}
+
+.syn-person-lookup-status {
+  padding: 0.68rem 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #6b7280;
+  background: #ffffff;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .syn-person-lookup-status {
+  color: #a1a1aa;
+  background: #1c1c1f;
+}
+
+.syn-person-lookup-list.list-group {
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.syn-person-lookup-list .list-group-item,
+.syn-person-lookup-list .pa-req-result-row {
+  width: 100%;
+  background: #ffffff;
+  color: #111827;
+  border: 0;
+  border-bottom: 1px solid #eef0f4;
+  border-radius: 0 !important;
+}
+
+.syn-person-lookup-list .list-group-item:last-child,
+.syn-person-lookup-list .pa-req-result-row:last-child {
+  border-bottom: 0;
+}
+
+.syn-person-lookup-list .list-group-item:hover,
+.syn-person-lookup-list .list-group-item:focus-visible,
+.syn-person-lookup-list .pa-req-result-row:hover,
+.syn-person-lookup-list .pa-req-result-row:focus-visible {
+  background: #f4f4f6;
+  color: #111827;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .syn-person-lookup-list :is(.list-group-item, .pa-req-result-row) {
+  background: #1c1c1f;
+  color: #f4f4f5;
+  border-bottom-color: #2a2a30;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .syn-person-lookup-list :is(.list-group-item, .pa-req-result-row):is(:hover, :focus-visible) {
+  background: #26262b;
+  color: #ffffff;
+}
+
+.syn-person-lookup-select {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #800000;
+  white-space: nowrap;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .syn-person-lookup-select {
+  color: #f87171;
 }

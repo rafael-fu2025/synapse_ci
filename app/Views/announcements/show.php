@@ -1,21 +1,52 @@
 <?php require __DIR__ . '/_dates.php'; ?>
 <?= $this->extend('layouts/app') ?>
 <?= $this->section('content') ?>
-<section class="portal-engagement" data-refresh-owner="portal-announcement-detail.<?= (int) $announcement['id'] ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+<?php $unread = $announcement['read_at'] === null; ?>
+<section class="portal-engagement pe-announcement-detail"
+         data-refresh-owner="portal-announcement-detail.<?= (int) $announcement['id'] ?>"
+         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <div class="pe-reading">
-    <a class="btn btn-outline-secondary btn-sm mb-3" href="<?= esc(site_url('/portal/announcements')) ?>"><i class="bi bi-arrow-left me-2" aria-hidden="true"></i>All announcements</a>
-    <article class="card pe-content-card" aria-labelledby="announcement-title"><div class="card-body p-3 p-sm-4 p-lg-5">
-      <div class="pe-card-top"><span class="pe-department"><?= view('partials/unit_vector_icon', ['unit' => $announcement['unit']]) ?><?= esc(ucfirst($announcement['unit'])) ?></span><span class="pe-state" data-refresh-region="read-state" data-refresh-heading tabindex="-1"><?= $announcement['read_at'] === null ? 'Unread' : 'Read' ?></span></div>
-      <h1 id="announcement-title" class="h3 fw-bold text-break mb-3"><?= esc($announcement['title']) ?></h1>
-      <p class="small text-muted mb-0">Published <time datetime="<?= esc($announcementDate($announcement['published_at'], 'c')) ?>"><?= esc($announcementDate($announcement['published_at'], 'd M Y, g:i A')) ?></time> (Asia/Manila)</p>
-      <div class="pe-reading-body"><?= esc($announcement['body']) ?></div>
-      <?php if ($announcement['ends_at'] !== null): ?><p class="small text-muted">Available until <?= esc($announcementDate($announcement['ends_at'], 'd M Y, g:i A')) ?> (Asia/Manila)</p><?php endif; ?>
-      <div class="pe-card-footer" data-refresh-region="read-action">
-        <?php if ($announcement['read_at'] === null): ?>
-        <div><form method="POST" data-background-submit action="<?= esc(site_url('/portal/announcements/' . (int) $announcement['id'] . '/read')) ?>"><?= csrf_field() ?><button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-2" aria-hidden="true"></i>Mark as read</button></form><p class="form-text mb-0">Records that you marked this notice read, not acknowledgement or comprehension.</p></div>
-        <?php else: ?><p class="pe-completion"><i class="bi bi-check-circle" aria-hidden="true"></i>Marked read <?= esc($announcementDate($announcement['read_at'], 'd M Y, g:i A')) ?> (Asia/Manila)</p><?php endif; ?>
+    <article class="an-sheet" aria-labelledby="announcement-title">
+      <header class="an-reading-head">
+        <div class="an-reading-meta-top">
+          <span class="pe-department">
+            <?= view('partials/unit_vector_icon', ['unit' => $announcement['unit']]) ?><?= esc(ucfirst($announcement['unit'])) ?>
+          </span>
+          <span class="pe-state <?= $unread ? 'pe-state-pending' : 'pe-state-read' ?>" data-refresh-region="read-state" data-refresh-heading tabindex="-1"><?= $unread ? 'Unread' : 'Read' ?></span>
+        </div>
+
+        <h2 id="announcement-title" class="an-article-title"><?= esc($announcement['title']) ?></h2>
+
+        <p class="an-dateline">
+          <span><i class="bi bi-calendar3" aria-hidden="true"></i>Published <time datetime="<?= esc($announcementDate($announcement['published_at'], 'c')) ?>"><?= esc($announcementDate($announcement['published_at'], 'd M Y, g:i A')) ?></time> (Asia/Manila)</span>
+          <?php if ($announcement['ends_at'] !== null): ?>
+            <span>Available until <?= esc($announcementDate($announcement['ends_at'], 'd M Y, g:i A')) ?> (Asia/Manila)</span>
+          <?php endif; ?>
+        </p>
+      </header>
+
+      <div class="an-reading-body-band">
+        <div class="pe-reading-body"><?= esc($announcement['body']) ?></div>
       </div>
-    </div></article>
+
+      <footer class="an-reading-footer" data-refresh-region="read-action">
+        <?php if ($unread): ?>
+          <div class="an-read-action-stack">
+            <form method="POST" data-background-submit action="<?= esc(site_url('/portal/announcements/' . (int) $announcement['id'] . '/read')) ?>">
+              <?= csrf_field() ?>
+              <button type="submit" class="btn btn-primary an-btn">
+                <i class="bi bi-check2" aria-hidden="true"></i>Mark as read
+              </button>
+            </form>
+            <p class="an-read-note">Records that you marked this notice read, not acknowledgement or comprehension.</p>
+          </div>
+        <?php else: ?>
+          <p class="pe-completion">
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>Marked read <?= esc($announcementDate($announcement['read_at'], 'd M Y, g:i A')) ?> (Asia/Manila)
+          </p>
+        <?php endif; ?>
+      </footer>
+    </article>
   </div>
 </section>
 <?= $this->endSection() ?>

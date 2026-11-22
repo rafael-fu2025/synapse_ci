@@ -362,6 +362,13 @@
   const prefersReducedMotion = () =>
     Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
+  const hideTooltipsIn = (selector) => {
+    if (!window.bootstrap?.Tooltip) return;
+    document.querySelectorAll(selector).forEach(el => {
+      bootstrap.Tooltip.getInstance(el)?.hide();
+    });
+  };
+
   const dismissToggleTooltip = (triggerEl) => {
     if (triggerEl && window.bootstrap?.Tooltip) {
       const tipHost = triggerEl.matches('[data-bs-toggle="tooltip"]')
@@ -369,6 +376,7 @@
         : triggerEl.closest('[data-bs-toggle="tooltip"]');
       if (tipHost) bootstrap.Tooltip.getInstance(tipHost)?.hide();
     }
+    hideTooltipsIn('[data-bs-toggle="tooltip"]');
     document.querySelectorAll('.tooltip').forEach(t => t.remove());
   };
 
@@ -523,7 +531,32 @@
 
   var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]:not([data-sidebar-tooltip])'));
   tooltipTriggerList.map(function(el) {
-    var tip = new bootstrap.Tooltip(el, { trigger: 'hover' });
+    // Header tooltips must stay below the header bar and never flip sideways
+    // across adjacent header buttons (e.g. profile pill tooltip covering theme/notifications).
+    var inHeader = Boolean(el.closest('.header'));
+    var tip = new bootstrap.Tooltip(el, inHeader ? {
+      trigger: 'hover',
+      container: 'body',
+      placement: 'bottom',
+      fallbackPlacements: ['bottom'],
+      boundary: 'viewport',
+      popperConfig: function(defaultConfig) {
+        var modifiers = (defaultConfig.modifiers || []).map(function(mod) {
+          if (mod.name === 'flip') {
+            return Object.assign({}, mod, {
+              options: Object.assign({}, mod.options, { fallbackPlacements: ['bottom'], altAxis: false })
+            });
+          }
+          if (mod.name === 'preventOverflow') {
+            return Object.assign({}, mod, {
+              options: Object.assign({}, mod.options, { boundary: 'viewport', padding: 8 })
+            });
+          }
+          return mod;
+        });
+        return Object.assign({}, defaultConfig, { modifiers: modifiers });
+      }
+    } : { trigger: 'hover' });
     el.addEventListener('click', function() {
       tip.hide();
     });
@@ -541,6 +574,9 @@
 
   // Wrapper tooltips must stay disabled while their dropdown is open.
   document.addEventListener('show.bs.dropdown', function(e) {
+    if (e.target && e.target.closest && e.target.closest('.header')) {
+      hideTooltipsIn('.header [data-bs-toggle="tooltip"]');
+    }
     dropdownTooltips(e.target).forEach(function(tip) {
       tip.hide();
       tip.disable();
@@ -551,6 +587,13 @@
     dropdownTooltips(e.target).forEach(function(tip) {
       tip.enable();
     });
+  });
+
+  window.addEventListener('blur', function() {
+    hideTooltipsIn('.header [data-bs-toggle="tooltip"]');
+  });
+  document.addEventListener('synapse:before-navigate', function() {
+    hideTooltipsIn('.header [data-bs-toggle="tooltip"]');
   });
 
   /**

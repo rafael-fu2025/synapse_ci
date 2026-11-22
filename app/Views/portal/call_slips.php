@@ -1,8 +1,8 @@
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<a href="<?= esc($portalBackUrl ?? site_url('/portal')) ?>" class="btn btn-outline-secondary btn-sm">
-  <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to My Health Portal
+<a href="<?= esc($portalBackUrl ?? site_url('/portal'), 'attr') ?>" class="portal-back-btn">
+  <i class="bi bi-arrow-left" aria-hidden="true"></i>Back to My Health Portal
 </a>
 <?= $this->endSection() ?>
 
@@ -13,12 +13,12 @@ $filter = (string) ($filter ?? 'all');
 $counts = array_replace(['all' => 0, 'pending' => 0, 'acknowledged' => 0, 'history' => 0], is_array($counts ?? null) ? $counts : []);
 $baseUrl = (string) ($baseUrl ?? site_url('/portal/call-slips'));
 
-$statusBadgeMap = [
-    'pending'      => ['class' => 'text-bg-warning', 'label' => 'Awaiting Acknowledgment'],
-    'acknowledged' => ['class' => 'text-bg-info', 'label' => 'Acknowledged'],
-    'attended'     => ['class' => 'text-bg-success', 'label' => 'Attended'],
-    'missed'       => ['class' => 'text-bg-danger', 'label' => 'Missed'],
-    'cancelled'    => ['class' => 'text-bg-secondary', 'label' => 'Cancelled'],
+$statusMetaMap = [
+    'pending'      => ['tone' => 'is-requested', 'label' => 'Awaiting acknowledgment'],
+    'acknowledged' => ['tone' => 'is-queue',     'label' => 'Acknowledged'],
+    'attended'     => ['tone' => 'is-completed', 'label' => 'Attended'],
+    'missed'       => ['tone' => 'is-danger',    'label' => 'Missed'],
+    'cancelled'    => ['tone' => 'is-inactive',  'label' => 'Cancelled'],
 ];
 
 $tabs = [
@@ -29,144 +29,152 @@ $tabs = [
 ];
 ?>
 
-<style>
-  .portal-callslips-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-  .portal-callslip-row-card {
-    border: 1px solid var(--na-border, rgba(0, 0, 0, 0.08));
-    border-radius: 10px;
-    padding: 0.9rem 1rem;
-  }
-  [data-theme="dark"] .portal-callslip-row-card {
-    border-color: rgba(255, 255, 255, 0.12);
-    background: var(--na-surface-2, #222222);
-  }
-  @media (max-width: 575.98px) {
-    .portal-callslips-tabs {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.4rem;
-    }
-    .portal-callslips-tabs .btn {
-      width: 100%;
-      display: inline-flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-inline: 0.65rem;
-    }
-    .portal-callslip-row-card {
-      padding: 0.85rem;
-    }
-    .portal-callslip-row-actions,
-    .portal-callslip-row-actions form,
-    .portal-callslip-row-actions button {
-      width: 100%;
-    }
-  }
-</style>
+<div class="pa-workspace pa-callslips">
+  <section class="pa-sheet" aria-labelledby="portal-callslips-heading">
 
-<section class="card border-0 shadow-sm" aria-labelledby="portal-callslips-heading">
-  <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-    <div>
-      <h5 class="fw-bold mb-0" id="portal-callslips-heading">
-        <i class="bi bi-ticket-perforated-fill text-warning me-2" aria-hidden="true"></i>Guidance Call Slips
-      </h5>
-      <p class="small text-muted mb-0 mt-1">
-        Notices from the Guidance Office requesting you to report on the scheduled date and time.
-      </p>
-    </div>
-    <?php if ($counts['pending'] > 0): ?>
-      <span class="badge text-bg-warning"><?= (int) $counts['pending'] ?> awaiting acknowledgment</span>
-    <?php else: ?>
-      <span class="badge text-bg-secondary"><?= (int) $counts['all'] ?> total</span>
-    <?php endif; ?>
-  </div>
-
-  <div class="card-body p-3">
-    <nav class="portal-callslips-tabs mb-3" aria-label="Filter guidance call slips">
-      <?php foreach ($tabs as $tabKey => $tabLabel): ?>
-        <?php
-        $tabUrl = $tabKey === 'all' ? $baseUrl : ($baseUrl . '?status=' . urlencode($tabKey));
-        $isCurrent = $filter === $tabKey;
-        ?>
-        <a href="<?= esc($tabUrl) ?>"
-           class="btn btn-sm <?= $isCurrent ? 'btn-primary' : 'btn-outline-secondary' ?>"
-           <?= $isCurrent ? 'aria-current="page"' : '' ?>>
-          <span><?= esc($tabLabel) ?></span>
-          <span class="badge <?= $isCurrent ? 'bg-light text-dark' : 'bg-secondary-subtle text-body-secondary' ?> ms-1">
-            <?= (int) ($counts[$tabKey] ?? 0) ?>
-          </span>
-        </a>
-      <?php endforeach; ?>
-    </nav>
-
-    <?php if ($callSlips === []): ?>
-      <div class="text-center py-5 text-muted">
-        <i class="bi bi-ticket-perforated fs-1 d-block mb-2 opacity-50" aria-hidden="true"></i>
-        <p class="mb-2 fw-medium">
-          <?= match ($filter) {
-              'pending' => 'No call slips waiting for your acknowledgment.',
-              'acknowledged' => 'No acknowledged active call slips.',
-              'history' => 'No past or closed call slips recorded.',
-              default => 'You have no Guidance call slips yet.',
-          } ?>
-        </p>
-        <?php if ($filter !== 'all'): ?>
-          <a href="<?= esc($baseUrl) ?>" class="btn btn-outline-primary btn-sm">View all call slips</a>
-        <?php endif; ?>
+    <div class="pa-band pa-cs-header-band">
+      <div class="pa-cs-top">
+        <div class="pa-cs-copy">
+          <h2 class="pa-intro-title" id="portal-callslips-heading">Official Guidance Call Slips</h2>
+          <p class="pa-intro-desc">
+            Notices from the Guidance Office requesting you to report on the scheduled date and time.
+          </p>
+        </div>
+        <div class="pa-cs-summary">
+          <?php if ($counts['pending'] > 0): ?>
+            <span class="pa-status is-requested"><?= (int) $counts['pending'] ?> awaiting acknowledgment</span>
+          <?php else: ?>
+            <span class="pa-cs-total"><?= (int) $counts['all'] ?> total</span>
+          <?php endif; ?>
+        </div>
       </div>
-    <?php else: ?>
-      <div class="d-grid gap-2">
-        <?php foreach ($callSlips as $cs): ?>
+
+      <nav class="pa-cs-tabs" aria-label="Filter guidance call slips">
+        <?php foreach ($tabs as $tabKey => $tabLabel): ?>
           <?php
-          $csId = (int) ($cs['id'] ?? 0);
-          $csStatus = (string) ($cs['attendance_status'] ?? 'pending');
-          $badgeMeta = $statusBadgeMap[$csStatus] ?? ['class' => 'text-bg-secondary', 'label' => ucfirst($csStatus)];
-          $csSlipNumber = (string) ($cs['call_slip_number'] ?? ('#' . $csId));
-          $csDateRaw = (string) ($cs['call_date'] ?? '');
-          $csDateFormatted = $csDateRaw !== '' && strtotime($csDateRaw) ? date('M d, Y', strtotime($csDateRaw)) : $csDateRaw;
-          $csTimeRaw = (string) ($cs['call_time'] ?? '');
-          $csTimeFormatted = $csTimeRaw !== '' && strtotime($csTimeRaw) ? date('g:i A', strtotime($csTimeRaw)) : $csTimeRaw;
-          $csSchedule = trim($csDateFormatted . ($csTimeFormatted !== '' ? ' · ' . $csTimeFormatted : ''));
-          $csPurpose = ucwords(str_replace('_', ' ', (string) ($cs['purpose'] ?? 'counseling')));
-          $csPurposeOther = trim((string) ($cs['purpose_other'] ?? ''));
+          $tabUrl = $tabKey === 'all' ? $baseUrl : ($baseUrl . '?status=' . urlencode($tabKey));
+          $isCurrent = $filter === $tabKey;
           ?>
-          <article class="portal-callslip-row-card d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
-            <div>
-              <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-                <span class="fw-semibold"><?= esc($csSlipNumber) ?></span>
-                <span class="badge <?= esc($badgeMeta['class']) ?>"><?= esc($badgeMeta['label']) ?></span>
-              </div>
-              <div class="small text-muted d-flex flex-wrap align-items-center gap-2">
-                <?php if ($csSchedule !== ''): ?>
-                  <span><i class="bi bi-calendar-event me-1" aria-hidden="true"></i><?= esc($csSchedule) ?></span>
+          <a href="<?= esc($tabUrl, 'attr') ?>"
+             class="pa-cs-tab <?= $isCurrent ? 'is-active' : '' ?>"
+             <?= $isCurrent ? 'aria-current="page"' : '' ?>>
+            <span><?= esc($tabLabel) ?></span>
+            <span class="pa-cs-tab-count"><?= (int) ($counts[$tabKey] ?? 0) ?></span>
+          </a>
+        <?php endforeach; ?>
+      </nav>
+    </div>
+
+    <div class="pa-results-region">
+      <?php if ($callSlips === []): ?>
+        <div class="pa-empty">
+          <i class="bi bi-ticket-perforated" aria-hidden="true"></i>
+          <h3>
+            <?= match ($filter) {
+                'pending' => 'No call slips awaiting action',
+                'acknowledged' => 'No acknowledged call slips',
+                'history' => 'No past or closed call slips',
+                default => 'No Guidance call slips yet',
+            } ?>
+          </h3>
+          <p>
+            <?= match ($filter) {
+                'pending' => 'No call slips waiting for your acknowledgment.',
+                'acknowledged' => 'No acknowledged active call slips.',
+                'history' => 'No past or closed call slips recorded.',
+                default => 'You have no Guidance call slips yet.',
+            } ?>
+          </p>
+          <?php if ($filter !== 'all'): ?>
+            <a href="<?= esc($baseUrl, 'attr') ?>" class="btn btn-outline-secondary btn-sm pa-btn">View all call slips</a>
+          <?php endif; ?>
+        </div>
+      <?php else: ?>
+        <div class="pa-cs-ledger">
+          <?php foreach ($callSlips as $cs): ?>
+            <?php
+            $csId = (int) ($cs['id'] ?? 0);
+            $csStatus = (string) ($cs['attendance_status'] ?? 'pending');
+            $statusMeta = $statusMetaMap[$csStatus] ?? ['tone' => 'is-inactive', 'label' => ucfirst($csStatus)];
+            $csSlipNumber = (string) ($cs['call_slip_number'] ?? ('#' . $csId));
+            $csInstanceNum = trim((string) ($cs['form_instance_number'] ?? ''));
+            $csDateRaw = (string) ($cs['call_date'] ?? '');
+            $csDateFormatted = $csDateRaw !== '' && strtotime($csDateRaw) ? date('M j, Y', strtotime($csDateRaw)) : $csDateRaw;
+            $csTimeRaw = (string) ($cs['call_time'] ?? '');
+            $csTimeFormatted = $csTimeRaw !== '' && strtotime($csTimeRaw) ? date('g:i A', strtotime($csTimeRaw)) : $csTimeRaw;
+            $csSchedule = trim($csDateFormatted . ($csTimeFormatted !== '' ? ' · ' . $csTimeFormatted : ''));
+            $csPurpose = ucwords(str_replace('_', ' ', (string) ($cs['purpose'] ?? 'counseling')));
+            $csPurposeOther = trim((string) ($cs['purpose_other'] ?? ''));
+            ?>
+            <article class="pa-cs-row <?= $csStatus === 'pending' ? 'is-pending' : '' ?>">
+              <div class="pa-cs-main">
+                <div class="pa-cs-row-top">
+                  <div class="pa-cs-ident">
+                    <span class="pa-cs-number"><?= esc($csSlipNumber) ?></span>
+                    <?php if ($csInstanceNum !== ''): ?>
+                      <span class="pa-callslip-sep" aria-hidden="true">·</span>
+                      <span class="pa-cs-instance"><?= esc($csInstanceNum) ?></span>
+                    <?php endif; ?>
+                  </div>
+                  <span class="pa-status <?= esc($statusMeta['tone']) ?>"><?= esc($statusMeta['label']) ?></span>
+                </div>
+
+                <div class="pa-cs-details">
+                  <?php if ($csSchedule !== ''): ?>
+                    <span class="pa-cs-schedule">
+                      <i class="bi bi-calendar-event" aria-hidden="true"></i>
+                      <span><?= esc($csSchedule) ?></span>
+                    </span>
+                    <span class="pa-callslip-sep" aria-hidden="true">·</span>
+                  <?php endif; ?>
+                  <span class="pa-cs-purpose">
+                    Purpose: <strong><?= esc($csPurpose) ?><?= $csPurposeOther !== '' ? ' (' . esc($csPurposeOther) . ')' : '' ?></strong>
+                  </span>
+                </div>
+
+                <?php if (!empty($cs['acknowledged_at']) && $csStatus !== 'pending'): ?>
+                  <div class="pa-cs-ack-note">
+                    <i class="bi bi-check2" aria-hidden="true"></i>
+                    <span>Acknowledged on <?= esc(date('M j, Y · g:i A', strtotime((string) $cs['acknowledged_at']) ?: time())) ?></span>
+                  </div>
                 <?php endif; ?>
-                <span><i class="bi bi-chat-left-text me-1" aria-hidden="true"></i><?= esc($csPurpose) ?><?= $csPurposeOther !== '' ? ' (' . esc($csPurposeOther) . ')' : '' ?></span>
               </div>
-              <?php if (!empty($cs['acknowledged_at']) && $csStatus !== 'pending'): ?>
-                <div class="small text-muted mt-1">
-                  Acknowledged on <?= esc(date('M d, Y g:i A', strtotime((string) $cs['acknowledged_at']) ?: time())) ?>
+
+              <?php if ($csStatus === 'pending'): ?>
+                <div class="pa-cs-actions">
+                  <form method="post" action="<?= esc(site_url('/portal/guidance/call-slips/' . $csId . '/acknowledge'), 'attr') ?>" data-background-submit>
+                    <?= csrf_field() ?>
+                    <button type="submit" class="btn btn-primary btn-sm pa-btn">
+                      <span>Acknowledge receipt</span>
+                    </button>
+                  </form>
                 </div>
               <?php endif; ?>
-            </div>
+            </article>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
 
-            <?php if ($csStatus === 'pending'): ?>
-              <div class="portal-callslip-row-actions flex-shrink-0">
-                <form method="post" action="<?= esc(site_url('/portal/guidance/call-slips/' . $csId . '/acknowledge'), 'attr') ?>" data-background-submit>
-                  <?= csrf_field() ?>
-                  <button type="submit" class="btn btn-sm btn-primary">
-                    <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Acknowledge receipt
-                  </button>
-                </form>
-              </div>
-            <?php endif; ?>
-          </article>
-        <?php endforeach; ?>
+      <div class="pa-pagination-band">
+        <?= view('partials/table_pagination', [
+            'pagination' => $pagination ?? [
+                'page'     => 1,
+                'per_page' => 20,
+                'filtered' => count($callSlips),
+                'total'    => (int) ($counts['all'] ?? count($callSlips)),
+                'pages'    => 1,
+            ],
+            'filters' => $filters ?? ['status' => $filter, 'per_page' => 20],
+            'rowCount' => count($callSlips),
+            'baseUrl' => $baseUrl,
+            'paginationPageParam' => 'page',
+            'paginationLiveFilters' => false,
+            'paginationLabel' => 'Guidance call slip pages',
+            'totalLabel' => 'total call slips',
+        ]) ?>
       </div>
-    <?php endif; ?>
-  </div>
-</section>
+    </div>
+
+  </section>
+</div>
 <?= $this->endSection() ?>

@@ -66,46 +66,60 @@
             <div class="user-menu-info">
               <div class="user-menu-name"><?= esc($currentUser['name'] ?? 'User') ?></div>
               <div class="user-menu-email"><?= esc($userEmail) ?></div>
+              <span class="user-menu-role-badge"><?= esc($roleLabel) ?></span>
             </div>
           </div>
           <div class="user-menu-body">
             <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('main', 'portal') ?>">
-              <i class="bi bi-person"></i>
+              <span class="user-menu-icon" aria-hidden="true"><i class="bi bi-person"></i></span>
               <span>My Health Portal</span>
             </a>
             <?php if ($profilePersonId > 0 && $role !== 'guest'): ?>
               <a class="user-menu-item" data-navigation href="<?= esc(\App\Services\PortalContext::urlFor('main', 'portal/settings')) ?>">
-                <i class="bi bi-person-gear" aria-hidden="true"></i><span>Profile &amp; Settings</span>
+                <span class="user-menu-icon" aria-hidden="true"><i class="bi bi-person-gear"></i></span>
+                <span>Profile &amp; Settings</span>
               </a>
             <?php endif; ?>
-            <?php if (in_array($role, ['clinic_admin', 'clinic_staff', 'superadmin'], true)): ?>
-              <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('clinic', 'clinic') ?>">
-                <i class="bi bi-hospital"></i>
-                <span>Clinic Console</span>
-              </a>
-            <?php endif; ?>
-            <?php if (in_array($role, ['guidance_admin', 'guidance_supervisor', 'counsellor', 'superadmin'], true)): ?>
-              <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('guidance', 'guidance') ?>">
-                <i class="bi bi-person-heart"></i>
-                <span>Guidance Console</span>
-              </a>
-            <?php endif; ?>
-            <?php if (in_array($role, ['bmg_admin', 'facilities_op', 'superadmin'], true)): ?>
-              <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('bmg', 'facilities/dashboard') ?>">
-                <i class="bi bi-recycle"></i>
-                <span>Facilities Console</span>
-              </a>
-            <?php endif; ?>
-            <?php if (in_array($role, ['superadmin', 'audit_reader'], true)): ?>
-              <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('main', 'admin/audit') ?>">
-                <i class="bi bi-fingerprint"></i>
-                <span>Audit Ledger</span>
-              </a>
+            <?php 
+              $hasStaffConsoles = in_array($role, [
+                'clinic_admin', 'clinic_staff',
+                'guidance_admin', 'guidance_supervisor', 'counsellor',
+                'bmg_admin', 'facilities_op',
+                'superadmin', 'audit_reader'
+              ], true);
+            ?>
+            <?php if ($hasStaffConsoles): ?>
+              <div class="user-menu-divider" role="separator"></div>
+              <div class="user-menu-section-header">Staff Consoles</div>
+              <?php if (in_array($role, ['clinic_admin', 'clinic_staff', 'superadmin'], true)): ?>
+                <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('clinic', 'clinic') ?>">
+                  <span class="user-menu-icon" aria-hidden="true"><?= view('partials/unit_vector_icon', ['unit' => 'clinic', 'class' => 'unit-btn-icon']) ?></span>
+                  <span>Clinic Console</span>
+                </a>
+              <?php endif; ?>
+              <?php if (in_array($role, ['guidance_admin', 'guidance_supervisor', 'counsellor', 'superadmin'], true)): ?>
+                <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('guidance', 'guidance') ?>">
+                  <span class="user-menu-icon" aria-hidden="true"><?= view('partials/unit_vector_icon', ['unit' => 'guidance', 'class' => 'unit-btn-icon']) ?></span>
+                  <span>Guidance Console</span>
+                </a>
+              <?php endif; ?>
+              <?php if (in_array($role, ['bmg_admin', 'facilities_op', 'superadmin'], true)): ?>
+                <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('bmg', 'facilities/dashboard') ?>">
+                  <span class="user-menu-icon" aria-hidden="true"><i class="bi bi-recycle"></i></span>
+                  <span>Facilities Console</span>
+                </a>
+              <?php endif; ?>
+              <?php if (in_array($role, ['superadmin', 'audit_reader'], true)): ?>
+                <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('main', 'admin/audit') ?>">
+                  <span class="user-menu-icon" aria-hidden="true"><i class="bi bi-fingerprint"></i></span>
+                  <span>Audit Ledger</span>
+                </a>
+              <?php endif; ?>
             <?php endif; ?>
           </div>
           <div class="user-menu-footer">
             <button type="button" class="btn btn-primary user-menu-logout w-100" data-bs-toggle="modal" data-bs-target="#logoutConfirmModal">
-              <i class="bi bi-box-arrow-right"></i>
+              <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
               <span>Sign Out</span>
             </button>
           </div>

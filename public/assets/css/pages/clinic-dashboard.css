@@ -1,0 +1,1823 @@
+/* ==========================================================================
+   SYNAPSE — Clinic Workstation Command Center (.cdc-dashboard, .cdc-actions)
+   Modern asymmetric clinical bento dashboard designed around real nurse &
+   physician shift workflows:
+   - Compact shift status strip (zero generic welcome hero box)
+   - Unified hairline-divided 4-column live telemetry deck (zero repetition)
+   - Compact solid operational watch strip (zero pastel washes / dismiss X)
+   - 7/5 Bento Row 2: Clinical Intake Velocity (computed period analytics +
+     solid #800000 maroon segmented timeframe switcher) & Active Queue Radar
+     (compact triage donut + horizontal acuity bar + live Up Next patients)
+   - 7/5 Bento Row 3: Actionable Recent Encounters worklist (1-click Resume /
+     View CTAs) & Today's Clinic Schedule timeline + subtle workstation footer
+   Imported after core/synapse-theme.css.
+   ========================================================================== */
+
+.cdc-dashboard,
+.cdc-actions {
+  --cdc-card: #ffffff;
+  --cdc-subtle: #f8f9fb;
+  --cdc-muted: #f2f4f7;
+  --cdc-hover: #f5f6f9;
+  --cdc-border: #e3e6ec;
+  --cdc-hairline: #edf0f4;
+  --cdc-input-border: #cfd5df;
+  --cdc-fg: #0f172a;
+  --cdc-fg-secondary: #334155;
+  --cdc-muted-fg: #64748b;
+  --cdc-brand: #800000;
+  --cdc-brand-hover: #660000;
+  --cdc-emerald: #146c43;
+  --cdc-emerald-dot: #16a34a;
+  --cdc-amber: #d97706;
+  --cdc-amber-text: #b45309;
+  --cdc-crimson: #b91c1c;
+  --cdc-sky: #0369a1;
+  --cdc-slate: #475569;
+  --cdc-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
+  --cdc-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  color: var(--cdc-fg-secondary);
+  min-width: 0;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.cdc-dashboard,
+  .cdc-actions) {
+  --cdc-card: #151517;
+  --cdc-subtle: #1b1b1f;
+  --cdc-muted: #232328;
+  --cdc-hover: #1f1f24;
+  --cdc-border: #2a2a30;
+  --cdc-hairline: #222227;
+  --cdc-input-border: #3a3a42;
+  --cdc-fg: #f4f4f5;
+  --cdc-fg-secondary: #d4d4d8;
+  --cdc-muted-fg: #9ca3af;
+  --cdc-brand: #800000;
+  --cdc-brand-hover: #991b1b;
+  --cdc-emerald: #34d399;
+  --cdc-emerald-dot: #22c55e;
+  --cdc-amber: #f59e0b;
+  --cdc-amber-text: #fbbf24;
+  --cdc-crimson: #f87171;
+  --cdc-sky: #38bdf8;
+  --cdc-slate: #94a3b8;
+  --cdc-shadow: none;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--cdc-fg-secondary);
+}
+
+.cdc-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.cdc-dashboard :is(h2, h3, h4, h5, h6, strong) {
+  color: var(--cdc-fg);
+}
+
+.cdc-mono {
+  font-family: var(--cdc-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Solid Opaque Button System (Beats legacy synapse-theme outline fills)
+   ========================================================================== */
+.cdc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn:not(.btn-close) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 34px;
+  padding: 0 0.82rem;
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow: none;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-xs {
+  min-height: 28px;
+  padding: 0 0.58rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-primary {
+  background: var(--cdc-brand) !important;
+  border: 1px solid var(--cdc-brand) !important;
+  color: #ffffff !important;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-primary:hover,
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-primary:focus-visible {
+  background: var(--cdc-brand-hover) !important;
+  border-color: var(--cdc-brand-hover) !important;
+  color: #ffffff !important;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-primary {
+  background: var(--cdc-card) !important;
+  border: 1px solid var(--cdc-brand) !important;
+  color: var(--cdc-brand) !important;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-primary:hover,
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-primary:focus-visible {
+  background: var(--cdc-brand) !important;
+  border-color: var(--cdc-brand) !important;
+  color: #ffffff !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-primary {
+  background: var(--cdc-card) !important;
+  border-color: #b91c1c !important;
+  color: #fca5a5 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-primary:hover,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-primary:focus-visible {
+  background: var(--cdc-brand) !important;
+  border-color: var(--cdc-brand) !important;
+  color: #ffffff !important;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-secondary {
+  background: var(--cdc-card) !important;
+  border: 1px solid var(--cdc-input-border) !important;
+  color: var(--cdc-fg-secondary) !important;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-secondary:hover,
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-secondary:focus-visible {
+  background: var(--cdc-muted) !important;
+  border-color: var(--cdc-border) !important;
+  color: var(--cdc-fg) !important;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-danger {
+  background: var(--cdc-card) !important;
+  border: 1px solid var(--cdc-crimson) !important;
+  color: var(--cdc-crimson) !important;
+}
+
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-danger:hover,
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-danger:focus-visible {
+  background: #b91c1c !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+}
+
+/* Beat legacy synapse-theme white-icon rule on outline buttons */
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-primary.btn-outline-primary[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *),
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-secondary.btn-outline-secondary[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *),
+html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-danger.btn-outline-danger[class] :is(i.bi, i, svg, span):not(.badge):not(.badge *) {
+  color: currentColor !important;
+}
+
+/* ==========================================================================
+   1. Shift Status Strip (Compact Operational Context Bar)
+   ========================================================================== */
+.cdc-shift-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1.25rem;
+  padding: 0.65rem 1rem;
+  background: var(--cdc-card);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.375rem;
+  box-shadow: var(--cdc-shadow);
+}
+
+.cdc-shift-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  min-width: 0;
+}
+
+.cdc-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.16rem 0.5rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--cdc-emerald);
+  white-space: nowrap;
+}
+
+.cdc-live-tag::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cdc-emerald-dot);
+  flex-shrink: 0;
+}
+
+.cdc-shift-identity {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--cdc-fg);
+}
+
+.cdc-shift-sep {
+  color: var(--cdc-border);
+  user-select: none;
+}
+
+.cdc-shift-meta {
+  font-size: 0.78rem;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-shift-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+html body .cdc-dashboard a.cdc-status-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.25rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--cdc-fg-secondary) !important;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 0.14s ease, background-color 0.14s ease;
+}
+
+html body .cdc-dashboard a.cdc-status-link:hover {
+  background: var(--cdc-muted);
+  border-color: var(--cdc-input-border);
+}
+
+.cdc-status-link--amber {
+  color: var(--cdc-amber-text) !important;
+}
+
+.cdc-status-link--crimson {
+  color: var(--cdc-crimson) !important;
+}
+
+.cdc-status-link::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.cdc-status-link--amber::before {
+  background: var(--cdc-amber);
+}
+
+.cdc-queue-feedback {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--cdc-muted-fg);
+}
+
+/* ==========================================================================
+   2. Unified 4-Column Asymmetric Live Telemetry Deck
+   ========================================================================== */
+.cdc-deck {
+  display: grid;
+  grid-template-columns: 1.16fr 1.2fr 1fr 1.02fr;
+  background: var(--cdc-card);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.375rem;
+  box-shadow: var(--cdc-shadow);
+  overflow: hidden;
+}
+
+.cdc-deck-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 1rem 1.15rem;
+  border-right: 1px solid var(--cdc-hairline);
+  min-width: 0;
+  position: relative;
+}
+
+.cdc-deck-cell:last-child {
+  border-right: 0;
+}
+
+.cdc-deck-cell--hero {
+  border-top: 3px solid var(--cdc-brand);
+}
+
+.cdc-deck-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  min-height: 22px;
+}
+
+.cdc-deck-label {
+  font-size: 0.675rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  color: var(--cdc-muted-fg);
+  white-space: nowrap;
+}
+
+.cdc-deck-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.4rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--cdc-muted-fg);
+  white-space: nowrap;
+}
+
+.cdc-deck-badge--live {
+  color: var(--cdc-emerald);
+}
+
+.cdc-deck-badge--live::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cdc-emerald-dot);
+}
+
+.cdc-deck-badge--amber {
+  color: var(--cdc-amber-text);
+  border-color: var(--cdc-amber);
+}
+
+.cdc-deck-main {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.cdc-deck-num {
+  font-family: var(--cdc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--cdc-fg);
+}
+
+.cdc-deck-num--text {
+  font-family: inherit;
+  font-size: 1.25rem;
+  letter-spacing: 0;
+}
+
+.cdc-deck-unit {
+  font-size: 0.76rem;
+  color: var(--cdc-muted-fg);
+  font-weight: 500;
+}
+
+.cdc-deck-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--cdc-hairline);
+  font-size: 0.74rem;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-deck-foot-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.cdc-deck-foot-info.up {
+  color: var(--cdc-emerald);
+  font-weight: 600;
+}
+
+.cdc-deck-foot-info.warn {
+  color: var(--cdc-amber-text);
+  font-weight: 600;
+}
+
+html body .cdc-dashboard a.cdc-micro-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--cdc-brand) !important;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+html body .cdc-dashboard a.cdc-micro-link:hover {
+  text-decoration: underline;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-dashboard a.cdc-micro-link {
+  color: #fca5a5 !important;
+}
+
+/* ==========================================================================
+   3. Clinical Priority Watch Rail (Solid opaque, left-bordered)
+   ========================================================================== */
+.cdc-watch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.cdc-watch-grid--single {
+  grid-template-columns: 1fr;
+}
+
+.cdc-watch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  padding: 0.82rem 1.05rem;
+  background: var(--cdc-card);
+  border: 1px solid var(--cdc-border);
+  border-left: 3px solid var(--cdc-amber);
+  border-radius: 0.375rem;
+  box-shadow: var(--cdc-shadow);
+  min-width: 0;
+}
+
+.cdc-watch--crimson {
+  border-left-color: var(--cdc-crimson);
+}
+
+.cdc-watch-copy {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+
+.cdc-watch-title {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--cdc-fg);
+  margin-bottom: 0.18rem;
+}
+
+.cdc-watch-title i {
+  color: var(--cdc-amber);
+}
+
+.cdc-watch--crimson .cdc-watch-title i {
+  color: var(--cdc-crimson);
+}
+
+.cdc-watch-desc {
+  font-size: 0.78rem;
+  color: var(--cdc-fg-secondary);
+  line-height: 1.42;
+}
+
+.cdc-watch-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.cdc-watch-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.12rem 0.46rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.2rem;
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: var(--cdc-crimson);
+}
+
+/* ==========================================================================
+   4. Asymmetric 7/5 Bento Workspace Rows & Shared Card Shell
+   ========================================================================== */
+.cdc-bento-row {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
+.cdc-dashboard .card.cdc-panel {
+  background: var(--cdc-card);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.375rem;
+  box-shadow: var(--cdc-shadow);
+  margin-bottom: 0;
+  overflow: visible !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.cdc-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.85rem;
+  padding: 0.85rem 1.1rem;
+  background: var(--cdc-card);
+  border-bottom: 1px solid var(--cdc-hairline);
+  border-radius: 0.375rem 0.375rem 0 0;
+}
+
+.cdc-panel-title-wrap {
+  min-width: 0;
+}
+
+.cdc-panel-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--cdc-fg);
+  line-height: 1.25;
+}
+
+.cdc-panel-sub {
+  display: block;
+  margin-top: 0.14rem;
+  font-size: 0.74rem;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-panel-body {
+  padding: 1rem 1.1rem;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.cdc-panel-body--flush {
+  padding: 0;
+  border-radius: 0 0 0.375rem 0.375rem;
+  overflow: hidden;
+}
+
+/* Segmented Maroon Timeframe Switcher */
+.cdc-range-switch {
+  display: inline-flex;
+  border: 1px solid var(--cdc-input-border);
+  border-radius: 0.25rem;
+  overflow: hidden;
+  background: var(--cdc-subtle);
+}
+
+html body .cdc-dashboard .cdc-range-switch .cdc-range-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 29px;
+  padding: 0 0.7rem;
+  border: 0 !important;
+  border-right: 1px solid var(--cdc-border) !important;
+  border-radius: 0 !important;
+  background: var(--cdc-subtle) !important;
+  color: var(--cdc-fg-secondary) !important;
+  font-size: 0.73rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+html body .cdc-dashboard .cdc-range-switch .cdc-range-btn:last-child {
+  border-right: 0 !important;
+}
+
+html body .cdc-dashboard .cdc-range-switch .cdc-range-btn:hover:not(.active) {
+  background: var(--cdc-muted) !important;
+  color: var(--cdc-fg) !important;
+}
+
+html body .cdc-dashboard .cdc-range-switch .cdc-range-btn.active {
+  background: #800000 !important;
+  color: #ffffff !important;
+}
+
+/* Inline Hairline-Divided Period Analytics Ribbon (Zero nested box clutter) */
+.cdc-period-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.75rem 1.1rem;
+  background: var(--cdc-subtle);
+  border-bottom: 1px solid var(--cdc-hairline);
+}
+
+.cdc-period-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1.35rem;
+}
+
+.cdc-period-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  position: relative;
+}
+
+.cdc-period-metric+.cdc-period-metric {
+  padding-left: 1.35rem;
+  border-left: 1px solid var(--cdc-border);
+}
+
+.cdc-period-stat-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-period-stat-val {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.cdc-period-stat-val strong {
+  font-family: var(--cdc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--cdc-fg);
+  line-height: 1.15;
+}
+
+.cdc-period-stat-val span {
+  font-size: 0.72rem;
+  color: var(--cdc-muted-fg);
+  white-space: nowrap;
+}
+
+.cdc-chart-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  white-space: nowrap;
+}
+
+.cdc-legend-line {
+  width: 14px;
+  height: 2.5px;
+  border-radius: 1px;
+  background: var(--cdc-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-legend-line {
+  background: #f87171;
+}
+
+.cdc-legend-dash {
+  width: 14px;
+  height: 0;
+  border-top: 1.5px dashed var(--cdc-slate);
+}
+
+.cdc-legend-peak {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cdc-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-legend-peak {
+  background: #f87171;
+}
+
+.cdc-chart-stage {
+  padding: 0.75rem 0.9rem 0.6rem;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: opacity 0.16s ease;
+}
+
+.cdc-intake-panel .cdc-period-ribbon {
+  transition: opacity 0.16s ease;
+}
+
+.cdc-intake-panel.is-loading .cdc-chart-stage {
+  opacity: 0.42;
+}
+
+.cdc-intake-panel.is-loading .cdc-period-ribbon {
+  opacity: 0.72;
+}
+
+.cdc-intake-panel.is-loading .cdc-range-btn.active {
+  cursor: progress;
+}
+
+.cdc-intake-error {
+  margin: 0;
+  padding: 0.45rem 1.1rem;
+  background: var(--cdc-subtle);
+  border-bottom: 1px solid var(--cdc-border);
+  border-left: 3px solid var(--cdc-crimson);
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--cdc-crimson);
+}
+
+.cdc-dashboard .nd-chart-canvas {
+  min-height: 316px;
+}
+
+/* Custom Architectural ApexCharts Tooltip (Never clipped by cards) */
+.cdc-dashboard .apexcharts-canvas,
+.cdc-dashboard .nd-chart-canvas,
+.cdc-dashboard .nd-donut-canvas,
+.cdc-donut-stage {
+  overflow: visible !important;
+}
+
+.cdc-dashboard .apexcharts-tooltip {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+  z-index: 40 !important;
+  pointer-events: none !important;
+}
+
+/* Pin triage & category donut tooltips cleanly below the ring so they never clip left or obscure the center readout */
+.cdc-dashboard #clinicTriageChart .apexcharts-tooltip,
+.cdc-dashboard #guidanceCategoryChart .apexcharts-tooltip {
+  left: 0 !important;
+  right: auto !important;
+  top: calc(100% - 4px) !important;
+  bottom: auto !important;
+  transform: none !important;
+}
+
+.cdc-tip {
+  min-width: 136px;
+  padding: 0.5rem 0.68rem;
+  background: var(--cdc-card);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.3rem;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+  font-family: inherit;
+  color: var(--cdc-fg);
+  white-space: nowrap;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-tip {
+  background: #1f1f24;
+  border-color: #3a3a42;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.cdc-tip-head {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  color: var(--cdc-muted-fg);
+  margin-bottom: 0.3rem;
+}
+
+.cdc-tip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.cdc-tip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--cdc-fg-secondary);
+}
+
+.cdc-tip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cdc-tip-val {
+  font-family: var(--cdc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--cdc-fg);
+}
+
+.cdc-tip-delta {
+  margin-top: 0.3rem;
+  padding-top: 0.28rem;
+  border-top: 1px solid var(--cdc-hairline);
+  font-family: var(--cdc-mono);
+  font-size: 0.69rem;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-tip-delta--up {
+  color: var(--cdc-emerald);
+}
+
+/* ==========================================================================
+   5. Active Queue & Triage Radar Card (Framed Ring Gauge + Metered Acuity)
+   ========================================================================== */
+.cdc-triage-top {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  padding: 0.95rem 1.1rem;
+  border-bottom: 1px solid var(--cdc-hairline);
+}
+
+.cdc-donut-stage {
+  position: relative;
+  width: 168px;
+  height: 168px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cdc-donut-stage--empty .apexcharts-pie-area {
+  fill: var(--cdc-border) !important;
+  stroke: var(--cdc-card) !important;
+}
+
+.cdc-dashboard .cdc-triage-donut {
+  width: 168px;
+  min-height: 168px;
+  height: 168px;
+}
+
+.cdc-acuity-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.52rem;
+  min-width: 0;
+}
+
+.cdc-acuity-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  padding: 0.45rem 0.62rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-hairline);
+  border-radius: 0.25rem;
+  font-size: 0.76rem;
+}
+
+.cdc-acuity-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cdc-acuity-nums {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cdc-acuity-pct {
+  font-family: var(--cdc-mono);
+  font-size: 0.69rem;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-acuity-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--cdc-muted);
+  overflow: hidden;
+}
+
+.cdc-acuity-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+
+.cdc-acuity-fill--emergency {
+  background: var(--cdc-crimson);
+}
+
+.cdc-acuity-fill--urgent {
+  background: var(--cdc-amber);
+}
+
+.cdc-acuity-fill--routine {
+  background: var(--cdc-emerald);
+}
+
+.cdc-acuity-count {
+  font-family: var(--cdc-mono);
+  font-weight: 700;
+  color: var(--cdc-fg);
+}
+
+/* Up Next Live Queue Feed */
+.cdc-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.58rem 1.1rem;
+  background: var(--cdc-subtle);
+  border-bottom: 1px solid var(--cdc-hairline);
+  font-size: 0.69rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-queue-feed {
+  display: flex;
+  flex-direction: column;
+  border-radius: 0 0 0.375rem 0.375rem;
+  overflow: hidden;
+}
+
+html body .cdc-dashboard a.cdc-queue-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.62rem 1.1rem;
+  border-bottom: 1px solid var(--cdc-hairline);
+  border-left: 3px solid var(--cdc-border);
+  background: var(--cdc-card);
+  text-decoration: none;
+  color: inherit;
+  transition: background-color 0.14s ease;
+}
+
+html body .cdc-dashboard a.cdc-queue-row:last-child {
+  border-bottom: 0;
+}
+
+html body .cdc-dashboard a.cdc-queue-row:hover {
+  background: var(--cdc-hover);
+}
+
+.cdc-queue-row--emergency {
+  border-left-color: var(--cdc-crimson) !important;
+}
+
+.cdc-queue-row--urgent {
+  border-left-color: var(--cdc-amber) !important;
+}
+
+.cdc-queue-row--routine {
+  border-left-color: var(--cdc-slate) !important;
+}
+
+.cdc-queue-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.cdc-ticket-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.16rem 0.44rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.2rem;
+  font-family: var(--cdc-mono);
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: var(--cdc-fg);
+  flex-shrink: 0;
+}
+
+.cdc-queue-patient {
+  min-width: 0;
+}
+
+.cdc-queue-name {
+  display: block;
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--cdc-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cdc-queue-meta {
+  display: block;
+  font-size: 0.71rem;
+  color: var(--cdc-muted-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cdc-empty-block {
+  padding: 1.85rem 1.1rem;
+  text-align: center;
+  color: var(--cdc-muted-fg);
+  font-size: 0.8rem;
+}
+
+.cdc-empty-block i {
+  display: block;
+  font-size: 1.45rem;
+  margin-bottom: 0.35rem;
+  opacity: 0.6;
+}
+
+/* ==========================================================================
+   6. Recent Clinical Encounters Worklist (Actionable 4-column Table)
+   ========================================================================== */
+html body .cdc-dashboard .table.cdc-worklist {
+  margin-bottom: 0;
+  color: var(--cdc-fg-secondary);
+  border-color: var(--cdc-hairline);
+  --bs-table-bg: transparent;
+  --bs-table-hover-bg: var(--cdc-hover);
+  --bs-table-color: var(--cdc-fg-secondary);
+  --bs-table-hover-color: var(--cdc-fg);
+}
+
+html body .cdc-dashboard .table.cdc-worklist>thead,
+html body .cdc-dashboard .table.cdc-worklist>thead>tr,
+html body .cdc-dashboard .table.cdc-worklist>thead>tr>th {
+  background: var(--cdc-subtle) !important;
+  background-color: var(--cdc-subtle) !important;
+  color: var(--cdc-muted-fg) !important;
+  border-top: none !important;
+  border-bottom: 1px solid var(--cdc-border) !important;
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  padding: 0.62rem 1rem !important;
+  white-space: nowrap;
+}
+
+html body .cdc-dashboard .table.cdc-worklist>tbody>tr>td {
+  padding: 0.72rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--cdc-hairline);
+  background: transparent;
+  font-size: 0.81rem;
+  white-space: normal;
+}
+
+html body .cdc-dashboard .table.cdc-worklist>tbody>tr:last-child>td {
+  border-bottom: 0;
+}
+
+.cdc-pt-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.cdc-initials {
+  width: 32px;
+  height: 32px;
+  border-radius: 0.25rem;
+  border: 1px solid var(--cdc-border);
+  background: var(--cdc-subtle);
+  color: var(--cdc-fg-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cdc-initials--active {
+  background: var(--cdc-brand);
+  border-color: var(--cdc-brand);
+  color: #ffffff;
+}
+
+.cdc-pt-name {
+  display: block;
+  font-weight: 600;
+  color: var(--cdc-fg);
+  line-height: 1.28;
+  white-space: nowrap;
+}
+
+.cdc-pt-sub {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--cdc-muted-fg);
+  white-space: nowrap;
+}
+
+.cdc-complaint-line {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--cdc-fg);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.cdc-clinician-sub {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: var(--cdc-muted-fg);
+}
+
+/* Inline Status Dots */
+.cdc-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cdc-dot::before {
+  content: "";
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.cdc-dot--emerald {
+  color: var(--cdc-emerald);
+}
+
+.cdc-dot--amber {
+  color: var(--cdc-amber-text);
+}
+
+.cdc-dot--amber::before {
+  background: var(--cdc-amber);
+}
+
+.cdc-dot--crimson {
+  color: var(--cdc-crimson);
+}
+
+.cdc-dot--sky {
+  color: var(--cdc-sky);
+}
+
+.cdc-dot--slate {
+  color: var(--cdc-slate);
+}
+
+/* ==========================================================================
+   7. Today's Clinic Schedule Timeline & Workstation Footer
+   ========================================================================== */
+.cdc-pending-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.58rem 1.1rem;
+  background: var(--cdc-subtle);
+  border-bottom: 1px solid var(--cdc-border);
+  border-left: 3px solid var(--cdc-amber);
+  font-size: 0.76rem;
+  color: var(--cdc-fg);
+}
+
+.cdc-schedule-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.cdc-sched-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.72rem 1.1rem;
+  border-bottom: 1px solid var(--cdc-hairline);
+}
+
+.cdc-sched-row:last-child {
+  border-bottom: 0;
+}
+
+.cdc-sched-time {
+  font-family: var(--cdc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--cdc-fg);
+  white-space: nowrap;
+}
+
+.cdc-sched-info {
+  min-width: 0;
+  padding-left: 0.65rem;
+  border-left: 2px solid var(--cdc-border);
+}
+
+.cdc-sched-name {
+  display: block;
+  font-size: 0.81rem;
+  font-weight: 600;
+  color: var(--cdc-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cdc-sched-reason {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--cdc-muted-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cdc-tools-footer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--cdc-border);
+  background: var(--cdc-subtle);
+  border-radius: 0 0 0.375rem 0.375rem;
+  overflow: hidden;
+}
+
+html body .cdc-dashboard a.cdc-tool-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.24rem;
+  padding: 0.65rem 0.35rem;
+  border-right: 1px solid var(--cdc-hairline);
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: var(--cdc-fg-secondary) !important;
+  text-decoration: none;
+  text-align: center;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+html body .cdc-dashboard a.cdc-tool-link:last-child {
+  border-right: 0;
+}
+
+html body .cdc-dashboard a.cdc-tool-link i {
+  font-size: 0.92rem;
+  color: var(--cdc-muted-fg);
+}
+
+html body .cdc-dashboard a.cdc-tool-link:hover {
+  background: var(--cdc-muted);
+  color: var(--cdc-fg) !important;
+}
+
+html body .cdc-dashboard a.cdc-tool-link:hover i {
+  color: var(--cdc-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-dashboard a.cdc-tool-link:hover i {
+  color: #fca5a5;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints (Tablet & 390px Mobile — Zero Horizontal Overflow)
+   ========================================================================== */
+@media (max-width: 1199.98px) {
+  .cdc-deck {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cdc-deck-cell:nth-child(2) {
+    border-right: 0;
+  }
+
+  .cdc-deck-cell:nth-child(1),
+  .cdc-deck-cell:nth-child(2) {
+    border-bottom: 1px solid var(--cdc-hairline);
+  }
+
+  .cdc-bento-row,
+  .cdc-watch-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767.98px) {
+  :is(.cdc-actions, .cdc-dashboard) .btn:not(.btn-close):not(.btn-xs) {
+    min-height: 40px;
+  }
+
+  .cdc-shift-bar {
+    padding: 0.72rem 0.88rem;
+  }
+
+  .cdc-deck {
+    grid-template-columns: 1fr;
+  }
+
+  .cdc-deck-cell {
+    border-right: 0;
+    border-bottom: 1px solid var(--cdc-hairline);
+    padding: 0.88rem 0.95rem;
+  }
+
+  .cdc-deck-cell:last-child {
+    border-bottom: 0;
+  }
+
+  .cdc-deck-num {
+    font-size: 1.65rem;
+  }
+
+  .cdc-watch .btn {
+    width: 100%;
+  }
+
+  .cdc-range-switch {
+    width: 100%;
+  }
+
+  html body .cdc-dashboard .cdc-range-switch .cdc-range-btn {
+    flex: 1 1 0;
+    min-height: 36px;
+  }
+
+  .cdc-period-ribbon {
+    padding: 0.72rem 0.9rem;
+  }
+
+  .cdc-period-metrics {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem 0.85rem;
+  }
+
+  .cdc-period-metric+.cdc-period-metric {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .cdc-period-metric:last-child {
+    grid-column: 1 / -1;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--cdc-hairline);
+  }
+
+  .cdc-chart-stage {
+    padding: 0.7rem 0.45rem 0.35rem;
+  }
+
+  .cdc-triage-top {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .cdc-dashboard #clinicTriageChart .apexcharts-tooltip,
+  .cdc-dashboard #guidanceCategoryChart .apexcharts-tooltip {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+  }
+
+  .cdc-acuity-stack {
+    width: 100%;
+  }
+
+  .cdc-sched-row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .cdc-sched-info {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .cdc-tools-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cdc-tools-footer a:nth-child(2) {
+    border-right: 0;
+  }
+
+  .cdc-tools-footer a:nth-child(1),
+  .cdc-tools-footer a:nth-child(2) {
+    border-bottom: 1px solid var(--cdc-hairline);
+  }
+
+  /* Bespoke mobile cards for Recent Clinical Encounters */
+  html body .cdc-dashboard .table.cdc-worklist>thead {
+    display: none;
+  }
+
+  html body .cdc-dashboard .table.cdc-worklist,
+  html body .cdc-dashboard .table.cdc-worklist>tbody,
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr,
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr>td {
+    display: block;
+    width: 100%;
+  }
+
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr {
+    padding: 0.8rem 0.95rem;
+    border-bottom: 1px solid var(--cdc-border);
+  }
+
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr:last-child {
+    border-bottom: 0;
+  }
+
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr>td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.16rem;
+    padding: 0.32rem 0;
+    border-bottom: 1px dashed var(--cdc-hairline);
+    text-align: start !important;
+  }
+
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr>td:last-child {
+    border-bottom: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 0;
+  }
+
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr>td:last-child .btn {
+    width: 100%;
+    min-height: 36px;
+  }
+
+  html body .cdc-dashboard .table.cdc-worklist>tbody>tr>td[data-label]::before {
+    content: attr(data-label);
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.055em;
+    color: var(--cdc-muted-fg);
+  }
+
+  .cdc-pt-name,
+  .cdc-pt-sub {
+    white-space: normal;
+  }
+
+  .cdc-complaint-line {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .cdc-actions {
+    width: 100%;
+  }
+
+  .cdc-actions .btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* ==========================================================================
+   8. Guidance Command Center Extensions (Category Grid, Ops Hub, CHED Summary)
+   ========================================================================== */
+@media (min-width: 1350px), (min-width: 768px) and (max-width: 1199.98px) {
+  .cdc-triage-top:has(.cdc-category-grid) {
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .cdc-triage-top:has(.cdc-category-grid) .cdc-donut-stage,
+  .cdc-triage-top:has(.cdc-category-grid) .cdc-triage-donut {
+    width: 148px;
+    min-height: 148px;
+    height: 148px;
+  }
+}
+
+.cdc-category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.42rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.cdc-category-grid .cdc-acuity-row {
+  padding: 0.4rem 0.52rem;
+}
+
+.cdc-category-grid .cdc-acuity-row-top {
+  gap: 0.25rem;
+}
+
+.cdc-category-grid .cdc-dot {
+  font-size: 0.71rem;
+  gap: 0.3rem;
+}
+
+.cdc-category-grid .cdc-acuity-nums {
+  gap: 0.26rem;
+}
+
+.cdc-category-grid .cdc-acuity-count {
+  font-size: 0.72rem;
+}
+
+@media (max-width: 1349.98px) and (min-width: 1200px) {
+  .cdc-triage-top:has(.cdc-category-grid) {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+}
+
+.cdc-dot--violet {
+  color: #6d28d9;
+}
+
+.cdc-dot--amber-dark {
+  color: var(--cdc-amber-text);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-dot--violet {
+  color: #a78bfa;
+}
+
+.cdc-acuity-fill--academic {
+  background: var(--cdc-sky);
+}
+
+.cdc-acuity-fill--personal {
+  background: #6d28d9;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-acuity-fill--personal {
+  background: #a78bfa;
+}
+
+.cdc-acuity-fill--career {
+  background: var(--cdc-emerald);
+}
+
+.cdc-acuity-fill--crisis {
+  background: var(--cdc-crimson);
+}
+
+.cdc-acuity-fill--behavioral {
+  background: var(--cdc-amber);
+}
+
+.cdc-acuity-fill--family {
+  background: var(--cdc-slate);
+}
+
+.cdc-hub-section {
+  padding: 0.85rem 1.1rem;
+  border-top: 1px solid var(--cdc-hairline);
+}
+
+.cdc-hub-section .cdc-subhead {
+  padding: 0 0 0.55rem;
+  background: transparent;
+  border-bottom: 0;
+}
+
+.cdc-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+html body .cdc-dashboard a.cdc-hub-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.52rem 0.68rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.25rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--cdc-fg-secondary) !important;
+  text-decoration: none;
+  min-width: 0;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+html body .cdc-dashboard a.cdc-hub-link-main,
+.cdc-hub-link-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.cdc-hub-link-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html body .cdc-dashboard a.cdc-hub-link i.bi-chevron-right {
+  font-size: 0.68rem;
+  color: var(--cdc-muted-fg);
+  flex-shrink: 0;
+}
+
+html body .cdc-dashboard a.cdc-hub-link:hover {
+  background: var(--cdc-muted);
+  border-color: var(--cdc-brand);
+  color: var(--cdc-fg) !important;
+}
+
+html body .cdc-dashboard a.cdc-hub-link:hover i:first-child {
+  color: var(--cdc-brand);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-dashboard a.cdc-hub-link:hover {
+  border-color: #b91c1c;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .cdc-dashboard a.cdc-hub-link:hover i:first-child {
+  color: #fca5a5;
+}
+
+/* Periodic Summary Bar & KPI Grid */
+.cdc-summary-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.cdc-summary-field {
+  flex: 1 1 170px;
+  max-width: 220px;
+  min-width: 0;
+}
+
+.cdc-summary-field .form-label {
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  color: var(--cdc-muted-fg);
+  margin-bottom: 0.3rem;
+}
+
+.cdc-summary-field .form-control {
+  background: var(--cdc-card);
+  border-color: var(--cdc-input-border);
+  color: var(--cdc-fg);
+  font-size: 0.8rem;
+  min-height: 34px;
+}
+
+.cdc-summary-kpi {
+  height: 100%;
+  padding: 0.72rem 0.88rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.25rem;
+}
+
+.cdc-summary-kpi-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  color: var(--cdc-muted-fg);
+  margin-bottom: 0.28rem;
+}
+
+.cdc-summary-kpi-val {
+  font-family: var(--cdc-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--cdc-fg);
+}
+
+.cdc-summary-placeholder {
+  padding: 0.8rem 0.95rem;
+  background: var(--cdc-subtle);
+  border: 1px dashed var(--cdc-border);
+  border-radius: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--cdc-muted-fg);
+}
+
+@media (max-width: 767.98px) {
+  .cdc-summary-field {
+    max-width: none;
+    flex: 1 1 calc(50% - 0.375rem);
+  }
+
+  .cdc-summary-toolbar .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .cdc-category-grid,
+  .cdc-hub-grid {
+    grid-template-columns: 1fr;
+  }
+}

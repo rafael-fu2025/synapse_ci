@@ -196,8 +196,14 @@ final class SessionRotationHandoffTest extends CIUnitTestCase
             $this->secureSession->remove('_auth_notice');
         }
         self::assertSame(409, $response->getStatusCode());
-        self::assertSame(['message' => self::MESSAGE], json_decode($response->getBody(), true));
-        self::assertStringContainsString('application/json', $response->getHeaderLine('Content-Type'));
+        if (!$xhr && $method === 'GET') {
+            self::assertStringContainsString('text/html', $response->getHeaderLine('Content-Type'));
+            self::assertStringContainsString('<meta http-equiv="refresh" content="1">', $response->getBody());
+            self::assertStringContainsString('Renewing Session', $response->getBody());
+        } else {
+            self::assertSame(['message' => self::MESSAGE], json_decode($response->getBody(), true));
+            self::assertStringContainsString('application/json', $response->getHeaderLine('Content-Type'));
+        }
         self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
         self::assertSame('rotated', $response->getHeaderLine('X-Synapse-Session'));
         self::assertSame('1', $response->getHeaderLine('Retry-After'));
@@ -305,7 +311,93 @@ final class SessionRotationHandoffTest extends CIUnitTestCase
         self::assertContains(self::COOKIE, $result['sent_cookie_names']);
     }
 
-    private function probe(bool $xhr): array
+    public function testDocumentGetHandoffStopsAfterOneRetryAndRedirectsToLogin(): void
+    {
+        $oldId = session_id();
+        $this->secureSession->regenerate(true);
+        $this->reopen($oldId);
+        $this->secureSession->set('_auth_rotated_at', time());
+
+        $first = AuthenticatedUser::denied($this->request(false, 'GET'), false, AuthenticatedUser::AUTHENTICATION_MESSAGE, '/auth/login');
+        self::assertSame(409, $first->getStatusCode());
+        self::assertSame('rotated', $first->getHeaderLine('X-Synapse-Session'));
+        self::assertStringContainsString('text/html', $first->getHeaderLine('Content-Type'));
+        self::assertStringContainsString('<meta http-equiv="refresh" content="1">', $first->getBody());
+        self::assertNull($this->secureSession->get('_auth_notice'));
+
+        // A second document GET still carrying the obsolete cookie must not loop for 15 seconds.
+        $second = AuthenticatedUser::denied($this->request(false, 'GET'), false, AuthenticatedUser::AUTHENTICATION_MESSAGE, '/auth/login');
+        self::assertSame(302, $second->getStatusCode());
+        self::assertSame(site_url('auth/login'), $second->getHeaderLine('Location'));
+        self::assertSame('', $second->getHeaderLine('X-Synapse-Session'));
+        self::assertSame('', $second->getHeaderLine('Retry-After'));
+        self::assertStringContainsString('no-store', $second->getHeaderLine('Cache-Control'));
+        self::assertSame('authentication_required', $this->secureSession->get('_auth_notice'));
+        $this->assertAnonymous();
+    }
+
+    public function testUnauthenticatedOrLogoutRotationMarksObsoleteWithoutRenewingHandoff(): void
+    {
+        $oldId = session_id();
+        AuthenticatedUser::clear();
+        $this->secureSession->regenerate(true);
+        $newId = session_id();
+        self::assertNotSame($oldId, $newId);
+        self::assertNull($this->secureSession->get('_auth_rotated_at'));
+        self::assertNull($this->secureSession->get('_auth_obsolete'));
+
+        $this->reopen($oldId);
+        $this->assertAnonymous();
+        self::assertTrue($this->secureSession->get('_auth_obsolete'));
+        self::assertNull($this->secureSession->get('_auth_rotated_at'));
+
+        // A logged-out predecessor still cannot rotate into a new cookie or refresh its cookie.
+        $this->secureSession->regenerate(false);
+        self::assertSame($oldId, session_id());
+
+        $doc = AuthenticatedUser::denied($this->request(false, 'GET'), false, AuthenticatedUser::AUTHENTICATION_MESSAGE, '/auth/login');
+        self::assertSame(302, $doc->getStatusCode());
+        self::assertSame(site_url('auth/login'), $doc->getHeaderLine('Location'));
+        self::assertSame('', $doc->getHeaderLine('X-Synapse-Session'));
+
+        $xhr = AuthenticatedUser::denied($this->request(true, 'GET'), false, AuthenticatedUser::AUTHENTICATION_MESSAGE, '/auth/login');
+        self::assertSame(401, $xhr->getStatusCode());
+        self::assertSame('', $xhr->getHeaderLine('X-Synapse-Session'));
+
+        $result = $this->probe(true);
+        self::assertTrue($result['same_id']);
+        self::assertFalse($result['authenticated']);
+        self::assertFalse($result['queued_session_cookie']);
+        self::assertNotContains(self::COOKIE, $result['sent_cookie_names']);
+        self::assertContains('handoff_preference', $result['sent_cookie_names']);
+    }
+
+    public function testCgiBackgroundFetchAndImageRequestsDoNotAutoRotateSession(): void
+    {
+        $id = session_id();
+
+        $nav = $this->probe(false, ['HTTP_X_SYNAPSE_NAVIGATION' => '1', 'HTTP_SEC_FETCH_DEST' => 'empty']);
+        self::assertTrue($nav['same_id'], 'Abortable progressive navigation fetch must not auto-rotate the session ID.');
+        self::assertTrue($nav['authenticated']);
+        self::assertTrue($nav['bound_to_current_id']);
+        self::assertFalse($nav['marked']);
+
+        $this->reopen($id);
+        $image = $this->probe(false, ['HTTP_SEC_FETCH_DEST' => 'image']);
+        self::assertTrue($image['same_id'], 'Subresource image requests (e.g. account/photo) must not auto-rotate the session ID.');
+        self::assertTrue($image['authenticated']);
+        self::assertTrue($image['bound_to_current_id']);
+        self::assertFalse($image['marked']);
+
+        $this->reopen($id);
+        $document = $this->probe(false, ['HTTP_SEC_FETCH_DEST' => 'document']);
+        self::assertFalse($document['same_id'], 'Top-level document requests must still auto-rotate the session ID.');
+        self::assertTrue($document['authenticated']);
+        self::assertTrue($document['bound_to_current_id']);
+        self::assertContains(self::COOKIE, $document['sent_cookie_names']);
+    }
+
+    private function probe(bool $xhr, array $extraEnv = []): array
     {
         $cgi = null;
         foreach (array_merge([dirname(PHP_BINARY)], explode(PATH_SEPARATOR, getenv('PATH') ?: '')) as $directory) {
@@ -321,7 +413,9 @@ final class SessionRotationHandoffTest extends CIUnitTestCase
         }
         $id = session_id();
         $auth = $this->secureSession->get('_auth');
-        unset($auth['session_id']);
+        if (is_array($auth)) {
+            unset($auth['session_id']);
+        }
         $payload = json_encode(['directory' => $this->directory, 'auth' => $auth], JSON_THROW_ON_ERROR);
         session_write_close();
         $environment = getenv();
@@ -335,6 +429,9 @@ final class SessionRotationHandoffTest extends CIUnitTestCase
         $environment['SERVER_NAME'] = 'localhost';
         $environment['SERVER_PORT'] = '80';
         $environment['SERVER_PROTOCOL'] = 'HTTP/1.1';
+        foreach ($extraEnv as $key => $value) {
+            $environment[$key] = $value;
+        }
         $pipes = [];
         $process = proc_open([$cgi, '-d', 'cgi.force_redirect=0', '-d', 'session.gc_probability=0'],
             [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, ROOTPATH, $environment);

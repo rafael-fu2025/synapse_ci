@@ -183,26 +183,23 @@
 
   <!-- Theme-Aware Logout Confirmation Modal -->
   <div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 400px;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 420px;">
       <div class="modal-content border-0 shadow">
         <div class="modal-header border-bottom py-3">
           <h5 class="modal-title fs-6 fw-bold text-dark d-flex align-items-center mb-0" id="logoutModalLabel">
-            <i class="bi bi-box-arrow-right text-primary me-2 fs-5"></i> Confirm Sign Out
+            <i class="bi bi-box-arrow-right text-primary me-2 fs-5" aria-hidden="true"></i>Confirm Sign Out
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body p-4 text-center">
-          <div class="mb-3">
-            <i class="bi bi-shield-lock text-primary fs-1 opacity-75"></i>
-          </div>
-          <h6 class="fw-bold mb-1 text-dark">Are you sure you want to sign out?</h6>
-          <p class="text-muted small mb-0">Your active session will be ended. Please ensure any open records or consultation notes are saved.</p>
+        <div class="modal-body synapse-confirm-body">
+          <p class="synapse-confirm-lead">Are you sure you want to sign out?</p>
+          <p class="synapse-confirm-text mb-0">Your active session will be ended. Please ensure any open records or consultation notes are saved.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-          <form action="<?= site_url('/auth/logout') ?>" method="POST">
+          <form action="<?= site_url('/auth/logout') ?>" method="POST" class="m-0">
             <?= csrf_field() ?>
-            <button type="submit" class="btn btn-primary"><i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i> Yes, Sign Out</button>
+            <button type="submit" class="btn btn-primary">Yes, Sign Out</button>
           </form>
         </div>
       </div>
@@ -211,7 +208,7 @@
 
   <!-- Theme-Aware Confirmation Modal (shared; driven by assets/js/confirm.js) -->
   <div class="modal fade" id="synapseConfirmModal" tabindex="-1" aria-labelledby="synapseConfirmTitle" aria-describedby="synapseConfirmMessage" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 420px;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
       <div class="modal-content border-0 shadow">
         <!-- Header: icon inherits tone; title is the single accessible name. -->
         <div class="modal-header border-bottom py-3">
@@ -221,15 +218,12 @@
           </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body p-4 text-center">
-          <div class="mb-3">
-            <i class="bi bi-question-circle-fill text-primary fs-1 opacity-75" data-confirm-icon data-confirm-icon-body aria-hidden="true"></i>
-          </div>
-          <p class="text-muted small mb-0" id="synapseConfirmMessage" data-confirm-message>Are you sure?</p>
-          <div class="mt-3 text-start" data-confirm-reason-group hidden>
-            <label class="form-label" for="synapseConfirmReason">Cancellation reason <span class="text-danger" aria-hidden="true">*</span></label>
-            <input type="text" id="synapseConfirmReason" class="form-control" maxlength="255" aria-describedby="synapseConfirmReasonHelp" data-confirm-reason-input disabled>
-            <p class="small text-muted mt-2 mb-0" id="synapseConfirmReasonHelp">Required, up to 255 characters. Keep it brief; do not include confidential medical or counseling details.</p>
+        <div class="modal-body synapse-confirm-body">
+          <p class="synapse-confirm-text mb-0" id="synapseConfirmMessage" data-confirm-message>Are you sure?</p>
+          <div class="synapse-confirm-reason" data-confirm-reason-group hidden>
+            <label class="synapse-confirm-label" for="synapseConfirmReason">Cancellation reason <span class="text-danger" aria-hidden="true">*</span></label>
+            <input type="text" id="synapseConfirmReason" class="form-control synapse-confirm-input" maxlength="255" aria-describedby="synapseConfirmReasonHelp" data-confirm-reason-input disabled>
+            <p class="synapse-confirm-help mb-0" id="synapseConfirmReasonHelp">Required, up to 255 characters. Keep it brief; do not include confidential medical or counseling details.</p>
           </div>
         </div>
         <div class="modal-footer">
@@ -250,6 +244,7 @@
   <script src="<?= base_url('assets/js/custom-dropdown.js') ?>"></script>
   <script src="<?= base_url('assets/js/datepicker.js') ?>"></script>
   <script src="<?= base_url('assets/js/datetimepicker.js') ?>"></script>
+  <script src="<?= base_url('assets/js/date-range-picker.js') ?>"></script>
   <script src="<?= base_url('assets/js/loading.js') ?>"></script>
   <script src="<?= base_url('assets/js/form-loading.js') ?>"></script>
   <script src="<?= base_url('assets/js/auth-session.js') ?>"></script>
@@ -262,6 +257,7 @@
   <script src="<?= base_url('assets/js/notifications.js') ?>"></script>
   <script src="<?= base_url('assets/js/confirm.js') ?>"></script>
   <script src="<?= base_url('assets/js/care-forms.js') ?>"></script>
+  <script src="<?= base_url('assets/js/person-lookup-popover.js') ?>"></script>
   <script src="<?= base_url('assets/js/availability-workspace.js') ?>"></script>
   <script src="<?= base_url('assets/js/availability-filters.js') ?>"></script>
     <script src="<?= base_url('assets/js/live-filters.js') ?>"></script>

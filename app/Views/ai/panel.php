@@ -2,12 +2,25 @@
 require __DIR__ . '/_scope.php';
 
 $analysisTitles = array_column($analyses, 'title', 'code');
+$analysisIcons = [
+    'clinic.activity' => 'bi-activity',
+    'clinic.complaints' => 'bi-clipboard2-pulse',
+    'guidance.activity' => 'bi-chat-heart',
+    'guidance.themes' => 'bi-journal-text',
+    'bmg.batches' => 'bi-box-seam',
+    'bmg.rotations' => 'bi-arrow-repeat',
+];
 $activeStatuses = ['queued', 'running'];
 $activeJobs = array_values(array_filter($jobs, static fn (array $job): bool => in_array($job['status'], $activeStatuses, true)
     && $job['profile_revision'] === $profile['revision']));
 $historyJobs = array_values(array_filter($jobs, static fn (array $job): bool => !in_array($job['status'], $activeStatuses, true)
     || $job['profile_revision'] !== $profile['revision']));
 $pending = $activeJobs;
+
+$awaitingCount = count(array_filter($insights, static fn (array $item): bool => ($item['status'] ?? '') === 'draft'));
+$acceptedApprovedCount = count(array_filter($insights, static fn (array $item): bool => in_array($item['status'] ?? '', ['accepted', 'approved'], true)));
+$rejectedCount = count(array_filter($insights, static fn (array $item): bool => ($item['status'] ?? '') === 'rejected'));
+
 $stateMessage = match ($reason) {
     null => 'AI setup approved',
     'disabled' => 'AI requests turned off',
@@ -65,10 +78,12 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
 ?>
   <li class="ai-insights__request" data-ai-request="<?= (int) $job['id'] ?>" data-ai-progress="<?= esc($progressStage, 'attr') ?>" data-ai-key="request-<?= (int) $job['id'] ?>">
     <div class="ai-insights__request-copy">
-      <div class="d-flex flex-wrap align-items-center gap-2">
-        <strong><?= esc($analysisTitles[$job['analysis_code'] ?? ''] ?? 'Analysis') ?> #<?= (int) $job['id'] ?></strong>
-        <span class="badge text-bg-light"><?= esc($jobStatuses[$job['status']] ?? 'Status unavailable') ?></span>
-        <?php if ($older): ?><span class="badge text-bg-secondary">Older configuration</span><?php endif; ?>
+      <div class="ai-insights__request-head">
+        <strong><?= esc($analysisTitles[$job['analysis_code'] ?? ''] ?? 'Analysis') ?> <span class="ai-insights__id">#<?= (int) $job['id'] ?></span></strong>
+        <div class="ai-insights__request-badges">
+          <span class="badge text-bg-light" data-ai-tone="<?= esc($progressStage, 'attr') ?>"><?= esc($jobStatuses[$job['status']] ?? 'Status unavailable') ?></span>
+          <?php if ($older): ?><span class="badge text-bg-secondary">Older configuration</span><?php endif; ?>
+        </div>
       </div>
       <div class="ai-insights__progress-status" data-ai-progress-status>
         <?php if ($progressStage === 'generating'): ?>
@@ -97,175 +112,330 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
         </li>
         <?php endforeach; ?>
       </ol>
-      <small class="text-muted">Created <?= esc($time($job['created_at'])) ?> Philippine time<?php if ($job['reason']): ?> · <?= esc($jobReasons[$job['reason']] ?? 'This request could not proceed. Ask an administrator for help.') ?><?php endif; ?></small>
-      <?php if ($job['status'] === 'outcome_unknown'): ?><p class="small mb-0 mt-1">The AI service may have processed or charged for this request. It will not be sent again automatically.</p><?php endif; ?>
+      <small class="ai-insights__request-meta text-muted">Created <?= esc($time($job['created_at'])) ?> Philippine time<?php if ($job['reason']): ?> · <?= esc($jobReasons[$job['reason']] ?? 'This request could not proceed. Ask an administrator for help.') ?><?php endif; ?></small>
+      <?php if ($job['status'] === 'outcome_unknown'): ?><p class="ai-insights__unknown-note small mb-0 mt-1">The AI service may have processed or charged for this request. It will not be sent again automatically.</p><?php endif; ?>
     </div>
+    <?php
+      $showRetry = $canGenerate && ($job['can_retry'] ?? false) && !$older && $reason === null;
+      $showCancel = $canGenerate && $job['status'] === 'queued';
+    ?>
+    <?php if ($showRetry || $showCancel): ?>
     <div class="ai-insights__request-actions">
-      <?php if ($canGenerate && ($job['can_retry'] ?? false) && !$older && $reason === null): ?>
+      <?php if ($showRetry): ?>
       <form method="post" action="<?= esc(site_url($basePath . '/jobs/' . (int) $job['id'] . '/retry'), 'attr') ?>" data-ai-action data-ai-confirm="Queue a new attempt using the normal request budget? This is allowed only when no attempt in this request family reserved an outbound dispatch." data-ai-key="retry-job-<?= (int) $job['id'] ?>">
         <?= csrf_field() ?><input type="hidden" name="confirm_retry" value="1"><button type="submit" class="btn btn-sm btn-outline-primary">Queue safe new attempt</button>
       </form>
       <?php endif; ?>
-      <?php if ($canGenerate && $job['status'] === 'queued'): ?>
+      <?php if ($showCancel): ?>
       <form method="post" action="<?= esc(site_url($basePath . '/jobs/' . (int) $job['id'] . '/cancel'), 'attr') ?>" data-ai-action data-ai-key="cancel-job-<?= (int) $job['id'] ?>">
         <?= csrf_field() ?><button type="submit" class="btn btn-sm btn-outline-danger">Cancel waiting request</button>
       </form>
       <?php endif; ?>
     </div>
+    <?php endif; ?>
   </li>
 <?php
 };
 ?>
 <div data-ai-pending="<?= $pending !== [] ? 'true' : 'false' ?>">
-  <section class="ai-insights__control card" aria-labelledby="ai-analysis-heading">
-    <div class="card-body">
-      <div class="ai-insights__status-row">
-        <div>
-          <h2 class="h5 mb-1" id="ai-analysis-heading">Create an insight</h2>
-          <p class="small text-muted mb-0">Comparison: <?= esc($comparisonMonthLabel) ?> and <?= esc($completedMonthLabel) ?> <span aria-hidden="true">&middot;</span> completed months in Philippine time</p>
+  <aside class="ai-insights__rail" aria-label="Analysis controls and live requests">
+    <section class="ai-insights__control card" aria-labelledby="ai-analysis-heading">
+      <div class="card-body">
+        <div class="ai-insights__studio-head">
+          <div class="ai-insights__status-row">
+            <h2 class="h5 mb-0" id="ai-analysis-heading">Create an insight</h2>
+            <span class="ai-insights__status <?= $reason === null ? 'is-ready' : 'is-attention' ?>"><span aria-hidden="true"></span><?= esc($stateMessage) ?></span>
+          </div>
+          <p class="small text-muted mb-0"><?= esc($comparisonMonthLabel) ?> and <?= esc($completedMonthLabel) ?> · Philippine time</p>
+          <p class="small text-muted ai-insights__status-help"><?= esc($stateHelp) ?></p>
         </div>
-        <span class="ai-insights__status <?= $reason === null ? 'is-ready' : 'is-attention' ?>"><span aria-hidden="true"></span><?= esc($stateMessage) ?></span>
-      </div>
-      <p class="small text-muted ai-insights__status-help"><?= esc($stateHelp) ?></p>
 
-      <div class="ai-insights__action-grid">
-        <div class="ai-insights__selector">
-          <label class="form-label fw-semibold" for="ai-analysis-selector">Analysis</label>
-          <select class="form-select" id="ai-analysis-selector" data-native-select data-ai-analysis-selector>
-            <?php foreach ($analyses as $analysis): ?>
-            <option value="<?= esc($analysis['code'], 'attr') ?>"<?= $analysis['code'] === $selectedAnalysis ? ' selected' : '' ?>><?= esc($analysis['title']) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <p class="form-text mb-0" data-ai-analysis-description><?= esc($analysisDescriptions[$selectedAnalysis] ?? 'Compare approved monthly totals.') ?></p>
-          <?php foreach ($analyses as $analysis): ?><span hidden data-ai-analysis-option="<?= esc($analysis['code'], 'attr') ?>" data-description="<?= esc($analysisDescriptions[$analysis['code']] ?? 'Compare approved monthly totals.', 'attr') ?>"></span><?php endforeach; ?>
+        <div class="ai-insights__step-block">
+          <div class="ai-insights__step-head">
+            <span class="ai-insights__step-num" aria-hidden="true">1</span>
+            <label class="ai-insights__step-label" for="ai-analysis-selector">Choose an analysis</label>
+            <span class="ai-insights__step-count"><?= count($analyses) ?> fixed</span>
+          </div>
+
+          <div class="ai-insights__selector-wrap">
+            <select class="form-select ai-insights__native-select" id="ai-analysis-selector" data-native-select data-ai-analysis-selector tabindex="-1">
+              <?php foreach ($analyses as $analysis): ?>
+              <option value="<?= esc($analysis['code'], 'attr') ?>"<?= $analysis['code'] === $selectedAnalysis ? ' selected' : '' ?>><?= esc($analysis['title']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <div class="ai-insights__choices" role="radiogroup" aria-label="Available analyses">
+              <?php foreach ($analyses as $analysis):
+                  $code = $analysis['code'];
+                  $isSelected = $code === $selectedAnalysis;
+                  $icon = $analysisIcons[$code] ?? 'bi-bar-chart-line';
+                  $desc = $analysisDescriptions[$code] ?? 'Compare approved monthly totals.';
+              ?>
+              <button
+                type="button"
+                role="radio"
+                aria-checked="<?= $isSelected ? 'true' : 'false' ?>"
+                class="ai-insights__choice<?= $isSelected ? ' is-selected' : '' ?>"
+                data-ai-analysis-choice="<?= esc($code, 'attr') ?>"
+                data-ai-key="choice-<?= esc($code, 'attr') ?>"
+              >
+                <span class="ai-insights__choice-icon" aria-hidden="true"><i class="bi <?= esc($icon, 'attr') ?>"></i></span>
+                <span class="ai-insights__choice-body">
+                  <span class="ai-insights__choice-title"><?= esc($analysis['title']) ?></span>
+                  <span class="ai-insights__choice-desc"><?= esc($desc) ?></span>
+                </span>
+                <span class="ai-insights__choice-dot" aria-hidden="true"></span>
+              </button>
+              <?php endforeach; ?>
+            </div>
+            <p class="form-text visually-hidden mb-0" data-ai-analysis-description><?= esc($analysisDescriptions[$selectedAnalysis] ?? 'Compare approved monthly totals.') ?></p>
+            <?php foreach ($analyses as $analysis): ?><span hidden data-ai-analysis-option="<?= esc($analysis['code'], 'attr') ?>" data-description="<?= esc($analysisDescriptions[$analysis['code']] ?? 'Compare approved monthly totals.', 'attr') ?>"></span><?php endforeach; ?>
+          </div>
         </div>
+
         <?php if ($canGenerate): ?>
-        <div class="ai-insights__action-bar" aria-label="Analysis actions">
-          <form method="post" action="<?= esc(site_url($basePath . '/prepare'), 'attr') ?>" data-ai-action data-ai-key="prepare-analysis">
-            <?= csrf_field() ?><?php if (!$legacyAnalysisFixture): ?><input type="hidden" name="analysis_code" value="<?= esc($selectedAnalysis, 'attr') ?>" data-ai-analysis-value><?php endif; ?>
-            <button class="btn btn-outline-primary" type="submit"<?= !$ready ? ' disabled' : '' ?>><i class="bi bi-table" aria-hidden="true"></i> Preview data</button>
-          </form>
-          <form method="post" action="<?= esc(site_url($basePath . '/generate'), 'attr') ?>" data-ai-action data-ai-key="generate-analysis">
-            <?= csrf_field() ?><?php if (!$legacyAnalysisFixture): ?><input type="hidden" name="analysis_code" value="<?= esc($selectedAnalysis, 'attr') ?>" data-ai-analysis-value><?php endif; ?>
-            <button class="btn btn-primary" type="submit"<?= !$ready || $reason !== null ? ' disabled' : '' ?>><i class="bi bi-stars" aria-hidden="true"></i> Generate draft</button>
-          </form>
+        <div class="ai-insights__step-block">
+          <div class="ai-insights__step-head">
+            <span class="ai-insights__step-num" aria-hidden="true">2</span>
+            <span class="ai-insights__step-label">Preview locally or generate draft</span>
+          </div>
+          <div class="ai-insights__action-stack" aria-label="Analysis actions">
+            <div class="ai-insights__action-item">
+              <form method="post" action="<?= esc(site_url($basePath . '/prepare'), 'attr') ?>" data-ai-action data-ai-key="prepare-analysis">
+                <?= csrf_field() ?><?php if (!$legacyAnalysisFixture): ?><input type="hidden" name="analysis_code" value="<?= esc($selectedAnalysis, 'attr') ?>" data-ai-analysis-value><?php endif; ?>
+                <button class="btn btn-outline-primary" type="submit"<?= !$ready ? ' disabled' : '' ?>><i class="bi bi-table" aria-hidden="true"></i> Preview data</button>
+              </form>
+              <span class="ai-insights__action-hint">Inspect approved local numbers right beside this panel — no AI contacted.</span>
+            </div>
+            <div class="ai-insights__action-item">
+              <form method="post" action="<?= esc(site_url($basePath . '/generate'), 'attr') ?>" data-ai-action data-ai-key="generate-analysis">
+                <?= csrf_field() ?><?php if (!$legacyAnalysisFixture): ?><input type="hidden" name="analysis_code" value="<?= esc($selectedAnalysis, 'attr') ?>" data-ai-analysis-value><?php endif; ?>
+                <button class="btn btn-primary" type="submit"<?= !$ready || $reason !== null ? ' disabled' : '' ?>><i class="bi bi-stars" aria-hidden="true"></i> Generate draft</button>
+              </form>
+              <span class="ai-insights__action-hint">Queue a worker to draft a summary &amp; program proposal for staff review.</span>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
+
+        <div class="ai-insights__control-footer">
+          <span class="small text-muted">Repeated requests reuse the existing request.</span>
+          <button class="btn btn-sm btn-link" type="button" data-ai-refresh data-ai-key="refresh-status"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh status</button>
+        </div>
+      </div>
+    </section>
+
+    <?php if ($activeJobs !== []): ?>
+    <section class="ai-insights__requests card" aria-labelledby="ai-active-requests-heading">
+      <div class="card-body">
+        <div class="ai-insights__section-heading">
+          <div>
+            <h2 class="h6 mb-1" id="ai-active-requests-heading">Active requests</h2>
+            <p class="small text-muted mb-0" data-ai-progress-help>Status updates automatically. A separate worker must be enabled; this page cannot confirm one is scheduled.</p>
+          </div>
+          <span class="badge text-bg-light" data-ai-tone="generating"><?= count($activeJobs) ?></span>
+        </div>
+        <ul class="ai-insights__request-list"><?php foreach ($activeJobs as $job) { $renderJob($job); } ?></ul>
+      </div>
+    </section>
+    <?php endif; ?>
+
+    <?php if ($canGenerate && ($recoverableSnapshots ?? []) !== []): ?>
+    <details class="ai-insights__attention" data-ai-key="needs-attention">
+      <summary data-ai-key="needs-attention-summary"><span><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Needs attention</span><span class="badge text-bg-light" data-ai-tone="draft"><?= count($recoverableSnapshots) ?></span></summary>
+      <div class="ai-insights__attention-body">
+        <p class="small">Expired local evidence can be recovered only when the source and category masks are exactly identical. Old requests and approvals are not renewed.</p>
+        <?php foreach ($recoverableSnapshots as $snapshot): ?>
+        <form method="post" action="<?= esc(site_url($basePath . '/recover'), 'attr') ?>" data-ai-action data-ai-confirm="Recover identical evidence with a new retention interval? This does not renew old requests or approvals." data-ai-key="recover-<?= esc($snapshot['analysis_code'], 'attr') ?>-<?= esc($snapshot['period'], 'attr') ?>" class="ai-insights__recovery">
+          <?= csrf_field() ?><input type="hidden" name="analysis_code" value="<?= esc($snapshot['analysis_code'], 'attr') ?>"><input type="hidden" name="confirm_recovery" value="1">
+          <span><strong><?= esc($analysisTitles[$snapshot['analysis_code']] ?? 'Analysis') ?></strong><small><?= esc($snapshot['period']) ?></small></span>
+          <button class="btn btn-sm btn-outline-secondary" type="submit"<?= !$ready ? ' disabled' : '' ?>>Recover identical data</button>
+        </form>
+        <?php endforeach; ?>
+      </div>
+    </details>
+    <?php endif; ?>
+  </aside>
+
+  <div class="ai-insights__canvas">
+    <div class="ai-insights__summary-strip" aria-label="Workspace overview">
+      <div class="ai-insights__stat">
+        <span class="ai-insights__stat-label">Awaiting review</span>
+        <strong class="ai-insights__stat-value"><?= $awaitingCount ?></strong>
+      </div>
+      <div class="ai-insights__stat">
+        <span class="ai-insights__stat-label">Accepted &amp; approved</span>
+        <strong class="ai-insights__stat-value"><?= $acceptedApprovedCount ?></strong>
+      </div>
+      <div class="ai-insights__stat">
+        <span class="ai-insights__stat-label">Active requests</span>
+        <strong class="ai-insights__stat-value"><?= count($activeJobs) ?></strong>
+      </div>
+    </div>
+
+    <section class="ai-insights__drafts card" aria-labelledby="ai-drafts-heading">
+      <div class="card-body">
+        <div class="ai-insights__drafts-head">
+          <div>
+            <div class="ai-insights__drafts-title-row">
+              <h2 class="h5 mb-0" id="ai-drafts-heading">Drafts for review</h2>
+              <?php if ($insights !== []): ?><span class="badge text-bg-light"><?= count($insights) ?></span><?php endif; ?>
+            </div>
+            <p class="small text-muted mb-0 mt-1">AI output is unverified. Open a draft to compare its narrative and program proposal side-by-side against approved local data.</p>
+          </div>
+          <?php if (count($insights) > 1): ?>
+          <div class="ai-insights__filter-tabs" role="group" aria-label="Filter drafts by status">
+            <button type="button" class="ai-insights__filter-tab is-active" data-ai-filter="all" aria-pressed="true">All <span class="ai-insights__filter-count"><?= count($insights) ?></span></button>
+            <?php if ($awaitingCount > 0): ?><button type="button" class="ai-insights__filter-tab" data-ai-filter="draft" aria-pressed="false">Awaiting <span class="ai-insights__filter-count"><?= $awaitingCount ?></span></button><?php endif; ?>
+            <?php if ($acceptedApprovedCount > 0): ?><button type="button" class="ai-insights__filter-tab" data-ai-filter="reviewed" aria-pressed="false">Reviewed <span class="ai-insights__filter-count"><?= $acceptedApprovedCount ?></span></button><?php endif; ?>
+            <?php if ($rejectedCount > 0): ?><button type="button" class="ai-insights__filter-tab" data-ai-filter="rejected" aria-pressed="false">Rejected <span class="ai-insights__filter-count"><?= $rejectedCount ?></span></button><?php endif; ?>
+          </div>
+          <?php endif; ?>
+        </div>
+
+        <?php if ($insights === []): ?>
+        <div class="ai-insights__empty">
+          <div class="ai-insights__empty-icon"><i class="bi bi-file-earmark-text" aria-hidden="true"></i></div>
+          <div class="ai-insights__empty-copy">
+            <strong>No AI drafts yet</strong>
+            <p class="mb-0">Generate a draft if you have permission. Only unexpired drafts are shown; historical policies cannot be accepted or approved.</p>
+            <div class="ai-insights__empty-flow" aria-hidden="true">
+              <span>1. Select analysis</span>
+              <i class="bi bi-arrow-right"></i>
+              <span>2. Preview or generate</span>
+              <i class="bi bi-arrow-right"></i>
+              <span>3. Open &amp; decide</span>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($insights !== []): ?>
+        <div class="ai-insights__draft-list">
+        <?php foreach ($insights as $insight):
+            $draft = $insight['draft'];
+            $narrative = $draft['narrative'];
+            $analysisTitle = $analysisTitles[$draft['evidence']['analysis_code'] ?? $insight['analysis_code'] ?? ''] ?? ($unitLabel . ' operations');
+            $currentPolicy = $insight['current_policy'] ?? \App\Services\Ai\PipelineProvenance::matches($draft['provenance']['pipeline_digest'] ?? null);
+            $insightTone = match ($insight['status'] ?? '') {
+                'draft' => 'draft', 'accepted' => 'accepted', 'approved' => 'approved', 'rejected' => 'rejected', default => 'neutral',
+            };
+            $filterGroup = match ($insight['status'] ?? '') {
+                'draft' => 'draft', 'accepted', 'approved' => 'reviewed', 'rejected' => 'rejected', default => 'all',
+            };
+            $programCount = count($draft['programs'] ?? []);
+            $metricCount = count($draft['evidence']['metrics'] ?? []);
+        ?>
+          <article class="ai-insights__draft" data-ai-insight-card="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>" data-ai-filter-group="<?= esc($filterGroup, 'attr') ?>" data-ai-key="insight-<?= (int) $insight['id'] ?>">
+            <div class="ai-insights__draft-main">
+              <div class="ai-insights__draft-meta">
+                <span class="badge text-bg-light" data-ai-tone="<?= esc($insightTone, 'attr') ?>"><?= esc($insightStatuses[$insight['status']] ?? 'Review status unavailable') ?></span>
+                <?php if ($programCount > 0): ?>
+                <span class="ai-insights__draft-chip"><i class="bi bi-kanban" aria-hidden="true"></i> <?= $programCount === 1 ? '1 program proposal' : $programCount . ' program proposals' ?></span>
+                <?php elseif (!empty($narrative['abstained'])): ?>
+                <span class="ai-insights__draft-chip"><i class="bi bi-info-circle" aria-hidden="true"></i> Observation only</span>
+                <?php endif; ?>
+                <?php if ($metricCount > 0): ?>
+                <span class="ai-insights__draft-chip"><?= $metricCount === 1 ? '1 metric' : $metricCount . ' metrics' ?></span>
+                <?php endif; ?>
+                <time class="ai-insights__draft-time"><?= esc($time($insight['created_at'])) ?></time>
+              </div>
+              <h3 class="ai-insights__draft-title h6 mb-1"><?= esc($analysisTitle) ?> <span class="ai-insights__id">#<?= (int) $insight['id'] ?></span></h3>
+              <p class="ai-insights__draft-summary mb-0"><?= esc($narrative['summary']) ?></p>
+              <?php if (!$currentPolicy): ?><p class="ai-insights__policy-note mb-0"><i class="bi bi-clock-history" aria-hidden="true"></i> Historical policy: reject only</p><?php endif; ?>
+            </div>
+            <div class="ai-insights__draft-cta">
+              <button type="button" class="btn btn-sm btn-outline-primary" data-ai-open-review data-ai-insight-id="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>" data-ai-key="open-insight-<?= (int) $insight['id'] ?>" aria-haspopup="dialog">Open draft</button>
+            </div>
+          </article>
+          <template data-ai-review-template="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>" data-title="<?= esc($analysisTitle . ' insight #' . (int) $insight['id'], 'attr') ?>">
+            <div class="ai-insights__review-content" data-ai-review-content="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>">
+              <?php if (!$currentPolicy): ?><div class="alert alert-warning small mb-0">Historical or unverified pipeline policy. This draft cannot be accepted or approved under the current setup. Authorized reviewers may reject it.</div><?php endif; ?>
+              <div class="ai-insights__review-banner">
+                <span class="badge text-bg-light" data-ai-tone="<?= esc($insightTone, 'attr') ?>"><?= esc($insightStatuses[$insight['status']] ?? 'Review status unavailable') ?></span>
+                <p class="small text-muted mb-0">Created <?= esc($time($insight['created_at'])) ?> Philippine time · AI can make mistakes. This is not a clinical finding and does not prove why activity changed.</p>
+              </div>
+
+              <div class="ai-insights__review-split">
+                <div class="ai-insights__review-col ai-insights__review-col--draft">
+                  <section class="ai-insights__narrative" aria-labelledby="ai-summary-<?= (int) $insight['id'] ?>">
+                    <p class="ai-insights__eyebrow mb-1">AI narrative</p>
+                    <h3 class="h6 mb-2" id="ai-summary-<?= (int) $insight['id'] ?>">Draft interpretation</h3>
+                    <p class="ai-insights__narrative-lead"><?= esc($narrative['summary']) ?></p>
+                    <p class="ai-insights__narrative-body"><?= esc($narrative['interpretation']) ?></p>
+                    <?php if ($narrative['abstained']): ?><p class="alert alert-info small mb-3">The AI did not recommend a program.</p><?php endif; ?>
+                    <div class="ai-insights__alternatives">
+                      <h4 class="h6 mb-2"><i class="bi bi-signpost-split" aria-hidden="true"></i> Alternative explanations to review</h4>
+                      <ul><?php foreach ($narrative['alternative_explanations'] as $alternative): ?><li><?= esc($alternative) ?></li><?php endforeach; ?></ul>
+                    </div>
+                  </section>
+
+                  <?php foreach ($draft['programs'] as $program): ?>
+                  <section class="ai-insights__program" aria-label="Operational program draft">
+                    <div class="ai-insights__program-head">
+                      <p class="ai-insights__eyebrow mb-1">Program draft</p>
+                      <h3 class="h6 mb-0"><?= esc($program['title']) ?></h3>
+                    </div>
+                    <p class="ai-insights__program-objective"><strong>Objective:</strong> <?= esc($program['objective']) ?></p>
+                    <details data-ai-key="program-<?= (int) $insight['id'] ?>-<?= esc(hash('sha256', $program['title']), 'attr') ?>">
+                      <summary>Program details</summary>
+                      <div class="ai-insights__program-details mt-3">
+                        <p class="ai-insights__program-audience small"><strong>Audience:</strong> <?= esc($program['audience']) ?></p>
+                        <div class="ai-insights__program-grid">
+                          <?php foreach (['activities' => 'Proposed activities', 'resource_assumptions' => 'Resources that may be needed', 'evaluation_measures' => 'How to assess the program', 'limitations' => 'Limits to keep in mind'] as $key => $label): ?>
+                          <div class="ai-insights__program-box">
+                            <h4 class="h6"><?= esc($label) ?></h4>
+                            <ul class="small mb-0"><?php foreach ($program[$key] as $item): ?><li><?= esc($item) ?></li><?php endforeach; ?></ul>
+                          </div>
+                          <?php endforeach; ?>
+                        </div>
+                        <div class="ai-insights__program-refs">
+                          <p class="small mb-2"><strong>Required reviewer:</strong> <?= esc($program['required_reviewer']) ?>. References guide review and approval; they do not prove the program works.</p>
+                          <ul class="small mb-0"><?php foreach ($program['references'] as $reference): ?><li><a href="<?= esc($reference['url'], 'attr') ?>" target="_blank" rel="noopener noreferrer" data-navigation="false"><?= esc($reference['title']) ?></a></li><?php endforeach; ?></ul>
+                        </div>
+                      </div>
+                    </details>
+                  </section>
+                  <?php endforeach; ?>
+                </div>
+
+                <div class="ai-insights__review-col ai-insights__review-col--evidence">
+                  <?= view('ai/evidence', ['evidence' => $draft['evidence']]) ?>
+                  <details class="ai-insights__provenance" data-ai-key="provenance-<?= (int) $insight['id'] ?>">
+                    <summary>Draft details</summary>
+                    <div class="ai-insights__provenance-body">
+                      <p class="small mb-1">Model: <?= esc($draft['provenance']['model']) ?> · Instruction version: <?= esc($draft['provenance']['prompt_version']) ?> · Library: <?= esc($draft['provenance']['library_version'] ?? 'Legacy') ?></p>
+                      <p class="small text-break mb-0">Pipeline policy: <?= esc($draft['provenance']['pipeline_digest'] ?? 'Not recorded (legacy)') ?></p>
+                    </div>
+                  </details>
+                </div>
+              </div>
+
+              <p class="ai-insights__review-disclaimer small text-muted mb-0">Accepting records your review; it does not confirm that the AI is correct. Approving a program draft does not publish, fund, schedule, or send anything.</p>
+            </div>
+          </template>
+          <template data-ai-review-actions="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>">
+            <?php $decisions = [];
+            if ($canReview && $currentPolicy && $insight['status'] === 'draft') { $decisions['accept'] = 'Accept insight'; }
+            if ($canReview && in_array($insight['status'], ['draft', 'accepted'], true)) { $decisions['reject'] = 'Reject insight'; }
+            if ($canApprove && $currentPolicy && $insight['status'] === 'accepted' && $draft['programs'] !== []) { $decisions['approve'] = 'Approve program draft'; }
+            foreach ($decisions as $decision => $label): ?>
+            <form method="post" action="<?= esc(site_url($basePath . '/' . (int) $insight['id'] . '/review'), 'attr') ?>" data-ai-action data-ai-review-form data-ai-decision="<?= esc($decision, 'attr') ?>" data-ai-key="review-<?= (int) $insight['id'] ?>-<?= esc($decision, 'attr') ?>">
+              <?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $insight['version'] ?>"><input type="hidden" name="decision" value="<?= esc($decision, 'attr') ?>">
+              <button type="submit" class="btn btn-sm <?= $decision === 'reject' ? 'btn-outline-danger' : 'btn-primary' ?>"><?= esc($label) ?></button>
+            </form>
+            <?php endforeach; ?>
+          </template>
+        <?php endforeach; ?>
         </div>
         <?php endif; ?>
       </div>
-      <div class="ai-insights__control-footer">
-        <span class="small text-muted">Repeated requests reuse the existing request.</span>
-        <button class="btn btn-sm btn-link" type="button" data-ai-refresh data-ai-key="refresh-status"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh status</button>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <?php if ($canGenerate && ($recoverableSnapshots ?? []) !== []): ?>
-  <details class="ai-insights__attention" data-ai-key="needs-attention">
-    <summary data-ai-key="needs-attention-summary"><span><i class="bi bi-exclamation-circle" aria-hidden="true"></i> Needs attention</span><span class="badge text-bg-light"><?= count($recoverableSnapshots) ?></span></summary>
-    <div class="ai-insights__attention-body">
-      <p class="small">Expired local evidence can be recovered only when the source and category masks are exactly identical. Old requests and approvals are not renewed.</p>
-      <?php foreach ($recoverableSnapshots as $snapshot): ?>
-      <form method="post" action="<?= esc(site_url($basePath . '/recover'), 'attr') ?>" data-ai-action data-ai-confirm="Recover identical evidence with a new retention interval? This does not renew old requests or approvals." data-ai-key="recover-<?= esc($snapshot['analysis_code'], 'attr') ?>-<?= esc($snapshot['period'], 'attr') ?>" class="ai-insights__recovery">
-        <?= csrf_field() ?><input type="hidden" name="analysis_code" value="<?= esc($snapshot['analysis_code'], 'attr') ?>"><input type="hidden" name="confirm_recovery" value="1">
-        <span><strong><?= esc($analysisTitles[$snapshot['analysis_code']] ?? 'Analysis') ?></strong><small><?= esc($snapshot['period']) ?></small></span>
-        <button class="btn btn-sm btn-outline-secondary" type="submit"<?= !$ready ? ' disabled' : '' ?>>Recover identical data</button>
-      </form>
-      <?php endforeach; ?>
-    </div>
-  </details>
-  <?php endif; ?>
-
-  <?php if ($activeJobs !== []): ?>
-  <section class="ai-insights__requests card" aria-labelledby="ai-active-requests-heading">
-    <div class="card-body">
-      <div class="ai-insights__section-heading">
-        <div><h2 class="h5 mb-1" id="ai-active-requests-heading">Active requests</h2><p class="small text-muted mb-0" data-ai-progress-help>Status updates automatically. A separate worker must be enabled; this page cannot confirm one is scheduled.</p></div>
-        <span class="badge text-bg-light"><?= count($activeJobs) ?></span>
-      </div>
-      <ul class="ai-insights__request-list"><?php foreach ($activeJobs as $job) { $renderJob($job); } ?></ul>
-    </div>
-  </section>
-  <?php endif; ?>
-
-  <section class="ai-insights__drafts" aria-labelledby="ai-drafts-heading">
-    <div class="ai-insights__section-heading">
-      <div><h2 class="h5 mb-1" id="ai-drafts-heading">Drafts for review</h2><p class="small text-muted mb-0">AI output is unverified. Open a draft to review its narrative, evidence, program details, and available decisions.</p></div>
-      <?php if ($insights !== []): ?><span class="badge text-bg-light"><?= count($insights) ?></span><?php endif; ?>
-    </div>
-    <?php if ($insights === []): ?>
-    <div class="ai-insights__empty"><i class="bi bi-file-earmark-text" aria-hidden="true"></i><div><strong>No AI drafts yet</strong><p class="mb-0">Generate a draft if you have permission. Only unexpired drafts are shown; historical policies cannot be accepted or approved.</p></div></div>
+    <?php if ($historyJobs !== []): ?>
+    <details class="ai-insights__history" data-ai-key="request-history">
+      <summary data-ai-key="request-history-summary"><span><i class="bi bi-clock-history" aria-hidden="true"></i> Request history</span><span class="badge text-bg-light"><?= count($historyJobs) ?></span></summary>
+      <div class="ai-insights__history-body"><ul class="ai-insights__request-list ai-insights__request-list--compact"><?php foreach ($historyJobs as $job) { $renderJob($job); } ?></ul></div>
+    </details>
     <?php endif; ?>
-    <div class="ai-insights__draft-grid">
-    <?php foreach ($insights as $insight):
-        $draft = $insight['draft'];
-        $narrative = $draft['narrative'];
-        $analysisTitle = $analysisTitles[$draft['evidence']['analysis_code'] ?? $insight['analysis_code'] ?? ''] ?? ($unitLabel . ' operations');
-        $currentPolicy = $insight['current_policy'] ?? \App\Services\Ai\PipelineProvenance::matches($draft['provenance']['pipeline_digest'] ?? null);
-    ?>
-      <article class="ai-insights__draft card" data-ai-insight-card="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>" data-ai-key="insight-<?= (int) $insight['id'] ?>">
-        <div class="card-body">
-          <div class="ai-insights__draft-meta"><span class="badge text-bg-light"><?= esc($insightStatuses[$insight['status']] ?? 'Review status unavailable') ?></span><time><?= esc($time($insight['created_at'])) ?></time></div>
-          <h3 class="h6 mb-2"><?= esc($analysisTitle) ?> <span class="text-muted">#<?= (int) $insight['id'] ?></span></h3>
-          <p class="ai-insights__draft-summary"><?= esc($narrative['summary']) ?></p>
-          <?php if (!$currentPolicy): ?><p class="ai-insights__policy-note"><i class="bi bi-clock-history" aria-hidden="true"></i> Historical policy: reject only</p><?php endif; ?>
-          <button type="button" class="btn btn-sm btn-outline-primary" data-ai-open-review data-ai-insight-id="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>" data-ai-key="open-insight-<?= (int) $insight['id'] ?>" aria-haspopup="dialog">Open draft</button>
-        </div>
-      </article>
-      <template data-ai-review-template="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>" data-title="<?= esc($analysisTitle . ' insight #' . (int) $insight['id'], 'attr') ?>">
-        <div class="ai-insights__review-content" data-ai-review-content="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>">
-          <?php if (!$currentPolicy): ?><div class="alert alert-warning small">Historical or unverified pipeline policy. This draft cannot be accepted or approved under the current setup. Authorized reviewers may reject it.</div><?php endif; ?>
-          <p class="small text-muted">Created <?= esc($time($insight['created_at'])) ?> Philippine time · AI can make mistakes. This is not a clinical finding and does not prove why activity changed.</p>
-          <section class="ai-insights__narrative" aria-labelledby="ai-summary-<?= (int) $insight['id'] ?>">
-            <h3 class="h6" id="ai-summary-<?= (int) $insight['id'] ?>">Draft interpretation</h3>
-            <p class="fw-semibold"><?= esc($narrative['summary']) ?></p>
-            <p><?= esc($narrative['interpretation']) ?></p>
-            <?php if ($narrative['abstained']): ?><p class="alert alert-info">The AI did not recommend a program.</p><?php endif; ?>
-            <h4 class="h6">Alternative explanations to review</h4>
-            <ul><?php foreach ($narrative['alternative_explanations'] as $alternative): ?><li><?= esc($alternative) ?></li><?php endforeach; ?></ul>
-          </section>
-          <?= view('ai/evidence', ['evidence' => $draft['evidence']]) ?>
-          <?php foreach ($draft['programs'] as $program): ?>
-          <section class="ai-insights__program" aria-label="Operational program draft">
-            <p class="ai-insights__eyebrow mb-1">Program draft</p>
-            <h3 class="h6 mb-2"><?= esc($program['title']) ?></h3>
-            <p><strong>Objective:</strong> <?= esc($program['objective']) ?></p>
-            <details data-ai-key="program-<?= (int) $insight['id'] ?>-<?= esc(hash('sha256', $program['title']), 'attr') ?>">
-              <summary>Program details</summary>
-              <div class="mt-3">
-                <p class="small"><strong>Audience:</strong> <?= esc($program['audience']) ?></p>
-                <?php foreach (['activities' => 'Proposed activities', 'resource_assumptions' => 'Resources that may be needed', 'evaluation_measures' => 'How to assess the program', 'limitations' => 'Limits to keep in mind'] as $key => $label): ?>
-                <h4 class="h6"><?= esc($label) ?></h4><ul class="small"><?php foreach ($program[$key] as $item): ?><li><?= esc($item) ?></li><?php endforeach; ?></ul>
-                <?php endforeach; ?>
-                <p class="small">Required reviewer: <?= esc($program['required_reviewer']) ?>. References guide review and approval; they do not prove the program works.</p>
-                <ul class="small mb-0"><?php foreach ($program['references'] as $reference): ?><li><a href="<?= esc($reference['url'], 'attr') ?>" target="_blank" rel="noopener noreferrer" data-navigation="false"><?= esc($reference['title']) ?></a></li><?php endforeach; ?></ul>
-              </div>
-            </details>
-          </section>
-          <?php endforeach; ?>
-          <details class="ai-insights__provenance" data-ai-key="provenance-<?= (int) $insight['id'] ?>"><summary>Draft details</summary><p class="small mt-2 mb-0">Model: <?= esc($draft['provenance']['model']) ?> · Instruction version: <?= esc($draft['provenance']['prompt_version']) ?> · Library: <?= esc($draft['provenance']['library_version'] ?? 'Legacy') ?></p><p class="small text-break mb-0">Pipeline policy: <?= esc($draft['provenance']['pipeline_digest'] ?? 'Not recorded (legacy)') ?></p></details>
-          <p class="small text-muted mb-0">Accepting records your review; it does not confirm that the AI is correct. Approving a program draft does not publish, fund, schedule, or send anything.</p>
-        </div>
-      </template>
-      <template data-ai-review-actions="<?= (int) $insight['id'] ?>" data-ai-insight-version="<?= (int) $insight['version'] ?>">
-        <?php $decisions = [];
-        if ($canReview && $currentPolicy && $insight['status'] === 'draft') { $decisions['accept'] = 'Accept insight'; }
-        if ($canReview && in_array($insight['status'], ['draft', 'accepted'], true)) { $decisions['reject'] = 'Reject insight'; }
-        if ($canApprove && $currentPolicy && $insight['status'] === 'accepted' && $draft['programs'] !== []) { $decisions['approve'] = 'Approve program draft'; }
-        foreach ($decisions as $decision => $label): ?>
-        <form method="post" action="<?= esc(site_url($basePath . '/' . (int) $insight['id'] . '/review'), 'attr') ?>" data-ai-action data-ai-review-form data-ai-decision="<?= esc($decision, 'attr') ?>" data-ai-key="review-<?= (int) $insight['id'] ?>-<?= esc($decision, 'attr') ?>">
-          <?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $insight['version'] ?>"><input type="hidden" name="decision" value="<?= esc($decision, 'attr') ?>">
-          <button type="submit" class="btn btn-sm <?= $decision === 'reject' ? 'btn-outline-danger' : 'btn-primary' ?>"><?= esc($label) ?></button>
-        </form>
-        <?php endforeach; ?>
-      </template>
-    <?php endforeach; ?>
-    </div>
-  </section>
-
-  <?php if ($historyJobs !== []): ?>
-  <details class="ai-insights__history" data-ai-key="request-history">
-    <summary data-ai-key="request-history-summary"><span>Request history</span><span class="badge text-bg-light"><?= count($historyJobs) ?></span></summary>
-    <div class="ai-insights__history-body"><ul class="ai-insights__request-list"><?php foreach ($historyJobs as $job) { $renderJob($job); } ?></ul></div>
-  </details>
-  <?php endif; ?>
+  </div>
 </div>

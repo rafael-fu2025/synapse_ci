@@ -39,7 +39,7 @@ final class ClinicIsolationController extends BaseController
                 || in_array('clinic.isolation.write', $actor['permissions'] ?? [], true);
             $service = new IsolationTrackingService();
             $data = $service->listing($this->request->getGet());
-            return view('clinic/isolation/index', $data + [
+            $viewData = $data + [
                 'title'      => 'Communicable Disease & Isolation Calendar',
                 'pageTitle'  => 'Isolation & Outbreak Monitoring',
                 'canWrite'   => $canWrite,
@@ -49,7 +49,11 @@ final class ClinicIsolationController extends BaseController
                     ['label' => 'Clinic', 'url' => site_url('/clinic')],
                     ['label' => 'Isolation & Outbreaks', 'url' => ''],
                 ],
-            ]);
+            ];
+            if ($this->request->getGet('fragment') === '1') {
+                return $this->response->setContentType('text/html')->setBody(view('clinic/isolation/_body', $viewData));
+            }
+            return view('clinic/isolation/index', $viewData);
         } catch (Throwable $e) {
             $status = in_array($e->getCode(), [401, 403], true) ? $e->getCode() : 500;
             return $this->response->setStatusCode($status)->setBody(esc($status === 500 ? 'Unable to load isolation calendar.' : $e->getMessage()));

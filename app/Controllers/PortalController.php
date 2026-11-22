@@ -197,7 +197,7 @@ final class PortalController extends BaseController
                     ->where('deleted_at', null)
                     ->orderBy('call_date', 'DESC')
                     ->orderBy('id', 'DESC')
-                    ->limit(50)
+                    ->limit(500)
                     ->get()
                     ->getResultArray();
             }
@@ -246,11 +246,32 @@ final class PortalController extends BaseController
             };
         }));
 
+        $filteredCount = count($callSlips);
+        $perPage = (int) ($this->request->getGet('per_page') ?? 20);
+        if (!in_array($perPage, [20, 25, 50, 100], true)) {
+            $perPage = 20;
+        }
+        $totalPages = max(1, (int) ceil($filteredCount / $perPage));
+        $page = max(1, min($totalPages, (int) ($this->request->getGet('page') ?? 1)));
+        $offset = ($page - 1) * $perPage;
+        $pagedCallSlips = array_slice($callSlips, $offset, $perPage);
+        $pagination = [
+            'page'     => $page,
+            'per_page' => $perPage,
+            'filtered' => $filteredCount,
+            'total'    => $counts['all'],
+            'pages'    => $totalPages,
+            'from'     => $filteredCount === 0 ? 0 : $offset + 1,
+            'to'       => min($offset + $perPage, $filteredCount),
+        ];
+
         return view('portal/call_slips', [
             'title'         => 'Guidance Call Slips',
             'pageTitle'     => 'Guidance Call Slips',
-            'callSlips'     => $callSlips,
+            'callSlips'     => $pagedCallSlips,
             'filter'        => $filter,
+            'filters'       => ['status' => $filter, 'per_page' => $perPage],
+            'pagination'    => $pagination,
             'counts'        => $counts,
             'baseUrl'       => site_url('/portal/call-slips'),
             'portalBackUrl' => site_url('/portal'),

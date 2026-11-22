@@ -569,7 +569,7 @@ final class AuthService
         $this->userModel->update($sessionData['id'], ['last_login_at' => date('Y-m-d H:i:s')]);
 
         AuthenticatedUser::clear();
-        session()->remove(['_auth_notice', '_auth_expired', '_auth_rotated_at']);
+        session()->remove(['_auth_notice', '_auth_expired', '_auth_rotated_at', '_auth_obsolete', '_auth_handoff_doc_retries']);
         session()->regenerate(true);
         session()->set('_auth', [
             'started_at' => time(), 'last_seen_at' => time(),
@@ -589,7 +589,7 @@ final class AuthService
     public function logout(): void
     {
         AuthenticatedUser::clear();
-        session()->remove(['_auth_notice', '_auth_expired', '_auth_rotated_at']);
+        session()->remove(['_auth_notice', '_auth_expired', '_auth_rotated_at', '_auth_obsolete', '_auth_handoff_doc_retries']);
         session()->regenerate(true);
     }
 }

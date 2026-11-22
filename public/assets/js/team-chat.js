@@ -141,7 +141,7 @@
             taskResults.replaceChildren();
             if (!data.tasks.length) taskResults.textContent = 'No active tasks match your search.';
             else {
-              taskResults.append(node('p', 'small text-muted mt-2 mb-0', 'Showing up to 50 active tasks. Search to narrow the list.'));
+              taskResults.append(node('p', 'small text-muted mt-2 mb-0', 'Showing up to 40 active tasks. Search to narrow the list.'));
               data.tasks.forEach(task => {
                 const label = node('label', 'team-chat-task-option'), checkbox = document.createElement('input');
                 checkbox.type = 'checkbox'; checkbox.checked = selectedTasks.has(task.id); checkbox.disabled = !editable();
@@ -171,10 +171,25 @@
     const ids = () => [...state.messages.keys()].sort((a, b) => a - b);
     const maximum = () => ids().at(-1) || 0;
     const warn = message => { error.textContent = message; error.hidden = !message; };
+    const memberRoles = new Map((initial.members || []).filter(m => m && m.role).map(m => [Number(m.id), String(m.role)]));
+    const initialsOf = name => {
+      const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+      const letters = parts.slice(0, 2).map(part => part.charAt(0).toUpperCase()).join('');
+      return letters || 'TM';
+    };
+    const avatarTone = seed => {
+      const tones = ['emerald', 'sky', 'amber', 'maroon', 'slate'];
+      const text = String(seed ?? '');
+      let hash = 0;
+      for (let i = 0; i < text.length; i++) hash = ((hash * 31) + text.charCodeAt(i)) | 0;
+      return tones[Math.abs(hash) % tones.length];
+    };
     function summary(data) {
       if (Number.isInteger(data.last_read_id)) state.lastRead = Math.max(state.lastRead, data.last_read_id);
       if (Number.isInteger(data.unread_count)) state.unread = data.unread_count;
       find('[data-chat-unread]').textContent = String(state.unread);
+      const pill = find('[data-chat-unread-pill]');
+      if (pill) { pill.textContent = String(state.unread); pill.dataset.count = String(state.unread); }
       find('[data-chat-read-status]').textContent = `Unread: ${state.unread}`;
     }
     function controls() {
@@ -206,12 +221,15 @@
     }
     function messageArticle(message) {
       const id = message.id, stamp = dateOf(message.created_at);
-      const article = node('article', 'team-chat-message' + (message.sender_user_id === Number(root.dataset.actorId) ? ' is-own' : ''));
+      const isOwn = message.sender_user_id === Number(root.dataset.actorId);
+      const article = node('article', 'team-chat-message' + (isOwn ? ' is-own' : ''));
       article.dataset.messageId = String(id);
       article.id = `chat-message-${id}`; article.tabIndex = -1;
       article.classList.toggle('is-targeted', id === initial.target_message_id);
       const bubble = node('div', 'team-chat-bubble'), header = node('div', 'team-chat-message-header');
       header.append(node('strong', '', message.sender_name));
+      const senderRole = !isOwn ? memberRoles.get(Number(message.sender_user_id)) : '';
+      if (senderRole) header.append(node('span', 'tws-msg-role-badge', senderRole));
       const time = node('time', '', timeFormat.format(stamp));
       time.dateTime = stamp.toISOString(); time.title = dayFormat.format(stamp) + ' · Asia/Manila';
       header.append(time); bubble.append(header);
@@ -230,7 +248,8 @@
       text.append(document.createTextNode(message.body.slice(offset))); bubble.append(text);
       const tasks = message.tasks || (message.task_id ? [{ id: message.task_id, title: message.task_title }] : []);
       for (const task of tasks) {
-        const link = node('a', 'team-chat-task', `Task #${task.id}: ${task.title || 'Task'}`);
+        const link = node('a', 'team-chat-task');
+        link.append(node('span', 'tws-chat-task-id', `Task #${task.id}: `), node('span', 'tws-chat-task-title', task.title || 'Task'));
         link.href = `${root.dataset.teamsUrl}/${task.id}`;
         link.setAttribute('data-app-modal-open', ''); bubble.append(link);
       }
@@ -243,6 +262,11 @@
         window.bootstrap?.Tooltip?.getInstance(reply)?.hide();
         if (editable()) { replyTo = message; renderReferences(); body.focus(); }
       });
+      if (!isOwn) {
+        const avatar = node('span', `tws-msg-avatar is-${avatarTone(message.sender_user_id || message.sender_name)}`, initialsOf(message.sender_name));
+        avatar.setAttribute('aria-hidden', 'true');
+        article.append(avatar);
+      }
       article.append(bubble, reply);
       return article;
     }
@@ -252,8 +276,9 @@
       return separator;
     }
     function unreadSeparator() {
-      const separator = node('div', 'team-chat-unread-divider', 'Unread messages');
+      const separator = node('div', 'team-chat-unread-divider');
       separator.dataset.chatUnreadDivider = '';
+      separator.append(node('span', 'tws-unread-pill', 'Unread messages'));
       return separator;
     }
     function reconcile(incoming = null) {

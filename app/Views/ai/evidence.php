@@ -10,10 +10,14 @@ $point = static fn ($value): string => $value === null ? 'Not defined' : number_
 <section class="ai-insights__evidence" aria-labelledby="ai-evidence-<?= esc(hash('sha256', $analysisCode . ($evidence['period']['label'] ?? '')), 'attr') ?>">
   <div class="ai-insights__evidence-heading">
     <div>
-      <p class="ai-insights__eyebrow mb-1">Approved local data</p>
-      <h3 class="h6 mb-1" id="ai-evidence-<?= esc(hash('sha256', $analysisCode . ($evidence['period']['label'] ?? '')), 'attr') ?>"><?= esc($definition['title']) ?></h3>
+      <div class="ai-insights__evidence-kicker">
+        <p class="ai-insights__eyebrow mb-0">Approved local data</p>
+        <span class="ai-insights__evidence-period"><?= esc($evidence['comparison_period']['label']) ?> → <?= esc($evidence['period']['label']) ?></span>
+      </div>
+      <h3 class="h6 mb-1 mt-1" id="ai-evidence-<?= esc(hash('sha256', $analysisCode . ($evidence['period']['label'] ?? '')), 'attr') ?>"><?= esc($definition['title']) ?></h3>
       <p class="small text-muted mb-0">Completed calendar months · Philippine time · recorded events<?php if ($definition['unit'] !== 'bmg'): ?>, not different people or campus prevalence<?php endif; ?></p>
     </div>
+    <button type="button" class="btn btn-sm btn-link ai-insights__baseline-close" data-ai-dismiss-baseline aria-label="Hide local data preview"><i class="bi bi-x-lg" aria-hidden="true"></i> Hide</button>
   </div>
 
   <div class="ai-insights__evidence-warning" role="note">
@@ -27,9 +31,9 @@ $point = static fn ($value): string => $value === null ? 'Not defined' : number_
       <thead>
         <tr>
           <th scope="col">Released metric</th>
-          <th scope="col"><?= esc($evidence['comparison_period']['label']) ?></th>
-          <th scope="col"><?= esc($evidence['period']['label']) ?></th>
-          <th scope="col">Released comparison</th>
+          <th scope="col" class="ai-col-num"><?= esc($evidence['comparison_period']['label']) ?></th>
+          <th scope="col" class="ai-col-num"><?= esc($evidence['period']['label']) ?></th>
+          <th scope="col" class="ai-col-num">Released comparison</th>
         </tr>
       </thead>
       <tbody>
@@ -43,10 +47,10 @@ $point = static fn ($value): string => $value === null ? 'Not defined' : number_
       ?>
         <tr data-ai-evidence-metric="<?= esc($metric['metric_code'] ?? 'released', 'attr') ?>">
           <th scope="row"><span><?= esc($descriptor['label'] ?? 'Released metric') ?></span><small>Counted unit: <?= esc($unitOfAnalysis) ?></small></th>
-          <td><span class="ai-insights__metric-value"><?= esc($number($metric['previous_value'] ?? null)) ?></span><?php if ($hasShare): ?><small><?= esc($percent($metric['previous_share_percent'] ?? null)) ?> share of <?= esc($number($metric['previous_denominator'] ?? null)) ?> <?= esc($descriptors[$descriptor['denominator_metric_code'] ?? '']['label'] ?? 'recorded source events') ?></small><?php endif; ?></td>
-          <td><span class="ai-insights__metric-value"><?= esc($number($metric['current_value'] ?? null)) ?></span><?php if ($hasShare): ?><small><?= esc($percent($metric['current_share_percent'] ?? null)) ?> share of <?= esc($number($metric['current_denominator'] ?? null)) ?> <?= esc($descriptors[$descriptor['denominator_metric_code'] ?? '']['label'] ?? 'recorded source events') ?></small><?php endif; ?></td>
-          <td>
-            <span><?= esc($number($metric['absolute_change'] ?? null)) ?> count change</span>
+          <td class="ai-col-num" data-label="<?= esc($evidence['comparison_period']['label'], 'attr') ?>"><span class="ai-insights__metric-value"><?= esc($number($metric['previous_value'] ?? null)) ?></span><?php if ($hasShare): ?><small><?= esc($percent($metric['previous_share_percent'] ?? null)) ?> share of <?= esc($number($metric['previous_denominator'] ?? null)) ?> <?= esc($descriptors[$descriptor['denominator_metric_code'] ?? '']['label'] ?? 'recorded source events') ?></small><?php endif; ?></td>
+          <td class="ai-col-num" data-label="<?= esc($evidence['period']['label'], 'attr') ?>"><span class="ai-insights__metric-value"><?= esc($number($metric['current_value'] ?? null)) ?></span><?php if ($hasShare): ?><small><?= esc($percent($metric['current_share_percent'] ?? null)) ?> share of <?= esc($number($metric['current_denominator'] ?? null)) ?> <?= esc($descriptors[$descriptor['denominator_metric_code'] ?? '']['label'] ?? 'recorded source events') ?></small><?php endif; ?></td>
+          <td class="ai-col-num ai-col-compare" data-label="Released comparison">
+            <span class="ai-insights__change-value"><?= esc($number($metric['absolute_change'] ?? null)) ?> count change</span>
             <small><?= esc($percent($metric['relative_change_percent'] ?? null)) ?> compared with the earlier month<?php if ($hasShare): ?> · <?= esc($point($metric['share_change_points'] ?? null)) ?> percentage-point share change<?php endif; ?></small>
           </td>
         </tr>

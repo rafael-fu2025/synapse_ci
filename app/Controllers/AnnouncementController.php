@@ -20,7 +20,8 @@ final class AnnouncementController extends BaseController
     public function index(string $unit)
     {
         return $this->respond(function () use ($unit) {
-            $data = $this->announcements->listing($unit, $this->request->getGet('page') ?? 1);
+            $query = (array) $this->request->getGet();
+            $data = $this->announcements->listing($unit, $this->request->getGet('page') ?? 1, $query);
             $reads = $this->request->getGet('reads');
             if ($reads !== null) {
                 if (!is_string($reads) || !ctype_digit($reads) || (int) $reads < 1) { throw new RuntimeException('Invalid announcement.', 422); }

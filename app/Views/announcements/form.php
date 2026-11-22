@@ -1,6 +1,15 @@
 <?php require __DIR__ . '/_dates.php'; ?>
+<?php $useRedesignedAnnouncements = in_array($unit, ['guidance', 'clinic'], true); ?>
 <?= $this->extend('layouts/modal_form') ?>
+<?php if ($useRedesignedAnnouncements): ?>
+<?= $this->section('styles') ?>
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/guidance-announcements.css'), 'attr') ?>">
+<?= $this->endSection() ?>
+<?php endif; ?>
 <?= $this->section('content') ?>
+<?php if ($useRedesignedAnnouncements): ?>
+<?php require __DIR__ . '/_guidance_form.php'; ?>
+<?php else: ?>
 <p class="text-muted small"><?= esc(ucfirst($unit)) ?> announcement · Saving creates a draft only. Publication is a separate, confirmed action.</p>
 <form action="<?= esc($formAction) ?>" method="POST" data-modal-submit x-data="{ audience: <?= esc(json_encode($announcement['audience'] ?? 'all'), 'attr') ?> }">
   <?= csrf_field() ?>
@@ -52,4 +61,5 @@
   </div>
   <div class="form-actions"><a href="<?= esc($cancelUrl) ?>" class="btn btn-outline-secondary" data-app-modal-close>Cancel</a><button type="submit" class="btn btn-primary">Save draft</button></div>
 </form>
+<?php endif; ?>
 <?= $this->endSection() ?>

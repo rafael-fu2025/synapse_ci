@@ -507,6 +507,7 @@ test('portal shell places quick services in page actions, tickets above profile,
   assert.equal(await page.locator('#main .page-actions .portal-app-dock').count(), 1);
   assert.equal(await page.locator('#main .page-actions a[href$="/portal/visits"]').count(), 0, 'My Visit History header button removed');
   assert.equal(await page.locator('#app-sidebar a[href$="/portal/visits"]').count(), 1, 'My Visit History remains in the sidebar');
+  assert.equal(await page.locator('#portal-workspace-pane > .portal-workspace-header h2.portal-workspace-title').innerText(), 'My Appointments', 'My Appointments matches other portal pane headers');
   assert.equal(await page.locator('.portal-left-rail .portal-request-actions a[data-app-modal-open]').count(), 2);
   assert.equal(await page.locator('.portal-left-rail .portal-request-actions svg.portal-request-icon').count(), 2, 'Request buttons use Clinic and Guidance vector SVGs');
   assert.equal(await page.locator('.portal-left-rail .portal-request-actions i').count(), 0, 'Calendar icon fonts replaced by vector SVGs');
@@ -565,4 +566,12 @@ test('portal shell places quick services in page actions, tickets above profile,
   assert.ok(mobile.q.bottom <= mobile.p.top + 2, 'Tickets sit above profile card on mobile');
   assert.ok(mobile.r.top >= mobile.p.bottom - 2, 'Request buttons sit below profile card on mobile');
   assert.ok(Math.abs(mobile.q.width - mobile.p.width) <= 2, 'Tickets match profile width on mobile');
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const [pane, expectedTitle] of [['announcements', 'Announcements'], ['surveys', 'My Surveys']]) {
+    await page.locator(`.portal-app-dock [data-portal-pane-link="${pane}"]`).click();
+    await ready(page);
+    assert.equal(await page.locator('#portal-workspace-pane .portal-workspace-title').innerText(), expectedTitle);
+    assert.equal(await page.locator('#portal-workspace-pane .portal-workspace-actions').getByRole('link', { name: 'Back to My Health Portal', exact: true }).count(), 1);
+  }
 });

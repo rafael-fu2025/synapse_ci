@@ -82,24 +82,178 @@
   width: min(23rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
   overflow: auto;
-  padding: 1.25rem;
-  border: 1px solid var(--border-color, #d9dee5);
-  border-top: 3px solid var(--accent-color, #800000);
-  border-radius: var(--radius-md, 0.5rem);
-  background: var(--surface-color, #fff);
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--border-color, #d8dde6);
+  border-radius: 10px;
+  background: var(--surface-color, #ffffff);
   color: var(--default-color, #293241);
-  box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 15%);
+  box-shadow: 0 10px 28px -8px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
 }
-.report-download-panel > strong { display: block; font-size: 1rem; margin-bottom: 0.5rem; }
-.report-download-message { margin: 0 0 0.75rem; font-size: 0.875rem; overflow-wrap: anywhere; }
-.report-download-panel > small { display: block; color: var(--muted-color, #667085); line-height: 1.5; margin: 0.75rem 0 1rem; }
-.report-download-panel > progress { display: block; width: 100%; height: 0.65rem; border: 0; border-radius: 1rem; overflow: hidden; accent-color: var(--accent-color, #800000); }
-.report-download-panel > progress[hidden] { display: none; }
-.report-download-panel > progress::-webkit-progress-bar { background: var(--border-color-light, #e9ecef); border-radius: 1rem; }
-.report-download-panel > progress::-webkit-progress-value { background: var(--accent-color, #800000); border-radius: 1rem; }
-.report-download-panel > progress::-moz-progress-bar { background: var(--accent-color, #800000); border-radius: 1rem; }
-.report-download-panel > progress:indeterminate { opacity: 0.65; }
-.report-download-panel[data-state="error"] { border-top-color: var(--bs-danger, #dc3545); }
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel {
+  background: var(--surface-color, #1c1c1c);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 32px -6px rgba(0, 0, 0, 0.55);
+}
+
+.report-download-panel > strong {
+  display: block;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--heading-color, #111827);
+  margin-bottom: 0.35rem;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel > strong {
+  color: #f3f4f6;
+}
+
+.report-download-message {
+  margin: 0 0 0.65rem;
+  font-size: 0.825rem;
+  line-height: 1.45;
+  color: var(--default-color, #374151);
+  overflow-wrap: anywhere;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-message {
+  color: #d1d5db;
+}
+
+.report-download-panel[data-state="complete"] .report-download-message {
+  font-family: var(--mono-font, monospace);
+  font-size: 0.77rem;
+  color: var(--heading-color, #111827);
+  background: #f9fafb;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  display: inline-block;
+  max-width: 100%;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel[data-state="complete"] .report-download-message {
+  color: #f3f4f6;
+  background: #222222;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.report-download-panel > progress {
+  display: block;
+  width: 100%;
+  height: 3.5px;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  accent-color: var(--fu-brand, #800000);
+}
+
+.report-download-panel > progress[hidden] {
+  display: none;
+}
+
+.report-download-panel > progress::-webkit-progress-bar {
+  background: #eef0f4;
+  border-radius: 999px;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel > progress::-webkit-progress-bar {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.report-download-panel > progress::-webkit-progress-value {
+  background: var(--fu-brand, #800000);
+  border-radius: 999px;
+  transition: width 0.15s ease;
+}
+
+.report-download-panel > progress::-moz-progress-bar {
+  background: var(--fu-brand, #800000);
+  border-radius: 999px;
+}
+
+.report-download-panel[data-state="complete"] > progress::-webkit-progress-value {
+  background: #15803d;
+}
+
+.report-download-panel[data-state="complete"] > progress::-moz-progress-bar {
+  background: #15803d;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel[data-state="complete"] > progress::-webkit-progress-value,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel[data-state="complete"] > progress::-moz-progress-bar {
+  background: #4ade80;
+}
+
+.report-download-panel > progress:indeterminate {
+  opacity: 0.65;
+}
+
+.report-download-panel > small {
+  display: block;
+  color: #6b7280;
+  font-size: 0.77rem;
+  line-height: 1.45;
+  margin: 0.6rem 0 0.85rem;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel > small {
+  color: #9ca3af;
+}
+
+html body .report-download-panel > .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 14px;
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px;
+  background: #ffffff !important;
+  color: #111827 !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  cursor: pointer;
+  box-shadow: none !important;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+html body .report-download-panel > .btn:hover {
+  background: #f3f4f6 !important;
+  border-color: #9ca3af !important;
+  color: #111827 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel > .btn {
+  background: #1c1c1c !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #f3f4f6 !important;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel > .btn:hover {
+  background: #282828 !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+}
+
+.report-download-panel[data-state="error"] {
+  border-color: var(--bs-danger, #b91c1c);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel[data-state="error"] {
+  border-color: #f87171;
+}
+
+.report-download-panel[data-state="error"] > strong {
+  color: var(--bs-danger, #b91c1c);
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .report-download-panel[data-state="error"] > strong {
+  color: #f87171;
+}
+
 @media (max-width: 575.98px) {
   .report-download-panel { right: 1rem; bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
