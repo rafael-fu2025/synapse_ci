@@ -40,7 +40,7 @@
   --ai-rose-bg: #fff1f2;
   --ai-rose-border: #fecdd3;
   --ai-rose-dot: #f43f5e;
-  --ai-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --ai-mono: var(--mono-font, "Courier New", Courier, monospace);
   color: var(--ai-fg-secondary);
   display: flex;
   flex-direction: column;

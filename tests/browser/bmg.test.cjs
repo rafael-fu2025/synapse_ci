@@ -363,10 +363,10 @@ test('schedule enforces eight times, uniqueness and midnight overlap before conf
   assert.equal(await form.getByRole('button', { name: 'Add time', exact: true }).isEnabled(), true);
   await fillScheduleTime(inputs.nth(0), '11:59 PM');
   await fillScheduleTime(inputs.nth(1), '12:00 AM');
-  await form.locator('[name="duration_seconds"]').fill('120');
+  await form.locator('[name="rotations"]').fill('20');
   await form.getByRole('button', { name: 'Save schedule', exact: true }).click();
   assert.match(await form.locator('[role="alert"]').textContent(), /overlap/);
-  await form.locator('[name="duration_seconds"]').fill('60');
+  await form.locator('[name="rotations"]').fill('7');
   await form.getByRole('button', { name: 'Save schedule', exact: true }).click();
   await page.locator('#synapseConfirmModal.show').waitFor();
   await page.locator('[data-confirm-accept]').click(); await page.waitForURL('**/facilities/unit/11/schedule');
@@ -468,7 +468,7 @@ test('stop confirms and submits no run duration', async t => {
   await page.locator('#synapseConfirmModal.show').waitFor(); assert.equal(posts.length, count);
   await page.locator('[data-confirm-accept]').click(); await page.waitForURL('**/facilities/unit/11/command');
   assert.equal(posts.at(-1).fields.expected_version, '3');
-  assert.equal(posts.at(-1).fields.command, 'stop'); assert.equal('duration_seconds' in posts.at(-1).fields, false);
+  assert.equal(posts.at(-1).fields.command, 'stop'); assert.equal('rotations' in posts.at(-1).fields, false);
   assert.ok(posts.at(-1).fields.csrf_test_name);
 });
 test('all detail writes use CSRF and exact registration, cancellation and edit fields', async t => {
@@ -490,12 +490,12 @@ test('all detail writes use CSRF and exact registration, cancellation and edit f
 });
 test('run request posts duration only after shared consent', async t => {
   const page = await pageFor(t); const count = posts.length;
-  await page.locator('#manualDuration').fill('90');
+  await page.locator('#manualRotations').fill('9');
   await page.getByRole('button', { name: 'Request run now', exact: true }).click();
   await page.locator('#synapseConfirmModal.show').waitFor(); assert.equal(posts.length, count);
   await page.locator('[data-confirm-accept]').click(); await page.waitForURL('**/facilities/unit/11/command');
   assert.equal(posts.at(-1).fields.expected_version, '3');
-  assert.equal(posts.at(-1).fields.command, 'run_now'); assert.equal(posts.at(-1).fields.duration_seconds, '90');
+  assert.equal(posts.at(-1).fields.command, 'run_now'); assert.equal(posts.at(-1).fields.rotations, '9');
   assert.equal('pwm' in posts.at(-1).fields, false);
 });
 test('batch completion hands off to shared confirmation without stacked modals', async t => {
@@ -538,7 +538,7 @@ test('AJAX schedule errors retain fields, render escaped messages and refresh CS
   const form = page.locator('[data-bmg-schedule]');
   const originalUrl = page.url();
   const literal = '<img src=x onerror="window.bmgXss=1">Rejected & retained';
-  await form.locator('[name="duration_seconds"]').fill('125');
+  await form.locator('[name="rotations"]').fill('12');
   for (const status of [422, 409, 403, 503]) {
     responses.push({ status, message: literal, hash: `token-${status}`, headerOnly: status === 403 });
     await form.getByRole('button', { name: 'Save schedule', exact: true }).click();
@@ -551,7 +551,7 @@ test('AJAX schedule errors retain fields, render escaped messages and refresh CS
     assert.equal(await form.locator('[data-bmg-submit-error]').textContent(), literal);
     assert.equal(await form.locator('[data-bmg-submit-error] img').count(), 0);
     assert.equal(await page.evaluate(() => window.bmgXss), undefined);
-    assert.equal(await form.locator('[name="duration_seconds"]').inputValue(), '125');
+    assert.equal(await form.locator('[name="rotations"]').inputValue(), '12');
     assert.deepEqual(await form.locator('[name="times[]"]').evaluateAll(inputs => inputs.map(input => input.value)), ['08:00', '16:00']);
     assert.equal(await page.locator('meta[name="csrf-token"]').getAttribute('content'), `token-${status}`);
     assert.equal(await page.locator('main input[name="csrf_test_name"]').evaluateAll(inputs => inputs.every(input => input.value === document.querySelector('meta[name="csrf-token"]').content)), true);
@@ -559,7 +559,7 @@ test('AJAX schedule errors retain fields, render escaped messages and refresh CS
   await form.getByRole('button', { name: 'Save schedule', exact: true }).click();
   await page.locator('#synapseConfirmModal.show').waitFor();
   await page.locator('[data-confirm-accept]').click(); await page.waitForURL('**/facilities/unit/11/schedule');
-  assert.equal(posts.at(-1).fields.duration_seconds, '125');
+  assert.equal(posts.at(-1).fields.rotations, '12');
   assert.equal(posts.at(-1).fields.csrf_test_name, 'token-503');
   assert.equal(posts.at(-1).headers['x-csrf-token'], 'token-503');
 });

@@ -247,7 +247,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
         <p class="small text-muted mt-2" x-show="item.review_note" x-text="item.review_note"></p>
         <button class="btn btn-outline-primary btn-sm mt-2" type="button" @click="addBankQuestion(item)" :disabled="questions.length >= 20">Add copy</button>
       </article></template>
-      <div class="d-flex gap-2 align-items-center mt-3"><button class="btn btn-outline-secondary btn-sm" type="button" @click="searchBank(bankPage - 1)" :disabled="bankBusy || bankPage <= 1">Previous</button><span class="small" x-text="'Page ' + bankPage + ' of ' + bankPages"></span><button class="btn btn-outline-secondary btn-sm" type="button" @click="searchBank(bankPage + 1)" :disabled="bankBusy || bankPage >= bankPages">Next</button></div>
+      <div class="d-flex flex-wrap gap-2 align-items-center mt-3"><span class="small text-muted me-auto" role="status" aria-live="polite" x-show="bankLoaded && !bankBusy && !bankError" x-text="'Showing ' + bankFrom + '–' + bankTo + ' of ' + bankTotal">Showing 0–0 of 0</span><button class="btn btn-outline-secondary btn-sm" type="button" @click="searchBank(bankPage - 1)" :disabled="bankBusy || bankPage <= 1">Previous</button><span class="small" x-text="'Page ' + bankPage + ' of ' + bankPages"></span><button class="btn btn-outline-secondary btn-sm" type="button" @click="searchBank(bankPage + 1)" :disabled="bankBusy || bankPage >= bankPages">Next</button></div>
     </section>
     <p class="small text-success" role="status" x-show="bankMessage" x-text="bankMessage"></p>
     <template x-for="(question, index) in questions" :key="index">

@@ -32,7 +32,7 @@
   --cp-sky: #0369a1;
   --cp-slate: #475569;
   --cp-zinc: #64748b;
-  --cp-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  --cp-mono: var(--mono-font, "Courier New", Courier, monospace);
   color: var(--cp-fg-secondary);
   min-width: 0;
 }

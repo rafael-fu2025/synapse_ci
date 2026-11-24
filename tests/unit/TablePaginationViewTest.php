@@ -42,6 +42,17 @@ final class TablePaginationViewTest extends CIUnitTestCase
         $this->assertCount(1, $xpath->query('//*[@aria-current="page"]'));
     }
 
+    public function testCardFooterSpacingIsAnExplicitPresentationOption(): void
+    {
+        $html = $this->render(['paginationCardFooter' => true,
+            'pagination' => ['page' => 2, 'per_page' => 25, 'filtered' => 61, 'total' => 90]]);
+        $this->assertStringContainsString('Showing 26–50 of 61', $html);
+        $xpath = $this->xpath($html);
+        $this->assertCount(1, $xpath->query('//*[@data-table-pagination and contains(@class,"ce-table-footer") and not(contains(@class,"mt-3"))]'));
+        $this->assertCount(1, $xpath->query('//*[@aria-current="page" and normalize-space(.)="2"]'));
+        $this->assertCount(0, $this->xpath($this->render())->query('//*[contains(@class,"ce-table-footer")]'));
+    }
+
     public function testDirectoryDefaultsPreserveFiltersCountsAndTableHooks(): void
     {
         $html = $this->render([
@@ -99,6 +110,33 @@ final class TablePaginationViewTest extends CIUnitTestCase
             $this->assertSame('42', $query['reads']);
             $this->assertSame($anchor->getAttribute('data-table-page'), $query['read_page']);
             $this->assertFalse($anchor->hasAttribute('data-filter-link'));
+        }
+    }
+
+    public function testIndependentSizesFragmentsAndModalHooksAreOptIn(): void
+    {
+        $html = $this->render([
+            'pagination' => ['page' => 2, 'per_page' => 20, 'filtered' => 45, 'total' => 45],
+            'paginationPageParam' => 'comments_page', 'paginationPerPageParam' => 'comments_per_page',
+            'paginationExtraQuery' => ['activity_page' => 3, 'activity_per_page' => 50, 'page' => 4],
+            'paginationFragment' => 'comments', 'paginationModalPages' => true,
+            'paginationNavigation' => true,
+        ]);
+        $this->assertStringContainsString('Showing 21–40 of 45', $html);
+        $this->assertStringContainsString('data-page-param="comments_page"', $html);
+        $this->assertStringContainsString('data-per-page-param="comments_per_page"', $html);
+        foreach ($this->xpath($html)->query('//a') as $anchor) {
+            $this->assertTrue($anchor->hasAttribute('data-app-modal-page'));
+            $this->assertTrue($anchor->hasAttribute('data-pagination-navigation'));
+            $this->assertFalse($anchor->hasAttribute('data-filter-link'));
+            $this->assertSame('comments', parse_url($anchor->getAttribute('href'), PHP_URL_FRAGMENT));
+            parse_str((string) parse_url($anchor->getAttribute('href'), PHP_URL_QUERY), $query);
+            $this->assertSame('20', $query['comments_per_page']);
+            $this->assertSame($anchor->getAttribute('data-table-page'), $query['comments_page']);
+            $this->assertSame('3', $query['activity_page']);
+            $this->assertSame('50', $query['activity_per_page']);
+            $this->assertSame('4', $query['page']);
+            $this->assertArrayNotHasKey('per_page', $query);
         }
     }
 

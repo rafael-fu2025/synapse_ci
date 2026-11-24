@@ -99,6 +99,31 @@ final class BmgRotationService
         return $this->detail($this->findUnit((int) $actor['tenant_id'], $id));
     }
 
+    /** Web-only histories; unit() and all command/write responses retain their legacy shape. */
+    public function unitPage(int $id, array $query = []): array
+    {
+        $actor = $this->actor('facilities.read');
+        $tenant = (int) $actor['tenant_id'];
+        $unit = $this->findUnit($tenant, $id);
+        $pages = [
+            'commands' => TablePage::forList($query, 'commands_page', 'commands_per_page', 20),
+            'runs' => TablePage::forList($query, 'runs_page', 'runs_per_page', 20),
+        ];
+        $device = $this->boundDevice($tenant, $id);
+        $detail = ['unit' => $unit, 'schedule' => $this->scheduleView($tenant, $id),
+            'device' => $device === null ? null : $this->formatDevice($device),
+            'hardware_enabled' => $this->hardwareEnabled()];
+        foreach ($pages as $kind => $page) {
+            $builder = $this->db->table('bmg_rotation_' . $kind)->where('tenant_id', $tenant)->where('unit_id', $id);
+            $total = (clone $builder)->countAllResults();
+            $pagination = $page->metadata($total, $total);
+            $detail[$kind . 'Pagination'] = $pagination;
+            $detail[$kind] = $builder->orderBy('id', 'DESC')
+                ->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage)->get()->getResultArray();
+        }
+        return $detail;
+    }
+
     /** Create/update unit configuration; capacity is required, and edits require expected_version. */
     public function saveUnit(?int $id, array $data): array
     {
@@ -131,14 +156,14 @@ final class BmgRotationService
             if ($id === null) {
                 $this->db->table('bmg_units')->insert($values + ['tenant_id' => $tenant, 'created_at' => $this->now()]);
                 $id = (int) $this->db->insertID();
-                $this->persistSchedule($tenant, $id, (int) $actor['id'], false, [], 60, null);
+                $this->persistSchedule($tenant, $id, (int) $actor['id'], false, [], 7, null);
             } else {
                 $this->db->table('bmg_units')->where('tenant_id', $tenant)->where('id', $id)->update($values);
                 if ($status !== 'active') {
                     $this->disable($tenant, $id, (int) $actor['id']);
                 } else {
                     $old = $this->scheduleView($tenant, $id);
-                    $this->persistSchedule($tenant, $id, (int) $actor['id'], $old['enabled'], $old['times'], $old['duration_seconds'], $old['pwm']);
+                    $this->persistSchedule($tenant, $id, (int) $actor['id'], $old['enabled'], $old['times'], $old['rotations'], $old['pwm']);
                 }
             }
             $this->audit($actor, 'bmg_unit', $id, 'save', $values);
@@ -214,11 +239,11 @@ final class BmgRotationService
         return $devices;
     }
 
-    /** Full replacement: expected_version required, enabled, times (0..8 HH:MM), duration_seconds, optional pwm. */
+    /** Full replacement: expected_version required, enabled, times (0..8 HH:MM), rotations (1..100), optional pwm. */
     public function saveSchedule(int $unitId, array $data): array
     {
         $actor = $this->configurationActor();
-        $this->keys($data, ['enabled', 'times', 'duration_seconds', 'pwm', 'expected_version']);
+        $this->keys($data, ['enabled', 'times', 'rotations', 'pwm', 'expected_version']);
         $enabled = $this->boolean($data['enabled'] ?? false, 'enabled');
         $times = $data['times'] ?? [];
         if (!is_array($times) || !array_is_list($times) || count($times) > 8) {
@@ -233,32 +258,28 @@ final class BmgRotationService
             throw new InvalidArgumentException('Enabled schedules need distinct times.');
         }
         sort($times);
-        $duration = $this->integer($data['duration_seconds'] ?? 60, 1, 600, 'duration_seconds');
-        // Reject overlapping windows, including the midnight wrap.
+        $rotations = $this->integer($data['rotations'] ?? 7, 1, 100, 'rotations');
+        // Reject overlapping windows (estimating 6s per rotation), including the midnight wrap.
         if (count($times) > 1) {
             $minutes = array_map(static fn (string $t): int => (int) substr($t, 0, 2) * 60 + (int) substr($t, 3, 2), $times);
             $minutes[] = $minutes[0] + 1440;
+            $windowSeconds = $rotations * 6;
             for ($i = 1; $i < count($minutes); $i++) {
-                if (($minutes[$i] - $minutes[$i - 1]) * 60 < $duration) {
+                if (($minutes[$i] - $minutes[$i - 1]) * 60 < $windowSeconds) {
                     throw new InvalidArgumentException('Schedule rotation windows overlap.');
                 }
             }
         }
         $pwm = array_key_exists('pwm', $data) && $data['pwm'] !== null
             ? $this->integer($data['pwm'], 1, 255, 'pwm') : null;
-        return $this->locked((int) $actor['tenant_id'], function () use ($actor, $unitId, $enabled, $times, $duration, $pwm, $data): array {
+        return $this->locked((int) $actor['tenant_id'], function () use ($actor, $unitId, $enabled, $times, $rotations, $pwm, $data): array {
             $tenant = (int) $actor['tenant_id'];
             $unit = $this->findUnit($tenant, $unitId);
             $this->expectVersion($tenant, $unitId, $data['expected_version'] ?? null);
-            $old = $this->scheduleView($tenant, $unitId);
-            // Safe shutdown is allowed without hardware authority; configuration is not.
-            if ($enabled || $pwm !== null || $times !== $old['times'] || $duration !== $old['duration_seconds']) {
-                $this->hardware($actor);
-            }
             if ($enabled && ($unit['status'] !== 'active' || $this->boundDevice($tenant, $unitId) === null)) {
                 throw new RuntimeException('Enabling requires an active unit and exactly one bound active device.', 409);
             }
-            $this->persistSchedule($tenant, $unitId, (int) $actor['id'], $enabled, $times, $duration, $pwm);
+            $this->persistSchedule($tenant, $unitId, (int) $actor['id'], $enabled, $times, $rotations, $pwm);
             $this->cancelCommands($tenant, $unitId, (int) $actor['id']);
             $this->audit($actor, 'bmg_unit', $unitId, 'schedule', $this->scheduleView($tenant, $unitId));
             return $this->scheduleView($tenant, $unitId);
@@ -339,15 +360,15 @@ final class BmgRotationService
     {
         $actor = $this->actor('facilities.manage');
         $this->hardware($actor);
-        $this->keys($data, ['command', 'duration_seconds', 'pwm', 'expires_in_seconds', 'expected_version']);
+        $this->keys($data, ['command', 'rotations', 'pwm', 'expires_in_seconds', 'expected_version']);
         $kind = $this->choice($data['command'] ?? null, ['run_now', 'stop'], 'command');
         $ttl = $this->integer($data['expires_in_seconds'] ?? 60, 5, 300, 'expires_in_seconds');
-        $duration = $kind === 'run_now' ? $this->integer($data['duration_seconds'] ?? 60, 1, 600, 'duration_seconds') : null;
+        $rotations = $kind === 'run_now' ? $this->integer($data['rotations'] ?? 7, 1, 100, 'rotations') : null;
         $pwm = isset($data['pwm']) ? $this->integer($data['pwm'], 1, 255, 'pwm') : null;
-        if ($kind === 'stop' && (array_key_exists('duration_seconds', $data) || array_key_exists('pwm', $data))) {
-            throw new InvalidArgumentException('stop does not accept duration_seconds or pwm.');
+        if ($kind === 'stop' && (array_key_exists('rotations', $data) || array_key_exists('pwm', $data))) {
+            throw new InvalidArgumentException('stop does not accept rotations or pwm.');
         }
-        return $this->locked((int) $actor['tenant_id'], function () use ($actor, $unitId, $kind, $ttl, $duration, $pwm, $data): array {
+        return $this->locked((int) $actor['tenant_id'], function () use ($actor, $unitId, $kind, $ttl, $rotations, $pwm, $data): array {
             $tenant = (int) $actor['tenant_id'];
             $unit = $this->findUnit($tenant, $unitId);
             $this->expectVersion($tenant, $unitId, $data['expected_version'] ?? null);
@@ -364,7 +385,7 @@ final class BmgRotationService
                 throw new RuntimeException('A command is already pending.', 409);
             }
             $values = ['tenant_id' => $tenant, 'unit_id' => $unitId, 'device_id' => (int) $device['id'],
-                'command' => $kind, 'duration_seconds' => $duration, 'pwm' => $pwm, 'status' => 'pending',
+                'command' => $kind, 'rotations' => $rotations, 'pwm' => $pwm, 'status' => 'pending',
                 'created_by_user_id' => (int) $actor['id'], 'created_at' => $this->now(),
                 'expires_at' => $this->clock()->modify('+' . $ttl . ' seconds')->format('Y-m-d H:i:s')];
             $this->db->table('bmg_rotation_commands')->insert($values);
@@ -420,17 +441,17 @@ final class BmgRotationService
     /** Device facts are accepted even with the hardware gate off; never evidence of authorization. */
     public function ingestRun(string $token, array $data): array
     {
-        $this->keys($data, ['run_uid', 'motor_state', 'duration_seconds', 'occurred_at']);
+        $this->keys($data, ['run_uid', 'motor_state', 'rotations', 'occurred_at']);
         $uid = $this->text($data['run_uid'] ?? null, 64, 'run_uid');
         if (!preg_match('/\A[A-Za-z0-9_-]+\z/D', $uid)) { throw new InvalidArgumentException('Invalid run_uid.'); }
         $state = $this->choice($data['motor_state'] ?? null, ['turned_normal', 'stopped', 'failed', 'interrupted'], 'motor_state');
-        $duration = $this->integer($data['duration_seconds'] ?? null, 0, 86400, 'duration_seconds');
+        $rotations = $this->integer($data['rotations'] ?? null, 0, 1000, 'rotations');
         $occurred = $this->text($data['occurred_at'] ?? null, 19, 'occurred_at');
         $date = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $occurred, new DateTimeZone('Asia/Manila'));
         if ($date === false || $date->format('Y-m-d H:i:s') !== $occurred || $date > $this->clock()) {
             throw new InvalidArgumentException('occurred_at must be a valid Manila timestamp, not in the future.');
         }
-        return $this->deviceOperation($token, function (array $device) use ($uid, $state, $duration, $occurred): array {
+        return $this->deviceOperation($token, function (array $device) use ($uid, $state, $rotations, $occurred): array {
             if ($device['unit_id'] === null) { throw new RuntimeException('Device is not bound to a unit.', 409); }
             $this->findUnit((int) $device['tenant_id'], (int) $device['unit_id']);
             // Second-resolution clocks cannot disambiguate runs in the binding second.
@@ -438,7 +459,7 @@ final class BmgRotationService
             if ($device['rotation_bound_at'] === null || $occurred <= $device['rotation_bound_at']) {
                 throw new RuntimeException('Run predates or overlaps the current binding; attribution rejected.', 409);
             }
-            $facts = ['motor_state' => $state, 'duration_seconds' => $duration, 'occurred_at' => $occurred];
+            $facts = ['motor_state' => $state, 'rotations' => $rotations, 'occurred_at' => $occurred];
             $existing = $this->db->table('bmg_rotation_runs')->where('tenant_id', $device['tenant_id'])
                 ->where('device_id', $device['id'])->where('run_uid', $uid)->get()->getRowArray();
             if ($existing !== null) {
@@ -466,7 +487,7 @@ final class BmgRotationService
             $this->revalidateCommands($device);
             $this->expireCommands($tenant, (int) $device['id']);
 
-            $rows = $this->db->table('bmg_rotation_commands')->select('id AS command_id, command, duration_seconds, pwm, expires_at')
+            $rows = $this->db->table('bmg_rotation_commands')->select('id AS command_id, command, rotations, pwm, expires_at')
                 ->where('tenant_id', $tenant)->where('device_id', $device['id'])->where('unit_id', $device['unit_id'])
                 ->where('status', 'pending')->orderBy('id')->limit(20)->get()->getResultArray();
             return ['commands' => $rows, 'server_time' => $this->now()];
@@ -609,7 +630,7 @@ final class BmgRotationService
     private function defaultSchedule(): array
     {
         return ['version' => 0, 'enabled' => false, 'timezone' => 'Asia/Manila', 'times' => [],
-            'duration_seconds' => 60, 'pwm' => null, 'direction' => 'forward'];
+            'rotations' => 7, 'pwm' => null, 'direction' => 'forward', 'next_run_at' => null];
     }
 
     private function scheduleView(int $tenant, int $unit): array
@@ -621,15 +642,48 @@ final class BmgRotationService
     private function formatSchedule(?array $row): array
     {
         if ($row === null) { return $this->defaultSchedule(); }
-        return ['version' => (int) $row['version'], 'enabled' => (bool) $row['enabled'], 'timezone' => 'Asia/Manila',
-            'times' => json_decode($row['times_json'], true, 16, JSON_THROW_ON_ERROR),
-            'duration_seconds' => (int) $row['duration_seconds'], 'pwm' => $row['pwm'] === null ? null : (int) $row['pwm'], 'direction' => 'forward'];
+        $times = json_decode($row['times_json'], true, 16, JSON_THROW_ON_ERROR);
+        $enabled = (bool) $row['enabled'];
+        return ['version' => (int) $row['version'], 'enabled' => $enabled, 'timezone' => 'Asia/Manila',
+            'times' => $times, 'rotations' => (int) $row['rotations'],
+            'pwm' => $row['pwm'] === null ? null : (int) $row['pwm'], 'direction' => 'forward',
+            'next_run_at' => $this->nextRunAt($times, $enabled)];
     }
 
-    private function persistSchedule(int $tenant, int $unit, int $actor, bool $enabled, array $times, int $duration, ?int $pwm): void
+    /** Next upcoming Asia/Manila scheduled run timestamp, or null when off/empty. */
+    private function nextRunAt(array $times, bool $enabled): ?string
+    {
+        if (!$enabled || $times === []) {
+            return null;
+        }
+        $tz = new DateTimeZone('Asia/Manila');
+        $now = $this->clock();
+        $today = $now->format('Y-m-d');
+        $tomorrow = $now->modify('+1 day')->format('Y-m-d');
+        $upcoming = [];
+        foreach ($times as $hhmm) {
+            if (!is_string($hhmm) || !preg_match('/\A(?:[01][0-9]|2[0-3]):[0-5][0-9]\z/D', $hhmm)) {
+                continue;
+            }
+            foreach ([$today, $tomorrow] as $day) {
+                $candidate = DateTimeImmutable::createFromFormat('!Y-m-d H:i', $day . ' ' . $hhmm, $tz);
+                if ($candidate !== false && $candidate > $now) {
+                    $upcoming[] = $candidate;
+                    break;
+                }
+            }
+        }
+        if ($upcoming === []) {
+            return null;
+        }
+        usort($upcoming, static fn (DateTimeImmutable $a, DateTimeImmutable $b): int => $a <=> $b);
+        return $upcoming[0]->format('Y-m-d H:i:s');
+    }
+
+    private function persistSchedule(int $tenant, int $unit, int $actor, bool $enabled, array $times, int $rotations, ?int $pwm): void
     {
         $old = $this->db->table('bmg_rotation_schedules')->where('tenant_id', $tenant)->where('unit_id', $unit)->get()->getRowArray();
-        $values = ['enabled' => $enabled, 'times_json' => json_encode($times, JSON_THROW_ON_ERROR), 'duration_seconds' => $duration,
+        $values = ['enabled' => $enabled, 'times_json' => json_encode($times, JSON_THROW_ON_ERROR), 'rotations' => $rotations,
             'pwm' => $pwm, 'version' => $old === null ? 1 : (int) $old['version'] + 1,
             'updated_by_user_id' => $actor, 'updated_at' => $this->now()];
         if ($old === null) {
@@ -642,7 +696,7 @@ final class BmgRotationService
     private function disable(int $tenant, int $unit, int $actor): void
     {
         $old = $this->scheduleView($tenant, $unit);
-        $this->persistSchedule($tenant, $unit, $actor, false, $old['times'], $old['duration_seconds'], null);
+        $this->persistSchedule($tenant, $unit, $actor, false, $old['times'], $old['rotations'], null);
         $this->cancelCommands($tenant, $unit, $actor);
     }
 

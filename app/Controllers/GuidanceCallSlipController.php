@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\TablePage;
 use App\Services\AuthenticatedUser;
 use App\Services\Guidance\GuidanceAccessPolicy;
 use App\Services\Guidance\GuidanceAppointmentService;
@@ -51,6 +52,7 @@ final class GuidanceCallSlipController extends BaseController
         try {
             $actor = $this->resolveStaffActor();
             $tenantId = (int) $actor['tenant_id'];
+            $page = TablePage::forList($this->request->getGet());
             $status = trim((string) ($this->request->getGet('status') ?? ''));
             if ($status !== '' && !in_array($status, GuidanceCallSlipService::VALID_STATUSES, true)) {
                 $status = '';
@@ -70,11 +72,20 @@ final class GuidanceCallSlipController extends BaseController
                 ->where('cs.deleted_at', null)
                 ->where('p.deleted_at', null);
 
+            $total = (clone $builder)->countAllResults();
             if ($status !== '') {
                 $builder->where('cs.attendance_status', $status);
             }
+            $filtered = $status === '' ? $total : (clone $builder)->countAllResults();
+            $pagination = $page->metadata($total, $filtered);
 
-            $callSlips = $builder->orderBy('cs.call_date', 'DESC')->orderBy('cs.call_time', 'DESC')->orderBy('cs.id', 'DESC')->limit(100)->get()->getResultArray();
+            $callSlips = $builder
+                ->orderBy('cs.call_date', 'DESC')
+                ->orderBy('cs.call_time', 'DESC')
+                ->orderBy('cs.id', 'DESC')
+                ->limit($pagination['per_page'], ($pagination['page'] - 1) * $pagination['per_page'])
+                ->get()
+                ->getResultArray();
 
             // Optional prefill when opened from an episode or case
             $prefillPerson = null;
@@ -93,6 +104,7 @@ final class GuidanceCallSlipController extends BaseController
                 'title'            => 'Guidance Call Slips',
                 'pageTitle'        => 'Guidance Call Slips',
                 'callSlips'        => $callSlips,
+                'pagination'       => $pagination,
                 'status'           => $status,
                 'validStatuses'    => GuidanceCallSlipService::VALID_STATUSES,
                 'validPurposes'    => GuidanceCallSlipService::VALID_PURPOSES,

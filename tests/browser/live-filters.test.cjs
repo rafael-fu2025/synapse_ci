@@ -21,17 +21,21 @@ function render(url) {
   const endpoint = origin + url.pathname;
   const link = query => escape(endpoint + '?' + new URLSearchParams(query));
   const key = 'portal-' + url.pathname.split('/').pop();
+  const named = p.has('named');
+  const namedFields = named ? `<input type="hidden" name="named" value="1"><input type="hidden" name="mi_page" value="${p.get('mi_page') || '1'}">` : '';
+  const namedResult = named ? `|${p.get('mi_page') || '1'}` : '';
+  const namedLink = named ? `<a data-filter-link href="${link({ named: '1', q: p.get('q') || '', page: p.get('page') || '1', mi_page: '2' })}">Next MI</a>` : '';
   return `<!doctype html><html><head><meta name="csrf-name" content="csrf"><meta name="csrf-token" content="fresh"><meta name="csrf-header" content="X-CSRF"></head>
-<body data-navigation-scope="portal:fixture"><main><section data-live-filters data-filter-url="${endpoint}" data-filter-key="${key}"${p.has('live') ? ' data-live-events="portal.appointments.changed"' : ''}>
+<body data-navigation-scope="portal:fixture"><main><section data-live-filters data-filter-url="${endpoint}" data-filter-key="${key}"${named ? ' data-filter-page-params="page mi_page"' : ''}${p.has('live') ? ' data-live-events="portal.appointments.changed"' : ''}>
 <form method="get" data-filter-form action="${endpoint}"><input name="q" type="search" value="${value('q')}" aria-label="Search">
 <input name="category" value="${value('category')}" aria-label="Category">
 <select name="status" aria-label="Status"><option value="">All</option><option value="open" ${p.get('status') === 'open' ? 'selected' : ''}>Open</option></select>
-<input name="day" type="hidden" value="${value('day')}"><input name="mine" type="hidden" value="${value('mine')}">
+<input name="day" type="hidden" value="${value('day')}"><input name="mine" type="hidden" value="${value('mine')}">${namedFields}
 <button type="submit">Apply</button></form><a data-filter-reset href="${endpoint}">Reset</a>
 <p data-filter-status>Showing ${value('q') || 'all'} results</p><div data-filter-error hidden><span data-filter-error-text></span><button data-filter-retry>Retry</button></div>
-<div data-filter-region="results"><p data-result>${value('q') || 'all'}|${value('category')}|${value('status')}|${value('day')}|${value('mine')}|${p.get('page') || '1'}</p>
+<div data-filter-region="results"><p data-result>${value('q') || 'all'}|${value('category')}|${value('status')}|${value('day')}|${value('mine')}|${p.get('page') || '1'}${namedResult}</p>
 <form method="post" action="/never-write"><input aria-label="Draft" name="title"><button>Save</button></form><div contenteditable="true" aria-label="Editor"></div></div>
-<nav data-filter-region="navigation"><a data-filter-link href="${link({ q: p.get('q') || '', status: 'open', mine: '1', day: '2026-10-21', page: '2' })}">Next</a><a href="/ordinary">Ordinary</a></nav>
+<nav data-filter-region="navigation"><a data-filter-link href="${link({ q: p.get('q') || '', status: 'open', mine: '1', day: '2026-10-21', page: '2' })}">Next</a>${namedLink}<a href="/ordinary">Ordinary</a></nav>
 <div data-filter-region="summary">Summary ${value('q')}</div><div data-filter-region="notice">Notice ${value('q')}</div>
 </section></main><div id="appFormModal" class="modal"><form method="post"><input name="external"></form></div>
 <script src="/assets/js/live-filters.js"></script></body></html>`;
@@ -123,6 +127,26 @@ function hold(transport, query) {
   };
   return { ready, release };
 }
+
+test('named pages preserve the other list and reset together when filters change', async t => {
+  const { page, reads } = await open(t, 'surveys', false, '?named=1&page=3&mi_page=1');
+  await shown(page, 'all|||||3|1');
+  await page.getByText('Next MI', { exact: true }).click();
+  await shown(page, 'all|||||3|2');
+  assert.equal(new URL(page.url()).searchParams.get('page'), '3');
+  assert.equal(new URL(page.url()).searchParams.get('mi_page'), '2');
+  assert.equal(await page.locator('[name="mi_page"]').inputValue(), '2');
+  await page.getByRole('searchbox', { name: 'Search', exact: true }).fill('fresh');
+  await shown(page, 'fresh|||||1|1');
+  assert.equal(reads.at(-1).searchParams.has('page'), false);
+  assert.equal(reads.at(-1).searchParams.has('mi_page'), false);
+  assert.equal(await page.locator('[name="mi_page"]').inputValue(), '1');
+  await page.goBack();
+  await shown(page, 'all|||||3|1');
+  assert.equal(await page.locator('[name="mi_page"]').inputValue(), '1');
+  await page.goForward();
+  await shown(page, 'fresh|||||1|1');
+});
 
 for (const kind of ['surveys', 'announcements']) test(`${kind}: debounced named text, IME, persistent focus/caret and no initialization reads`, async t => {
   const { page, reads } = await open(t, kind);

@@ -68,7 +68,7 @@ final class ClinicInventoryController extends BaseController
             if (!in_array($rawPerPage, ['20', '25', '50', '100'], true)) {
                 throw new InvalidArgumentException('Invalid movement page size.', 422);
             }
-            $details = $this->inventory->details($id, $page, (int) $rawPerPage);
+            $details = $this->inventory->detailsPage($id, ['page' => $page, 'per_page' => (int) $rawPerPage] + $this->request->getGet());
             return view('inventory/show', $details + [
                 'title' => $details['medicine']['name'], 'pageTitle' => 'Medicine Details',
 

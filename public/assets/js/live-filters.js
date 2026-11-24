@@ -31,6 +31,8 @@
     const errorText = root.querySelector('[data-filter-error-text]');
     const currentRegions = regions(root, form);
     const key = root.dataset.filterKey;
+    const pageNames = new Set(['page', ...(root.dataset.filterPageParams || '').split(/\s+/)
+      .filter(name => /^[a-z][a-z0-9_]{0,63}$/.test(name))]);
     const scope = document.body.dataset.navigationScope;
     let endpoint;
     try { endpoint = new URL(root.dataset.filterUrl, location.href); } catch (_) { return; }
@@ -55,7 +57,8 @@
       }
       return url;
     }
-    function filterUrl() { const url = queryUrl(); url.searchParams.delete('page'); return url; }
+    function resetPages(url) { for (const name of pageNames) url.searchParams.delete(name); return url; }
+    function filterUrl() { return resetPages(queryUrl()); }
     let applied = filterUrl();
     let observed = applied.href;
     function invalidate() {
@@ -84,7 +87,7 @@
         url.searchParams.delete(name);
         for (const value of link.searchParams.getAll(name)) url.searchParams.append(name, value);
       }
-      if (newerText) url.searchParams.delete('page');
+      if (newerText) resetPages(url);
       return url;
     }
     function syncControls(source, all, restoreText = false) {
@@ -183,7 +186,9 @@
             return [anchor, destination.href];
           });
         const canonical = queryUrl(incomingForm);
-        if (url.searchParams.has('page') && !incomingForm.elements.namedItem('page')) canonical.searchParams.set('page', url.searchParams.get('page'));
+        for (const name of pageNames) {
+          if (url.searchParams.has(name) && !incomingForm.elements.namedItem(name)) canonical.searchParams.set(name, url.searchParams.get(name));
+        }
         if (mode !== 'none') {
           if (window.SynapseNavigation) {
             const regional = regionalOwner && regionalRegions.length === currentRegions.size
@@ -206,8 +211,7 @@
         for (const [anchor, href] of contextLinks) anchor.href = href;
         // Ordinary reads preserve typed text; Reset and history restore it only on success.
         syncControls(incomingForm, link, restoreText);
-        applied = queryUrl(incomingForm);
-        applied.searchParams.delete('page');
+        applied = resetPages(queryUrl(incomingForm));
         const name = page.querySelector('meta[name="csrf-name"]')?.content;
         const hash = page.querySelector('meta[name="csrf-token"]')?.content;
         if (name && hash) window.SynapseCsrf?.sync({ name, hash, header: page.querySelector('meta[name="csrf-header"]')?.content });

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Ai;
 
+use App\Libraries\TablePage;
+use InvalidArgumentException;
+
 /** HTTP-facing use cases; no endpoint is contacted from this service. */
 final class InsightApplication
 {
@@ -24,15 +27,42 @@ final class InsightApplication
         if (AnalysisCatalog::forUnit($this->unit) === []) { throw new AiFailure('invalid_request', 422); }
     }
 
-    public function panel(array $actor): array
+    /** Only web read cursors and a fixed review-status scope; workstation scope remains path-owned. */
+    public static function panelQuery(array $query): array
+    {
+        if (array_diff(array_keys($query), ['insights_page', 'insights_per_page', 'jobs_page', 'jobs_per_page', 'insights_status']) !== []) {
+            throw new AiFailure('invalid_request', 422);
+        }
+        $status = array_key_exists('insights_status', $query) ? $query['insights_status'] : 'all';
+        if (!is_string($status) || !in_array($status, ['all', 'draft', 'reviewed', 'rejected'], true)) {
+            throw new AiFailure('invalid_request', 422);
+        }
+        try {
+            $insights = TablePage::forList($query, 'insights_page', 'insights_per_page', 20);
+            $jobs = TablePage::forList($query, 'jobs_page', 'jobs_per_page', 20);
+        } catch (InvalidArgumentException) {
+            throw new AiFailure('invalid_request', 422);
+        }
+        return ['insights_page' => $insights->page, 'insights_per_page' => $insights->perPage,
+            'jobs_page' => $jobs->page, 'jobs_per_page' => $jobs->perPage, 'insights_status' => $status];
+    }
+
+    public function panel(array $actor, array $query = []): array
     {
         $this->authorize($actor, 'ai.insights.read');
+        $query = self::panelQuery($query);
+        $insightsPage = TablePage::forList($query, 'insights_page', 'insights_per_page', 20);
+        $jobsPage = TablePage::forList($query, 'jobs_page', 'jobs_per_page', 20);
         $data = ['unit' => $this->unit, 'analyses' => AnalysisCatalog::forUnit($this->unit),
             'basePath' => match ($this->unit) {
                 'guidance' => 'guidance/insights', 'bmg' => 'facilities/insights', default => 'clinic/insights',
             },
             'profile' => $this->profile->publicStatus(), 'ready' => false, 'reason' => null,
-            'jobs' => [], 'insights' => [], 'recoverableSnapshots' => [], 'canGenerate' => false, 'canReview' => false, 'canApprove' => false];
+            'jobs' => [], 'insights' => [], 'recoverableSnapshots' => [], 'canGenerate' => false, 'canReview' => false, 'canApprove' => false,
+            'insightPagination' => $insightsPage->metadata(0, 0), 'jobPagination' => $jobsPage->metadata(0, 0),
+            'insightCounts' => ['total' => 0, 'draft' => 0, 'accepted' => 0, 'approved' => 0, 'reviewed' => 0, 'rejected' => 0],
+            'jobCounts' => ['total' => 0, 'active' => 0, 'pending' => 0, 'older_active' => 0, 'history' => 0],
+            'panelQuery' => $query];
         foreach (['canGenerate' => 'ai.insights.generate', 'canReview' => 'ai.insights.review', 'canApprove' => 'ai.insights.approve'] as $key => $permission) {
             try { $this->authorize($actor, $permission); $data[$key] = true; }
             catch (AiFailure) { /* A hidden action is not an authorization substitute. */ }
@@ -41,11 +71,19 @@ final class InsightApplication
             $this->assertAnalyticsAllowed((int) $actor['tenant_id']);
             if (!$this->store->ready()) { throw new AiFailure('store_unavailable'); }
             $revision = $this->profile->revision();
-            $data['jobs'] = $this->store->listJobs((int) $actor['tenant_id'], $this->unit);
+            $jobs = $this->store->listJobsPage((int) $actor['tenant_id'], $this->unit, $jobsPage, profileRevision: $revision);
+            $data['jobs'] = $jobs['rows'];
+            $data['jobPagination'] = $jobs['pagination'];
+            $data['jobCounts'] = $jobs['counts'];
+            $data['panelQuery']['jobs_page'] = $jobs['pagination']['page'];
             if ($data['canGenerate'] && $this->store->supportsRecovery()) {
                 $data['recoverableSnapshots'] = $this->store->listRecoverableSnapshots((int) $actor['tenant_id'], $this->unit);
             }
-            $data['insights'] = $this->store->listInsights((int) $actor['tenant_id'], $this->unit);
+            $insights = $this->store->listInsightsPage((int) $actor['tenant_id'], $this->unit, $insightsPage, status: $query['insights_status']);
+            $data['insights'] = $insights['rows'];
+            $data['insightPagination'] = $insights['pagination'];
+            $data['insightCounts'] = $insights['counts'];
+            $data['panelQuery']['insights_page'] = $insights['pagination']['page'];
             foreach ($data['insights'] as &$row) {
                 $row['current_policy'] = ($row['draft']['provenance']['profile_revision'] ?? null) === $revision
                     && PipelineProvenance::matches($row['draft']['provenance']['pipeline_digest'] ?? null);

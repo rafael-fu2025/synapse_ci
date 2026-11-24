@@ -46,7 +46,7 @@
   min-height: 5rem;
   padding: 1.25rem;
   border-radius: var(--radius-md, 0.5rem);
-  background: color-mix(in srgb, var(--surface-color, #ffffff) 72%, transparent);
+  background: transparent;
   backdrop-filter: blur(1px);
   cursor: progress;
 }

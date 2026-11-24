@@ -74,12 +74,21 @@ final class QuestionBankService
         return $entry + $row;
     }
 
-    public function history(int $id): array
+    /** Optional paging bounds only revision metadata; selected versions are still read through get(). */
+    public function history(int $id, ?\App\Libraries\TablePage $historyPage = null): array
     {
         $entry = $this->get($id);
-        $revisions = Database::connect()->table('survey_question_bank_revisions')->select('revision,created_at')
-            ->where(['tenant_id' => $entry['tenant_id'], 'question_id' => $id])->orderBy('revision', 'DESC')->get()->getResultArray();
-        return ['entry' => $entry, 'revisions' => $revisions];
+        $query = Database::connect()->table('survey_question_bank_revisions')
+            ->where(['tenant_id' => $entry['tenant_id'], 'question_id' => $id]);
+        $pagination = null;
+        if ($historyPage !== null) {
+            $total = (clone $query)->countAllResults();
+            $pagination = $historyPage->metadata($total, $total);
+            $query->limit($historyPage->perPage, ($pagination['page'] - 1) * $historyPage->perPage);
+        }
+        $revisions = $query->select('revision,created_at')->orderBy('revision', 'DESC')->get()->getResultArray();
+        return ['entry' => $entry, 'revisions' => $revisions]
+            + ($pagination === null ? [] : ['historyPagination' => $pagination]);
     }
 
     public function create(array $input): int

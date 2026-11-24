@@ -30,7 +30,7 @@
   --rw-sky: #0369a1;
   --rw-indigo: #4338ca;
   --rw-rose: #b91c1c;
-  --rw-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  --rw-mono: var(--mono-font, "Courier New", Courier, monospace);
   color: var(--rw-fg-secondary);
   min-width: 0;
 }

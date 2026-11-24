@@ -6,7 +6,14 @@
 <a class="btn btn-outline-secondary btn-sm" href="<?= esc($baseUrl, 'attr') ?>"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to question bank</a>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
-<?php $refreshOwner = 'question-bank.history.' . (int) $entry['id']; ?>
+<?php
+$refreshOwner = 'question-bank.history.' . (int) $entry['id'];
+$historyTotal = (int) ($historyPagination['total'] ?? count($revisions));
+$revisionQuery = isset($historyPagination) ? [
+    'history_page' => (int) $historyPagination['page'],
+    'per_page' => (int) $historyPagination['per_page'],
+] : [];
+?>
 <section class="guidance-ui qb-workspace qb-history" data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>" data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
   <div class="qb-sheet">
     <div class="qb-band qb-selected-revision" data-refresh-region="selected-revision">
@@ -27,16 +34,27 @@
     <section class="qb-history-revisions" aria-labelledby="bankRevisionHistory">
       <div class="qb-results-head">
         <h2 class="qb-results-title" id="bankRevisionHistory">Revision history</h2>
-        <span class="qb-count"><?= number_format(count($revisions)) ?> <?= count($revisions) === 1 ? 'revision' : 'revisions' ?></span>
+        <span class="qb-count"><?= number_format($historyTotal) ?> <?= $historyTotal === 1 ? 'revision' : 'revisions' ?></span>
       </div>
       <ul class="qb-revision-list">
         <?php foreach ($revisions as $revision): ?>
           <li class="qb-revision-row <?= (int) $revision['revision'] === (int) $selected['revision'] ? 'is-selected' : '' ?>">
-            <a href="<?= esc($baseUrl . '/' . (int) $entry['id'] . '?revision=' . (int) $revision['revision'], 'attr') ?>"<?= (int) $revision['revision'] === (int) $selected['revision'] ? ' aria-current="page"' : '' ?>>Revision <?= (int) $revision['revision'] ?></a>
+            <a href="<?= esc($baseUrl . '/' . (int) $entry['id'] . '?' . http_build_query(['revision' => (int) $revision['revision']] + $revisionQuery, '', '&', PHP_QUERY_RFC3986), 'attr') ?>"<?= (int) $revision['revision'] === (int) $selected['revision'] ? ' aria-current="page"' : '' ?>>Revision <?= (int) $revision['revision'] ?></a>
             <span class="qb-revision-time"><?= esc($revision['created_at']) ?> UTC</span>
           </li>
         <?php endforeach; ?>
       </ul>
+      <?php if (isset($historyPagination)): ?>
+        <?= view('partials/table_pagination', [
+            'pagination' => $historyPagination,
+            'baseUrl' => $baseUrl . '/' . (int) $entry['id'],
+            'paginationPageParam' => 'history_page',
+            'paginationPerPageParam' => 'per_page',
+            'paginationExtraQuery' => ['revision' => (int) $selected['revision']],
+            'paginationLabel' => 'Question revision history pages',
+            'paginationNavigation' => true,
+        ], ['saveData' => false]) ?>
+      <?php endif; ?>
     </section>
   </div>
 </section>

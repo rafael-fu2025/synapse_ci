@@ -699,14 +699,14 @@ LATEX;
             $signer = self::escape((string) ($attestation['signer_role'] ?? $attestation['signer_name'] ?? 'Counselor'));
             $attDate = self::escape((string) ($attestation['attested_at'] ?? ''));
             $hash = self::escape(substr((string) ($attestation['snapshot_hash'] ?? ''), 0, 16) . '...');
-            $attestationBanner = "\\begin{mdframed}[backgroundcolor=gray!10,roundcorner=4pt]\n"
+            $attestationBanner = "\\noindent\\fcolorbox{gray}{gray!10}{\\begin{minipage}{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}\n"
                 . "\\small \\textbf{Digitally Finalized by:} {$signer} on {$attDate} \\\\\n"
                 . "\\textbf{Record Hash (SHA-256):} \\texttt{{$hash}} \\quad \\textbf{Method:} Authenticated Account Attestation\n"
-                . "\\end{mdframed}\\par\\vspace{0.8em}\n";
+                . "\\end{minipage}}\\par\\vspace{0.8em}\n";
         } elseif ($isDraft) {
-            $attestationBanner = "\\begin{mdframed}[backgroundcolor=orange!10,roundcorner=4pt]\n"
+            $attestationBanner = "\\noindent\\fcolorbox{gray}{orange!10}{\\begin{minipage}{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}\n"
                 . "\\small \\textbf{ATTENTION:} Unfinalized draft record. Not official without authenticated attestation.\n"
-                . "\\end{mdframed}\\par\\vspace{0.8em}\n";
+                . "\\end{minipage}}\\par\\vspace{0.8em}\n";
         }
 
         return <<<LATEX
@@ -714,7 +714,6 @@ LATEX;
 \\usepackage[margin=18mm,top=20mm,bottom=22mm]{geometry}
 \\usepackage{amsmath,amssymb}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
@@ -765,20 +764,20 @@ LATEX;
 \\cleaders\\hbox to 4mm{\\hss\\rule{2mm}{0.4pt}\\hss}\\hfill\\kern0pt
 \\vspace{1em}
 
-\\noindent\\begin{mdframed}[roundcorner=3pt]
+\\noindent\\fbox{\\begin{minipage}{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}
 \\textbf{Teacher / Instructor Acknowledgment Return Section}\\par\\vspace{0.4em}
 \\small
-\\begin{tabularx}{\\textwidth}{|l|X|l|X|}
+\\begin{tabularx}{\\linewidth}{|l|X|l|X|}
 \\hline
 \\textbf{Student Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
 \\textbf{Call Slip No:} & {$num} & \\textbf{Date:} & {$date} \\\\ \\hline
 \\textbf{Subject / Section:} & & \\textbf{Time Released from Class:} & \\\\ \\hline
 \\end{tabularx}\\par\\vspace{1em}
-\\noindent\\begin{tabularx}{\\textwidth}{X r}
+\\noindent\\begin{tabularx}{\\linewidth}{X r}
 \\textbf{Teacher / Instructor Signature:} \\underline{\\hspace{5.5cm}} & \\textbf{Date Signed:} \\underline{\\hspace{2.5cm}} \\\\
 \\end{tabularx}\\par\\vspace{0.4em}
 \\textit{\\footnotesize Instructions: Please sign and return this acknowledgment slip with the student or to the Office of the Guidance Center.}
-\\end{mdframed}
+\\end{minipage}}
 
 \\vfill
 \\begin{center}
@@ -860,26 +859,31 @@ LATEX;
 \\usepackage[margin=8mm,top=8mm,bottom=8mm,left=8mm,right=8mm]{geometry}
 \\usepackage{amsmath,amssymb}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\pagestyle{empty}
 \\setlength{\\parindent}{0pt}
+\\setlength{\\fboxsep}{2mm}
+\\setlength{\\fboxrule}{0.5pt}
 {$watermark}
 
 \\begin{document}
+\\noindent\\begin{minipage}{\\textwidth}
 
 \\noindent
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[1]}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{6mm}
+\\begin{minipage}[t][125mm][t]{6mm}
+\\vspace{0pt}
 \\centering
-\\vbox to 132mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
+\\vbox to 125mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[2]}
 \\end{minipage}
 
@@ -890,17 +894,21 @@ LATEX;
 \\vspace{2mm}
 
 \\noindent
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[3]}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{6mm}
+\\begin{minipage}[t][125mm][t]{6mm}
+\\vspace{0pt}
 \\centering
-\\vbox to 132mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
+\\vbox to 125mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[4]}
+\\end{minipage}
 \\end{minipage}
 
 \\end{document}
@@ -927,7 +935,7 @@ LATEX;
         string $attestationLine
     ): string {
         return <<<LATEX
-\\begin{mdframed}[linewidth=0.5pt,innerleftmargin=2mm,innerrightmargin=2mm,innertopmargin=2mm,innerbottommargin=2mm]
+\\noindent\\fbox{\\begin{minipage}[t]{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}
 {\\centering
 {\\bfseries\\scriptsize FOUNDATION UNIVERSITY}\\par
 {\\bfseries\\tiny OFFICE OF THE GUIDANCE CENTER}\\par
@@ -953,7 +961,7 @@ LATEX;
 {\\tiny\\textbf{Signature:} \\underline{\\hspace{2.5cm}} Date: \\underline{\\hspace{1.2cm}}}\\par\\vspace{0.8mm}
 {\\tiny {$verificationLine} \\hfill {$attestationLine}}\\par\\vspace{0.5mm}
 {\\tiny\\centering\\textit{Confidential Guidance Record --- RA 10173}\\par}
-\\end{mdframed}
+\\end{minipage}}
 LATEX;
     }
 

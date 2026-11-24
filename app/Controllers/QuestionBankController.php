@@ -38,8 +38,14 @@ final class QuestionBankController extends BaseController
     public function show(int $id)
     {
         return $this->respond(function () use ($id) {
+            try {
+                $historyPage = \App\Libraries\TablePage::forList($this->request->getGet(), 'history_page');
+            } catch (\InvalidArgumentException $exception) {
+                // respond() deliberately exposes only coded RuntimeException failures.
+                throw new RuntimeException($exception->getMessage(), 422, $exception);
+            }
             $service = new QuestionBankService();
-            return view('question_bank/show', $service->history($id) + [
+            return view('question_bank/show', $service->history($id, $historyPage) + [
                 'selected' => $service->get($id, $this->request->getGet('revision')),
                 'title' => 'Question Revision History', 'baseUrl' => site_url('guidance/question-bank')]);
         });

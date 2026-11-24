@@ -68,6 +68,7 @@
       }
       confirmed = true;
       saved.add(form);
+      form.dispatchEvent(new CustomEvent('synapse:form-saved', { bubbles: true, detail: { form } }));
       unlock();
       // Row actions stay in the current folder/date/filter/page unless the server explicitly
       // returns a navigate descriptor (e.g. creating a new record whose next step is its edit view).

@@ -1,61 +1,23 @@
 <?php
-$filters = $filters ?? ['q' => '', 'status' => 'all'];
+$filters = $filters ?? ['q' => '', 'status' => 'all', 'page' => 1, 'per_page' => 25, 'mi_page' => 1, 'mi_per_page' => 25];
 $counts = $counts ?? array_fill_keys(['all', 'available', 'submitted', 'closed'], 0);
 $miAssignments = is_array($miAssignments ?? null) ? $miAssignments : [];
+$miCounts = array_replace(array_fill_keys(['all', 'available', 'submitted', 'closed'], 0), $miCounts ?? []);
 $miGateEnabled = (bool) ($miGateEnabled ?? false);
 $now = new \DateTimeImmutable($nowUtc ?? gmdate('Y-m-d H:i:s'), new \DateTimeZone('UTC'));
-$tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query(['q' => $filters['q'], 'status' => $state]);
-
-$miQuery = mb_strtolower(trim((string) ($filters['q'] ?? '')), 'UTF-8');
-$miSearchMatches = array_values(array_filter($miAssignments, static function (array $item) use ($miQuery): bool {
-    if ($miQuery === '') {
-        return true;
-    }
-    $haystack = mb_strtolower(implode(' ', [
-        'Multiple Intelligences Survey',
-        'Walter McKenzie',
-        'Guidance Office',
-        'Assessment',
-        (string) ($item['academic_term'] ?? ''),
-        (string) ($item['academic_year'] ?? ''),
-    ]), 'UTF-8');
-    return str_contains($haystack, $miQuery);
-}));
-
+$pagination = $pagination ?? ['page' => 1, 'pages' => 1, 'filtered' => count($items ?? []), 'per_page' => 25];
+$miPagination = $miPagination ?? ['page' => 1, 'pages' => 1, 'filtered' => count($miAssignments), 'total' => count($miAssignments), 'per_page' => 25];
+$generalPage = (int) $pagination['page'];
+$generalSize = (int) $pagination['per_page'];
+$miPage = (int) $miPagination['page'];
+$miSize = (int) $miPagination['per_page'];
+$tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query([
+    'q' => $filters['q'], 'status' => $state, 'page' => 1, 'per_page' => $generalSize,
+    'mi_page' => 1, 'mi_per_page' => $miSize,
+]);
 $displayCounts = $counts;
-foreach ($miSearchMatches as $miItem) {
-    $miStatus = (string) ($miItem['status'] ?? 'assigned');
-    $miCompleted = $miStatus === 'completed' && !empty($miItem['submission_id']);
-    $miCancelled = $miStatus === 'cancelled';
-    $displayCounts['all']++;
-    if ($miCompleted) {
-        $displayCounts['submitted']++;
-        $displayCounts['closed']++;
-    } elseif ($miCancelled) {
-        $displayCounts['closed']++;
-    } else {
-        $displayCounts['available']++;
-    }
-}
-
-$visibleMiAssignments = array_values(array_filter($miSearchMatches, static function (array $item) use ($filters): bool {
-    $miStatus = (string) ($item['status'] ?? 'assigned');
-    $miCompleted = $miStatus === 'completed' && !empty($item['submission_id']);
-    $miCancelled = $miStatus === 'cancelled';
-    return match ($filters['status']) {
-        'available' => !$miCompleted && !$miCancelled,
-        'submitted' => $miCompleted,
-        'closed'    => $miCompleted || $miCancelled,
-        default     => true,
-    };
-}));
-
-$currentPage = max(1, (int) ($pagination['page'] ?? 1));
-$pageMiAssignments = $currentPage === 1 ? $visibleMiAssignments : [];
-$displayPagination = $pagination ?? ['page' => 1, 'pages' => 1, 'filtered' => count($items), 'per_page' => 12];
-if ($visibleMiAssignments !== []) {
-    $displayPagination['filtered'] = (int) ($displayPagination['filtered'] ?? 0) + count($visibleMiAssignments);
-    $displayPagination['per_page'] = max((int) ($displayPagination['per_page'] ?? 12), count($items) + count($pageMiAssignments));
+foreach ($miCounts as $state => $count) {
+    $displayCounts[$state] = (int) ($displayCounts[$state] ?? 0) + (int) $count;
 }
 ?>
 <?= $this->extend('layouts/app') ?>
@@ -69,6 +31,7 @@ if ($visibleMiAssignments !== []) {
          data-live-filters
          data-filter-url="<?= esc($baseUrl) ?>"
          data-filter-key="portal-surveys"
+         data-filter-page-params="page mi_page"
          data-live-events="notifications.changed">
   <div class="sv-sheet">
 
@@ -97,13 +60,31 @@ if ($visibleMiAssignments !== []) {
       <?php endif; ?>
     </div>
 
-    <!-- Band 2: Search, Participation Tabs & Unified Survey Grid -->
+    <!-- Band 2: Search, Participation Tabs & Independent Survey Sections -->
     <div class="sv-band">
       <form method="get" action="<?= esc($baseUrl) ?>" class="sv-search-form" role="search" aria-label="Search surveys" data-filter-form>
         <input type="hidden" name="status" value="<?= esc($filters['status']) ?>">
+        <input type="hidden" name="page" value="<?= $generalPage ?>">
+        <input type="hidden" name="mi_page" value="<?= $miPage ?>">
         <div class="sv-search-field">
           <label for="survey-search" class="sv-search-label">Find a survey</label>
           <input id="survey-search" type="search" name="q" class="form-control sv-search-input" maxlength="120" placeholder="Search a title or topic" value="<?= esc($filters['q']) ?>">
+        </div>
+        <div class="sv-search-field">
+          <label for="surveys-per-page" class="sv-search-label">General surveys per page</label>
+          <select name="per_page" id="surveys-per-page" class="form-select">
+            <?php foreach ([25, 50, 100] as $size): ?>
+              <option value="<?= $size ?>" <?= $generalSize === $size ? 'selected' : '' ?>><?= $size ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="sv-search-field">
+          <label for="mi-per-page" class="sv-search-label">MI assignments per page</label>
+          <select name="mi_per_page" id="mi-per-page" class="form-select">
+            <?php foreach ([25, 50, 100] as $size): ?>
+              <option value="<?= $size ?>" <?= $miSize === $size ? 'selected' : '' ?>><?= $size ?></option>
+            <?php endforeach; ?>
+          </select>
         </div>
         <div class="sv-search-actions">
           <button class="btn btn-primary sv-btn" type="submit"><i class="bi bi-search" aria-hidden="true"></i>Search</button>
@@ -124,18 +105,35 @@ if ($visibleMiAssignments !== []) {
 
         <p class="pe-filter-note">Counts reflect your search. Submitted surveys can also appear under Closed.</p>
 
-        <?php if (!$miGateEnabled && $pageMiAssignments !== []): ?>
-          <div class="sv-inline-notice mb-3" role="status">
-            <i class="bi bi-shield-lock" aria-hidden="true"></i>
-            <div>You may open an assigned Multiple Intelligences assessment and save encrypted drafts, but final submission is paused pending Guidance, QA, and DPO sign-off.</div>
-          </div>
-        <?php endif; ?>
+        <section aria-labelledby="mi-assignments-heading" class="mb-4" data-mi-assignment-section>
+          <h3 id="mi-assignments-heading" class="h5">MI assignments</h3>
+          <p class="pe-filter-note">Assigned Multiple Intelligences assessments have their own pages.</p>
+          <?php if (!$miGateEnabled && $miAssignments !== []): ?>
+            <div class="sv-inline-notice mb-3" role="status">
+              <i class="bi bi-shield-lock" aria-hidden="true"></i>
+              <div>You may open an assigned Multiple Intelligences assessment and save encrypted drafts, but final submission is paused pending Guidance, QA, and DPO sign-off.</div>
+            </div>
+          <?php endif; ?>
+          <?php if ($miAssignments !== []): ?>
+            <div class="pe-survey-grid">
+              <?= view('surveys/_mi_assignments', ['assignments' => $miAssignments, 'miGateEnabled' => $miGateEnabled], ['saveData' => false]) ?>
+            </div>
+          <?php else: ?>
+            <div class="pe-empty"><p>No MI assignments match your profile and selected filters.</p></div>
+          <?php endif; ?>
+          <?= view('partials/table_pagination', [
+              'pagination' => $miPagination, 'filters' => $filters, 'baseUrl' => $baseUrl,
+              'paginationPageParam' => 'mi_page', 'paginationPerPageParam' => 'mi_per_page',
+              'paginationExtraQuery' => ['page' => $generalPage, 'per_page' => $generalSize],
+              'paginationLabel' => 'MI assignment pages', 'paginationLiveFilters' => true,
+              'totalLabel' => 'total MI assignments',
+          ], ['saveData' => false]) ?>
+        </section>
 
-        <?php if ($pageMiAssignments !== [] || $items !== []): ?>
+        <section aria-labelledby="general-surveys-heading" data-general-survey-section>
+          <h3 id="general-surveys-heading" class="h5">General surveys</h3>
+        <?php if ($items !== []): ?>
           <div class="pe-survey-grid">
-            <?php if ($pageMiAssignments !== []): ?>
-              <?= view('surveys/_mi_assignments', ['assignments' => $pageMiAssignments, 'miGateEnabled' => $miGateEnabled]) ?>
-            <?php endif; ?>
             <?php foreach ($items as $survey):
               $submitted = (bool) $survey['submitted'];
               $closed = (bool) ($survey['closed'] ?? false);
@@ -206,7 +204,13 @@ if ($visibleMiAssignments !== []) {
           </div>
         <?php endif; ?>
 
-        <?= view('partials/content_pagination', ['pagination' => $displayPagination, 'filters' => $filters, 'baseUrl' => $baseUrl, 'paginationLabel' => 'Survey pages', 'liveFilters' => true], ['saveData' => false]) ?>
+        <?= view('partials/content_pagination', [
+            'pagination' => $pagination, 'filters' => $filters, 'baseUrl' => $baseUrl,
+            'paginationPageParam' => 'page', 'paginationPerPageParam' => 'per_page',
+            'paginationExtraQuery' => ['mi_page' => $miPage, 'mi_per_page' => $miSize],
+            'paginationLabel' => 'General survey pages', 'liveFilters' => true,
+        ], ['saveData' => false]) ?>
+        </section>
       </div>
     </div>
 

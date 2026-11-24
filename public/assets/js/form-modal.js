@@ -2,7 +2,61 @@
 (function () {
   'use strict';
   let active = null;
+  let styleOwnerSequence = 0;
   const committed = new WeakSet();
+
+  /** Only explicitly marked, inert modal metadata can contribute page-owned CSS. */
+  async function stageModalStyles(doc, baseUrl, signal) {
+    const metadata = Array.from(doc.querySelectorAll('[data-modal-styles]'));
+    if (metadata.length > 1 || metadata.some(node => !node.matches('template') || node.closest('.modal-content'))) {
+      throw new Error('The form styles could not be loaded.');
+    }
+    const owner = metadata[0];
+    const helper = window.SynapsePageStyles;
+    if (helper?.collect && helper?.stage) {
+      return await helper.stage(owner ? helper.collect(owner) : document.createDocumentFragment(), { signal, baseUrl });
+    }
+    // Existing inline-only fixtures remain supported. Never mount an unready
+    // stylesheet link or imported CSS when the production helper is missing.
+    const fragment = document.createDocumentFragment();
+    for (const node of Array.from(owner?.content.childNodes || [])) {
+      if (node.nodeType === Node.COMMENT_NODE || (node.nodeType === Node.TEXT_NODE && !node.textContent.trim())) continue;
+      if (node.nodeType !== Node.ELEMENT_NODE || node.tagName !== 'STYLE' || /@import\b/i.test(node.textContent)) {
+        throw new Error('The form styles could not be loaded.');
+      }
+      const style = document.createElement('style');
+      style.textContent = node.textContent;
+      if (node.hasAttribute('media')) style.setAttribute('media', node.getAttribute('media'));
+      fragment.append(style);
+    }
+    let disposed = false;
+    return {
+      commit(target) {
+        if (disposed || signal.aborted) throw new DOMException('The dialog was closed.', 'AbortError');
+        target.replaceChildren(fragment);
+        disposed = true;
+      },
+      dispose() { disposed = true; fragment.replaceChildren(); },
+    };
+  }
+
+  function commitModalStyles(record, styles) {
+    if (!record.styleSlot) {
+      const slot = document.createElement('div');
+      slot.id = 'app-modal-styles-' + ++styleOwnerSequence;
+      slot.setAttribute('data-modal-style-owner', '');
+      slot.hidden = true;
+      document.body.append(slot);
+      record.styleSlot = slot;
+    }
+    styles.commit(record.styleSlot);
+  }
+
+  function clearModalStyles(record) {
+    if (record.styleSlot) window.SynapsePageStyles?.clear?.(record.styleSlot);
+    record.styleSlot?.remove();
+    record.styleSlot = null;
+  }
 
   function lockSavedForm(form) {
     committed.add(form);
@@ -324,7 +378,7 @@
     const move = () => { footer.append(actions); content.append(footer); };
     if (window.Alpine) Alpine.mutateDom(move); else move();
   }
-  function busy(root) { return Boolean(root.querySelector('form[aria-busy="true"]')); }
+  function busy(root) { return root.dataset.modalPaging === 'true' || Boolean(root.querySelector('form[aria-busy="true"]')); }
   function updateCsrf(csrf) {
     if (!csrf) return;
     if (window.SynapseCsrf) { window.SynapseCsrf.sync(csrf); return; }
@@ -335,8 +389,14 @@
     if (meta) meta.content = csrf.hash;
   }
   function attach(root, opener) {
-    const record = { root, opener, controller: new AbortController() };
+    const record = { root, opener, controller: new AbortController(), pageSequence: 0, editVersion: 0, dirty: false, styleSlot: null };
     active = record;
+    for (const type of ['input', 'change']) root.addEventListener(type, event => {
+      if (event.target.isContentEditable || event.target.form?.method.toLowerCase() === 'post') {
+        record.dirty = true;
+        ++record.editVersion;
+      }
+    });
     const modal = bootstrap.Modal.getOrCreateInstance(root, { backdrop: 'static', keyboard: false });
     record.modal = modal;
     root.addEventListener('keydown', event => {
@@ -360,9 +420,11 @@
     root.addEventListener('hide.bs.modal', event => {
       // Do not imply that an in-flight write was cancelled when it may commit.
       if (busy(root)) event.preventDefault();
+      else if (record.closeRequested) record.controller.abort();
     });
     root.addEventListener('hidden.bs.modal', () => {
       record.controller.abort();
+      clearModalStyles(record);
       window.SynapseCarouselForm?.destroy(root);
       window.BalayDateRangePicker?.destroy(root);
       window.BalaySelect?.destroy(root);
@@ -403,24 +465,37 @@
     if (url.origin !== location.origin) { location.assign(url); return; }
     url.searchParams.set('fragment', '1');
     const record = attach(loadingRoot(), link);
+    record.pageUrl = new URL(url); record.pageUrl.searchParams.delete('fragment'); record.pageUrl.hash = '';
     record.sourceOwner = link.closest('[data-refresh-owner]')?.dataset.refreshOwner
       || (document.querySelectorAll('#main [data-refresh-owner]').length === 1
         ? document.querySelector('#main [data-refresh-owner]').dataset.refreshOwner : null);
+    let timedOut = false, styles = null;
+    const timeout = window.setTimeout(() => { timedOut = true; record.controller.abort(); }, 20000);
     try {
       const response = await fetch(url, { credentials: 'same-origin', signal: record.controller.signal,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest' } });
       window.SynapseCsrf?.fromResponse(response);
-      if (!response.ok || response.redirected) throw new Error('Unable to open the form. Check your access or sign in again.');
+      if (!response.ok || response.redirected || !/\btext\/html\b/i.test(response.headers.get('Content-Type') || '')) {
+        throw new Error('Unable to open the form. Check your access or sign in again.');
+      }
       const html = await response.text();
-      if (active !== record || record.controller.signal.aborted) return;
-      const source = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-app-form-modal]');
+      if (active !== record || record.closeRequested || record.controller.signal.aborted) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const source = doc.querySelector('[data-app-form-modal]');
       if (!source?.querySelector('.modal-content .modal-body')) throw new Error('The form response could not be loaded.');
       const sourceContent = source.querySelector('.modal-content');
+      if (sourceContent.querySelector('iframe, object, embed, base, link, style, [data-modal-styles]')) {
+        throw new Error('The form response could not be loaded.');
+      }
+      // Strip scripts while detached; no fetched script is ever inserted or run.
+      const incoming = document.importNode(sourceContent, true);
+      incoming.querySelectorAll('script').forEach(script => script.remove());
+      styles = await stageModalStyles(doc, response.url || url.href, record.controller.signal);
+      if (active !== record || record.closeRequested || record.controller.signal.aborted) return;
       const target = record.root.querySelector('.modal-content');
       const insert = () => {
-        target.innerHTML = sourceContent.innerHTML;
-        // Components are globally registered. Never execute scripts fetched as HTML.
-        target.querySelectorAll('script').forEach(script => script.remove());
+        commitModalStyles(record, styles);
+        target.replaceChildren(...Array.from(incoming.childNodes));
         if (window.Alpine) Alpine.initTree(target);
       };
       if (window.Alpine) Alpine.mutateDom(insert); else insert();
@@ -436,16 +511,110 @@
       initCatalogComboboxes(record.root);
       if (record.root.classList.contains('show')) focusField(record.root);
     } catch (failure) {
-      if (failure.name !== 'AbortError' && active === record) {
+      if (active === record && !record.closeRequested && (failure.name !== 'AbortError' || timedOut)) {
+        clearModalStyles(record);
         record.root.querySelector('[data-modal-loading]')?.remove();
-        error(record.root, failure.message);
+        error(record.root, timedOut ? 'Loading the form timed out. Close the dialog and try again.' : failure.message);
       }
+    } finally {
+      clearTimeout(timeout);
+      styles?.dispose();
+    }
+  }
+
+  async function pageModal(link) {
+    const record = active;
+    if (!record || busy(record.root)) return;
+    let url;
+    try { url = new URL(link.href, location.href); } catch (_) { return; }
+    if (url.origin !== location.origin || url.username || url.password || !record.pageUrl || url.pathname !== record.pageUrl.pathname) return;
+    const params = new Set();
+    record.root.querySelectorAll('[data-table-pagination]').forEach(meta => {
+      for (const name of [meta.dataset.pageParam, meta.dataset.perPageParam]) {
+        if (name && /^[a-z][a-z0-9_]{0,63}$/.test(name)) params.add(name);
+      }
+    });
+    for (const name of new Set([...record.pageUrl.searchParams.keys(), ...url.searchParams.keys()])) {
+      if (!params.has(name) && name !== 'fragment' && JSON.stringify(url.searchParams.getAll(name)) !== JSON.stringify(record.pageUrl.searchParams.getAll(name))) return;
+    }
+    if (record.dirty || window.SynapseNavigation?.hasUnsavedChanges(null, { within: [record.root] })) {
+      const approved = await window.SynapseConfirm?.confirm({ title: 'Unsaved changes',
+        message: 'Changing history pages will discard your unsaved edits in this dialog. Continue?',
+        confirmLabel: 'Discard and change page', cancelLabel: 'Keep edits', tone: 'warning' });
+      if (!approved || active !== record || busy(record.root)) return;
+    }
+    const approvedEdits = record.editVersion;
+    const token = ++record.pageSequence;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    record.controller.signal.addEventListener('abort', abort, { once: true });
+    let timedOut = false, styles = null;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
+    url.searchParams.set('fragment', '1');
+    record.root.dataset.modalPaging = 'true';
+    const content = record.root.querySelector('.modal-content');
+    content.inert = true;
+    const finish = window.SynapseLoading?.begin(content, { label: 'Loading history…' }) || (() => {});
+    try {
+      const response = await fetch(url.href, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
+        headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest' } });
+      window.SynapseCsrf?.fromResponse(response);
+      if (!response.ok || response.redirected || !response.headers.get('Content-Type')?.includes('text/html')) throw new Error('Unable to load history. Your current page and edits have been kept.');
+      const html = await response.text();
+      if (active !== record || token !== record.pageSequence || controller.signal.aborted) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const source = doc.querySelector('[data-app-form-modal]');
+      const incoming = source?.querySelector('.modal-content');
+      if (!incoming?.querySelector('.modal-body') || incoming.querySelector('script, iframe, object, embed, base, link, style, [data-modal-styles]')) {
+        throw new Error('The history response could not be loaded. Your current page has been kept.');
+      }
+      styles = await stageModalStyles(doc, response.url || url.href, controller.signal);
+      if (active !== record || record.closeRequested || token !== record.pageSequence || controller.signal.aborted) return;
+      if (record.editVersion !== approvedEdits) throw new Error('Your edits changed while history was loading. Your current page and edits have been kept.');
+      finish();
+      window.SynapsePageLifecycle?.destroy(content);
+      window.BalaySelect?.destroy(content);
+      const insert = () => {
+        window.Alpine?.destroyTree(content);
+        commitModalStyles(record, styles);
+        content.replaceChildren(...Array.from(incoming.childNodes, node => document.importNode(node, true)));
+        window.Alpine?.initTree(content);
+      };
+      if (window.Alpine) Alpine.mutateDom(insert); else insert();
+      record.root.dataset.returnUrl = source.dataset.returnUrl;
+      record.pageUrl = new URL(url); record.pageUrl.searchParams.delete('fragment'); record.pageUrl.hash = '';
+      record.dirty = false;
+      record.root.querySelectorAll('form').forEach(form => window.SynapseNavigation?.markSaved(form));
+      separateActions(record.root);
+      window.SynapsePageLifecycle?.init(content);
+      initCatalogComboboxes(record.root);
+      content.inert = false;
+      const heading = record.root.querySelector('[data-table-pagination] [aria-current="page"]');
+      if (heading) { heading.tabIndex = -1; heading.focus(); } else focusField(record.root);
+    } catch (failure) {
+      if (active === record && !record.closeRequested && (failure.name !== 'AbortError' || timedOut)) error(record.root, timedOut
+        ? 'Loading history timed out. Your current page and edits have been kept.'
+        : failure.message || 'Unable to load history. Your current page has been kept.');
+    } finally {
+      clearTimeout(timeout);
+      styles?.dispose();
+      record.controller.signal.removeEventListener('abort', abort);
+      finish();
+      content.inert = false;
+      delete record.root.dataset.modalPaging;
     }
   }
 
   // Read-only detail dialogs may explicitly link to a different modal route.
   // Ordinary navigation remains blocked, especially during an in-flight write.
   document.addEventListener('click', event => {
+    const pageLink = event.target.closest('a[data-app-modal-page]');
+    if (pageLink && active?.root.contains(pageLink) && event.button === 0 &&
+        !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      void pageModal(pageLink);
+      return;
+    }
     const route = event.target.closest('a[data-app-modal-route]');
     if (route && active?.root.contains(route) && event.button === 0 &&
         !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
@@ -459,6 +628,7 @@
       event.preventDefault();
       if (!busy(active.root)) {
         active.closeRequested = true;
+        active.controller.abort();
         active.modal.hide();
       }
       return;
@@ -538,7 +708,10 @@
   function start(event) {
     const scope = event?.detail?.root || document;
     const direct = scope.querySelector('[data-app-form-modal][data-modal-direct]');
-    if (direct && !active) attach(direct, null);
+    if (direct && !active) {
+      const record = attach(direct, null);
+      record.pageUrl = new URL(location.href); record.pageUrl.searchParams.delete('fragment'); record.pageUrl.hash = '';
+    }
   }
   document.addEventListener('synapse:page-load', start);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });

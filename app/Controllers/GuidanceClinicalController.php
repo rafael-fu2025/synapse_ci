@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\TablePage;
 use App\Services\AuthenticatedUser;
 use App\Services\Guidance\FormAttestationService;
 use App\Services\Guidance\GuidanceAccessPolicy;
@@ -53,6 +54,7 @@ final class GuidanceClinicalController extends BaseController
             $actor = $this->resolveStaffActor();
             $tenantId = (int) $actor['tenant_id'];
             $actorId = (int) $actor['id'];
+            $page = TablePage::forList($this->request->getGet());
 
             $practitionerProfile = $this->practitionerService->getPractitionerProfile($actorId, $tenantId);
             $canCoSign = $this->practitionerService->canFinalizeDirectly($actorId, $tenantId);
@@ -86,9 +88,16 @@ final class GuidanceClinicalController extends BaseController
                 $builder->where('gfi.assigned_supervisor_user_id', $actorId);
             }
 
+            $pendingCount = (clone $builder)->countAllResults();
+            $assignedCount = $hasOversight
+                ? (clone $builder)->where('gfi.assigned_supervisor_user_id', $actorId)->countAllResults()
+                : $pendingCount;
+            $pagination = $page->metadata($pendingCount, $pendingCount);
+
             $pendingForms = $builder
                 ->orderBy('gfi.submitted_for_cosign_at', 'ASC')
                 ->orderBy('gfi.id', 'DESC')
+                ->limit($pagination['per_page'], ($pagination['page'] - 1) * $pagination['per_page'])
                 ->get()
                 ->getResultArray();
 
@@ -96,6 +105,9 @@ final class GuidanceClinicalController extends BaseController
                 'title'               => 'Supervisor Co-Sign Queue',
                 'pageTitle'           => 'Supervisor Co-Sign Queue',
                 'pendingForms'        => $pendingForms,
+                'pagination'          => $pagination,
+                'pendingCount'        => $pendingCount,
+                'assignedCount'       => $assignedCount,
                 'actor'               => $actor,
                 'practitionerProfile' => $practitionerProfile,
                 'canCoSign'           => $canCoSign,
@@ -983,7 +995,7 @@ final class GuidanceClinicalController extends BaseController
     private function safeFailure(Throwable $error, string $operation, int $recordId = 0): array
     {
         $status = (int) $error->getCode();
-        if (!in_array($status, [401, 403, 404, 409, 422], true)) {
+        if (!in_array($status, [401, 403, 404, 409, 422, 503], true)) {
             $status = 500;
             log_message('error', 'Guidance clinical error: operation={operation} record_id={record_id} exception={exception_class} code={error_code}', [
                 'operation'       => $operation,
@@ -999,6 +1011,9 @@ final class GuidanceClinicalController extends BaseController
             404     => $error->getMessage() !== '' ? $error->getMessage() : 'The requested clinical form was not found.',
             409     => $error->getMessage() !== '' ? $error->getMessage() : 'Clinical form state conflict.',
             422     => $error->getMessage() !== '' ? $error->getMessage() : 'Please review the clinical form fields and try again.',
+            503     => $operation === 'clinical.pdf'
+                ? 'PDF preview is unavailable because the document could not be generated. Please contact your administrator to check the PDF compiler and try again.'
+                : 'Unable to complete the clinical form operation. Please try again later.',
             default => 'Unable to complete the clinical form operation. Please try again later.',
         };
 

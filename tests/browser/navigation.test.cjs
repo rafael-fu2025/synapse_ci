@@ -56,7 +56,7 @@ function synthetic(name) {
     <input type="hidden" name="unrelated" value="unchanged"></form>
     <div id="anchor" style="margin-top:900px">Anchor</div>
     <div x-data="navigationCounter()"><button id="increment" @click="count++">Increment</button><output id="counter" x-text="count"></output></div>
-    </main><script src="/assets/js/csrf.js"></script><script src="/assets/js/navigation.js"></script>
+    </main><script src="/assets/js/csrf.js"></script><script src="/assets/js/page-styles.js"></script><script src="/assets/js/navigation.js"></script>
     <script src="/assets/js/page-lifecycle.js"></script><div id="page-scripts">
     <script src="/navigation-fixture/shared.js"></script>
     <script>
@@ -381,11 +381,15 @@ test('real carousel CSS applies initially, leaves with appointments and returns 
   });
   const opacity = () => page.locator('#carousel-style-probe').evaluate(element => getComputedStyle(element).opacity);
   assert.equal(await opacity(), '0.5', 'Actual carousel stylesheet must apply on initial render');
-  const firstStyles = await page.locator('#main style, #page-styles style').elementHandles();
-  assert.ok(firstStyles.length > 0);
+  const firstStyles = await page.locator('style').elementHandles();
+  const ownedStyles = await page.evaluate(() => [document.getElementById('main'), ...SynapsePageStyles.nodes(document.getElementById('page-styles'))]
+    .flatMap(node => node.tagName === 'STYLE' ? [node.textContent] : [...node.querySelectorAll('style')].map(style => style.textContent)));
+  const firstPageStyles = [];
+  for (const style of firstStyles) if (ownedStyles.includes(await style.textContent())) firstPageStyles.push(style);
+  assert.ok(firstPageStyles.length > 0);
   await clickRoute(page, '/clinic/appointments');
   assert.equal(await opacity(), '1', 'Carousel CSS must not leak into appointments');
-  for (const style of firstStyles) assert.equal(await style.evaluate(element => element.isConnected), false);
+  for (const style of firstPageStyles) assert.equal(await style.evaluate(element => element.isConnected), false);
   await clickRoute(page, '/admin/carousel');
   assert.equal(await opacity(), '0.5', 'Returning must install carousel CSS again');
   assert.equal(await page.locator('#slideList .slide-row').count(), 1);
@@ -409,7 +413,7 @@ test('active hidden page-style containers replace CSS on navigation and history'
     document.body.append(probe);
   });
   await clickRoute(page, '/navigation-fixture/b');
-  assert.equal(await styles.evaluate(element => element.isConnected), false);
+  assert.equal(await styles.evaluate(element => element.isConnected && element === document.getElementById('page-styles')), true);
   assert.deepEqual(await pageStyle(), { color: 'rgb(0, 128, 0)', marker: 'b' });
   assert.equal(await page.locator('#old-style-probe').evaluate(element => getComputedStyle(element).getPropertyValue('--navigation-page')), '');
   await traverse(page, 'back', '/navigation-fixture/a');

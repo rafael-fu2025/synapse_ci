@@ -1,14 +1,14 @@
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2">
+<div class="ce-page-actions">
   <?php if (!empty($referral['linked_case_id'])): ?>
-    <a href="<?= esc(site_url('/guidance/cases/' . (int) $referral['linked_case_id'])) ?>" class="btn btn-success btn-sm">
-      <i class="bi bi-folder2-open me-1" aria-hidden="true"></i> Open Linked Case #<?= (int) $referral['linked_case_id'] ?>
+    <a href="<?= esc(site_url('/guidance/cases/' . (int) $referral['linked_case_id'])) ?>" class="btn btn-primary btn-sm">
+      <i class="bi bi-folder2-open" aria-hidden="true"></i> Open Linked Case #<?= (int) $referral['linked_case_id'] ?>
     </a>
   <?php endif; ?>
   <a href="<?= esc(site_url('/guidance/intake')) ?>" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i> Intake Queue
+    <i class="bi bi-arrow-left" aria-hidden="true"></i> Intake Queue
   </a>
 </div>
 <?= $this->endSection() ?>
@@ -44,89 +44,112 @@ if (isset($rawSelections['items']) && is_array($rawSelections['items'])) {
     $concernKeys = $rawSelections;
 }
 
-$riskBadge = static fn (string $level): string => match ($level) {
-    'imminent_danger' => 'bg-danger text-white',
-    'high'            => 'bg-danger-subtle text-danger border-danger-subtle',
-    'moderate'        => 'bg-warning-subtle text-warning border-warning-subtle',
-    default           => 'bg-success-subtle text-success border-success-subtle',
+$riskDot = static fn (string $level): string => match ($level) {
+    'imminent_danger', 'high' => 'ce-status-crimson',
+    'moderate'                => 'ce-status-amber',
+    default                   => 'ce-status-emerald',
 };
 
-$priorityBadge = static fn (string $hint): string => match ($hint) {
-    'crisis' => 'bg-danger text-white',
-    'urgent' => 'bg-warning text-dark',
-    default  => 'bg-secondary-subtle text-secondary border',
+$priorityDot = static fn (string $hint): string => match ($hint) {
+    'crisis' => 'ce-status-crimson',
+    'urgent' => 'ce-status-amber',
+    default  => 'ce-status-slate',
+};
+
+$statusDot = match ($status) {
+    'submitted', 'received'   => 'ce-status-sky',
+    'triaged'                 => 'ce-status-amber',
+    'accepted', 'case_linked' => 'ce-status-emerald',
+    'declined', 'withdrawn'   => 'ce-status-crimson',
+    default                   => 'ce-status-slate',
 };
 
 $isTerminal = in_array($status, ['declined', 'closed', 'withdrawn', 'external_handoff'], true);
-
 $assessments = $safetyHistory['assessments'] ?? [];
 $events      = $safetyHistory['events'] ?? [];
+$initials = strtoupper(
+    substr((string) ($subjectPerson['first_name'] ?? 'S'), 0, 1) .
+    substr((string) ($subjectPerson['last_name'] ?? 'R'), 0, 1)
+);
 ?>
 
-<div class="guidance-ui guidance-intake-workspace"
-     data-refresh-owner="guidance.intake.<?= $refId ?>"
-     data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
-  <div data-refresh-region="workspace" data-refresh-heading tabindex="-1">
+<section class="guidance-ui guidance-intake-workspace ce-encounter"
+         data-refresh-owner="guidance.intake.<?= $refId ?>"
+         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+  <div class="d-flex flex-column gap-3" data-refresh-region="workspace" data-refresh-heading tabindex="-1">
 
     <!-- Identity & Status Header Card -->
-    <div class="card border-0 shadow-sm mb-4">
-      <div class="card-body p-3 p-lg-4">
-        <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-          <div>
-            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
-              <span class="badge bg-dark-subtle text-body border fw-bold"><?= esc($referral['referral_number']) ?></span>
-              <span class="badge text-capitalize <?= $priorityBadge((string) $referral['priority_hint']) ?>">
-                Attention Hint: <?= esc($referral['priority_hint']) ?>
+    <div class="ce-patient-card">
+      <div class="ce-patient-top">
+        <div class="ce-patient-identity">
+          <div class="ce-avatar" aria-hidden="true"><?= esc($initials !== '' ? $initials : 'IR') ?></div>
+          <div style="min-width: 0;">
+            <div class="ce-patient-heading">
+              <span class="ce-tag ce-mono fw-bold"><?= esc($referral['referral_number']) ?></span>
+              <h2 class="ce-patient-name">
+                <?= esc(trim(($subjectPerson['last_name'] ?? 'Subject') . ', ' . ($subjectPerson['first_name'] ?? ''))) ?>
+              </h2>
+              <span class="ce-tag ce-tag-upper"><?= esc((string) ($subjectPerson['kind'] ?? 'student')) ?></span>
+              <span class="ce-tag">
+                <span class="ce-status-dot <?= $priorityDot((string) $referral['priority_hint']) ?> text-capitalize">
+                  Attention Hint: <?= esc($referral['priority_hint']) ?>
+                </span>
               </span>
-              <span class="badge bg-primary-subtle text-primary border text-capitalize">
+              <span class="ce-status-dot <?= $statusDot ?> text-capitalize">
                 Status: <?= esc(str_replace('_', ' ', $status)) ?>
               </span>
             </div>
-            <h2 class="h5 fw-bold mb-1">
-              <?= esc(trim(($subjectPerson['last_name'] ?? 'Subject') . ', ' . ($subjectPerson['first_name'] ?? ''))) ?>
-              <small class="text-muted fw-normal">(MIS ID: <?= esc($subjectPerson['mis_id'] ?? '—') ?>)</small>
-            </h2>
-            <div class="small text-muted">
-              <?= esc(ucfirst((string) ($subjectPerson['kind'] ?? 'student'))) ?>
+            <div class="ce-patient-meta">
+              <span>MIS ID: <strong class="ce-mono"><?= esc($subjectPerson['mis_id'] ?? '—') ?></strong></span>
               <?php if ($studentProfile !== null): ?>
-                · <?= esc($studentProfile['program'] ?? '') ?> Year <?= esc((string) ($studentProfile['year_level'] ?? '')) ?>
-                <?= !empty($studentProfile['department']) ? ' (' . esc($studentProfile['department']) . ')' : '' ?>
+                <span class="ce-meta-sep" aria-hidden="true">·</span>
+                <span>
+                  <?= esc($studentProfile['program'] ?? '') ?> Year <?= esc((string) ($studentProfile['year_level'] ?? '')) ?>
+                  <?= !empty($studentProfile['department']) ? ' (' . esc($studentProfile['department']) . ')' : '' ?>
+                </span>
               <?php endif; ?>
-              · Referrer: <strong><?= esc($referral['referrer_name_snapshot']) ?></strong>
-              (<?= esc($referral['referrer_designation_snapshot']) ?>, <?= esc($referral['referrer_department_snapshot']) ?>)
+              <span class="ce-meta-sep" aria-hidden="true">·</span>
+              <span>
+                Referrer: <strong><?= esc($referral['referrer_name_snapshot']) ?></strong>
+                (<?= esc($referral['referrer_designation_snapshot']) ?>, <?= esc($referral['referrer_department_snapshot']) ?>)
+              </span>
             </div>
           </div>
-          <div>
-            <span class="badge bg-success-subtle text-success border border-success-subtle p-2">
-              <i class="bi bi-shield-lock-fill me-1" aria-hidden="true"></i> Decrypted Payload · Audited Read
-            </span>
-          </div>
+        </div>
+
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <span class="ce-tag">
+            <i class="bi bi-shield-lock-fill" aria-hidden="true"></i> Decrypted Payload · Audited Read
+          </span>
         </div>
       </div>
     </div>
 
-    <div class="row g-4">
-      <!-- Left Column: Referral Details, Chronology & State Actions -->
-      <div class="col-12 col-lg-7">
+    <div class="row g-3">
+      <!-- Left Column: Referral Details, Workflow Actions & Chronology -->
+      <div class="col-12 col-lg-7 d-flex flex-column gap-3">
 
         <!-- Decrypted Referral Payload -->
-        <div class="card border-0 shadow-sm mb-4">
-          <div class="card-header bg-transparent py-3">
-            <h3 class="h6 fw-bold mb-0"><i class="bi bi-file-earmark-medical me-1" aria-hidden="true"></i> Presenting Concerns &amp; Narrative</h3>
+        <div class="ce-card">
+          <div class="ce-card-header">
+            <h3 class="ce-card-title">
+              <i class="bi bi-file-earmark-medical" aria-hidden="true"></i> Presenting Concerns &amp; Narrative
+            </h3>
+            <span class="ce-tag ce-mono">Catalog v<?= esc($referral['concern_catalog_version'] ?? '1.0.0') ?></span>
           </div>
-          <div class="card-body">
+          <div class="ce-card-body">
             <div class="mb-3">
-              <div class="small text-muted fw-semibold mb-2">Concern Catalog Selections (v<?= esc($referral['concern_catalog_version'] ?? '1.0.0') ?>)</div>
+              <div class="ce-kv-label mb-2">Concern Catalog Selections</div>
               <?php if ($concernKeys === []): ?>
                 <span class="small text-muted">None specified.</span>
               <?php else: ?>
                 <div class="d-flex flex-wrap gap-1">
                   <?php foreach ($concernKeys as $k => $v): ?>
                     <?php
-                    $code  = is_string($v) ? $v : (string) $k;
-                    $label = $catalogChecklist[$code] ?? (is_string($v) ? ucwords(str_replace('_', ' ', $v)) : (string) $k . ': ' . json_encode($v));
+                      $code  = is_string($v) ? $v : (string) $k;
+                      $label = $catalogChecklist[$code] ?? (is_string($v) ? ucwords(str_replace('_', ' ', $v)) : (string) $k . ': ' . json_encode($v));
                     ?>
-                    <span class="badge bg-info-subtle text-info border border-info-subtle"><?= esc($label) ?></span>
+                    <span class="ce-tag"><?= esc($label) ?></span>
                   <?php endforeach; ?>
                 </div>
               <?php endif; ?>
@@ -136,63 +159,71 @@ $events      = $safetyHistory['events'] ?? [];
             </div>
 
             <div class="mb-3">
-              <div class="small text-muted fw-semibold mb-1">Referral Narrative</div>
-              <div class="p-3 rounded border bg-body-tertiary small" style="white-space: pre-wrap;"><?= esc($referral['narrative'] ?? '') ?></div>
+              <div class="ce-kv-label">Referral Narrative</div>
+              <div class="ce-kv-box small" style="white-space: pre-wrap;"><?= esc($referral['narrative'] ?? '') ?></div>
             </div>
 
             <?php if (!empty($referral['prior_actions'])): ?>
               <div class="mb-3">
-                <div class="small text-muted fw-semibold mb-1">Prior Actions Taken by Referrer</div>
-                <div class="p-3 rounded border bg-body-tertiary small" style="white-space: pre-wrap;"><?= esc($referral['prior_actions']) ?></div>
+                <div class="ce-kv-label">Prior Actions Taken by Referrer</div>
+                <div class="ce-kv-box small" style="white-space: pre-wrap;"><?= esc($referral['prior_actions']) ?></div>
               </div>
             <?php endif; ?>
 
             <?php if (!empty($referral['triage_notes'])): ?>
               <div class="mb-3">
-                <div class="small text-muted fw-semibold mb-1">Guidance Triage Notes</div>
-                <div class="p-3 rounded border bg-body-tertiary small" style="white-space: pre-wrap;"><?= esc($referral['triage_notes']) ?></div>
+                <div class="ce-kv-label">Guidance Triage Notes</div>
+                <div class="ce-kv-box small" style="white-space: pre-wrap;"><?= esc($referral['triage_notes']) ?></div>
               </div>
             <?php endif; ?>
 
             <?php if (!empty($referral['decline_reason'])): ?>
-              <div class="alert alert-danger small mb-0">
-                <strong>Decline Reason:</strong> <?= esc($referral['decline_reason']) ?>
+              <div class="ce-notice ce-notice-crimson">
+                <div class="ce-notice-body">
+                  <i class="bi bi-x-octagon ce-notice-icon" aria-hidden="true"></i>
+                  <span><strong>Decline Reason:</strong> <?= esc($referral['decline_reason']) ?></span>
+                </div>
               </div>
             <?php endif; ?>
 
             <?php if (!empty($referral['external_facility'])): ?>
-              <div class="alert alert-secondary small mb-0">
-                <strong>External Handoff Facility:</strong> <?= esc($referral['external_facility']) ?>
+              <div class="ce-notice mt-2">
+                <div class="ce-notice-body">
+                  <i class="bi bi-building ce-notice-icon" aria-hidden="true"></i>
+                  <span><strong>External Handoff Facility:</strong> <?= esc($referral['external_facility']) ?></span>
+                </div>
               </div>
             <?php endif; ?>
           </div>
         </div>
 
         <!-- Intake Lifecycle Actions -->
-        <div class="card border-0 shadow-sm mb-4">
-          <div class="card-header bg-transparent py-3">
-            <h3 class="h6 fw-bold mb-0"><i class="bi bi-sliders me-1" aria-hidden="true"></i> Intake Workflow Actions</h3>
+        <div class="ce-card">
+          <div class="ce-card-header">
+            <h3 class="ce-card-title">
+              <i class="bi bi-sliders" aria-hidden="true"></i> Intake Workflow Actions
+            </h3>
           </div>
-          <div class="card-body">
-            <div class="d-flex flex-wrap gap-2 mb-3">
-              <?php if ($status === 'submitted'): ?>
+          <div class="ce-card-body">
+            <?php if ($status === 'submitted'): ?>
+              <div class="mb-3">
                 <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/receive'), 'attr') ?>" method="POST" data-background-submit>
                   <?= csrf_field() ?>
-                  <button type="submit" class="btn btn-info btn-sm">
-                    <i class="bi bi-check2-circle me-1" aria-hidden="true"></i> Mark Received
+                  <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-check2-circle" aria-hidden="true"></i> Mark Received
                   </button>
                 </form>
-              <?php endif; ?>
-            </div>
+              </div>
+            <?php endif; ?>
 
             <?php if (!$isTerminal): ?>
               <!-- Triage Attention Hint -->
-              <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/triage'), 'attr') ?>" method="POST" data-background-submit class="p-3 rounded border bg-body-tertiary mb-3">
+              <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/triage'), 'attr') ?>" method="POST" data-background-submit class="ce-dispense-panel mb-3">
                 <?= csrf_field() ?>
                 <h4 class="h6 fw-semibold mb-2">Update Intake Attention Hint &amp; Triage Notes</h4>
                 <div class="row g-2">
                   <div class="col-md-4">
-                    <label for="triagePriorityHint" class="form-label small fw-semibold mb-1">Priority Hint</label>
+                    <label for="triagePriorityHint" class="form-label">Priority Hint</label>
                     <select id="triagePriorityHint" name="priority_hint" class="form-select form-select-sm" required>
                       <?php foreach ($priorityHints as $hint): ?>
                         <option value="<?= esc($hint, 'attr') ?>" <?= ($referral['priority_hint'] ?? '') === $hint ? 'selected' : '' ?>>
@@ -202,22 +233,22 @@ $events      = $safetyHistory['events'] ?? [];
                     </select>
                   </div>
                   <div class="col-md-8">
-                    <label for="triageNotes" class="form-label small fw-semibold mb-1">Triage Notes</label>
+                    <label for="triageNotes" class="form-label">Triage Notes</label>
                     <input type="text" id="triageNotes" name="triage_notes" class="form-control form-control-sm" value="<?= esc($referral['triage_notes'] ?? '', 'attr') ?>" placeholder="Intake coordination notes">
                   </div>
                 </div>
                 <div class="mt-2 d-flex justify-content-end">
-                  <button type="submit" class="btn btn-outline-primary btn-sm w-100 w-sm-auto">Save Triage</button>
+                  <button type="submit" class="btn btn-outline-primary btn-sm">Save Triage</button>
                 </div>
               </form>
 
               <!-- Accept & Assign Counselor -->
-              <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/accept'), 'attr') ?>" method="POST" data-background-submit class="p-3 rounded border bg-body-tertiary mb-3">
+              <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/accept'), 'attr') ?>" method="POST" data-background-submit class="ce-dispense-panel mb-3">
                 <?= csrf_field() ?>
                 <h4 class="h6 fw-semibold mb-2">Accept Referral</h4>
                 <div class="row g-2 align-items-end">
                   <div class="col-md-8">
-                    <label for="assignCounselorSelect" class="form-label small fw-semibold mb-1">Assign Counselor (Optional)</label>
+                    <label for="assignCounselorSelect" class="form-label">Assign Counselor (Optional)</label>
                     <select id="assignCounselorSelect" name="assigned_counsellor_user_id" class="form-select form-select-sm">
                       <option value="">Keep unassigned / decide later</option>
                       <?php foreach ($counselors as $c): ?>
@@ -236,12 +267,12 @@ $events      = $safetyHistory['events'] ?? [];
 
               <!-- Link or Create Counseling Case -->
               <?php if ($canLinkCase && empty($referral['linked_case_id'])): ?>
-                <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/link-case'), 'attr') ?>" method="POST" data-background-submit class="p-3 rounded border bg-body-tertiary mb-3">
+                <form action="<?= esc(site_url('/guidance/intake/' . $refId . '/link-case'), 'attr') ?>" method="POST" data-background-submit class="ce-dispense-panel mb-3">
                   <?= csrf_field() ?>
                   <h4 class="h6 fw-semibold mb-2">Link to Counseling Case</h4>
                   <div class="row g-2 align-items-end">
                     <div class="col-md-8">
-                      <label for="existingCaseSelect" class="form-label small fw-semibold mb-1">Target Case</label>
+                      <label for="existingCaseSelect" class="form-label">Target Case</label>
                       <select id="existingCaseSelect" name="existing_case_id" class="form-select form-select-sm">
                         <option value="">Open a brand-new counseling case for this referral</option>
                         <?php foreach ($existingCases as $ec): ?>
@@ -260,10 +291,10 @@ $events      = $safetyHistory['events'] ?? [];
 
               <!-- Decline or External Handoff -->
               <?php if ($status !== 'case_linked'): ?>
-                <div class="accordion" id="intakeTerminalActions">
+                <div class="accordion gi-terminal-accordion" id="intakeTerminalActions">
                   <div class="accordion-item">
                     <h4 class="accordion-header">
-                      <button class="accordion-button collapsed py-2 small fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDecline">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDecline">
                         Decline Referral
                       </button>
                     </h4>
@@ -279,7 +310,7 @@ $events      = $safetyHistory['events'] ?? [];
                           <?= csrf_field() ?>
                           <input type="hidden" name="confirmed" value="1">
                           <div class="mb-2">
-                            <label for="declineReason" class="form-label small fw-semibold">Mandatory Decline Reason</label>
+                            <label for="declineReason" class="form-label">Mandatory Decline Reason</label>
                             <textarea id="declineReason" name="decline_reason" rows="2" class="form-control form-control-sm" required placeholder="Provide rationale for declining"></textarea>
                           </div>
                           <button type="submit" class="btn btn-outline-danger btn-sm">Confirm Decline</button>
@@ -290,7 +321,7 @@ $events      = $safetyHistory['events'] ?? [];
 
                   <div class="accordion-item">
                     <h4 class="accordion-header">
-                      <button class="accordion-button collapsed py-2 small fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseHandoff">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseHandoff">
                         External Facility Handoff
                       </button>
                     </h4>
@@ -306,11 +337,11 @@ $events      = $safetyHistory['events'] ?? [];
                           <?= csrf_field() ?>
                           <input type="hidden" name="confirmed" value="1">
                           <div class="mb-2">
-                            <label for="externalFacility" class="form-label small fw-semibold">External Facility / Specialist</label>
+                            <label for="externalFacility" class="form-label">External Facility / Specialist</label>
                             <input type="text" id="externalFacility" name="external_facility" class="form-control form-control-sm" required placeholder="Hospital, external psychologist, or agency">
                           </div>
                           <div class="mb-2">
-                            <label for="handoffNotes" class="form-label small fw-semibold">Handoff Notes</label>
+                            <label for="handoffNotes" class="form-label">Handoff Notes</label>
                             <textarea id="handoffNotes" name="handoff_notes" rows="2" class="form-control form-control-sm" placeholder="Summary of external referral"></textarea>
                           </div>
                           <button type="submit" class="btn btn-outline-secondary btn-sm">Record External Handoff</button>
@@ -325,12 +356,14 @@ $events      = $safetyHistory['events'] ?? [];
         </div>
 
         <!-- Chronology -->
-        <div class="card border-0 shadow-sm">
-          <div class="card-header bg-transparent py-3">
-            <h3 class="h6 fw-bold mb-0"><i class="bi bi-clock-history me-1" aria-hidden="true"></i> Referral Chronology</h3>
+        <div class="ce-card">
+          <div class="ce-card-header">
+            <h3 class="ce-card-title">
+              <i class="bi bi-clock-history" aria-hidden="true"></i> Referral Chronology
+            </h3>
           </div>
-          <div class="card-body">
-            <ul class="list-unstyled small mb-0">
+          <div class="ce-card-body">
+            <ul class="gi-chronology-list">
               <?php
               $milestones = [
                   'created_at'   => 'Draft Created',
@@ -341,12 +374,12 @@ $events      = $safetyHistory['events'] ?? [];
                   'closed_at'    => 'Closed / Terminal State',
               ];
               foreach ($milestones as $col => $label):
-                if (!empty($referral[$col])): ?>
-                  <li class="d-flex justify-content-between py-1 border-bottom">
-                    <span class="fw-semibold"><?= esc($label) ?></span>
-                    <span class="text-muted"><?= esc(date('M j, Y g:i A', strtotime((string) $referral[$col]))) ?></span>
-                  </li>
-                <?php endif;
+                  if (!empty($referral[$col])): ?>
+                    <li class="gi-chronology-item">
+                      <span class="fw-semibold"><?= esc($label) ?></span>
+                      <span class="ce-mono text-muted"><?= esc(date('M j, Y g:i A', strtotime((string) $referral[$col]))) ?></span>
+                    </li>
+                  <?php endif;
               endforeach; ?>
             </ul>
           </div>
@@ -355,30 +388,41 @@ $events      = $safetyHistory['events'] ?? [];
       </div>
 
       <!-- Right Column: Clinical Safety Triage & Escalation Panel -->
-      <div class="col-12 col-lg-5">
-        <div class="card border-0 shadow-sm mb-4">
-          <div class="card-header bg-transparent py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div class="col-12 col-lg-5 d-flex flex-column gap-3">
+        <div class="ce-card">
+          <div class="ce-card-header">
             <div>
-              <h3 class="h6 fw-bold mb-0"><i class="bi bi-shield-plus me-1" aria-hidden="true"></i> Clinical Safety Triage &amp; Escalation</h3>
-              <small class="text-muted">Authoritative practitioner risk determination (separate from referrer hint)</small>
+              <h3 class="ce-card-title">
+                <i class="bi bi-shield-plus" aria-hidden="true"></i> Clinical Safety Triage &amp; Escalation
+              </h3>
+              <div class="small text-muted mt-1">Authoritative practitioner risk determination (separate from referrer hint)</div>
             </div>
           </div>
-          <div class="card-body">
+          <div class="ce-card-body">
             <?php if (!$safetyGateOpen): ?>
-              <div class="alert alert-warning small mb-3">
-                <strong>Safety SOP Gate Pending (<code>safety_escalation_sop_signoff</code>):</strong>
-                Live crisis escalation dispatch is blocked until Guidance Head, QA Office, and DPO sign off on the Safety Escalation SOP.
+              <div class="ce-notice ce-notice-amber mb-3">
+                <div class="ce-notice-body">
+                  <i class="bi bi-exclamation-triangle ce-notice-icon" aria-hidden="true"></i>
+                  <span>
+                    <strong>Safety SOP Gate Pending (<code>safety_escalation_sop_signoff</code>):</strong>
+                    Live crisis escalation dispatch is blocked until Guidance Head, QA Office, and DPO sign off on the Safety Escalation SOP.
+                  </span>
+                </div>
               </div>
             <?php endif; ?>
 
             <?php if (!$isQualifiedSafety): ?>
-              <div class="alert alert-secondary small mb-3">
-                <i class="bi bi-person-lock me-1" aria-hidden="true"></i>
-                Only users with an active qualified Guidance practitioner profile and <code>guidance.safety.triage</code> permission may record clinical safety assessments or crisis escalations.
+              <div class="ce-notice mb-3">
+                <div class="ce-notice-body">
+                  <i class="bi bi-person-lock ce-notice-icon" aria-hidden="true"></i>
+                  <span>
+                    Only users with an active qualified Guidance practitioner profile and <code>guidance.safety.triage</code> permission may record clinical safety assessments or crisis escalations.
+                  </span>
+                </div>
               </div>
             <?php else: ?>
               <!-- Record Clinical Safety Assessment -->
-              <form action="<?= esc(site_url('/guidance/safety/assess'), 'attr') ?>" method="POST" data-background-submit class="p-3 rounded border bg-body-tertiary mb-3">
+              <form action="<?= esc(site_url('/guidance/safety/assess'), 'attr') ?>" method="POST" data-background-submit class="ce-dispense-panel mb-3">
                 <?= csrf_field() ?>
                 <input type="hidden" name="person_id" value="<?= (int) $referral['subject_person_id'] ?>">
                 <input type="hidden" name="intake_referral_id" value="<?= $refId ?>">
@@ -388,7 +432,7 @@ $events      = $safetyHistory['events'] ?? [];
 
                 <h4 class="h6 fw-semibold mb-2">Record Authoritative Safety Assessment</h4>
                 <div class="mb-2">
-                  <label for="safetyRiskLevel" class="form-label small fw-semibold mb-1">Clinical Risk Level</label>
+                  <label for="safetyRiskLevel" class="form-label">Clinical Risk Level</label>
                   <select id="safetyRiskLevel" name="risk_level" class="form-select form-select-sm" required>
                     <?php foreach ($riskLevels as $rl): ?>
                       <option value="<?= esc($rl, 'attr') ?>"><?= esc(ucwords(str_replace('_', ' ', $rl))) ?></option>
@@ -408,22 +452,22 @@ $events      = $safetyHistory['events'] ?? [];
                 </div>
 
                 <div class="mb-2">
-                  <label for="safetyIndicators" class="form-label small fw-semibold mb-1">Clinical Indicators (one per line or comma-separated, encrypted)</label>
+                  <label for="safetyIndicators" class="form-label">Clinical Indicators (one per line or comma-separated, encrypted)</label>
                   <textarea id="safetyIndicators" name="indicators" rows="2" class="form-control form-control-sm" placeholder="E.g., expressed hopelessness, acute panic, recent loss"></textarea>
                 </div>
 
                 <div class="mb-2">
-                  <label for="immediateActions" class="form-label small fw-semibold mb-1">Immediate Clinical Actions Taken <span class="text-danger">*</span></label>
+                  <label for="immediateActions" class="form-label">Immediate Clinical Actions Taken <span class="text-danger">*</span></label>
                   <textarea id="immediateActions" name="immediate_actions_taken" rows="2" class="form-control form-control-sm" required placeholder="Containment, grounding, or stabilization steps"></textarea>
                 </div>
 
                 <div class="mb-3">
-                  <label for="safetyPlan" class="form-label small fw-semibold mb-1">Safety Plan (Optional, encrypted)</label>
+                  <label for="safetyPlan" class="form-label">Safety Plan (Optional, encrypted)</label>
                   <textarea id="safetyPlan" name="safety_plan" rows="2" class="form-control form-control-sm" placeholder="Protective contacts, coping strategies, follow-up plan"></textarea>
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-sm w-100">
-                  <i class="bi bi-shield-check me-1" aria-hidden="true"></i> Record Immutable Safety Assessment
+                  <i class="bi bi-shield-check" aria-hidden="true"></i> Record Immutable Safety Assessment
                 </button>
               </form>
 
@@ -436,13 +480,16 @@ $events      = $safetyHistory['events'] ?? [];
                       data-confirm-title="Record Crisis Escalation"
                       data-confirm-label="Dispatch Escalation"
                       data-confirm-tone="danger"
-                      class="p-3 rounded border bg-body-tertiary mb-3">
+                      class="ce-dispense-panel mb-3"
+                      style="border-left: 3px solid var(--ce-crimson);">
                   <?= csrf_field() ?>
                   <input type="hidden" name="intake_referral_id" value="<?= $refId ?>">
-                  <h4 class="h6 fw-semibold mb-2 text-danger-emphasis"><i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i> Log Crisis Escalation</h4>
+                  <h4 class="h6 fw-semibold mb-2">
+                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i> Log Crisis Escalation
+                  </h4>
 
                   <div class="mb-2">
-                    <label for="escAssessmentId" class="form-label small fw-semibold mb-1">Linked Safety Assessment</label>
+                    <label for="escAssessmentId" class="form-label">Linked Safety Assessment</label>
                     <select id="escAssessmentId" name="safety_assessment_id" class="form-select form-select-sm" required>
                       <?php foreach ($assessments as $a): ?>
                         <option value="<?= (int) $a['id'] ?>">
@@ -453,7 +500,7 @@ $events      = $safetyHistory['events'] ?? [];
                   </div>
 
                   <div class="mb-2">
-                    <label for="escChannel" class="form-label small fw-semibold mb-1">Escalation Channel</label>
+                    <label for="escChannel" class="form-label">Escalation Channel</label>
                     <select id="escChannel" name="escalation_channel" class="form-select form-select-sm" required>
                       <?php foreach ($escalationChannels as $ch): ?>
                         <option value="<?= esc($ch, 'attr') ?>"><?= esc(ucwords(str_replace('_', ' ', $ch))) ?></option>
@@ -462,72 +509,83 @@ $events      = $safetyHistory['events'] ?? [];
                   </div>
 
                   <div class="mb-2">
-                    <label for="escRecipient" class="form-label small fw-semibold mb-1">Recipient Agency / Official</label>
+                    <label for="escRecipient" class="form-label">Recipient Agency / Official</label>
                     <input type="text" id="escRecipient" name="recipient_agency_or_person" class="form-control form-control-sm" required placeholder="E.g., University Physician / Campus Crisis Team">
                   </div>
 
                   <div class="mb-3">
-                    <label for="escSummary" class="form-label small fw-semibold mb-1">Handover Summary Notes</label>
+                    <label for="escSummary" class="form-label">Handover Summary Notes</label>
                     <textarea id="escSummary" name="summary_notes" rows="2" class="form-control form-control-sm" required placeholder="Brief escalation handover details"></textarea>
                   </div>
 
                   <button type="submit"
-                          class="btn btn-danger btn-sm w-100"
+                          class="btn btn-outline-danger btn-sm w-100"
                           <?= !$safetyGateOpen ? 'disabled title="Disabled until safety_escalation_sop_signoff gate is enabled"' : '' ?>>
-                    <i class="bi bi-broadcast me-1" aria-hidden="true"></i> Record Crisis Escalation
+                    <i class="bi bi-broadcast" aria-hidden="true"></i> Record Crisis Escalation
                   </button>
                 </form>
               <?php endif; ?>
             <?php endif; ?>
 
             <!-- Decrypted Safety History -->
-            <h4 class="h6 fw-bold mb-2">Subject Safety History</h4>
+            <h4 class="ce-section-heading">
+              <i class="bi bi-journal-medical" aria-hidden="true"></i> Subject Safety History
+            </h4>
             <?php if ($safetyDenied): ?>
               <p class="small text-muted mb-0">You do not have permission to view safety assessment history.</p>
             <?php elseif ($events === []): ?>
               <p class="small text-muted mb-0">No clinical safety assessments or escalations recorded for this subject yet.</p>
             <?php else: ?>
-              <div class="d-flex flex-column gap-2">
+              <div class="ce-entry-list">
                 <?php foreach ($events as $ev): ?>
                   <?php if ($ev['event_type'] === 'safety_assessment'): ?>
-                    <div class="p-2 rounded border bg-body-tertiary small">
-                      <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
-                        <span class="badge border text-capitalize <?= $riskBadge((string) $ev['risk_level']) ?>">
-                          <?= esc(str_replace('_', ' ', (string) $ev['risk_level'])) ?> Risk
+                    <?php
+                      $evRisk = (string) ($ev['risk_level'] ?? 'low');
+                      $evMod = in_array($evRisk, ['imminent_danger', 'high'], true) ? 'ce-entry-card--abnormal' : ($evRisk === 'moderate' ? 'ce-entry-card--pending' : 'ce-entry-card--normal');
+                    ?>
+                    <div class="ce-entry-card <?= $evMod ?>">
+                      <div class="ce-entry-head">
+                        <span class="ce-status-dot <?= $riskDot($evRisk) ?> text-capitalize">
+                          <?= esc(str_replace('_', ' ', $evRisk)) ?> Risk
                         </span>
-                        <span class="text-muted"><?= esc(date('M j, Y g:i A', strtotime((string) $ev['timestamp']))) ?></span>
+                        <span class="ce-mono small text-muted"><?= esc(date('M j, Y g:i A', strtotime((string) $ev['timestamp']))) ?></span>
                       </div>
-                      <div class="mb-1">
-                        <?php if (!empty($ev['self_harm_risk'])): ?><span class="badge bg-danger me-1">Self-Harm Risk</span><?php endif; ?>
-                        <?php if (!empty($ev['harm_to_others_risk'])): ?><span class="badge bg-danger me-1">Harm-to-Others Risk</span><?php endif; ?>
-                      </div>
-                      <div><strong>Immediate Actions:</strong> <?= esc($ev['immediate_actions_taken']) ?></div>
+                      <?php if (!empty($ev['self_harm_risk']) || !empty($ev['harm_to_others_risk'])): ?>
+                        <div class="d-flex flex-wrap gap-1 mb-1">
+                          <?php if (!empty($ev['self_harm_risk'])): ?><span class="ce-tag">Self-Harm Risk</span><?php endif; ?>
+                          <?php if (!empty($ev['harm_to_others_risk'])): ?><span class="ce-tag">Harm-to-Others Risk</span><?php endif; ?>
+                        </div>
+                      <?php endif; ?>
+                      <div class="ce-entry-body"><strong>Immediate Actions:</strong> <?= esc($ev['immediate_actions_taken']) ?></div>
                       <?php if (!empty($ev['indicators'])): ?>
-                        <div class="mt-1"><strong>Indicators:</strong> <?= esc(implode(', ', (array) $ev['indicators'])) ?></div>
+                        <div class="ce-entry-notes"><strong>Indicators:</strong> <?= esc(implode(', ', (array) $ev['indicators'])) ?></div>
                       <?php endif; ?>
                       <?php if (!empty($ev['safety_plan'])): ?>
-                        <div class="mt-1"><strong>Safety Plan:</strong> <?= esc($ev['safety_plan']) ?></div>
+                        <div class="ce-entry-notes"><strong>Safety Plan:</strong> <?= esc($ev['safety_plan']) ?></div>
                       <?php endif; ?>
                     </div>
                   <?php else: ?>
-                    <div class="p-2 rounded border border-danger-subtle bg-danger-subtle small">
-                      <div class="d-flex flex-wrap justify-content-between align-items-center gap-1 mb-1">
-                        <strong>Escalation: <?= esc(ucwords(str_replace('_', ' ', (string) $ev['channel']))) ?></strong>
-                        <span class="text-muted"><?= esc(date('M j, Y g:i A', strtotime((string) $ev['timestamp']))) ?></span>
+                    <div class="ce-entry-card ce-entry-card--abnormal">
+                      <div class="ce-entry-head">
+                        <span class="ce-entry-title">
+                          Escalation: <?= esc(ucwords(str_replace('_', ' ', (string) $ev['channel']))) ?>
+                        </span>
+                        <span class="ce-mono small text-muted"><?= esc(date('M j, Y g:i A', strtotime((string) $ev['timestamp']))) ?></span>
                       </div>
-                      <div><strong>Recipient:</strong> <?= esc($ev['recipient']) ?></div>
-                      <div><strong>Summary:</strong> <?= esc($ev['summary_notes']) ?></div>
+                      <div class="ce-entry-body"><strong>Recipient:</strong> <?= esc($ev['recipient']) ?></div>
+                      <div class="ce-entry-notes"><strong>Summary:</strong> <?= esc($ev['summary_notes']) ?></div>
                       <?php if (!empty($ev['acknowledged_at'])): ?>
-                        <div class="mt-1 text-success-emphasis">
-                          <i class="bi bi-check-circle-fill me-1" aria-hidden="true"></i>
-                          Acknowledged by <?= esc($ev['acknowledged_by']) ?> on <?= esc(date('M j, Y g:i A', strtotime((string) $ev['acknowledged_at']))) ?>
+                        <div class="ce-entry-foot">
+                          <span class="ce-status-dot ce-status-emerald">
+                            Acknowledged by <?= esc($ev['acknowledged_by']) ?> on <?= esc(date('M j, Y g:i A', strtotime((string) $ev['acknowledged_at']))) ?>
+                          </span>
                         </div>
                       <?php elseif ($isQualifiedSafety): ?>
                         <form action="<?= esc(site_url('/guidance/safety/escalations/' . (int) $ev['id'] . '/ack'), 'attr') ?>" method="POST" data-background-submit class="mt-2 d-flex flex-wrap gap-2">
                           <?= csrf_field() ?>
                           <input type="hidden" name="intake_referral_id" value="<?= $refId ?>">
                           <input type="text" name="acknowledged_by" class="form-control form-control-sm" style="flex: 1 1 11rem; min-width: 0;" value="<?= esc($actor['name'] ?? '', 'attr') ?>" placeholder="Acknowledging official" required>
-                          <button type="submit" class="btn btn-outline-success btn-sm flex-shrink-0 w-100 w-sm-auto">Acknowledge</button>
+                          <button type="submit" class="btn btn-success btn-sm flex-shrink-0">Acknowledge</button>
                         </form>
                       <?php endif; ?>
                     </div>
@@ -541,5 +599,5 @@ $events      = $safetyHistory['events'] ?? [];
     </div>
 
   </div>
-</div>
+</section>
 <?= $this->endSection() ?>

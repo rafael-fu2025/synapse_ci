@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\TablePage;
 use App\Services\AuthenticatedUser;
 use App\Services\Guidance\GuidanceAccessPolicy;
 use App\Services\Guidance\GuidanceEpisodeService;
@@ -36,6 +37,7 @@ final class GuidanceEpisodeController extends BaseController
         try {
             $actor = $this->resolveStaffActor();
             $tenantId = (int) $actor['tenant_id'];
+            $page = TablePage::forList($this->request->getGet());
             $status = trim((string) ($this->request->getGet('status') ?? ''));
             $allowedStatuses = ['open', 'active', 'closed', 'transferred'];
             if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
@@ -44,9 +46,6 @@ final class GuidanceEpisodeController extends BaseController
 
             $db = Database::connect();
             $builder = $db->table('guidance_episodes ge')
-                ->select('ge.*, p.first_name, p.last_name, p.mis_id, p.kind')
-                ->select('cu.username AS counselor_username, cp.first_name AS counselor_first_name, cp.last_name AS counselor_last_name')
-                ->select('cc.case_number, cc.title AS case_title')
                 ->join('people p', 'p.id = ge.person_id AND p.tenant_id = ge.tenant_id')
                 ->join('users cu', 'cu.id = ge.primary_counselor_user_id AND cu.tenant_id = ge.tenant_id', 'left')
                 ->join('people cp', 'cp.id = cu.person_id AND cp.tenant_id = cu.tenant_id', 'left')
@@ -63,11 +62,41 @@ final class GuidanceEpisodeController extends BaseController
                 $builder->where('ge.primary_counselor_user_id', (int) $actor['id']);
             }
 
+            $statusCounts = [
+                ''            => 0,
+                'open'        => 0,
+                'active'      => 0,
+                'closed'      => 0,
+                'transferred' => 0,
+            ];
+            $countRows = (clone $builder)
+                ->select('ge.status, COUNT(*) AS total', false)
+                ->groupBy('ge.status')
+                ->get()
+                ->getResultArray();
+            foreach ($countRows as $cRow) {
+                $stKey = (string) ($cRow['status'] ?? '');
+                $cnt = (int) ($cRow['total'] ?? 0);
+                $statusCounts[''] += $cnt;
+                if (array_key_exists($stKey, $statusCounts)) {
+                    $statusCounts[$stKey] = $cnt;
+                }
+            }
+
             if ($status !== '') {
                 $builder->where('ge.status', $status);
             }
 
-            $episodes = $builder->orderBy('ge.opened_at', 'DESC')->orderBy('ge.id', 'DESC')->limit(100)->get()->getResultArray();
+            $pagination = $page->metadata($statusCounts[''], $statusCounts[$status]);
+            $episodes = $builder
+                ->select('ge.*, p.first_name, p.last_name, p.mis_id, p.kind')
+                ->select('cu.username AS counselor_username, cp.first_name AS counselor_first_name, cp.last_name AS counselor_last_name')
+                ->select('cc.case_number, cc.title AS case_title')
+                ->orderBy('ge.opened_at', 'DESC')
+                ->orderBy('ge.id', 'DESC')
+                ->limit($pagination['per_page'], ($pagination['page'] - 1) * $pagination['per_page'])
+                ->get()
+                ->getResultArray();
 
             $qualifiedCounselors = $this->loadQualifiedCounselors($tenantId);
 
@@ -75,7 +104,9 @@ final class GuidanceEpisodeController extends BaseController
                 'title'               => 'Guidance Episodes',
                 'pageTitle'           => 'Guidance Episodes',
                 'episodes'            => $episodes,
+                'pagination'          => $pagination,
                 'status'              => $status,
+                'statusCounts'        => $statusCounts,
                 'qualifiedCounselors' => $qualifiedCounselors,
                 'actor'               => $actor,
                 'breadcrumbs'         => [

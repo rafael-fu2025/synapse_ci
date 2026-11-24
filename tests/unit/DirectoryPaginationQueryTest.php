@@ -53,7 +53,7 @@ final class DirectoryPaginationQueryTest extends CIUnitTestCase
                 $this->assertStringNotContainsString('LIMIT', $sql);
                 return $stats;
             }
-            $this->assertStringEndsWith('ORDER BY name ASC, id ASC LIMIT 25 OFFSET 25', $sql);
+            $this->assertStringEndsWith('ORDER BY catalog.name ASC, catalog.id ASC LIMIT 25 OFFSET 25', $sql);
             return $rows;
         });
         $result = (new InventoryService($db))->paginateMedicines(TablePage::fromQuery(['q'=>"O'Neil 50%_!", 'status'=>'low_stock', 'page'=>'1000000']));
@@ -72,7 +72,15 @@ final class DirectoryPaginationQueryTest extends CIUnitTestCase
         CurrentTenant::set(73);
         $db = $this->createMock(BaseConnection::class);
         $builder = $this->createMock(BaseBuilder::class);
-        $db->expects($this->once())->method('table')->with('people p')->willReturn($builder);
+        $visitBuilder = $this->createMock(BaseBuilder::class);
+        $db->expects($this->exactly(2))->method('table')->willReturnCallback(function ($table) use ($builder, $visitBuilder) {
+            $this->assertContains($table, ['people p', 'clinic_encounters']);
+            return $table === 'people p' ? $builder : $visitBuilder;
+        });
+        foreach (['select', 'where', 'whereIn', 'groupBy'] as $method) $visitBuilder->method($method)->willReturnSelf();
+        $visitRows = $this->createMock(BaseResult::class);
+        $visitRows->method('getResultArray')->willReturn([['person_id' => 8, 'visit_count' => 7, 'last_visit_at' => '2026-10-20 09:00:00']]);
+        $visitBuilder->method('get')->willReturn($visitRows);
         $builder->expects($this->exactly(3))->method('where')->willReturnCallback(function ($key, $value) use ($builder) {
             $this->assertContains([$key, $value], [['p.tenant_id',73], ['p.deleted_at',null], ['p.kind','student']]);
             return $builder;
@@ -111,6 +119,8 @@ final class DirectoryPaginationQueryTest extends CIUnitTestCase
         $this->assertSame(26, $result['pagination']['filtered']);
         $this->assertSame(2, $result['pagination']['page']);
         $this->assertSame('BSIT-2', $result['patients'][0]['program_or_dept']);
+        $this->assertSame(7, $result['patients'][0]['visit_count']);
+        $this->assertSame('2026-10-20 09:00:00', $result['patients'][0]['last_visit_at']);
         $this->assertSame(['q'=>'First Last', 'kind'=>'student', 'per_page'=>25], $result['filters']);
     }
 }

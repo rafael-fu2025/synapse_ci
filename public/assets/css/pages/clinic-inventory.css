@@ -34,7 +34,7 @@
   --inv-crimson-hover: #991b1b;
   --inv-slate: #475569;
   --inv-zinc: #64748b;
-  --inv-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  --inv-mono: var(--mono-font, "Courier New", Courier, monospace);
   color: var(--inv-fg-secondary);
   min-width: 0;
 }

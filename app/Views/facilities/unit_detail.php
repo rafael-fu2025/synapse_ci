@@ -12,6 +12,15 @@ $canRunNow = $commandHardwareAllowed && $unit['status'] === 'active' && $device 
 $canStop = $commandHardwareAllowed && $device !== null;
 $activeBatch = $activeBatch ?? null;
 $pastBatches = $pastBatches ?? [];
+$commandsPagination ??= ['page' => 1, 'per_page' => 20, 'total' => count($commands ?? [])];
+$runsPagination ??= ['page' => 1, 'per_page' => 20, 'total' => count($runs ?? [])];
+$batchesPagination ??= ['page' => 1, 'per_page' => 50, 'total' => count($pastBatches)];
+$historyQuery = [
+    'commands_page' => $commandsPagination['page'], 'commands_per_page' => $commandsPagination['per_page'],
+    'runs_page' => $runsPagination['page'], 'runs_per_page' => $runsPagination['per_page'],
+    'batches_page' => $batchesPagination['page'], 'batches_per_page' => $batchesPagination['per_page'],
+];
+$historyUrl = site_url($base) . '?' . http_build_query($historyQuery, '', '&', PHP_QUERY_RFC3986);
 $formatBatchTime = static function (?string $utc): string {
     if ($utc === null || $utc === '') {
         return 'Not recorded';
@@ -25,9 +34,10 @@ $formatBatchTime = static function (?string $utc): string {
 ?>
 <?= $this->section('styles') ?>
 <link rel="stylesheet" href="<?= esc(base_url('assets/css/bmg.css')) ?>">
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/bmg-workstation.css'), 'attr') ?>">
 <?= $this->endSection() ?>
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2">
+<div class="ce-page-actions">
   <a href="<?= esc(site_url('/facilities')) ?>" class="btn btn-outline-secondary btn-sm">All drums</a>
   <?php if ($configure): ?>
   <a href="<?= esc(site_url('/facilities') . '?create=1', 'attr') ?>" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add drum</a>
@@ -37,78 +47,182 @@ $formatBatchTime = static function (?string $utc): string {
 </div>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
-<div class="bmg-workspace" data-bmg-base-url="<?= esc(site_url('/facilities'), 'attr') ?>" data-refresh-owner="facilities.unit.<?= $id ?>">
+<section class="bmg-workspace bmg-workstation ce-workspace" aria-label="Drum operations workstation" data-bmg-base-url="<?= esc(site_url('/facilities'), 'attr') ?>" data-refresh-owner="facilities.unit.<?= $id ?>" data-refresh-url="<?= esc($historyUrl, 'attr') ?>">
 <div data-refresh-region="unit">
-<header class="card mb-3"><div class="card-body pt-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
-  <div class="d-flex align-items-center gap-3">
+<header class="card ce-card bmg-unit-intro mb-3"><div class="card-body bmg-intro-body">
+  <div class="bmg-unit-identity">
     <?php $gearSeed = $id; require __DIR__ . '/_gear.php'; ?>
-    <div><div class="small text-muted"><?= esc($unit['unit_code']) ?> · Drum operations</div><h2 class="card-title py-2 mb-0"><?= esc($unit['name']) ?></h2><p class="small text-muted mb-0">Plan rotation, request commands and manage batch records.</p></div>
+    <div><span class="bmg-eyebrow"><span class="bmg-code"><?= esc($unit['unit_code']) ?></span> · Drum operations</span><h2 class="card-title"><?= esc($unit['name']) ?></h2><p class="bmg-caption mb-0">Plan rotation, request commands and manage batch records.</p></div>
   </div>
-  <span class="badge bg-light text-dark border"><?= esc(ucfirst($unit['status'])) ?></span>
+  <span class="ce-tag"><span class="ce-status-dot ce-status-<?= $unit['status'] === 'active' ? 'emerald' : ($unit['status'] === 'maintenance' ? 'amber' : 'slate') ?>"><?= esc(ucfirst($unit['status'])) ?></span></span>
 </div></header>
-<div class="row g-3 mb-3" aria-label="Drum at a glance">
-  <div class="col-sm-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3"><div class="small text-muted">Capacity</div><div class="fw-semibold"><?= esc($unit['drum_capacity_kg']) ?> kg</div></div></div></div>
-  <div class="col-sm-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3"><div class="small text-muted">Current batch</div><div class="fw-semibold text-break"><?= $activeBatch === null ? 'No active batch' : esc($activeBatch['batch_code']) ?></div><div class="small text-muted"><?= $activeBatch === null ? 'No batch record in progress' : esc($activeBatch['total_input_weight_kg']) . ' kg input · ' . esc($activeBatch['status']) ?></div></div></div></div>
-  <div class="col-sm-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3"><div class="small text-muted">Saved schedule intent</div><div class="fw-semibold"><?= !empty($schedule['enabled']) ? 'Enabled' : 'Disabled' ?></div><div class="small text-muted"><?= count($schedule['times']) ?> daily times · <?= (int) $schedule['duration_seconds'] ?> s per run</div></div></div></div>
-  <div class="col-sm-6 col-xl-3"><div class="card h-100 mb-0"><div class="card-body pt-3"><div class="small text-muted">Device binding</div><div class="fw-semibold"><?= $device === null ? 'Not registered' : 'Registered' ?></div><div class="small text-muted">Binding does not establish motor state</div></div></div></div>
+<div class="row bmg-metrics" aria-label="Drum at a glance">
+  <div class="col-sm-6 col-xl-3"><div class="card ce-card bmg-stat"><div class="card-body"><span class="bmg-stat-label"><i class="bi bi-speedometer2" aria-hidden="true"></i>Capacity</span><div class="bmg-stat-value bmg-number"><?= esc($unit['drum_capacity_kg']) ?> kg</div><span class="bmg-caption">Configured drum volume</span></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card ce-card bmg-stat"><div class="card-body"><span class="bmg-stat-label"><i class="bi bi-box-seam" aria-hidden="true"></i>Current batch</span><div class="bmg-stat-value text-break"><?= $activeBatch === null ? 'No active batch' : esc($activeBatch['batch_code']) ?></div><span class="bmg-caption"><?= $activeBatch === null ? 'No batch record in progress' : esc($activeBatch['total_input_weight_kg']) . ' kg input · ' . esc($activeBatch['status']) ?></span></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card ce-card bmg-stat"><div class="card-body"><span class="bmg-stat-label"><i class="bi bi-calendar-week" aria-hidden="true"></i>Saved schedule intent</span><div class="bmg-stat-value"><?= !empty($schedule['enabled']) ? 'Enabled' : 'Disabled' ?></div><span class="bmg-caption"><?= count($schedule['times']) ?> daily times · <?= (int) $schedule['rotations'] ?> rotations per run</span></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card ce-card bmg-stat"><div class="card-body"><span class="bmg-stat-label"><i class="bi bi-cpu" aria-hidden="true"></i>Device binding</span><div class="bmg-stat-value"><?= $device === null ? 'Not registered' : 'Registered' ?></div><span class="bmg-caption">Binding does not establish motor state</span></div></div></div>
 </div>
-<nav class="nav nav-pills gap-2 mb-3" aria-label="Drum sections">
-  <a class="nav-link" href="#bmg-setup">Setup checklist</a><a class="nav-link" href="#bmg-schedule">Rotation schedule</a><a class="nav-link" href="#bmg-controls">Manual controls</a><a class="nav-link" href="#bmg-batch">Current batch</a><a class="nav-link" href="#bmg-device">Device &amp; setup</a><a class="nav-link" href="#bmg-history">History</a>
+<nav class="bmg-section-nav" aria-label="Drum sections">
+  <a class="nav-link" href="#bmg-setup"><i class="bi bi-list-check" aria-hidden="true"></i>Setup checklist</a>
+  <a class="nav-link" href="#bmg-schedule"><i class="bi bi-calendar-week" aria-hidden="true"></i>Rotation schedule</a>
+  <a class="nav-link" href="#bmg-controls"><i class="bi bi-sliders" aria-hidden="true"></i>Manual controls</a>
+  <a class="nav-link" href="#bmg-batch"><i class="bi bi-box-seam" aria-hidden="true"></i>Current batch</a>
+  <a class="nav-link" href="#bmg-device"><i class="bi bi-cpu" aria-hidden="true"></i>Device &amp; setup</a>
+  <a class="nav-link" href="#bmg-history"><i class="bi bi-clock-history" aria-hidden="true"></i>History</a>
 </nav>
-<div class="alert alert-warning mb-3" role="note"><strong>Web stop is not an emergency stop.</strong> Use the local physical emergency stop for immediate safety. Device-reported motor events are not verified drum rotation. Connectivity does not establish motor state.</div>
-<?php if (!$gateOpen): ?><div class="alert alert-secondary mb-3" role="note">Hardware control is disabled by the server gate. Run, stop and schedule editing/enabling are unavailable. Configuration admins may disable existing schedule intent without changing its times or duration. Configuration admins can still register a device without enabling motor operation. Existing schedule intent may still be reviewed.</div><?php elseif (!$hardwareAllowed && !$commandHardwareAllowed): ?><div class="alert alert-secondary mb-3" role="note">Configuration access and explicit hardware-control permission are required. Run, stop and schedule editing/enabling are unavailable. Configuration admins may disable existing schedule intent without changing its times or duration. Configuration admins can still register a device without enabling motor operation. Existing schedule intent may still be reviewed.</div><?php elseif (!$hardwareAllowed && $commandHardwareAllowed): ?><div class="alert alert-info mb-3" role="note">Schedule editing/enabling requires configuration access. Manual commands remain gated by facilities management and hardware-control permission. <?php if (!$canStop): ?>Motor commands require one active bound device.<?php elseif (!$canRunNow): ?>Timed run requests require an active drum; web stop remains available while a device is bound, but is not an emergency stop.<?php endif; ?></div><?php elseif ($hardwareAllowed && !$commandHardwareAllowed): ?><div class="alert alert-info mb-3" role="note">Manual commands require facilities management (<code>facilities.manage</code>) and hardware-control permission.</div><?php elseif (!$canStop): ?><div class="alert alert-info mb-3" role="note">Motor commands require one active bound device.</div><?php elseif (!$canRunNow): ?><div class="alert alert-info mb-3" role="note">Timed run requests require an active drum and one active bound device. Web stop remains available while a device is bound, but is not an emergency stop.</div><?php endif; ?>
+<div class="alert alert-warning bmg-safety-note mb-3" role="note"><strong>Web stop is not an emergency stop.</strong> Use the local physical emergency stop for immediate safety. Device-reported motor events are not verified drum rotation. Connectivity does not establish motor state.</div>
+<?php if (!$gateOpen): ?><div class="alert alert-secondary mb-3" role="note">Hardware motor gate is disabled (<code>BMG_HARDWARE_ENABLED=false</code>). You can still configure and publish the drum's daily rotation schedule below and register devices; live motor commands (Run now / Stop) and device delivery stay paused until the hardware gate is opened.</div><?php elseif (!$hardwareAllowed && !$commandHardwareAllowed): ?><div class="alert alert-secondary mb-3" role="note">Manual motor commands require explicit hardware-control permission. <?php if ($configure): ?>You can still configure and publish the daily rotation schedule below and register devices.<?php endif; ?></div><?php elseif (!$hardwareAllowed && $commandHardwareAllowed): ?><div class="alert alert-info mb-3" role="note">Schedule editing requires configuration access. Manual commands remain gated by facilities management and hardware-control permission. <?php if (!$canStop): ?>Motor commands require one active bound device.<?php elseif (!$canRunNow): ?>Rotation run requests require an active drum; web stop remains available while a device is bound, but is not an emergency stop.<?php endif; ?></div><?php elseif ($hardwareAllowed && !$commandHardwareAllowed): ?><div class="alert alert-info mb-3" role="note">Manual commands require facilities management (<code>facilities.manage</code>) and hardware-control permission.</div><?php elseif (!$canStop): ?><div class="alert alert-info mb-3" role="note">Motor commands require one active bound device.</div><?php elseif (!$canRunNow): ?><div class="alert alert-info mb-3" role="note">Rotation run requests require an active drum and one active bound device. Web stop remains available while a device is bound, but is not an emergency stop.</div><?php endif; ?>
 <?php require __DIR__ . '/_setup_steps.php'; ?>
 <div class="bmg-detail-grid">
   <div class="bmg-main">
-    <section class="card bmg-panel mb-4" id="bmg-schedule" aria-labelledby="bmg-schedule-title">
-      <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading"><h2 class="card-title mb-0 p-0" id="bmg-schedule-title"><i class="bi bi-calendar-week" aria-hidden="true"></i> Daily rotation schedule</h2><span class="badge bg-light text-dark border">UTC+08:00</span></div>
-      <div class="card-body pt-3 bmg-panel-body">
-      <p class="text-muted small">Asia/Manila (UTC+08:00). Up to eight distinct daily times; runs must not overlap, including across midnight. Saving replaces the schedule and cancels pending commands.</p>
-      <p class="small">Saved version: <strong><?= (int) $schedule['version'] ?></strong> · Saved intent: <strong><?= !empty($schedule['enabled']) ? 'Enabled' : 'Disabled' ?></strong></p>
-      <?php if ($hardwareAllowed): ?>
-      <form action="<?= esc(site_url($base . '/schedule')) ?>" method="POST" data-bmg-submit data-bmg-schedule data-confirm="Replace this daily schedule and cancel pending commands? Saved intent does not prove the device has applied it." data-confirm-title="Save rotation schedule" data-confirm-label="Save schedule" data-confirm-tone="warning">
+    <?php
+    $savedTimes = is_array($schedule['times'] ?? null) ? array_values($schedule['times']) : [];
+    $isDraftSchedule = $savedTimes === [];
+    $editorTimes = $isDraftSchedule ? ['08:00', '12:00', '16:00'] : $savedTimes;
+    $savedRotations = max(1, (int) ($schedule['rotations'] ?? 7));
+    $editorSessions = count($editorTimes);
+    $editorDailyTotal = $editorSessions * $savedRotations;
+    $savedDailyTotal = count($savedTimes) * $savedRotations;
+    $nextRunLabel = 'Schedule off';
+    if (!empty($schedule['enabled'])) {
+        $nextAt = $schedule['next_run_at'] ?? null;
+        if (($nextAt === null || $nextAt === '') && $savedTimes !== []) {
+            $tz = new \DateTimeZone('Asia/Manila');
+            $nowManila = \App\Services\Scheduling\SchedulingClock::now();
+            $upcoming = [];
+            foreach ($savedTimes as $hhmm) {
+                if (!is_string($hhmm) || !preg_match('/\A(?:[01][0-9]|2[0-3]):[0-5][0-9]\z/D', $hhmm)) { continue; }
+                foreach ([$nowManila->format('Y-m-d'), $nowManila->modify('+1 day')->format('Y-m-d')] as $day) {
+                    $cand = \DateTimeImmutable::createFromFormat('!Y-m-d H:i', $day . ' ' . $hhmm, $tz);
+                    if ($cand !== false && $cand > $nowManila) { $upcoming[] = $cand; break; }
+                }
+            }
+            if ($upcoming !== []) {
+                usort($upcoming, static fn (\DateTimeImmutable $a, \DateTimeImmutable $b): int => $a <=> $b);
+                $nextAt = $upcoming[0]->format('Y-m-d H:i:s');
+            }
+        }
+        if (!empty($nextAt)) {
+            $nextDt = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', (string) $nextAt, new \DateTimeZone('Asia/Manila'));
+            $nextRunLabel = $nextDt !== false ? $nextDt->format('g:i A · M j') : (string) $nextAt;
+        } else {
+            $nextRunLabel = 'No run times set';
+        }
+    }
+    $rtcLabel = $device === null || !isset($device['rtc_valid'])
+        ? 'RTC unknown'
+        : ($device['rtc_valid'] ? 'RTC OK' : 'RTC invalid');
+    ?>
+    <section class="card ce-card bmg-panel mb-4" id="bmg-schedule" aria-labelledby="bmg-schedule-title">
+      <div class="card-header bmg-panel-heading">
+        <h2 class="card-title" id="bmg-schedule-title"><i class="bi bi-calendar-week" aria-hidden="true"></i> Drum automation &amp; schedule</h2>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+          <span class="ce-tag"><span class="ce-status-dot ce-status-<?= !empty($schedule['enabled']) ? 'emerald' : 'slate' ?>"><?= !empty($schedule['enabled']) ? 'Schedule v' . (int) $schedule['version'] : 'Schedule off' ?></span></span>
+          <span class="ce-tag">21 rot/day · UTC+08:00</span>
+        </div>
+      </div>
+      <div class="card-body bmg-panel-body">
+      <dl class="bmg-automation-stats">
+        <div class="bmg-automation-stat">
+          <dt>Controller</dt>
+          <dd class="bmg-code"><?= $device === null ? 'No board bound' : esc($device['chip_mac']) ?></dd>
+          <span class="bmg-caption"><?= $device === null ? 'Register a device to sync' : 'Last contact: ' . esc($device['last_seen_at'] ?? 'Never checked in') ?></span>
+        </div>
+        <div class="bmg-automation-stat">
+          <dt>Clock &amp; sync</dt>
+          <dd><?= esc($rtcLabel) ?></dd>
+          <span class="bmg-caption"><?= $device !== null && isset($device['applied_schedule_version']) ? 'Applied v' . (int) $device['applied_schedule_version'] . ' · Saved v' . (int) $schedule['version'] : 'Saved v' . (int) $schedule['version'] . ' · Not yet reported' ?></span>
+        </div>
+        <div class="bmg-automation-stat">
+          <dt>Next run</dt>
+          <dd class="bmg-number"><?= esc($nextRunLabel) ?></dd>
+          <span class="bmg-caption"><?= $savedTimes === [] ? 'No published times yet' : esc(implode(', ', $savedTimes)) ?></span>
+        </div>
+      </dl>
+
+      <p class="text-muted small">BMG daily rule: <strong>21 rotations/day</strong> divided into <strong>3 sessions × 7 rotations</strong> (Asia/Manila UTC+08:00). Choose any session count (1–8) and custom times below; publishing bumps the schedule version the controller polls for.</p>
+
+      <?php if ($configure): ?>
+      <div class="bmg-schedule-summary" data-bmg-schedule-summary>
+        <div>
+          <span class="bmg-schedule-summary-label">Daily rotation plan<?= $isDraftSchedule ? ' · Suggested 3×7 draft (unsaved)' : '' ?></span>
+          <strong class="bmg-number" data-bmg-daily-summary><?= $editorSessions ?> <?= $editorSessions === 1 ? 'session' : 'sessions' ?> × <?= $savedRotations ?> <?= $savedRotations === 1 ? 'rotation' : 'rotations' ?> = <?= $editorDailyTotal ?> rotations / day</strong>
+        </div>
+        <span class="ce-tag"><span class="ce-status-dot ce-status-<?= $editorDailyTotal === 21 ? 'emerald' : 'amber' ?>" data-bmg-daily-target><?= $editorDailyTotal === 21 ? '21 / 21 · Daily target met' : $editorDailyTotal . ' / 21 · Target 3 × 7' ?></span></span>
+      </div>
+      <form action="<?= esc(site_url($base . '/schedule')) ?>" method="POST" data-bmg-submit data-bmg-schedule data-confirm="Publish this daily rotation schedule and cancel pending commands? Saved intent does not prove the device has applied it." data-confirm-title="Save rotation schedule" data-confirm-label="Publish schedule" data-confirm-tone="warning">
         <?= csrf_field() ?>
         <input type="hidden" name="expected_version" value="<?= (int) ($schedule['version'] ?? 0) ?>">
-        <fieldset class="mb-3"><legend class="fs-6">Daily start times</legend>
+        <div class="bmg-dynamic-controls">
+          <div class="bmg-session-picker">
+            <label class="form-label mb-0" for="scheduleSessionCount">Sessions / day</label>
+            <select id="scheduleSessionCount" class="form-select form-select-sm" data-bmg-session-count aria-label="Sessions per day">
+              <?php for ($s = 1; $s <= 8; $s++): ?>
+                <option value="<?= $s ?>" <?= $editorSessions === $s ? 'selected' : '' ?>><?= $s ?> <?= $s === 1 ? 'session' : 'sessions' ?></option>
+              <?php endfor; ?>
+            </select>
+          </div>
+          <div class="bmg-preset-bar" role="group" aria-label="Quick rotation presets">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bmg-preset="08:00,12:00,16:00" data-bmg-preset-rotations="7"><i class="bi bi-magic" aria-hidden="true"></i> Standard 3×7 (8 AM, 12 PM, 4 PM)</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bmg-preset="07:00,13:00,19:00" data-bmg-preset-rotations="7"><i class="bi bi-clock" aria-hidden="true"></i> 3×7 Extended (7 AM, 1 PM, 7 PM)</button>
+          </div>
+        </div>
+        <fieldset class="mb-3"><legend class="fs-6">Daily session times</legend>
           <div data-bmg-times>
-            <?php foreach ($schedule['times'] as $i => $time): ?>
-            <div class="d-flex align-items-end gap-2 mb-2" data-bmg-time-row><div class="flex-grow-1"><label class="form-label" for="rotationTime<?= (int) $i ?>">Start time</label><?= view('partials/schedule_time', ['id' => 'rotationTime' . (int) $i, 'name' => 'times[]', 'label' => 'Start time', 'value' => $time]) ?></div><button class="btn btn-outline-secondary" type="button" data-bmg-remove-time aria-label="Remove start time">Remove</button></div>
+            <?php foreach ($editorTimes as $i => $time): ?>
+            <div class="d-flex align-items-end gap-2 mb-2" data-bmg-time-row><div class="flex-grow-1"><label class="form-label" for="rotationTime<?= (int) $i ?>" data-bmg-session-label>Session <?= (int) $i + 1 ?> start time</label><?= view('partials/schedule_time', ['id' => 'rotationTime' . (int) $i, 'name' => 'times[]', 'label' => 'Start time', 'value' => $time]) ?></div><button class="btn btn-outline-secondary" type="button" data-bmg-remove-time aria-label="Remove start time">Remove</button></div>
             <?php endforeach; ?>
           </div>
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-bmg-add-time>Add time</button>
-          <p class="form-text mb-0" data-bmg-time-count aria-live="polite"><?= count($schedule['times']) ?> of 8 times</p>
+          <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+            <button class="btn btn-outline-secondary btn-sm" type="button" data-bmg-add-time><i class="bi bi-plus-lg" aria-hidden="true"></i> Add time</button>
+            <span class="form-text mb-0" data-bmg-time-count aria-live="polite"><?= $editorSessions ?> of 8 times</span>
+          </div>
         </fieldset>
-        <div class="mb-3"><label class="form-label" for="scheduleDuration">Run duration (seconds)</label><input id="scheduleDuration" class="form-control" type="number" name="duration_seconds" min="1" max="600" step="1" value="<?= (int) $schedule['duration_seconds'] ?>" required></div>
-        <div class="mb-3"><label class="form-label" for="schedulePwm">PWM (optional, 1–255)</label><input id="schedulePwm" class="form-control" type="number" name="pwm" min="1" max="255" step="1" value="<?= isset($schedule['pwm']) ? (int) $schedule['pwm'] : '' ?>"></div>
-        <div class="form-check mb-3"><input id="scheduleEnabled" class="form-check-input" name="enabled" type="checkbox" value="1" <?= $hardwareAllowed && $device !== null && $unit['status'] === 'active' ? '' : 'disabled' ?> <?= !empty($schedule['enabled']) ? 'checked' : '' ?> aria-describedby="scheduleEnableHelp"><label class="form-check-label" for="scheduleEnabled">Enable daily rotation</label></div>
-        <p id="scheduleEnableHelp" class="form-text">Enabling requires hardware permission, an open hardware gate, an active drum and a bound device. If enabling is unavailable, saving records disabled intent; it does not stop the motor.</p>
+        <div class="bmg-form-grid">
+          <div class="mb-3"><label class="form-label" for="scheduleRotations">Rotations per run</label><input id="scheduleRotations" class="form-control" type="number" name="rotations" min="1" max="100" step="1" value="<?= $savedRotations ?>" required></div>
+          <div class="mb-3"><label class="form-label" for="schedulePwm">Motor speed (PWM 1–255, optional)</label><input id="schedulePwm" class="form-control" type="number" name="pwm" min="1" max="255" step="1" value="<?= isset($schedule['pwm']) ? (int) $schedule['pwm'] : '' ?>" placeholder="e.g. 200"></div>
+        </div>
+        <div class="bmg-toggle-card mb-3">
+          <div>
+            <label class="form-check-label fw-semibold d-block" for="scheduleEnabled">Schedule enabled</label>
+            <span id="scheduleEnableHelp" class="form-text d-block mt-0">Off keeps your saved times and rotations without running the motor. Enabling requires an active drum and a bound controller.</span>
+          </div>
+          <div class="form-check form-switch m-0">
+            <input id="scheduleEnabled" class="form-check-input" name="enabled" type="checkbox" role="switch" value="1" <?= $device !== null && $unit['status'] === 'active' ? '' : 'disabled' ?> <?= !empty($schedule['enabled']) ? 'checked' : '' ?> aria-describedby="scheduleEnableHelp">
+          </div>
+        </div>
         <div class="alert alert-danger d-none small" data-bmg-schedule-error role="alert"></div>
         <button class="btn btn-primary" type="submit">Save schedule</button>
       </form>
       <?php else: ?>
-      <p><?= $schedule['times'] === [] ? 'No daily times saved.' : esc(implode(', ', $schedule['times'])) ?> · <?= (int) $schedule['duration_seconds'] ?> seconds per run · PWM: <?= isset($schedule['pwm']) ? (int) $schedule['pwm'] : 'Not set' ?></p>
-            <p class="text-muted small">Editing times, duration, PWM or enabling requires configuration and hardware-control permission with the server hardware gate enabled.</p>
-            <?php if ($configure && !empty($schedule['enabled'])): ?>
-            <form action="<?= esc(site_url($base . '/schedule')) ?>" method="POST" data-bmg-submit data-confirm="Disable saved schedule intent and cancel pending commands? This does not confirm a motor stop." data-confirm-title="Disable schedule intent" data-confirm-label="Disable intent" data-confirm-tone="warning">
-              <?= csrf_field() ?>
-              <input type="hidden" name="expected_version" value="<?= (int) $schedule['version'] ?>">
-              <input type="hidden" name="enabled" value="0">
-              <?php foreach ($schedule['times'] as $time): ?><input type="hidden" name="times[]" value="<?= esc($time, 'attr') ?>"><?php endforeach; ?>
-              <input type="hidden" name="duration_seconds" value="<?= (int) $schedule['duration_seconds'] ?>">
-              <button class="btn btn-outline-warning" type="submit">Disable saved schedule intent</button>
-              <p class="form-text mb-0">Times and duration are retained; PWM is cleared. This is not a physical stop.</p>
-            </form>
-            <?php endif; ?>
+      <div class="bmg-schedule-summary">
+        <div>
+          <span class="bmg-schedule-summary-label">Daily rotation plan</span>
+          <strong class="bmg-number"><?= count($savedTimes) ?> <?= count($savedTimes) === 1 ? 'session' : 'sessions' ?> × <?= $savedRotations ?> <?= $savedRotations === 1 ? 'rotation' : 'rotations' ?> = <?= $savedDailyTotal ?> rotations / day</strong>
+        </div>
+        <span class="ce-tag"><span class="ce-status-dot ce-status-<?= $savedDailyTotal === 21 ? 'emerald' : 'amber' ?>"><?= $savedDailyTotal === 21 ? '21 / 21 · Daily target met' : $savedDailyTotal . ' / 21 · Target 3 × 7' ?></span></span>
+      </div>
+      <div class="bmg-saved-schedule mb-3">
+        <div class="bmg-saved-schedule-heading">
+          <span><i class="bi bi-clock" aria-hidden="true"></i> Saved session times</span>
+          <span class="ce-tag bmg-number"><?= $savedRotations ?> rotations / session</span>
+        </div>
+        <div class="bmg-time-tags">
+          <?php if ($savedTimes === []): ?><span class="bmg-caption">No daily times saved.</span><?php else: foreach ($savedTimes as $time): ?><span class="ce-tag bmg-number"><?= esc($time) ?></span><?php endforeach; endif; ?>
+        </div>
+        <p class="bmg-caption mb-0">PWM: <?= isset($schedule['pwm']) ? (int) $schedule['pwm'] : 'Not set' ?></p>
+      </div>
+      <p class="text-muted small mb-0">Editing the schedule requires facilities configuration access.</p>
       <?php endif; ?>
     </div></section>
-    <section class="card bmg-panel mb-4" id="bmg-controls" aria-labelledby="bmg-controls-title">
-      <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading"><h2 class="card-title mb-0 p-0" id="bmg-controls-title"><i class="bi bi-sliders" aria-hidden="true"></i> Manual commands</h2></div>
-      <div class="card-body pt-3 bmg-panel-body"><p class="small text-muted">Requests are queued for the device. Delivery or acknowledgement is not proof of physical rotation or a safe stop.</p>
+    <section class="card ce-card bmg-panel mb-4" id="bmg-controls" aria-labelledby="bmg-controls-title">
+      <div class="card-header bmg-panel-heading"><h2 class="card-title" id="bmg-controls-title"><i class="bi bi-sliders" aria-hidden="true"></i> Manual commands</h2></div>
+      <div class="card-body bmg-panel-body"><p class="small text-muted">Requests are queued for the device. Delivery or acknowledgement is not proof of physical rotation or a safe stop.</p>
       <div class="bmg-command-grid">
-      <div class="bmg-command-box border rounded p-3"><h3 class="h6">Timed run request</h3>
+      <div class="bmg-command-box border rounded p-3"><h3 class="h6">Rotation run request</h3>
       <form action="<?= esc(site_url($base . '/command')) ?>" method="POST" data-bmg-submit class="mb-3" data-confirm="Queue a run request for this drum? Confirm that the equipment and surrounding area are safe before continuing." data-confirm-title="Request rotation" data-confirm-label="Queue run" data-confirm-tone="warning">
         <?= csrf_field() ?><input type="hidden" name="expected_version" value="<?= (int) ($schedule['version'] ?? 0) ?>"><input type="hidden" name="command" value="run_now">
-        <div class="mb-2"><label for="manualDuration" class="form-label">Run duration (seconds)</label><input id="manualDuration" type="number" name="duration_seconds" class="form-control" min="1" max="600" step="1" value="60" required <?= $canRunNow ? '' : 'disabled' ?>></div>
+        <div class="mb-2"><label for="manualRotations" class="form-label">Rotations</label><input id="manualRotations" type="number" name="rotations" class="form-control" min="1" max="100" step="1" value="7" required <?= $canRunNow ? '' : 'disabled' ?>></div>
         <button class="btn btn-primary" type="submit" <?= $canRunNow ? '' : 'disabled' ?>>Request run now</button>
       </form>
       </div>
@@ -120,18 +234,18 @@ $formatBatchTime = static function (?string $utc): string {
     </div></section>
   </div>
   <aside class="bmg-aside" aria-label="Drum setup and batch">
-    <section class="card bmg-panel mb-4" id="bmg-batch" aria-labelledby="bmg-batch-title">
-      <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading"><h2 class="card-title mb-0 p-0" id="bmg-batch-title"><i class="bi bi-box-seam" aria-hidden="true"></i> Current batch</h2></div>
-      <div class="card-body pt-3 bmg-panel-body">
+    <section class="card ce-card bmg-panel mb-4" id="bmg-batch" aria-labelledby="bmg-batch-title">
+      <div class="card-header bmg-panel-heading"><h2 class="card-title" id="bmg-batch-title"><i class="bi bi-box-seam" aria-hidden="true"></i> Current batch</h2></div>
+      <div class="card-body bmg-panel-body">
       <?php if ($activeBatch === null): ?><p class="text-muted">No active batch. <?= $unit['status'] === 'active' ? 'This drum is available for a new batch record.' : 'Set the drum to active before starting a batch.' ?></p>
       <?php if ($manage && $unit['status'] === 'active'): ?><button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#startBatchModal">Start batch</button><?php endif; ?>
       <?php else: ?>
       <h3 class="h6 text-break"><?= esc($activeBatch['batch_code']) ?></h3><dl class="bmg-fact-grid small"><div class="bmg-fact"><dt>Status</dt><dd><?= esc($activeBatch['status']) ?></dd></div><div class="bmg-fact"><dt>Started (Asia/Manila)</dt><dd><?= esc($formatBatchTime($activeBatch['started_at'] ?? null)) ?></dd></div><div class="bmg-fact"><dt>Input weight</dt><dd><?= esc($activeBatch['total_input_weight_kg']) ?> kg</dd></div></dl><p class="small text-muted text-break"><strong>Creation notes:</strong> <?= nl2br(esc($activeBatch['notes'] ?? 'Not recorded')) ?></p>
       <?php if ($manage): ?><div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#completeBatchModal">Complete batch</button><button class="btn btn-outline-danger btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#cancelBatchModal">Cancel batch</button></div><?php endif; endif; ?>
     </div></section>
-    <section class="card bmg-panel mb-4" id="bmg-device" aria-labelledby="bmg-device-title">
-      <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading"><h2 class="card-title mb-0 p-0" id="bmg-device-title"><i class="bi bi-cpu" aria-hidden="true"></i> Device registration</h2></div>
-      <div class="card-body pt-3 bmg-panel-body">
+    <section class="card ce-card bmg-panel mb-4" id="bmg-device" aria-labelledby="bmg-device-title">
+      <div class="card-header bmg-panel-heading"><h2 class="card-title" id="bmg-device-title"><i class="bi bi-cpu" aria-hidden="true"></i> Device registration</h2></div>
+      <div class="card-body bmg-panel-body">
       <?php if (!empty($canUsb)): ?><a class="btn btn-outline-primary btn-sm mb-3" href="<?= esc(site_url($base . '/usb'), 'attr') ?>">USB installer &amp; serial monitor</a><?php endif; ?>
       <p id="deviceGateHelp" class="text-muted small">Configuration admins can register a device or rotate its credential while motor control is disabled. Registration disables the saved schedule and cancels pending commands; it does not start the motor. Keep the hardware gate off until firmware and safety verification is complete.</p>
       <?php if ($device === null): ?><p class="text-muted">No active device bound. Register a device before enabling rotation.</p><?php else: ?>
@@ -178,6 +292,6 @@ $formatBatchTime = static function (?string $utc): string {
 <?php endif; ?>
 <?php if ($configure || $manage): require __DIR__ . '/_operation_modals.php'; endif; ?>
 </div>
-</div>
+</section>
 <?= $this->endSection() ?>
 <?= $this->section('scripts') ?><script src="<?= esc(base_url('assets/js/bmg.js')) ?>"></script><script src="<?= esc(base_url('assets/js/bmg-gear.js')) ?>"></script><?= $this->endSection() ?>

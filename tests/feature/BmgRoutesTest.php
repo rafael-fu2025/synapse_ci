@@ -56,7 +56,7 @@ final class BmgRoutesTest extends BmgIsolatedRouteCase
         $before = $this->state();
         $this->submit('facilities/units/store', ['unit_code' => 'forged', 'name' => 'Forged', 'drum_capacity_kg' => '500.00'])->assertStatus(403);
         $this->submit('facilities/unit/' . $this->unit . '/update', ['unit_code' => 'changed', 'name' => 'Changed', 'drum_capacity_kg' => '500.00', 'expected_version' => '0'])->assertStatus(403);
-        $this->submit('facilities/unit/' . $this->unit . '/schedule', ['enabled' => '0', 'duration_seconds' => '60', 'expected_version' => '0'])->assertStatus(403);
+        $this->submit('facilities/unit/' . $this->unit . '/schedule', ['enabled' => '0', 'rotations' => '7', 'expected_version' => '0'])->assertStatus(403);
         $this->submit('facilities/unit/' . $this->unit . '/device', ['chip_mac' => 'aa:bb:cc:dd:ee:02', 'expected_version' => '0'])->assertStatus(403);
         $this->submit('facilities/device/' . $this->device . '/revoke', ['expected_version' => 0])->assertStatus(403);
         $this->assertSame($before, $this->state());
@@ -67,7 +67,7 @@ final class BmgRoutesTest extends BmgIsolatedRouteCase
         $foreign = $this->insert('bmg_units', ['tenant_id' => $this->foreignTenant, 'unit_code' => 'foreign', 'name' => 'Private drum', 'status' => 'active']);
         $before = $this->state();
         $this->submit('facilities/unit/' . $foreign . '/update', ['unit_code' => 'stolen', 'name' => 'Stolen', 'status' => 'active', 'drum_capacity_kg' => '500.00', 'expected_version' => '0'])->assertStatus(404);
-        $this->submit('facilities/unit/' . $foreign . '/schedule', ['enabled' => '0', 'duration_seconds' => 60, 'expected_version' => 0])->assertStatus(404);
+        $this->submit('facilities/unit/' . $foreign . '/schedule', ['enabled' => '0', 'rotations' => 7, 'expected_version' => 0])->assertStatus(404);
         $this->assertSame($before, $this->state());
         // The controller allowlists form fields: ignoring forged ownership is safe,
         // provided it never changes the DB-derived tenant or actor.
@@ -103,7 +103,7 @@ final class BmgRoutesTest extends BmgIsolatedRouteCase
             $this->bmgDb->table('role_permissions')->insert(['role' => 'superadmin', 'permission_id' => $permission['id']]);
         }
         $before = $this->state();
-        $this->submit('facilities/unit/' . $this->unit . '/command', ['command' => 'run_now', 'duration_seconds' => 60, 'expected_version' => 0])->assertStatus(409);
+        $this->submit('facilities/unit/' . $this->unit . '/command', ['command' => 'run_now', 'rotations' => 7, 'expected_version' => 0])->assertStatus(409);
         $this->assertSame($before, $this->state());
 
         // Provisioning is configuration only, even while motor operation is gated off.
@@ -160,13 +160,13 @@ final class BmgRoutesTest extends BmgIsolatedRouteCase
     public function testScheduleVersionIsRequiredAndStaleFormsCannotOverwrite(): void
     {
         $path = 'facilities/unit/' . $this->unit . '/schedule';
-        $this->submit($path, ['enabled' => '0', 'duration_seconds' => '60'])->assertStatus(422);
-        $this->submit($path, ['enabled' => '0', 'duration_seconds' => '60', 'expected_version' => '0'])->assertStatus(200);
+        $this->submit($path, ['enabled' => '0', 'rotations' => '7'])->assertStatus(422);
+        $this->submit($path, ['enabled' => '0', 'rotations' => '7', 'expected_version' => '0'])->assertStatus(200);
         $published = $this->bmgDb->table('bmg_rotation_schedules')->where('unit_id', $this->unit)->get()->getRowArray();
         $this->assertSame(1, (int) $published['version']);
-        $this->submit($path, ['enabled' => '0', 'duration_seconds' => '60', 'expected_version' => '0'])->assertStatus(409);
+        $this->submit($path, ['enabled' => '0', 'rotations' => '7', 'expected_version' => '0'])->assertStatus(409);
         $this->assertSame($published, $this->bmgDb->table('bmg_rotation_schedules')->where('unit_id', $this->unit)->get()->getRowArray());
-        $this->submit($path, ['enabled' => '0', 'duration_seconds' => '60', 'expected_version' => '1'])->assertStatus(200);
+        $this->submit($path, ['enabled' => '0', 'rotations' => '7', 'expected_version' => '1'])->assertStatus(200);
         $this->assertSame(2, (int) $this->bmgDb->table('bmg_rotation_schedules')->where('unit_id', $this->unit)->get()->getRowArray()['version']);
     }
 

@@ -27,7 +27,7 @@ final class FacilitiesPaginationViewTest extends CIUnitTestCase
             Services::resetSingle('renderer');
             $item = ['unit' => ['id' => 26, 'unit_code' => 'DRUM-26', 'name' => 'Drum 26',
                 'status' => 'offline', 'drum_capacity_kg' => '80.00', 'deleted_at' => '2026-10-20 10:00:00'],
-                'schedule' => ['version' => 0, 'enabled' => false, 'times' => [], 'duration_seconds' => 60], 'device' => null];
+                'schedule' => ['version' => 0, 'enabled' => false, 'times' => [], 'rotations' => 7], 'device' => null];
             $html = view('facilities/index', [
                 'units' => [$item], 'archivedView' => $archived, 'canConfigure' => true, 'openCreate' => !$archived,
                 'stats' => ['total' => 61, 'active' => 40, 'maintenance' => 10, 'bound' => 30],

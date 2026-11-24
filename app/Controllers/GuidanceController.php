@@ -439,6 +439,10 @@ final class GuidanceController extends BaseController
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try {
             $actor = $this->freshActor('guidance.cases.read');
+            $formsPage = \App\Libraries\TablePage::forList($this->request->getGet(), 'forms_page');
+            $requestedTab = $this->request->getGet('tab');
+            $caseTab = is_string($requestedTab) && in_array($requestedTab, ['session', 'timeline', 'followups', 'clinical-forms'], true)
+                ? $requestedTab : null;
             $package = $this->caseService()->getCaseDetails($id);
             $tenantId = (int) $package['case']['tenant_id'];
 
@@ -459,6 +463,7 @@ final class GuidanceController extends BaseController
 
             $clinicalHistory = [
                 'controlled_forms'     => [],
+                'formsPagination'      => $formsPage->metadata(0, 0),
                 'interviews'           => [],
                 'contact_forms'        => [],
                 'contact_sheets'       => [],
@@ -466,7 +471,7 @@ final class GuidanceController extends BaseController
                 'timeline'             => [],
             ];
             try {
-                $clinicalHistory = (new GuidanceClinicalFormService())->getClinicalHistoryForCase($id, $tenantId, $actor);
+                $clinicalHistory = (new GuidanceClinicalFormService())->getClinicalHistoryForCase($id, $tenantId, $actor, $formsPage);
             } catch (\Throwable) {
                 // Keep case workspace accessible even if clinical forms history is unavailable
             }
@@ -575,6 +580,7 @@ final class GuidanceController extends BaseController
                 'noteReadAudited'       => $decryptedNote !== null,
                 'outcomes'              => $outcomes,
                 'clinicalHistory'       => $clinicalHistory,
+                'caseTab'               => $caseTab,
                 'episode'               => $episode,
                 'assignments'           => $assignments,
                 'transfers'             => $transfers,

@@ -58,10 +58,10 @@ final class TablePage
     }
 
     /** Pagination-only lists may have their own filters and independent page names. */
-    public static function forList(array $query, string $pageParam = 'page'): self
+    public static function forList(array $query, string $pageParam = 'page', string $perPageParam = 'per_page', int $defaultPerPage = 25): self
     {
         $page = self::integer($query, $pageParam, 1);
-        $perPage = self::integer($query, 'per_page', 25);
+        $perPage = self::integer($query, $perPageParam, $defaultPerPage);
         if ($page < 1 || $page > 1000000) {
             throw new InvalidArgumentException('Page must be between 1 and 1000000.', 422);
         }

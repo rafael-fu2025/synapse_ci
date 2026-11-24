@@ -15,17 +15,22 @@ class AiInsightsController extends BaseController
 {
     public function index()
     {
+        if (strtoupper($this->request->getMethod()) !== 'GET') { return $this->readMethodFailure(); }
         try {
             $actor = $this->actor('ai.insights.read');
+            $query = $this->readQuery();
             return $this->response->setHeader('Cache-Control', 'private, no-store')->setBody(view('ai/index',
-                ['title' => 'Department Insights & Program Planning'] + $this->application()->panel($actor)));
+                ['title' => 'Department Insights & Program Planning'] + $this->application()->panel($actor, $query)));
         } catch (Throwable $error) { return $this->failure($error); }
     }
 
     public function panel()
     {
+        if (strtoupper($this->request->getMethod()) !== 'GET') { return $this->readMethodFailure(); }
         try {
-            $data = $this->application()->panel($this->actor('ai.insights.read'));
+            $actor = $this->actor('ai.insights.read');
+            $query = $this->readQuery();
+            $data = $this->application()->panel($actor, $query);
             return $this->json(['success' => true, 'html' => view('ai/panel', $data)]);
         } catch (Throwable $error) { return $this->failure($error); }
     }
@@ -132,6 +137,22 @@ class AiInsightsController extends BaseController
         }
         try { return $this->json(['success' => true] + $action($this->actor($permission)), $status); }
         catch (Throwable $error) { return $this->failure($error); }
+    }
+
+    /** Read scope is a fixed allowlist; never accept dates, tenant/unit overrides or AI inputs. */
+    private function readQuery(): array
+    {
+        $query = $this->request->getGet();
+        if (!is_array($query) || $this->request->getPost() !== []) {
+            throw new AiFailure('invalid_request', 422);
+        }
+        return InsightApplication::panelQuery($query);
+    }
+
+    private function readMethodFailure()
+    {
+        return $this->response->setStatusCode(405)->setHeader('Allow', 'GET')->setHeader('Cache-Control', 'private, no-store')
+            ->setJSON(['success' => false, 'feedback_type' => 'error', 'message' => 'Use GET for this read.']);
     }
 
     /** Only fixed form fields; no dates, patient/cohort selectors, prompt, model, or URL. */

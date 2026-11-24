@@ -1,7 +1,7 @@
 <?= $this->extend('layouts/modal_form') ?>
 
 <?= $this->section('content') ?>
-<div class="guidance-ui" x-data="newCaseForm({ patientUrl: <?= esc(json_encode(site_url('/api/patients/search'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?> })">
+<div class="guidance-ui gc-modal-scope" x-data="newCaseForm({ patientUrl: <?= esc(json_encode(site_url('/api/patients/search'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), 'attr') ?> })">
   <form action="<?= site_url('/guidance/cases/store') ?>" method="POST" data-modal-submit>
     <?= csrf_field() ?>
     <input type="hidden" name="person_id" :value="selectedPerson?.id">
@@ -46,13 +46,12 @@
       </div>
 
       <!-- Selected client card -->
-      <div x-show.important="selectedPerson" class="card border-primary-subtle bg-primary-subtle p-3 mb-2" style="display: none;">
+      <div x-show.important="selectedPerson" class="card gc-selected-person-card p-3 mb-2" style="display: none;">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <span class="badge text-uppercase"
-                  :class="selectedPerson?.kind === 'employee' ? 'bg-info text-white' : 'bg-primary text-white'"
+            <span class="ce-tag ce-tag-upper"
                   x-text="selectedPerson ? (selectedPerson.kind || '') : ''"></span>
-            <strong class="d-block text-dark mt-1" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name + (selectedPerson.middle_name ? ' ' + selectedPerson.middle_name : '')) : ''"></strong>
+            <strong class="d-block mt-1" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name + (selectedPerson.middle_name ? ' ' + selectedPerson.middle_name : '')) : ''"></strong>
             <small class="text-muted" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></small>
           </div>
           <button type="button" class="btn btn-sm btn-link text-danger p-0" @click="changePerson()">Change</button>

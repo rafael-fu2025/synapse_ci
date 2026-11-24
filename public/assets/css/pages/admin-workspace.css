@@ -407,6 +407,10 @@
   border: 1px solid var(--adm-border-input, #cfd5df);
 }
 
+.adm-workspace .pagination.synapse-pagination {
+  border-color: var(--control-border);
+}
+
 .adm-workspace .pagination .page-item {
   margin: 0;
 }
@@ -416,26 +420,33 @@
   align-items: center;
   justify-content: center;
   height: 32px;
-  min-height: 32px;
   padding: 0 0.75rem;
   font-size: 0.8rem;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
-  background: var(--adm-surface);
-  color: var(--adm-heading, #111827) !important;
-  border: 0;
-  border-right: 1px solid var(--adm-border-input, #cfd5df);
+  border-width: 0;
+  border-right-width: 1px;
+  border-style: solid;
   border-radius: 0;
   box-shadow: none !important;
   transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+/* Legacy markup keeps its paint; shared partials delegate to .synapse-pagination.
+   Do not give the common pager a 32px minimum over the shared mobile 40px floor. */
+.adm-workspace .pagination:not(.synapse-pagination) .page-link {
+  min-height: 32px;
+  background: var(--adm-surface);
+  color: var(--adm-heading, #111827) !important;
+  border-color: var(--adm-border-input, #cfd5df);
 }
 
 .adm-workspace .pagination .page-item:last-child .page-link {
   border-right: 0;
 }
 
-.adm-workspace .pagination .page-link:hover:not([aria-disabled="true"]):not(.disabled) {
+.adm-workspace .pagination:not(.synapse-pagination) .page-link:hover:not([aria-disabled="true"]):not(.disabled) {
   background: var(--adm-surface-subtle);
   color: var(--adm-heading, #111827) !important;
 }
@@ -443,47 +454,55 @@
 /* Active Page Indicator */
 .adm-workspace .pagination .page-item.active .page-link,
 .adm-workspace .pagination .page-link[aria-current="page"] {
-  background: var(--adm-accent, #800000) !important;
-  color: #ffffff !important;
   font-weight: 700;
   cursor: default;
+}
+
+.adm-workspace .pagination:not(.synapse-pagination) .page-item.active .page-link,
+.adm-workspace .pagination:not(.synapse-pagination) .page-link[aria-current="page"] {
+  background: var(--adm-accent, #800000) !important;
+  color: #ffffff !important;
 }
 
 /* Disabled State */
 .adm-workspace .pagination .page-item.disabled .page-link,
 .adm-workspace .pagination .page-link[aria-disabled="true"] {
-  background: var(--adm-surface);
-  color: var(--adm-muted, #596577) !important;
-  opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
 }
 
-/* Dark Mode */
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination {
+.adm-workspace .pagination:not(.synapse-pagination) .page-item.disabled .page-link,
+.adm-workspace .pagination:not(.synapse-pagination) .page-link[aria-disabled="true"] {
+  background: var(--adm-surface);
+  color: var(--adm-muted, #596577) !important;
+  opacity: 0.45;
+}
+
+/* Dark legacy paint; common pagers inherit modern and legacy theme tokens. */
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination:not(.synapse-pagination) {
   border-color: rgba(255, 255, 255, 0.16);
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination .page-link {
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination:not(.synapse-pagination) .page-link {
   background: #1c1c1c;
   color: #f3f4f6 !important;
   border-right-color: rgba(255, 255, 255, 0.16);
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination .page-link:hover:not([aria-disabled="true"]):not(.disabled) {
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination:not(.synapse-pagination) .page-link:hover:not([aria-disabled="true"]):not(.disabled) {
   background: #282828;
   color: #ffffff !important;
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination .page-item.active .page-link,
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination .page-link[aria-current="page"] {
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination:not(.synapse-pagination) .page-item.active .page-link,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination:not(.synapse-pagination) .page-link[aria-current="page"] {
   background: var(--adm-accent, #800000) !important;
   border-color: var(--adm-accent, #800000) !important;
   color: #ffffff !important;
 }
 
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination .page-item.disabled .page-link,
-:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination .page-link[aria-disabled="true"] {
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination:not(.synapse-pagination) .page-item.disabled .page-link,
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .adm-workspace .pagination:not(.synapse-pagination) .page-link[aria-disabled="true"] {
   background: #1c1c1c;
   color: #9ca3af !important;
 }
@@ -2754,7 +2773,7 @@ html .ai-settings-page .ai-settings-permission-row form .btn-outline-danger:hove
   --sh-viz-grid: #f1f1f4;
   --sh-viz-rail: rgba(9, 9, 11, 0.035);
   --sh-viz-avg: #71717a;
-  --sh-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sh-mono: var(--mono-font, "Courier New", Courier, monospace);
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) {

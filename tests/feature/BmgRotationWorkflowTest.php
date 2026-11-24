@@ -54,6 +54,8 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
         $this->fixture();
         require_once APPPATH . 'Database/Migrations/2026-10-17-000005_CreateBmgRotationOperations.php';
         (new CreateBmgRotationOperations(Database::forge($this->rotationDb)))->up();
+        require_once APPPATH . 'Database/Migrations/2026-11-24-000001_ReplaceBmgDurationWithRotations.php';
+        (new \App\Database\Migrations\ReplaceBmgDurationWithRotations(Database::forge($this->rotationDb)))->up();
         $this->rotation = new BmgRotationService($this->rotationDb);
         $this->signIn();
         $this->unitId = (int) $this->rotation->saveUnit(null, ['unit_code' => 'drum-test', 'name' => 'Test drum', 'status' => 'active', 'drum_capacity_kg' => '80.00'])['unit']['id'];
@@ -182,12 +184,14 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
 
     public function testHardwareGateAndSeparateDatabasePermission(): void
     {
-        $this->reject(fn () => $this->saveSchedule($this->unitId, $this->schedule()), 409);
+        // Configuration admins can always save schedules; device delivery & manual commands remain hardware-gated.
+        $saved = $this->saveSchedule($this->unitId, $this->schedule());
+        $this->assertTrue($saved['enabled']);
+        $this->assertFalse($this->rotation->deviceSchedule($this->token)['enabled']);
         $this->reject(fn () => $this->command($this->unitId, ['command' => 'stop']), 409);
-        $this->reject(fn () => $this->saveSchedule($this->unitId, ['pwm' => 100]), 409);
         $this->gate(true);
+        $this->assertTrue($this->rotation->deviceSchedule($this->token)['enabled']);
         $this->rotationDb->table('role_permissions')->where('permission_id', 3)->delete();
-        $this->reject(fn () => $this->saveSchedule($this->unitId, $this->schedule()), 403);
         $this->reject(fn () => $this->command($this->unitId, ['command' => 'run_now']), 403);
         $this->assertFalse($this->saveSchedule($this->unitId, [])['enabled']);
     }
@@ -242,8 +246,8 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
     public function testStrictScheduleValidation(): void
     {
         foreach ([['times' => array_fill(0, 9, '08:00')], ['times' => ['24:00']], ['times' => ['8:00']],
-            ['times' => ['08:00', '08:00']], ['times' => ['23:59', '00:00'], 'duration_seconds' => 120],
-            ['duration_seconds' => 0], ['duration_seconds' => 601], ['duration_seconds' => 1.5],
+            ['times' => ['08:00', '08:00']], ['times' => ['23:59', '00:00'], 'rotations' => 20],
+            ['rotations' => 0], ['rotations' => 101], ['rotations' => 1.5],
             ['enabled' => 'false'], ['tenant_id' => 2], ['pwm' => 256], ['times' => '08:00']] as $bad) {
             $this->invalid(fn () => $this->saveSchedule($this->unitId, $bad));
         }
@@ -280,7 +284,7 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
         $this->assertSame('created', $this->rotation->ingestRun($this->token, $this->runPayload())['status']);
         $this->assertSame('acknowledged', $this->rotation->ingestRun($this->token, $this->runPayload())['status']);
         $different = $this->runPayload();
-        $different['duration_seconds'] = 59;
+        $different['rotations'] = 6;
         $this->reject(fn () => $this->rotation->ingestRun($this->token, $different), 409);
         $this->gate(true);
         $otherUnit = $this->rotation->saveUnit(null, ['unit_code' => 'second', 'name' => 'Second', 'status' => 'active', 'drum_capacity_kg' => '80.00']);
@@ -293,8 +297,8 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
 
     public function testRunValidationDoesNotInventFacts(): void
     {
-        foreach ([[], ['duration_seconds' => -1], ['occurred_at' => '2026-02-30 10:00:00'], ['motor_state' => 'okay'],
-            ['occurred_at' => '2099-01-01 00:00:00'], ['duration_seconds' => true], ['run_uid' => '../x']] as $bad) {
+        foreach ([[], ['rotations' => -1], ['occurred_at' => '2026-02-30 10:00:00'], ['motor_state' => 'okay'],
+            ['occurred_at' => '2099-01-01 00:00:00'], ['rotations' => true], ['run_uid' => '../x']] as $bad) {
             $this->invalid(fn () => $this->rotation->ingestRun($this->token, $bad === [] ? [] : array_replace($this->runPayload(), $bad)));
         }
     }
@@ -302,7 +306,7 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
     public function testCommandAcknowledgementIsScopedAndIdempotent(): void
     {
         $this->gate(true);
-        $command = $this->command($this->unitId, ['command' => 'run_now', 'duration_seconds' => 30]);
+        $command = $this->command($this->unitId, ['command' => 'run_now', 'rotations' => 5]);
         $this->assertCount(1, $this->rotation->pendingCommands($this->token)['commands']);
         $this->reject(fn () => $this->command($this->unitId, ['command' => 'run_now']), 409);
         $otherUnit = $this->rotation->saveUnit(null, ['unit_code' => 'second', 'name' => 'Second', 'status' => 'active', 'drum_capacity_kg' => '80.00']);
@@ -357,7 +361,7 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
             $this->assertSame('created', $this->rotation->ingestRun($this->token, $payload)['status']);
             $run = $this->rotationDb->table('bmg_rotation_runs')->where('run_uid', $payload['run_uid'])->get()->getRowArray();
             $this->assertSame('acknowledged', $this->rotation->ingestRun($this->token, $payload)['status']);
-            $this->reject(fn () => $this->rotation->ingestRun($this->token, array_replace($payload, ['duration_seconds' => 59])), 409);
+            $this->reject(fn () => $this->rotation->ingestRun($this->token, array_replace($payload, ['rotations' => 6])), 409);
             if (in_array($state, ['failed', 'interrupted'], true)) {
                 $this->assertWorkflowEvent('bmg_run_' . $state, (int) $run['id'], 'reported', null);
             }
@@ -560,12 +564,13 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
 
     public function testHardwareConfigurationIsGatedEvenWhenScheduleIsDisabled(): void
     {
-        $this->reject(fn () => $this->saveSchedule($this->unitId, ['times' => ['09:00']]), 409);
-        $this->reject(fn () => $this->saveSchedule($this->unitId, ['duration_seconds' => 20]), 409);
-        $this->gate(true);
-        $this->rotationDb->table('role_permissions')->where('permission_id', 3)->delete();
+        // Schedule editing requires facilities.configure; device execution stays gated by BMG_HARDWARE_ENABLED.
+        $saved = $this->saveSchedule($this->unitId, ['times' => ['08:00', '12:00', '16:00'], 'rotations' => 7]);
+        $this->assertSame(['08:00', '12:00', '16:00'], $saved['times']);
+        $this->assertSame(7, $saved['rotations']);
+        $this->assertFalse($this->rotation->deviceSchedule($this->token)['enabled']);
+        $this->rotationDb->table('role_permissions')->where('permission_id', 4)->delete();
         $this->reject(fn () => $this->saveSchedule($this->unitId, ['times' => ['09:00']]), 403);
-        $this->assertFalse($this->saveSchedule($this->unitId, [])['enabled']);
     }
 
     public function testRegistrationWorksWithoutHardwareAuthorityAndDoesNotEnableOperation(): void
@@ -578,8 +583,8 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
         $this->assertSame(0, $this->rotationDb->table('bmg_rotation_commands')->countAllResults());
         $this->reject(fn () => $this->rotation->deviceSchedule($this->token), 401);
         $this->reject(fn () => $this->command($this->unitId, ['command' => 'run_now']), 403);
-        $this->reject(fn () => $this->saveSchedule($this->unitId, $this->schedule()), 403);
         $this->rotationDb->table('role_permissions')->where('permission_id', 4)->delete();
+        $this->reject(fn () => $this->saveSchedule($this->unitId, $this->schedule()), 403);
         $this->reject(fn () => $this->register($this->unitId, ['chip_mac' => 'aa:bb:cc:dd:ee:05']), 403);
     }
 
@@ -590,7 +595,7 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
         $this->gate(false);
         $this->rotationDb->table('role_permissions')->where('permission_id', 3)->delete();
         $disabled = $this->rotation->saveSchedule($this->unitId, ['enabled' => false,
-            'times' => $published['times'], 'duration_seconds' => $published['duration_seconds'],
+            'times' => $published['times'], 'rotations' => $published['rotations'],
             'expected_version' => $published['version']]);
         $this->assertFalse($disabled['enabled']);
         $this->assertNull($disabled['pwm']);
@@ -962,12 +967,12 @@ final class BmgRotationWorkflowTest extends CIUnitTestCase
 
     private function schedule(): array
     {
-        return ['enabled' => true, 'times' => ['08:00', '16:00'], 'duration_seconds' => 60];
+        return ['enabled' => true, 'times' => ['08:00', '16:00'], 'rotations' => 7];
     }
 
     private function runPayload(): array
     {
-        return ['run_uid' => 'flash-run-1', 'motor_state' => 'turned_normal', 'duration_seconds' => 60, 'occurred_at' => (new \DateTimeImmutable($this->yesterday(), new \DateTimeZone('Asia/Manila')))->modify('+1 minute')->format('Y-m-d H:i:s')];
+        return ['run_uid' => 'flash-run-1', 'motor_state' => 'turned_normal', 'rotations' => 7, 'occurred_at' => (new \DateTimeImmutable($this->yesterday(), new \DateTimeZone('Asia/Manila')))->modify('+1 minute')->format('Y-m-d H:i:s')];
     }
 
     private function yesterday(): string

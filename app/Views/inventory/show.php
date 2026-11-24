@@ -5,6 +5,13 @@ $isActive = (int) $medicine['is_active'] === 1;
 $canManage = !empty($canManage);
 $canWrite = !empty($canWrite);
 $page = (int) $movementPagination['page'];
+$operationsPagination ??= ['page' => 1, 'per_page' => 100, 'total' => count($operations)];
+$historyQuery = [
+    'page' => $page, 'per_page' => $movementPagination['per_page'],
+    'operations_page' => $operationsPagination['page'], 'operations_per_page' => $operationsPagination['per_page'],
+];
+$detailUrl = site_url('/clinic/inventory/' . $id);
+$detailRefreshUrl = $detailUrl . '?' . http_build_query($historyQuery, '', '&', PHP_QUERY_RFC3986);
 $operationIds = array_fill_keys(array_map('intval', array_column($operations, 'id')), true);
 $movementIds = array_fill_keys(array_map('intval', array_column($movements, 'id')), true);
 $batchNumbers = [];
@@ -39,7 +46,7 @@ $stockMetrics = [
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <section class="inv-workspace inventory-show-section" data-refresh-owner="inventory.detail.<?= $id ?>"
-         data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
+         data-refresh-url="<?= esc($detailRefreshUrl, 'attr') ?>">
 
   <div data-refresh-region="summary" data-refresh-heading tabindex="-1" class="inv-detail-summary-stack">
     <div class="inv-detail-hero">
@@ -188,15 +195,15 @@ $stockMetrics = [
       <div class="inv-card-header">
         <div class="inv-card-header-stack">
           <div class="inv-card-title-row">
-            <h2 class="inv-card-title">Latest operations</h2>
-            <span class="inv-card-count"><?= number_format(count($operations)) ?></span>
+            <h2 class="inv-card-title">Operation history</h2>
+            <span class="inv-card-count"><?= number_format((int) $operationsPagination['total']) ?> total</span>
           </div>
-          <p class="inv-card-sub">Latest 100 operations only, newest first; independent of the movement page. One correction per dispensation. Legacy allocations with a null operation ID cannot be corrected.</p>
+          <p class="inv-card-sub"><?= (int) $operationsPagination['per_page'] ?> operations per page, newest first; independent of the movement page. One correction per dispensation. Legacy allocations with a null operation ID cannot be corrected.</p>
         </div>
       </div>
       <div class="inv-table-wrap">
         <table class="table align-middle mb-0 inv-table" data-mobile-cards="false">
-          <caption class="visually-hidden">Latest 100 inventory operations and correction references</caption>
+          <caption class="visually-hidden">Paginated inventory operations and correction references</caption>
           <thead>
             <tr>
               <th scope="col">Operation / date</th>
@@ -256,14 +263,14 @@ $stockMetrics = [
                     <?php if (isset($operationIds[(int) $operation['reversal_of']])): ?>
                       <a href="#inventory-operation-<?= (int) $operation['reversal_of'] ?>" class="inv-ref-link inv-mono small">Original #<?= (int) $operation['reversal_of'] ?></a>
                     <?php else: ?>
-                      <small class="inv-cell-sub">Original #<?= (int) $operation['reversal_of'] ?> (outside latest 100)</small>
+                      <small class="inv-cell-sub">Original #<?= (int) $operation['reversal_of'] ?> (on another operations page)</small>
                     <?php endif; ?>
                   <?php elseif ($operation['type'] === 'dispense' && $operation['reversed_by_operation_id'] !== null): ?>
                     <div class="inv-cell-primary">Corrected · <?= $operation['correction_mode'] === 'restore_unissued' ? 'Unissued stock restored' : 'Record only' ?></div>
                     <?php if (isset($operationIds[(int) $operation['reversed_by_operation_id']])): ?>
                       <a href="#inventory-operation-<?= (int) $operation['reversed_by_operation_id'] ?>" class="inv-ref-link inv-mono small">Correction #<?= (int) $operation['reversed_by_operation_id'] ?></a>
                     <?php else: ?>
-                      <small class="inv-cell-sub">Correction #<?= (int) $operation['reversed_by_operation_id'] ?> (outside latest 100)</small>
+                      <small class="inv-cell-sub">Correction #<?= (int) $operation['reversed_by_operation_id'] ?> (on another operations page)</small>
                     <?php endif; ?>
                   <?php elseif ($operation['type'] === 'dispense'): ?>
                     <?php if ($canManage): ?>
@@ -279,6 +286,14 @@ $stockMetrics = [
             <?php endforeach; ?>
           </tbody>
         </table>
+      </div>
+      <div class="inv-movement-footer">
+        <?= view('partials/table_pagination', [
+            'pagination' => $operationsPagination, 'filters' => [], 'baseUrl' => $detailUrl,
+            'paginationPageParam' => 'operations_page', 'paginationPerPageParam' => 'operations_per_page',
+            'paginationExtraQuery' => $historyQuery, 'paginationLabel' => 'Inventory operation pages',
+            'paginationFragment' => 'inventory-operations', 'paginationNavigation' => true,
+        ], ['saveData' => false]) ?>
       </div>
     </div>
   </div>
@@ -346,7 +361,7 @@ $stockMetrics = [
                   <?php elseif (isset($operationIds[(int) $movement['operation_id']])): ?>
                     <a href="#inventory-operation-<?= (int) $movement['operation_id'] ?>" class="inv-ref-link inv-mono small">Operation #<?= (int) $movement['operation_id'] ?></a>
                   <?php else: ?>
-                    <span class="inv-no-alerts">Operation #<?= (int) $movement['operation_id'] ?> (outside latest 100)</span>
+                    <span class="inv-no-alerts">Operation #<?= (int) $movement['operation_id'] ?> (on another operations page)</span>
                   <?php endif; ?>
                   <?php if ($movement['original_movement_id'] !== null): ?>
                     <div class="small mt-1">
@@ -364,7 +379,9 @@ $stockMetrics = [
         </table>
       </div>
       <div class="inv-movement-footer">
-        <form method="get" action="<?= esc(site_url('/clinic/inventory/' . $id)) ?>#inventory-movements" class="inv-movement-perpage inventory-movement-perpage">
+        <form method="get" action="<?= esc($detailUrl) ?>#inventory-movements" class="inv-movement-perpage inventory-movement-perpage">
+          <input type="hidden" name="operations_page" value="<?= (int) $operationsPagination['page'] ?>">
+          <input type="hidden" name="operations_per_page" value="<?= (int) $operationsPagination['per_page'] ?>">
           <label for="movementPerPage">Movements per page</label>
           <div>
             <select id="movementPerPage" name="per_page" class="form-select form-select-sm">
@@ -377,8 +394,9 @@ $stockMetrics = [
         </form>
         <?= view('partials/table_pagination', [
             'pagination' => $movementPagination, 'filters' => [],
-            'baseUrl' => site_url('/clinic/inventory/' . $id),
-            'paginationLabel' => 'Stock movement pages',
+            'baseUrl' => $detailUrl, 'paginationExtraQuery' => $historyQuery,
+            'paginationLabel' => 'Stock movement pages', 'paginationFragment' => 'inventory-movements',
+            'paginationNavigation' => true,
         ], ['saveData' => false]) ?>
       </div>
     </div>

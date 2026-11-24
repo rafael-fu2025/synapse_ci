@@ -80,6 +80,62 @@ html :is(.btn-primary, .btn-outline-primary, .btn-link, .nav-pills .nav-link.act
   --bs-pagination-focus-box-shadow: 0 0 0 0.2rem var(--focus-ring);
 }
 
+/* Shared pagination strip; page layouts retain their surrounding spacing. */
+.synapse-pagination {
+  gap: 0 !important;
+  --bs-pagination-bg: var(--bs-secondary-bg);
+  --bs-pagination-color: var(--default-color);
+  --bs-pagination-border-color: var(--control-border);
+  --bs-pagination-hover-bg: var(--bs-tertiary-bg);
+  --bs-pagination-hover-color: var(--default-color);
+  --bs-pagination-hover-border-color: var(--control-border);
+  --bs-pagination-focus-bg: var(--bs-tertiary-bg);
+  --bs-pagination-focus-color: var(--default-color);
+  --bs-pagination-focus-box-shadow: none;
+  --bs-pagination-active-bg: var(--fu-brand);
+  --bs-pagination-active-border-color: var(--fu-brand);
+  --bs-pagination-active-color: #ffffff;
+  --bs-pagination-disabled-bg: var(--bs-secondary-bg);
+  --bs-pagination-disabled-color: var(--muted-color);
+  --bs-pagination-disabled-border-color: var(--control-border);
+}
+
+.synapse-pagination .page-link {
+  background-color: var(--bs-pagination-bg);
+  color: var(--bs-pagination-color);
+  border-color: var(--bs-pagination-border-color);
+}
+
+.synapse-pagination .page-link:is(:hover, :focus) {
+  background-color: var(--bs-pagination-hover-bg);
+  color: var(--bs-pagination-hover-color);
+  border-color: var(--bs-pagination-hover-border-color);
+}
+
+/* Inset so segmented pagers cannot clip the keyboard indicator. */
+.synapse-pagination .page-link:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: -3px;
+}
+
+/* State paint follows hover/focus, including non-anchor current/disabled pages. */
+.synapse-pagination .active > .page-link,
+.synapse-pagination .page-link.active,
+.synapse-pagination .page-link[aria-current="page"] {
+  background-color: var(--bs-pagination-active-bg);
+  color: var(--bs-pagination-active-color);
+  border-color: var(--bs-pagination-active-border-color);
+}
+
+.synapse-pagination .disabled > .page-link,
+.synapse-pagination .page-link.disabled,
+.synapse-pagination .page-link[aria-disabled="true"] {
+  background-color: var(--bs-pagination-disabled-bg);
+  color: var(--bs-pagination-disabled-color);
+  border-color: var(--bs-pagination-disabled-border-color);
+  opacity: 1;
+}
+
 .nav-pills {
   --bs-nav-pills-link-active-bg: var(--fu-brand);
   --bs-nav-pills-link-active-color: #ffffff;

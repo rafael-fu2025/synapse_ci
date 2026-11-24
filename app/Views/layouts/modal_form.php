@@ -11,6 +11,9 @@ if (!$isFragment):
   <span class="text-muted ms-2">Complete the form in the dialog.</span>
 </div></div>
 <?php endif; ?>
+<?php if ($isFragment): ?>
+<template data-modal-styles><?= $this->renderSection('styles') ?></template>
+<?php endif; ?>
 <div class="modal fade" id="appFormModal" data-app-form-modal
      <?= !$isFragment ? 'data-modal-direct="true"' : '' ?>
      data-return-url="<?= esc($cancelUrl) ?>"

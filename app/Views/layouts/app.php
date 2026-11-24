@@ -24,10 +24,12 @@
   <link rel="icon" type="image/png" sizes="192x192" href="<?= base_url('favicon-192.png') ?>">
   <link rel="apple-touch-icon" sizes="180x180" href="<?= base_url('favicon-180.png') ?>">
 
+  <script src="<?= base_url('assets/js/auth-theme-init.js') ?>"></script>
+
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Nunito+Sans:wght@400;500;600;700;800&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
 
   <!-- Vendor CSS Files -->
   <link href="<?= base_url('assets/vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">
@@ -40,17 +42,6 @@
   <!-- Template Main CSS File -->
   <link href="<?= base_url('assets/css/style.css') ?>" rel="stylesheet">
 
-  <!-- Inline theme restoration to prevent FOUC (Flash of unstyled content) -->
-  <script>
-    (function() {
-      const storedTheme = localStorage.getItem('na-dark-mode');
-      if (storedTheme === '1' || (!storedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      } else {
-        document.documentElement.setAttribute('data-theme', 'light');
-      }
-    })();
-  </script>
 
   <!-- Offline-ready JS helpers: HTMX & Alpine.js -->
   <script src="<?= base_url('assets/vendor/htmx/htmx.min.js') ?>"></script>
@@ -136,11 +127,13 @@
     })();
   </script>
 
+  <template id="page-styles" data-page-style-owner="head"></template>
+  <?= $this->renderSection('styles') ?>
+  <template data-page-styles-end></template>
 </head>
 
 <?php // Path-based workstations share a shell; dedicated hosts retain their portal boundary. ?>
 <body class="app-shell" hx-boost="false" data-navigation-scope="<?= esc(hash('sha256', serialize([session()->get('user'), session()->get('tenant_id'), \App\Services\PortalContext::hostPortal() ?? 'single-host'])), 'attr') ?>" data-user-id="<?= esc((string) (session()->get('user')['id'] ?? '')) ?>" data-tenant-id="<?= esc((string) (session()->get('tenant_id') ?? '')) ?>">
-  <div id="page-styles" hidden><?= $this->renderSection('styles') ?></div>
   <?= $this->include('partials/header') ?>
   <?= $this->include('partials/sidebar') ?>
   <?= $this->include('partials/search_actions') ?>
@@ -264,6 +257,7 @@
   <?= $this->include('admin/carousel/_form_scripts') ?>
   <script src="<?= base_url('assets/js/survey-builder.js') ?>"></script>
   <script src="<?= base_url('assets/js/profile-settings.js') ?>"></script>
+  <script src="<?= base_url('assets/js/page-styles.js') ?>"></script>
   <script src="<?= base_url('assets/js/form-modal.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/form-modal.js') ?: '2' ?>"></script>
   <script src="<?= base_url('assets/js/responsive-tables.js') ?>"></script>
   <script src="<?= base_url('assets/js/core/main.js') ?>"></script>

@@ -37,7 +37,7 @@
   --appt-sky: #0369a1;
   --appt-slate: #475569;
   --appt-zinc: #64748b;
-  --appt-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  --appt-mono: var(--mono-font, "Courier New", Courier, monospace);
   color: var(--appt-fg-secondary);
   min-width: 0;
 }

@@ -39,7 +39,12 @@
   <p data-ai-feedback role="status" aria-live="polite" aria-atomic="true" class="alert alert-info small" hidden></p>
 
   <div class="ai-insights__workbench">
-    <div data-ai-panel><?= view('ai/panel', ['recoverableSnapshots' => $recoverableSnapshots ?? []] + compact('unit', 'basePath', 'analyses', 'legacyAnalysisFixture', 'profile', 'ready', 'reason', 'jobs', 'insights', 'canGenerate', 'canReview', 'canApprove', 'presentationNow')) ?></div>
+    <div data-ai-panel><?= view('ai/panel', [
+        'recoverableSnapshots' => $recoverableSnapshots ?? [],
+        'insightPagination' => $insightPagination ?? null, 'jobPagination' => $jobPagination ?? null,
+        'insightCounts' => $insightCounts ?? null, 'jobCounts' => $jobCounts ?? null,
+        'panelQuery' => $panelQuery ?? [],
+    ] + compact('unit', 'basePath', 'analyses', 'legacyAnalysisFixture', 'profile', 'ready', 'reason', 'jobs', 'insights', 'canGenerate', 'canReview', 'canApprove', 'presentationNow')) ?></div>
     <div data-ai-baseline></div>
   </div>
 

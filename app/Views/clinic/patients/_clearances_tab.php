@@ -1,5 +1,6 @@
         <!-- Tab 4: Enrollment & Annual Health Clearances -->
-        <div class="tab-pane fade" id="tab-clearances" role="tabpanel">
+        <div class="tab-pane fade <?= ($chartTab ?? 'tab-visits') === 'tab-clearances' || !empty($printChart) ? 'show active' : '' ?>" id="tab-clearances" role="tabpanel">
+          <h3 class="h5 d-none d-print-block">Enrollment &amp; Annual Health Clearances</h3>
           <div class="cp-notice mb-3">
             <i class="bi bi-shield-lock me-1" aria-hidden="true"></i>Retained per school year strictly for authorized Clinic personnel. Individual lab details remain restricted under Clinic RBAC.
           </div>
@@ -71,7 +72,11 @@
             </div>
           <?php endif; ?>
 
-          <?php if (!empty($canWriteClearance)): ?>
+          <div class="d-print-none" data-chart-history-pager="clearances">
+            <?= isset($historyPager) ? $historyPager('clearances', 'tab-clearances') : '' ?>
+          </div>
+
+          <?php if (!empty($canWriteClearance) && empty($printChart)): ?>
             <div class="cp-subform-panel">
               <h4 class="cp-subform-title"><i class="bi bi-clipboard-check" aria-hidden="true"></i>Update / Issue School-Year Medical Clearance</h4>
               <form method="POST" action="<?= site_url('/clinic/patients/' . (int) $person['id'] . '/clearances') ?>"

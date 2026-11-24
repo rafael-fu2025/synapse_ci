@@ -4,16 +4,34 @@
   if (window.SynapseAiInsights) return;
 
   const instances = new Map();
-  const MAX_FRAGMENT = 524288;
+  // At most 100 current-page drafts and their inert review templates; never cache other pages.
+  const MAX_FRAGMENT = 8 * 1024 * 1024;
+  const MAX_RESPONSE = 2 * MAX_FRAGMENT;
+  const PAGE_KEYS = ['insights_page', 'insights_per_page', 'jobs_page', 'jobs_per_page', 'insights_status'];
 
-  function endpoint(value, basePath, mutation) {
+  function pageQuery(params) {
+    for (const [key, value] of params) {
+      if (!PAGE_KEYS.includes(key) || params.getAll(key).length !== 1 ||
+          (key.endsWith('_page') && !key.endsWith('_per_page') &&
+            (!/^[1-9][0-9]{0,6}$/.test(value) || String(Number(value)) !== value || Number(value) > 1000000)) ||
+          (key.endsWith('_per_page') && !['20', '25', '50', '100'].includes(value)) ||
+          (key === 'insights_status' && !['all', 'draft', 'reviewed', 'rejected'].includes(value))) {
+        throw new Error('Invalid analysis page selection.');
+      }
+    }
+    return new URLSearchParams(params);
+  }
+
+  function endpoint(value, basePath, mutation, navigation = false) {
     const url = new URL(value, location.href);
     const suffix = url.pathname.slice(basePath.length);
-    if (url.origin !== location.origin || !/^https?:$/.test(url.protocol) || url.username || url.password || url.search || url.hash ||
+    if (url.origin !== location.origin || !/^https?:$/.test(url.protocol) || url.username || url.password || url.hash ||
         !/\/(?:clinic|guidance|facilities)\/insights$/.test(basePath) || !url.pathname.startsWith(basePath) ||
-        !(mutation ? /^\/(?:prepare|generate|recover|[1-9][0-9]*\/review|jobs\/[1-9][0-9]*\/(?:cancel|retry))$/.test(suffix) : suffix === '/panel')) {
+        !(mutation ? !url.search && /^\/(?:prepare|generate|recover|[1-9][0-9]*\/review|jobs\/[1-9][0-9]*\/(?:cancel|retry))$/.test(suffix)
+          : suffix === (navigation ? '' : '/panel'))) {
       throw new Error('Invalid analysis endpoint.');
     }
+    if (!mutation) pageQuery(url.searchParams);
     return url.href;
   }
 
@@ -55,6 +73,11 @@
     let review = null;
     let modal;
     let modalClosingReview = null;
+    let pageState = new URLSearchParams();
+    let readSequence = 0;
+    let pageChanging = false;
+    let pageAddress = location.href;
+    let pageHistoryState = history.state;
 
     const active = () => !stopped && !suspended && !auth && root.isConnected && !document.hidden;
     const modalShown = () => Boolean(modalElement?.classList.contains('show'));
@@ -69,6 +92,69 @@
           window.SynapseToast.show(message, { type, key: 'ai-insights' });
           feedback.hidden = true;
         } catch (_) { /* Retain concise inline feedback when the shared service fails. */ }
+      }
+    }
+
+    function renderedPageState(target = panel) {
+      const state = target.querySelector('[data-ai-page-state]');
+      if (!state) return null;
+      const query = new URLSearchParams();
+      for (const key of PAGE_KEYS) {
+        const value = state.getAttribute('data-ai-' + key.replaceAll('_', '-'));
+        if (value === null) throw new Error('Invalid analysis page selection.');
+        query.set(key, value);
+      }
+      return pageQuery(query);
+    }
+
+    function panelReadUrl(query) {
+      // Validate the supplied fixed route before replacing its validated read-only query.
+      const url = new URL(endpoint(root.dataset.panelUrl, basePath, false));
+      url.search = pageQuery(query).toString();
+      return endpoint(url.href, basePath, false);
+    }
+
+    function pageAddressFor(query) {
+      const url = new URL(basePath, location.origin);
+      url.search = pageQuery(query).toString();
+      return endpoint(url.href, basePath, false, true);
+    }
+
+    function updatePageHistory(query, mode) {
+      const address = pageAddressFor(query);
+      if (typeof window.SynapseNavigation?.updateHistory === 'function') {
+        if (!window.SynapseNavigation.updateHistory(address, mode)) return;
+      } else {
+        history[mode === 'push' && address !== location.href ? 'pushState' : 'replaceState'](history.state, '', address);
+      }
+      pageAddress = location.href;
+      pageHistoryState = history.state;
+    }
+
+    function pagingAllowed() {
+      if (auth || stopped) return false;
+      if (writing) {
+        say('Wait for the current action to finish before changing pages.', 'warning');
+        return false;
+      }
+      if (review || modalShown() || modalClosingReview) {
+        const message = 'Close the draft review before changing pages or filters. Your open review has been kept.';
+        say(message, 'warning');
+        if (staleNotice && !review?.stale) { staleNotice.textContent = message; staleNotice.hidden = false; }
+        return false;
+      }
+      return true;
+    }
+
+    async function navigatePage(value) {
+      if (!pagingAllowed()) return;
+      try {
+        const url = new URL(endpoint(value, basePath, false, true));
+        const query = pageQuery(url.searchParams);
+        clearModal();
+        await refresh(query);
+      } catch (error) {
+        if (!auth && !stopped) say(error.message || 'Page selection is unavailable.', 'warning');
       }
     }
 
@@ -191,6 +277,7 @@
 
     function openReview(button) {
       if (auth || stopped || !modalElement || !modalBody || !modalActions || !window.bootstrap?.Modal) return;
+      if (pageChanging) { say('Wait for the selected page to finish loading before opening a draft.', 'warning'); return; }
       const id = button.dataset.aiInsightId;
       const version = button.dataset.aiInsightVersion;
       const content = [...panel.querySelectorAll('template[data-ai-review-template]')]
@@ -234,6 +321,8 @@
       clearTimeout(debounce);
       read?.abort();
       read = null;
+      ++readSequence;
+      pageChanging = false;
       clearModal();
       panel.replaceChildren();
       baseline.replaceChildren();
@@ -263,7 +352,7 @@
         if (!response.headers.get('Content-Type')?.includes('application/json')) throw new Error('Analysis returned an unexpected response.');
         const text = await response.text();
         if (owner.signal.aborted || stopped) throw new DOMException('Cancelled', 'AbortError');
-        if (text.length > MAX_FRAGMENT) throw new Error('Analysis response is too large.');
+        if (text.length > MAX_RESPONSE) throw new Error('Analysis response is too large.');
         const payload = JSON.parse(text);
         if (!payload || typeof payload.success !== 'boolean') throw new Error('Invalid analysis response.');
         window.SynapseCsrf?.sync(payload.csrf);
@@ -281,22 +370,36 @@
       }
     }
 
-    async function refresh() {
-      if (!active() || writing || read) return;
+    async function refresh(nextQuery = null, historyMode = 'push') {
+      const changingPage = nextQuery !== null;
+      if (!active() || writing || (!changingPage && read)) return;
+      if (changingPage) { read?.abort(); read = null; }
       dirty = false;
       clearTimeout(timer);
       clearTimeout(debounce);
       debounce = null;
       const owner = new AbortController();
+      const sequence = ++readSequence;
       read = owner;
+      pageChanging = changingPage;
       try {
-        const payload = await request(root.dataset.panelUrl, owner);
-        if (!owner.signal.aborted && active() && read === owner) replace(panel, payload.html, 'panel');
+        const query = pageQuery(changingPage ? nextQuery : pageState);
+        const payload = await request(panelReadUrl(query), owner);
+        if (!owner.signal.aborted && active() && read === owner && sequence === readSequence) {
+          const next = fragment(payload.html);
+          const rendered = renderedPageState(next.content);
+          if (changingPage && !rendered) throw new Error('Analysis page information is unavailable. Refresh status before changing pages.');
+          replace(panel, payload.html, 'panel');
+          // Use SQL-clamped response cursors. A failed or aborted page load keeps the old state.
+          pageState = rendered || query;
+          if (rendered) updatePageHistory(pageState, changingPage ? historyMode : 'replace');
+        }
       } catch (error) {
-        if (!stopped && !writing && !auth && !owner.signal.aborted) say(error.message || 'Status refresh failed.');
+        if (!stopped && !writing && !auth && !owner.signal.aborted && sequence === readSequence) say(error.message || 'Status refresh failed.');
       } finally {
-        if (read === owner) {
+        if (read === owner && sequence === readSequence) {
           read = null;
+          pageChanging = false;
           if (dirty && active()) invalidate();
           else schedule();
         }
@@ -312,6 +415,15 @@
     }, { signal: events.signal });
 
     root.addEventListener('click', event => {
+      const pageLink = event.target.closest('[data-ai-pagination] a[data-table-page], a[data-ai-status]');
+      if (pageLink && panel.contains(pageLink)) {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey ||
+            pageLink.hasAttribute('download') || (pageLink.target && pageLink.target !== '_self')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void navigatePage(pageLink.getAttribute('href'));
+        return;
+      }
       const choice = event.target.closest('[data-ai-analysis-choice]');
       if (choice && panel.contains(choice)) {
         event.preventDefault();
@@ -342,10 +454,22 @@
     }, { signal: events.signal });
 
     root.addEventListener('submit', async event => {
+      const pageForm = event.target.closest('form[data-ai-page-size]');
+      if (pageForm && panel.contains(pageForm)) {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          const url = new URL(endpoint(pageForm.getAttribute('action'), basePath, false, true));
+          url.search = pageQuery(new URLSearchParams(new FormData(pageForm))).toString();
+          await navigatePage(url.href);
+        } catch (error) { say(error.message || 'Page selection is unavailable.', 'warning'); }
+        return;
+      }
       const form = event.target.closest('form[data-ai-action]');
       if (!form || !root.contains(form)) return;
       event.preventDefault();
       if (writing || auth || stopped || (form.hasAttribute('data-ai-review-form') && review?.stale)) return;
+      if (pageChanging) { say('Wait for the selected page to finish loading before submitting an action.', 'warning'); return; }
       if (form.dataset.aiConfirm && !window.confirm(form.dataset.aiConfirm)) return;
 
       writing = true;
@@ -353,6 +477,7 @@
       clearTimeout(timer);
       read?.abort();
       read = null;
+      ++readSequence;
       const buttons = mutationButtons().map(button => [button, button.disabled]);
       buttons.forEach(([button]) => { button.disabled = true; });
       // A review may be dismissed with Escape or either Close control while its mutation is pending.
@@ -423,6 +548,8 @@
       debounce = null;
       read?.abort();
       read = null;
+      ++readSequence;
+      pageChanging = false;
     }
 
     modalElement?.addEventListener('hide.bs.modal', () => {
@@ -437,6 +564,24 @@
       modalActions?.replaceChildren();
       modalElement.removeAttribute('data-ai-review-stale');
       if (staleNotice) staleNotice.hidden = true;
+    }, { signal: events.signal });
+
+    document.addEventListener('synapse:before-navigate', event => {
+      if (stopped || auth || !root.isConnected) return;
+      if (writing || review || modalShown() || modalClosingReview) {
+        event.preventDefault();
+        pagingAllowed();
+      }
+    }, { signal: events.signal });
+    window.addEventListener('popstate', () => {
+      // The shared navigator restores its own entries and invokes the same modal veto above.
+      if (window.SynapseNavigation) return;
+      try {
+        const url = new URL(endpoint(location.href, basePath, false, true));
+        if (!pagingAllowed()) { history.replaceState(pageHistoryState, '', pageAddress); return; }
+        clearModal();
+        void refresh(pageQuery(url.searchParams), 'replace');
+      } catch (_) { /* A different workstation belongs to document navigation, not this panel. */ }
     }, { signal: events.signal });
 
     document.addEventListener('synapse:realtime-event', event => {
@@ -458,6 +603,11 @@
       void refresh();
     }, { signal: events.signal });
 
+    try {
+      pageState = renderedPageState() || pageQuery(new URL(location.href).searchParams);
+    } catch (error) {
+      say(error.message || 'Invalid analysis page selection.', 'warning');
+    }
     applyAnalysis();
     applyFilter();
     schedule();

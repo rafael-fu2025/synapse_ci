@@ -13,13 +13,53 @@ $analysisIcons = [
 $activeStatuses = ['queued', 'running'];
 $activeJobs = array_values(array_filter($jobs, static fn (array $job): bool => in_array($job['status'], $activeStatuses, true)
     && $job['profile_revision'] === $profile['revision']));
-$historyJobs = array_values(array_filter($jobs, static fn (array $job): bool => !in_array($job['status'], $activeStatuses, true)
+$pagedPanel = is_array($insightPagination ?? null) && is_array($jobPagination ?? null);
+$historyJobs = $pagedPanel ? $jobs : array_values(array_filter($jobs, static fn (array $job): bool => !in_array($job['status'], $activeStatuses, true)
     || $job['profile_revision'] !== $profile['revision']));
-$pending = $activeJobs;
 
-$awaitingCount = count(array_filter($insights, static fn (array $item): bool => ($item['status'] ?? '') === 'draft'));
-$acceptedApprovedCount = count(array_filter($insights, static fn (array $item): bool => in_array($item['status'] ?? '', ['accepted', 'approved'], true)));
-$rejectedCount = count(array_filter($insights, static fn (array $item): bool => ($item['status'] ?? '') === 'rejected'));
+// Standalone legacy presentation fixtures have no paging metadata. Web counts are SQL scope totals.
+$insightCounts = $insightCounts ?? [];
+$jobCounts = $jobCounts ?? [];
+$awaitingCount = (int) ($insightCounts['draft'] ?? count(array_filter($insights, static fn (array $item): bool => ($item['status'] ?? '') === 'draft')));
+$acceptedApprovedCount = (int) ($insightCounts['reviewed'] ?? count(array_filter($insights, static fn (array $item): bool => in_array($item['status'] ?? '', ['accepted', 'approved'], true))));
+$rejectedCount = (int) ($insightCounts['rejected'] ?? count(array_filter($insights, static fn (array $item): bool => ($item['status'] ?? '') === 'rejected')));
+$insightCount = (int) ($insightCounts['total'] ?? count($insights));
+$activeCount = (int) ($jobCounts['active'] ?? count($activeJobs));
+$requestCount = (int) ($jobCounts['total'] ?? count($jobs));
+$selectedStatus = $pagedPanel ? ($panelQuery['insights_status'] ?? 'all') : 'all';
+$panelQuery = $pagedPanel ? [
+    'insights_page' => (int) $insightPagination['page'], 'insights_per_page' => (int) $insightPagination['per_page'],
+    'jobs_page' => (int) $jobPagination['page'], 'jobs_per_page' => (int) $jobPagination['per_page'],
+    'insights_status' => $selectedStatus,
+] : [];
+$panelUrl = site_url($basePath);
+$statusUrl = static fn (string $status): string => $panelUrl . '?' . http_build_query(
+    array_replace($panelQuery, ['insights_page' => 1, 'insights_status' => $status]), '', '&', PHP_QUERY_RFC3986,
+);
+$renderPagination = static function (string $list, array $pagination, string $label) use ($panelQuery, $panelUrl): void {
+    $pageParam = $list . '_page';
+    $perPageParam = $list . '_per_page';
+?>
+  <div data-ai-pagination="<?= esc($list, 'attr') ?>" data-ai-key="pagination-<?= esc($list, 'attr') ?>">
+    <?= view('partials/table_pagination', [
+        'pagination' => $pagination, 'filters' => [], 'baseUrl' => $panelUrl,
+        'paginationPageParam' => $pageParam, 'paginationPerPageParam' => $perPageParam,
+        'paginationExtraQuery' => $panelQuery, 'paginationLabel' => $label . ' pages',
+        'totalLabel' => $list === 'insights' ? 'unexpired drafts' : 'scoped requests',
+    ]) ?>
+    <form method="get" action="<?= esc($panelUrl, 'attr') ?>" data-ai-page-size class="d-flex align-items-center gap-2 mt-2">
+      <?php foreach (array_replace($panelQuery, [$pageParam => 1]) as $key => $value): if ($key === $perPageParam) { continue; } ?>
+      <input type="hidden" name="<?= esc($key, 'attr') ?>" value="<?= esc((string) $value, 'attr') ?>">
+      <?php endforeach; ?>
+      <label class="small text-muted" for="ai-<?= esc($list, 'attr') ?>-per-page"><?= esc($label) ?> per page</label>
+      <select class="form-select form-select-sm w-auto" id="ai-<?= esc($list, 'attr') ?>-per-page" name="<?= esc($perPageParam, 'attr') ?>" data-native-select>
+        <?php foreach ([20, 25, 50, 100] as $size): ?><option value="<?= $size ?>"<?= (int) $pagination['per_page'] === $size ? ' selected' : '' ?>><?= $size ?></option><?php endforeach; ?>
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
+    </form>
+  </div>
+<?php
+};
 
 $stateMessage = match ($reason) {
     null => 'AI setup approved',
@@ -137,7 +177,7 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
 <?php
 };
 ?>
-<div data-ai-pending="<?= $pending !== [] ? 'true' : 'false' ?>">
+<div data-ai-pending="<?= $activeCount > 0 ? 'true' : 'false' ?>"<?= $pagedPanel ? ' data-ai-page-state' : '' ?><?php foreach ($panelQuery as $key => $value): ?> data-ai-<?= esc(str_replace('_', '-', $key), 'attr') ?>="<?= esc((string) $value, 'attr') ?>"<?php endforeach; ?>>
   <aside class="ai-insights__rail" aria-label="Analysis controls and live requests">
     <section class="ai-insights__control card" aria-labelledby="ai-analysis-heading">
       <div class="card-body">
@@ -224,7 +264,7 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
       </div>
     </section>
 
-    <?php if ($activeJobs !== []): ?>
+    <?php if ($activeCount > 0): ?>
     <section class="ai-insights__requests card" aria-labelledby="ai-active-requests-heading">
       <div class="card-body">
         <div class="ai-insights__section-heading">
@@ -232,9 +272,13 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
             <h2 class="h6 mb-1" id="ai-active-requests-heading">Active requests</h2>
             <p class="small text-muted mb-0" data-ai-progress-help>Status updates automatically. A separate worker must be enabled; this page cannot confirm one is scheduled.</p>
           </div>
-          <span class="badge text-bg-light" data-ai-tone="generating"><?= count($activeJobs) ?></span>
+          <span class="badge text-bg-light" data-ai-tone="generating"><?= $activeCount ?></span>
         </div>
+        <?php if ($pagedPanel): ?>
+        <p class="small text-muted mb-0 mt-2">All <?= $activeCount ?> active requests under the current setup are counted across this department, including other request pages. Open Request history below to inspect the selected page.</p>
+        <?php else: ?>
         <ul class="ai-insights__request-list"><?php foreach ($activeJobs as $job) { $renderJob($job); } ?></ul>
+        <?php endif; ?>
       </div>
     </section>
     <?php endif; ?>
@@ -268,9 +312,10 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
       </div>
       <div class="ai-insights__stat">
         <span class="ai-insights__stat-label">Active requests</span>
-        <strong class="ai-insights__stat-value"><?= count($activeJobs) ?></strong>
+        <strong class="ai-insights__stat-value"><?= $activeCount ?></strong>
       </div>
     </div>
+    <?php if ($pagedPanel): ?><p class="small text-muted mb-3" data-ai-count-scope>Review totals cover all unexpired drafts in this department, not only this page or status filter. Active requests cover the current setup across all request pages.</p><?php endif; ?>
 
     <section class="ai-insights__drafts card" aria-labelledby="ai-drafts-heading">
       <div class="card-body">
@@ -278,16 +323,22 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
           <div>
             <div class="ai-insights__drafts-title-row">
               <h2 class="h5 mb-0" id="ai-drafts-heading">Drafts for review</h2>
-              <?php if ($insights !== []): ?><span class="badge text-bg-light"><?= count($insights) ?></span><?php endif; ?>
+              <?php if ($insightCount > 0): ?><span class="badge text-bg-light"><?= $insightCount ?></span><?php endif; ?>
             </div>
             <p class="small text-muted mb-0 mt-1">AI output is unverified. Open a draft to compare its narrative and program proposal side-by-side against approved local data.</p>
           </div>
-          <?php if (count($insights) > 1): ?>
-          <div class="ai-insights__filter-tabs" role="group" aria-label="Filter drafts by status">
-            <button type="button" class="ai-insights__filter-tab is-active" data-ai-filter="all" aria-pressed="true">All <span class="ai-insights__filter-count"><?= count($insights) ?></span></button>
-            <?php if ($awaitingCount > 0): ?><button type="button" class="ai-insights__filter-tab" data-ai-filter="draft" aria-pressed="false">Awaiting <span class="ai-insights__filter-count"><?= $awaitingCount ?></span></button><?php endif; ?>
-            <?php if ($acceptedApprovedCount > 0): ?><button type="button" class="ai-insights__filter-tab" data-ai-filter="reviewed" aria-pressed="false">Reviewed <span class="ai-insights__filter-count"><?= $acceptedApprovedCount ?></span></button><?php endif; ?>
-            <?php if ($rejectedCount > 0): ?><button type="button" class="ai-insights__filter-tab" data-ai-filter="rejected" aria-pressed="false">Rejected <span class="ai-insights__filter-count"><?= $rejectedCount ?></span></button><?php endif; ?>
+          <?php if ($pagedPanel || count($insights) > 1): ?>
+          <div class="ai-insights__filter-tabs" role="group" aria-label="<?= $pagedPanel ? 'Filter all department drafts by status' : 'Filter drafts by status' ?>">
+            <?php foreach (['all' => ['All', $insightCount], 'draft' => ['Awaiting', $awaitingCount], 'reviewed' => ['Reviewed', $acceptedApprovedCount], 'rejected' => ['Rejected', $rejectedCount]] as $status => [$label, $count]):
+                if (!$pagedPanel && $status !== 'all' && $count === 0) { continue; }
+                $isSelected = $selectedStatus === $status;
+            ?>
+              <?php if ($pagedPanel): ?>
+              <a href="<?= esc($statusUrl($status), 'attr') ?>" role="button" class="ai-insights__filter-tab<?= $isSelected ? ' is-active' : '' ?>" data-ai-status="<?= esc($status, 'attr') ?>" data-navigation="false" aria-pressed="<?= $isSelected ? 'true' : 'false' ?>"><?= esc($label) ?> <span class="ai-insights__filter-count"><?= $count ?></span></a>
+              <?php else: ?>
+              <button type="button" class="ai-insights__filter-tab<?= $isSelected ? ' is-active' : '' ?>" data-ai-filter="<?= esc($status, 'attr') ?>" aria-pressed="<?= $isSelected ? 'true' : 'false' ?>"><?= esc($label) ?> <span class="ai-insights__filter-count"><?= $count ?></span></button>
+              <?php endif; ?>
+            <?php endforeach; ?>
           </div>
           <?php endif; ?>
         </div>
@@ -296,7 +347,7 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
         <div class="ai-insights__empty">
           <div class="ai-insights__empty-icon"><i class="bi bi-file-earmark-text" aria-hidden="true"></i></div>
           <div class="ai-insights__empty-copy">
-            <strong>No AI drafts yet</strong>
+            <strong><?= $pagedPanel && $selectedStatus !== 'all' ? 'No drafts match this status' : 'No AI drafts yet' ?></strong>
             <p class="mb-0">Generate a draft if you have permission. Only unexpired drafts are shown; historical policies cannot be accepted or approved.</p>
             <div class="ai-insights__empty-flow" aria-hidden="true">
               <span>1. Select analysis</span>
@@ -428,13 +479,21 @@ $renderJob = static function (array $job) use ($analysisTitles, $jobStatuses, $j
         <?php endforeach; ?>
         </div>
         <?php endif; ?>
+        <?php if ($pagedPanel): $renderPagination('insights', $insightPagination, 'Drafts'); endif; ?>
       </div>
     </section>
 
-    <?php if ($historyJobs !== []): ?>
-    <details class="ai-insights__history" data-ai-key="request-history">
-      <summary data-ai-key="request-history-summary"><span><i class="bi bi-clock-history" aria-hidden="true"></i> Request history</span><span class="badge text-bg-light"><?= count($historyJobs) ?></span></summary>
-      <div class="ai-insights__history-body"><ul class="ai-insights__request-list ai-insights__request-list--compact"><?php foreach ($historyJobs as $job) { $renderJob($job); } ?></ul></div>
+    <?php if ($pagedPanel || $historyJobs !== []): ?>
+    <details class="ai-insights__history" data-ai-key="request-history"<?= $pagedPanel && $panelQuery['jobs_page'] > 1 ? ' open' : '' ?>>
+      <summary data-ai-key="request-history-summary"><span><i class="bi bi-clock-history" aria-hidden="true"></i> Request history</span><span class="badge text-bg-light"><?= $pagedPanel ? $requestCount : count($historyJobs) ?></span></summary>
+      <div class="ai-insights__history-body">
+        <?php if ($pagedPanel): ?>
+        <p class="small text-muted">All request statuses are included, including waiting and processing requests. The department total covers all request pages; status updates never start or replay a request.<?php if (($jobCounts['older_active'] ?? 0) > 0): ?> <?= (int) $jobCounts['older_active'] ?> waiting or processing requests belong to an older setup.<?php endif; ?></p>
+        <?php if ($historyJobs === []): ?><p class="small text-muted mb-0">No requests yet.</p><?php endif; ?>
+        <?php endif; ?>
+        <ul class="ai-insights__request-list ai-insights__request-list--compact"><?php foreach ($historyJobs as $job) { $renderJob($job); } ?></ul>
+        <?php if ($pagedPanel): $renderPagination('jobs', $jobPagination, 'Requests'); endif; ?>
+      </div>
     </details>
     <?php endif; ?>
   </div>

@@ -15,6 +15,7 @@
       aiController: null, aiTimeout: null, aiSequence: 0,
       bankOpen: false, bankBusy: false,
       bankQuery: '', bankCategory: '', bankAudience: '', bankItems: [], bankPage: 1, bankPages: 1,
+      bankTotal: 0, bankFrom: 0, bankTo: 0, bankLoaded: false,
       bankError: '', bankMessage: '', bankSelected: [], bankSelectionError: '', controller: null,
       bankDebounce: null, bankTimeout: null, bankSequence: 0, bankDestroyed: false,
       bankComposing: { bankQuery: false, bankCategory: false },
@@ -46,6 +47,8 @@
         this[field] = event.target.value;
         this.cancelBankSearch();
         this.bankPage = this.bankPages = 1;
+        this.bankTotal = this.bankFrom = this.bankTo = 0;
+        this.bankLoaded = false;
         this.bankItems = [];
         this.bankError = '';
         if (!this.bankOpen || this.bankDestroyed || event.isComposing || Object.values(this.bankComposing).some(Boolean)) return;
@@ -75,6 +78,8 @@
         this.bankBusy = true;
         this.bankError = '';
         this.bankItems = [];
+        this.bankTotal = this.bankFrom = this.bankTo = 0;
+        this.bankLoaded = false;
         this.bankTimeout = setTimeout(() => {
           if (!current()) return;
           this.cancelBankSearch();
@@ -101,11 +106,20 @@
             throw new Error(typeof data?.message === 'string' ? data.message.slice(0, 1500) : 'The question bank could not be loaded.');
           }
           if (!Array.isArray(data.items) || !data.items.every(item => this.validBankItem(item))
-            || !Number.isInteger(data.page) || !Number.isInteger(data.pages)
-            || data.page < 1 || data.pages < data.page) throw new Error('Invalid question bank data. Please retry.');
+            || !Number.isSafeInteger(data.page) || !Number.isSafeInteger(data.pages)
+            || !Number.isSafeInteger(data.total) || data.total < 0
+            || data.page < 1 || data.pages < data.page
+            || data.pages !== Math.max(1, Math.ceil(data.total / 20))) throw new Error('Invalid question bank data. Please retry.');
+          const offset = (data.page - 1) * 20;
+          const count = Math.min(20, Math.max(0, data.total - offset));
+          if (data.items.length !== count) throw new Error('Invalid question bank data. Please retry.');
           this.bankItems = data.items;
           this.bankPage = data.page;
           this.bankPages = data.pages;
+          this.bankTotal = data.total;
+          this.bankFrom = count === 0 ? 0 : offset + 1;
+          this.bankTo = offset + count;
+          this.bankLoaded = true;
         } catch (error) {
           if (current() && error?.name !== 'AbortError') this.bankError = error?.message || 'The question bank could not be loaded.';
         } finally {

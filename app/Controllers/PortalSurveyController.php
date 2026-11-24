@@ -16,14 +16,26 @@ final class PortalSurveyController extends BaseController
     public function index()
     {
         try {
-            $data = (new SurveyService())->available($this->request->getGet());
+            $query = $this->request->getGet();
+            $miPage = \App\Libraries\TablePage::forList($query, 'mi_page', 'mi_per_page');
+            if (!in_array($miPage->perPage, [25, 50, 100], true)) {
+                throw new \InvalidArgumentException('MI per page must be 25, 50 or 100.', 422);
+            }
+            $data = (new SurveyService())->available($query);
+            $data['filters']['page'] = $data['pagination']['page'];
+            $data['filters']['per_page'] = $data['pagination']['per_page'];
             $miAssignments = [];
+            $miCounts = array_fill_keys(['all', 'available', 'submitted', 'closed'], 0);
+            $miPagination = $miPage->metadata(0, 0);
             $miGateEnabled = false;
             $actor = (new AuthenticatedUser())->current();
             if ($actor !== null && (($actor['role'] ?? '') === 'superadmin'
                 || in_array('guidance.assessments.take', $actor['permissions'] ?? [], true))) {
                 try {
-                    $miAssignments = (new GuidanceMultipleIntelligenceService())->listPortalAssignments($actor);
+                    $miResult = (new GuidanceMultipleIntelligenceService())->listPortalAssignmentsPage($actor, $query);
+                    $miAssignments = $miResult['assignments'];
+                    $miCounts = $miResult['counts'];
+                    $miPagination = $miResult['pagination'];
                     $miGateEnabled = (new GuidanceActivationGateService())->isGateEnabled(
                         GuidanceActivationGateService::GATE_MI_REPRODUCTION,
                         (int) $actor['tenant_id']
@@ -37,13 +49,19 @@ final class PortalSurveyController extends BaseController
                     $data['miAssignmentsUnavailable'] = true;
                 }
             }
+            $data['filters']['mi_page'] = $miPagination['page'];
+            $data['filters']['mi_per_page'] = $miPagination['per_page'];
             $this->response->setHeader('Cache-Control', 'private, no-store');
             return view('surveys/portal_index', $data + [
                 'title' => 'My Surveys',
                 'baseUrl' => site_url('portal/surveys'),
                 'miAssignments' => $miAssignments,
+                'miCounts' => $miCounts,
+                'miPagination' => $miPagination,
                 'miGateEnabled' => $miGateEnabled,
             ]);
+        } catch (\InvalidArgumentException $error) {
+            return $this->failure(new RuntimeException($error->getMessage(), 422));
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
