@@ -187,7 +187,6 @@ foreach (array_reverse($history['messages'] ?? []) as $msg) {
         <header class="team-chat-header">
           <div class="tws-chat-header-title">
             <h2 class="h6 mb-0" id="chatChannelTitle"><span class="tws-channel-hash" aria-hidden="true">#</span> <?= esc($channelSlug) ?></h2>
-            <p class="tws-chat-header-sub mb-0">Operational updates, shift handoffs, and linked task discussions</p>
             <div class="tws-chat-header-meta">
               <span class="small text-muted" data-chat-connection></span>
               <span class="small text-muted" data-chat-history-status></span>
@@ -195,7 +194,6 @@ foreach (array_reverse($history['messages'] ?? []) as $msg) {
           </div>
           <div class="tws-chat-header-actions">
             <button type="button" class="btn btn-outline-secondary btn-sm" data-chat-older hidden>Load older messages</button>
-            <button class="btn btn-outline-secondary btn-sm" type="button" data-chat-latest>Show latest</button>
           </div>
         </header>
 
@@ -221,7 +219,7 @@ foreach (array_reverse($history['messages'] ?? []) as $msg) {
           <?php endforeach; ?>
         </div>
 
-        <div class="team-chat-update-bar"><button type="button" class="btn btn-outline-primary btn-sm" data-chat-new hidden>Go to new messages</button></div>
+        <div class="team-chat-update-bar"><button type="button" class="team-chat-scroll-latest" data-chat-new aria-label="Scroll to latest messages" title="Scroll to latest" hidden><i class="bi bi-arrow-down" aria-hidden="true"></i></button></div>
         <div class="alert alert-warning m-3" data-chat-error role="alert" hidden></div>
 
         <form class="team-chat-composer" action="<?= esc($baseUrl . '/send') ?>" method="post" data-chat-form data-loading="false" data-navigation="false">

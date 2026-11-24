@@ -31,7 +31,7 @@ final class ChatController extends TeamApiController
         return $this->teamRun(function () use ($unit): ResponseInterface {
             $result = (new TeamChatService(null, null, $this->teamAccess()))->tasks($unit, $this->query(['q']));
             return $this->teamOk(['data' => $result['tasks'], 'meta' => [
-                'unit' => $unit, 'total' => count($result['tasks']), 'limit' => TeamChatService::PAGE_LIMIT,
+                'unit' => $unit, 'total' => count($result['tasks']), 'limit' => TeamChatService::TASK_LIMIT,
             ]]);
         });
     }
