@@ -23,6 +23,9 @@ $statusTabs = [
     'hospitalized'     => 'Hospitalized',
     'cleared'          => 'Cleared',
 ];
+if (!empty($canArchive) || ($filters['status'] ?? '') === 'archived') {
+    $statusTabs['archived'] = 'Archived';
+}
 ?>
 <section class="iso-workspace"
          data-iso-workspace
@@ -121,6 +124,7 @@ $statusTabs = [
         'alerts'          => $alerts,
         'filters'         => $filters,
         'canWrite'        => $canWrite,
+        'canArchive'      => $canArchive ?? false,
         'conditions'      => $conditions,
         'defaultDays'     => $defaultDays,
     ], ['saveData' => false]) ?>

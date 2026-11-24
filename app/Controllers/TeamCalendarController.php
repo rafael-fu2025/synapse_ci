@@ -72,8 +72,15 @@ final class TeamCalendarController extends BaseController
             $service = new TeamCalendarService();
             $context = $service->context($unit);
             $event = $service->detail($unit, $id);
+            $actor = $context['actor'] ?? [];
+            $scope = (new \App\Services\Archive\ArchiveAccessPolicy())->allowedScope($actor);
+            $canArchive = in_array($actor['role'] ?? '', \App\Services\Archive\ArchiveAccessPolicy::ROLES_MAIN, true)
+                && (bool) ($scope['can_manage'] ?? false)
+                && in_array($unit, $scope['units'] ?? [], true);
+
             return view('teams/event_show', $context + $this->shared($unit) + [
                 'event' => $event, 'title' => 'Team event #' . $id,
+                'canArchive' => $canArchive,
                 'startLocal' => $this->local($event['starts_at']), 'endLocal' => $this->local($event['ends_at']),
                 'memberNames' => array_column($context['members'], 'name', 'id'),
                 'cancelUrl' => site_url($unit . '/teams/calendar'), 'formModalPage' => true,
@@ -119,6 +126,60 @@ final class TeamCalendarController extends BaseController
         return $this->respond(function () use ($unit, $id) {
             $event = (new TeamCalendarService())->cancel($unit, $id, $this->request->getPost());
             return $this->success('Team event cancelled. Patient schedules are unchanged.', $unit, $event);
+        });
+    }
+
+    /**
+     * Reversibly archive a cancelled or past team event.
+     */
+    public function archive(string $unit, int $id)
+    {
+        return $this->respond(function () use ($unit, $id) {
+            (new TeamCalendarService())->context($unit);
+            $db = \Config\Database::connect();
+            $row = $db->table('team_events')
+                ->where('tenant_id', \App\Services\CurrentTenant::id())
+                ->where('unit', $unit)
+                ->where('id', $id)
+                ->get()
+                ->getRowArray();
+            if ($row === null) {
+                throw new RuntimeException('Team event not found.', 404);
+            }
+            $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+            if ($reason === '') {
+                $reason = 'Archived from ' . $unit . ' team calendar';
+            }
+            (new \App\Services\Archive\ArchiveService($db))->archive('team_event', $id, $reason);
+
+            return $this->success('Team event archived reversibly.', $unit, $row);
+        });
+    }
+
+    /**
+     * Restore a previously archived team event.
+     */
+    public function restore(string $unit, int $id)
+    {
+        return $this->respond(function () use ($unit, $id) {
+            (new TeamCalendarService())->context($unit);
+            $db = \Config\Database::connect();
+            $row = $db->table('team_events')
+                ->where('tenant_id', \App\Services\CurrentTenant::id())
+                ->where('unit', $unit)
+                ->where('id', $id)
+                ->get()
+                ->getRowArray();
+            if ($row === null) {
+                throw new RuntimeException('Team event not found.', 404);
+            }
+            $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+            if ($reason === '') {
+                $reason = 'Restored from ' . $unit . ' team archive';
+            }
+            (new \App\Services\Archive\ArchiveService($db))->restore('team_event', $id, $reason);
+
+            return $this->success('Team event restored from archive.', $unit, $row);
         });
     }
 

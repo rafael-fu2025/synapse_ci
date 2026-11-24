@@ -266,6 +266,7 @@
   <script src="<?= base_url('assets/js/portal-workspace.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/portal-workspace.js') ?: '1' ?>"></script>
   <script src="<?= base_url('assets/js/refresh-regions.js') ?>"></script>
   <script src="<?= base_url('assets/js/team-chat.js') ?>"></script>
+  <script src="<?= base_url('assets/js/archive-actions.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/archive-actions.js') ?: '1' ?>"></script>
   <script src="<?= base_url('assets/js/background-actions.js') ?>"></script>
   <script src="<?= base_url('assets/js/global-search.js') ?>"></script>
 

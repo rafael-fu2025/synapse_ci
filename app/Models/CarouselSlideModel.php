@@ -34,9 +34,11 @@ final class CarouselSlideModel extends TenantModel
      */
     public function getActiveSlides(): array
     {
-        return $this->scoped()
-            ->where('is_active', 1)
-            ->orderBy('sort_order', 'ASC')
+        $builder = $this->scoped()->where('is_active', 1);
+        if ($this->db->fieldExists('deleted_at', $this->table)) {
+            $builder->where('deleted_at', null);
+        }
+        return $builder->orderBy('sort_order', 'ASC')
             ->orderBy('id', 'ASC')
             ->findAll();
     }
@@ -48,9 +50,29 @@ final class CarouselSlideModel extends TenantModel
      */
     public function getAllSlides(): array
     {
-        return $this->scoped()
-            ->orderBy('sort_order', 'ASC')
+        $builder = $this->scoped();
+        if ($this->db->fieldExists('deleted_at', $this->table)) {
+            $builder->where('deleted_at', null);
+        }
+        return $builder->orderBy('sort_order', 'ASC')
             ->orderBy('id', 'ASC')
+            ->findAll();
+    }
+
+    /**
+     * Get archived slides for reversible recovery.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getArchivedSlides(): array
+    {
+        if (!$this->db->fieldExists('deleted_at', $this->table)) {
+            return [];
+        }
+        return $this->scoped()
+            ->where('deleted_at !=', null)
+            ->orderBy('deleted_at', 'DESC')
+            ->orderBy('id', 'DESC')
             ->findAll();
     }
 

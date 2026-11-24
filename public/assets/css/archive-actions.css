@@ -1,0 +1,36 @@
+/* Subtle in-place row transitions for silent async archive & undo restoration. */
+.syn-archive-pending {
+  opacity: 0.52;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+}
+
+.syn-archive-leaving {
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.syn-archive-restored {
+  animation: synArchiveRestoreFlash 950ms ease;
+}
+
+@keyframes synArchiveRestoreFlash {
+  0% {
+    background-color: rgba(25, 135, 84, 0.16);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .syn-archive-pending,
+  .syn-archive-leaving,
+  .syn-archive-restored {
+    transition: none;
+    animation: none;
+    transform: none;
+  }
+}

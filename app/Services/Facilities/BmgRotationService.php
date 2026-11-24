@@ -185,12 +185,14 @@ final class BmgRotationService
                 throw new RuntimeException('Configuration actor changed.', 403);
             }
             $tenant = (int) $fresh['tenant_id'];
-            $this->findUnit($tenant, $id);
+            $unitRow = $this->findUnit($tenant, $id);
             $this->expectVersion($tenant, $id, $data['expected_version'] ?? null);
             if ($this->db->table('bmg_batches')->where('tenant_id', $tenant)->where('unit_id', $id)
                 ->whereIn('status', ['processing', 'awaiting_output', 'curing'])->countAllResults() > 0) {
                 throw new RuntimeException('Units with active batches cannot be archived.', 409);
             }
+            (new \App\Services\Archive\ArchiveService($this->db, new AuditService(db: $this->db)))
+                ->recordExternalArchive($tenant, 'bmg_unit', $id, $unitRow, (int) $fresh['id'], 'Archived from BMG drum directory');
             $revoked = $this->retireBindings($tenant, $id, (int) $fresh['id']);
             $now = $this->now();
             $this->db->table('bmg_units')->where('tenant_id', $tenant)->where('id', $id)
@@ -222,6 +224,8 @@ final class BmgRotationService
             $revoked = $this->retireBindings($tenant, $id, (int) $fresh['id']);
             $this->db->table('bmg_units')->where('tenant_id', $tenant)->where('id', $id)
                 ->update(['deleted_at' => null, 'status' => 'offline', 'updated_at' => $this->now()]);
+            (new \App\Services\Archive\ArchiveService($this->db, new AuditService(db: $this->db)))
+                ->recordExternalRestore($tenant, 'bmg_unit', $id, $unit, (int) $fresh['id'], 'Restored from BMG drum archive');
             $this->audit($fresh, 'bmg_unit', $id, 'restore', [
                 'schedule_version' => $this->scheduleView($tenant, $id)['version'], 'revoked_device_count' => $revoked]);
             return $this->detail($this->findUnit($tenant, $id));

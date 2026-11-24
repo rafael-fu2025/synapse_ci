@@ -603,9 +603,20 @@ final class InventoryService
                     }
                 }
             }
+            $prevActive = (int) ($medicine['is_active'] ?? 1);
+            $nextActive = (int) ($fields['is_active'] ?? $prevActive);
+            if ($prevActive === 1 && $nextActive === 0) {
+                (new \App\Services\Archive\ArchiveService($this->db, new \App\Services\Audit\AuditService(db: $this->db)))
+                    ->recordExternalArchive(CurrentTenant::id(), 'clinic_medicine', $id, $medicine, $actorId, 'Archived via medicine catalog');
+            }
             $ok = $this->db->table('clinic_medicines')->where('tenant_id', CurrentTenant::id())->where('id', $id)->where('version', $version)->update($fields + ['version'=>$version + 1, 'updated_at'=>$now]);
             $this->affected($ok);
-            return $this->medicine($id);
+            $updatedMedicine = $this->medicine($id);
+            if ($prevActive === 0 && $nextActive === 1) {
+                (new \App\Services\Archive\ArchiveService($this->db, new \App\Services\Audit\AuditService(db: $this->db)))
+                    ->recordExternalRestore(CurrentTenant::id(), 'clinic_medicine', $id, $updatedMedicine, $actorId, 'Restored via medicine catalog');
+            }
+            return $updatedMedicine;
         });
     }
 

@@ -130,9 +130,30 @@ final class QuestionBankService
         $this->transaction(function () use ($id, $actor, $version): void {
             $entry = $this->get($id);
             if ((int) $entry['version'] !== $version || $entry['status'] !== 'active') throw new RuntimeException('Bank entry changed or was already archived. Reload the list.', 409);
-            $this->must(Database::connect()->table('survey_question_bank')->where(['tenant_id' => $actor['tenant_id'], 'id' => $id, 'version' => $version])
+            $db = Database::connect();
+            (new \App\Services\Archive\ArchiveService($db, new AuditService(db: $db)))
+                ->recordExternalArchive((int) $actor['tenant_id'], 'question_bank', $id, $entry, (int) $actor['id'], 'Archived from question bank');
+            $this->must($db->table('survey_question_bank')->where(['tenant_id' => $actor['tenant_id'], 'id' => $id, 'version' => $version])
                 ->update(['status' => 'archived', 'version' => $version + 1, 'updated_at' => gmdate('Y-m-d H:i:s')]));
             $this->audit('archived', $id, (int) $entry['current_revision'], $actor);
+        });
+    }
+
+    public function restore(int $id, mixed $version, string $reason = 'Restored to active question bank'): void
+    {
+        $actor = $this->actor();
+        $version = SurveyQuestion::positive($version);
+        $this->transaction(function () use ($id, $actor, $version, $reason): void {
+            $entry = $this->get($id);
+            if ((int) $entry['version'] !== $version || $entry['status'] !== 'archived') {
+                throw new RuntimeException('Bank entry changed or is not archived. Reload the list.', 409);
+            }
+            $db = Database::connect();
+            $this->must($db->table('survey_question_bank')->where(['tenant_id' => $actor['tenant_id'], 'id' => $id, 'version' => $version])
+                ->update(['status' => 'active', 'version' => $version + 1, 'updated_at' => gmdate('Y-m-d H:i:s')]));
+            (new \App\Services\Archive\ArchiveService($db, new AuditService(db: $db)))
+                ->recordExternalRestore((int) $actor['tenant_id'], 'question_bank', $id, $entry, (int) $actor['id'], $reason);
+            $this->audit('restored', $id, (int) $entry['current_revision'], $actor);
         });
     }
 

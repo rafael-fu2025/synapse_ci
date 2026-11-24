@@ -89,6 +89,10 @@ final class PermissionsAndRolesSeeder extends Seeder
             ['code' => 'rbac.manage', 'name' => 'Manage users and role assignments', 'module' => 'admin'],
             ['code' => 'audit.read', 'name' => 'View and verify immutable audit chain', 'module' => 'admin'],
             ['code' => 'mis.sync', 'name' => 'Trigger manual MIS directory synchronization', 'module' => 'admin'],
+            ['code' => 'archive.read', 'name' => 'View scoped archive center, retention policies, and legal holds', 'module' => 'admin'],
+            ['code' => 'archive.manage', 'name' => 'Archive and restore permitted records in scope', 'module' => 'admin'],
+            ['code' => 'archive.policies.manage', 'name' => 'Configure institutional archive retention policies', 'module' => 'admin'],
+            ['code' => 'archive.legal_hold.manage', 'name' => 'Place and lift archive legal holds', 'module' => 'admin'],
             ['code' => 'reports.read', 'name' => 'View operational reports and analytics', 'module' => 'reports'],
             ['code' => 'reports.export', 'name' => 'Export CSV and data summaries', 'module' => 'reports'],
 
@@ -134,6 +138,7 @@ final class PermissionsAndRolesSeeder extends Seeder
                 'clinic.reports.export',
                 'referrals.create', 'referrals.read', 'referrals.acknowledge', 'referrals.review', 'referrals.close',
                 'reports.read', 'reports.export', 'rbac.manage', 'mis.sync',
+                'archive.read', 'archive.manage',
             ],
 
             'clinic_physician' => [
@@ -189,6 +194,7 @@ final class PermissionsAndRolesSeeder extends Seeder
                 'clinic.patients.read',
                 'referrals.create', 'referrals.read', 'referrals.acknowledge', 'referrals.review', 'referrals.close',
                 'reports.read', 'reports.export', 'rbac.manage', 'mis.sync',
+                'archive.read', 'archive.manage', 'archive.legal_hold.manage',
             ],
 
             'guidance_supervisor' => [
@@ -206,6 +212,7 @@ final class PermissionsAndRolesSeeder extends Seeder
                 'clinic.patients.read',
                 'referrals.create', 'referrals.read', 'referrals.acknowledge', 'referrals.review', 'referrals.close',
                 'reports.read',
+                'archive.read', 'archive.manage',
             ],
 
             'counsellor' => [
@@ -226,6 +233,7 @@ final class PermissionsAndRolesSeeder extends Seeder
             'bmg_admin' => [
                 'facilities.read', 'facilities.manage', 'facilities.configure',
                 'reports.read', 'reports.export',
+                'archive.read', 'archive.manage',
             ],
 
             'facilities_op' => [
@@ -233,7 +241,7 @@ final class PermissionsAndRolesSeeder extends Seeder
             ],
 
             'audit_reader' => [
-                'audit.read', 'reports.read', 'reports.export',
+                'audit.read', 'reports.read', 'reports.export', 'archive.read',
             ],
 
             'report_viewer' => [

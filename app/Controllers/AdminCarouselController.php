@@ -40,21 +40,25 @@ final class AdminCarouselController extends BaseController
      */
     public function index()
     {
-        $slides = $this->slideModel->getAllSlides();
+        $archivedView = $this->request->getGet('view') === 'archived';
+        $slides = $archivedView ? $this->slideModel->getArchivedSlides() : $this->slideModel->getAllSlides();
+        $archivedCount = count($this->slideModel->getArchivedSlides());
         $protected = [];
         foreach ($slides as $slide) {
             $protected[(int) $slide['id']] = CarouselAccessPolicy::usesDefaultAsset($slide);
         }
 
         return view('admin/carousel/index', [
-            'title'       => 'Login Carousel',
-            'formModalPage' => false,
-            'pageTitle'   => 'Login Carousel Slides',
-            'slides'      => $slides,
-            'slide'       => null,
+            'title'           => 'Login Carousel',
+            'formModalPage'   => false,
+            'pageTitle'       => 'Login Carousel Slides',
+            'slides'          => $slides,
+            'archivedView'    => $archivedView,
+            'archivedCount'   => $archivedCount,
+            'slide'           => null,
             'protectedSlides' => $protected,
-            'isSuperadmin' => $this->isSuperadmin(),
-            'breadcrumbs' => [
+            'isSuperadmin'    => $this->isSuperadmin(),
+            'breadcrumbs'     => [
                 ['label' => 'Governance', 'url' => site_url('/admin/audit')],
                 ['label' => 'Login Carousel', 'url' => ''],
             ],
@@ -179,6 +183,105 @@ final class AdminCarouselController extends BaseController
             return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
         } catch (Throwable $e) {
             return $this->respond($e->getMessage(), false);
+        }
+    }
+
+    /**
+     * Archive a slide reversibly while retaining its managed image files.
+     */
+    public function archive(int $id)
+    {
+        $slide = $this->slideModel->scoped()->find($id);
+        if ($slide === null) {
+            return $this->respond('Slide not found.', false);
+        }
+
+        $actor = $this->actor();
+        if (!CarouselAccessPolicy::canDelete($actor, $slide)) {
+            return $this->respond(CarouselAccessPolicy::DELETE_DENIED, false, 403);
+        }
+
+        try {
+            if ($this->isSuperadmin()) {
+                (new \App\Services\Archive\ArchiveService())->archive(
+                    'carousel_slide',
+                    $id,
+                    'Archived from login carousel manager'
+                );
+
+                return $this->respond('Slide archived reversibly.', true, 422, $this->regionalRefresh());
+            }
+
+            $now = gmdate('Y-m-d H:i:s');
+            $db = \Config\Database::connect();
+            $tid = (int) ($slide['tenant_id'] ?? \App\Services\CurrentTenant::id());
+            if ($db->tableExists('archive_legal_holds')) {
+                (new \App\Services\Archive\LegalHoldService($db))->assertNotHeld($tid, 'carousel_slide', $id);
+            }
+            $update = ['is_active' => 0, 'updated_at' => $now];
+            if ($db->fieldExists('deleted_at', 'carousel_slides')) {
+                $update['deleted_at'] = $now;
+            }
+            $db->table('carousel_slides')->where('tenant_id', $tid)->where('id', $id)->update($update);
+            (new \App\Services\Archive\ArchiveService($db))->recordExternalArchive(
+                $tid,
+                'carousel_slide',
+                $id,
+                $slide,
+                (int) ($actor['id'] ?? 0),
+                'Archived from login carousel manager'
+            );
+            return $this->respond('Slide archived reversibly.', true, 422, $this->regionalRefresh());
+        } catch (RuntimeException $e) {
+            return $this->respond($e->getMessage(), false, $e->getCode() === 409 ? 409 : ($e->getCode() === 403 ? 403 : 422));
+        }
+    }
+
+    /**
+     * Restore an archived slide (kept hidden until explicitly activated).
+     */
+    public function restore(int $id)
+    {
+        $db = \Config\Database::connect();
+        $tid = \App\Services\CurrentTenant::id();
+        $slide = $db->table('carousel_slides')->where('tenant_id', $tid)->where('id', $id)->get()->getRowArray();
+        if (!is_array($slide)) {
+            return $this->respond('Slide not found.', false);
+        }
+
+        $actor = $this->actor();
+        if (!CarouselAccessPolicy::canDelete($actor, $slide)) {
+            return $this->respond(CarouselAccessPolicy::DELETE_DENIED, false, 403);
+        }
+
+        try {
+            if ($this->isSuperadmin()) {
+                (new \App\Services\Archive\ArchiveService($db))->restore(
+                    'carousel_slide',
+                    $id,
+                    'Restored from login carousel archive'
+                );
+
+                return $this->respond('Slide restored as hidden. Use Show on login when ready.', true, 422, $this->regionalRefresh());
+            }
+
+            $now = gmdate('Y-m-d H:i:s');
+            $update = ['is_active' => 0, 'updated_at' => $now];
+            if ($db->fieldExists('deleted_at', 'carousel_slides')) {
+                $update['deleted_at'] = null;
+            }
+            $db->table('carousel_slides')->where('tenant_id', $tid)->where('id', $id)->update($update);
+            (new \App\Services\Archive\ArchiveService($db))->recordExternalRestore(
+                $tid,
+                'carousel_slide',
+                $id,
+                $slide,
+                (int) ($actor['id'] ?? 0),
+                'Restored from login carousel archive'
+            );
+            return $this->respond('Slide restored as hidden. Use Show on login when ready.', true, 422, $this->regionalRefresh());
+        } catch (RuntimeException $e) {
+            return $this->respond($e->getMessage(), false, $e->getCode() === 403 ? 403 : 422);
         }
     }
 

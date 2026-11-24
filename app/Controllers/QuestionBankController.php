@@ -75,6 +75,14 @@ final class QuestionBankController extends BaseController
         });
     }
 
+    public function restore(int $id)
+    {
+        return $this->respond(function () use ($id) {
+            (new QuestionBankService())->restore($id, $this->request->getPost('version'));
+            return $this->success('Question restored to active library.', $this->listRefresh());
+        });
+    }
+
     private function editor(?array $entry = null): string
     {
         $base = site_url('guidance/question-bank');

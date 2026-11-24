@@ -40,7 +40,7 @@ final class ClinicEncounterModel extends TenantModel
     /** @param array{q?: string, from?: string, to?: string, complaint?: string, disposition?: string} $filters */
     public function getListPage(\App\Libraries\TablePage $page, ?string $status = null, ?string $date = null, array $filters = []): array
     {
-        $total = $this->listQuery()->countAllResults();
+        $total = $this->listQuery($status === 'archived' ? 'archived' : null)->countAllResults();
         $filtered = $this->listQuery($status, $date, $filters)->countAllResults();
         $pagination = $page->metadata($total, $filtered);
         $encounters = $this->listQuery($status, $date, $filters)
@@ -71,7 +71,9 @@ final class ClinicEncounterModel extends TenantModel
             ->join('users u', 'u.id = clinic_encounters.attending_user_id AND u.tenant_id = clinic_encounters.tenant_id', 'left')
             ->join('users enc_u', 'enc_u.id = clinic_encounters.encoded_by_user_id AND enc_u.tenant_id = clinic_encounters.tenant_id', 'left');
 
-        if ($status !== null && $status !== '') {
+        if ($status === 'archived') {
+            $builder->onlyDeleted();
+        } elseif ($status !== null && $status !== '') {
             $builder->where('clinic_encounters.status', $status);
         }
 

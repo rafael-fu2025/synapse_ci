@@ -27,8 +27,11 @@ $filterTabs = [
     'closed'      => ['label' => 'Closed', 'icon' => 'bi-archive'],
     'transferred' => ['label' => 'Transferred', 'icon' => 'bi-arrow-left-right'],
 ];
+if (!empty($canViewArchived) || !empty($canArchive) || $currentStatus === 'archived') {
+    $filterTabs['archived'] = ['label' => 'Archived', 'icon' => 'bi-archive-fill'];
+}
 if (!isset($statusCounts) || !is_array($statusCounts)) {
-    $statusCounts = ['' => count($episodes), 'open' => 0, 'active' => 0, 'closed' => 0, 'transferred' => 0];
+    $statusCounts = ['' => count($episodes), 'open' => 0, 'active' => 0, 'closed' => 0, 'transferred' => 0, 'archived' => 0];
     foreach ($episodes as $epRow) {
         $stKey = (string) ($epRow['status'] ?? '');
         if (isset($statusCounts[$stKey])) {
@@ -81,7 +84,7 @@ $perPage = (int) $pagination['per_page'];
            <?= $isActive ? 'aria-current="page"' : '' ?>>
           <i class="bi <?= esc($meta['icon'], 'attr') ?>" aria-hidden="true"></i>
           <span class="ge-folder-label"><?= esc($meta['label']) ?></span>
-          <span class="ge-folder-count"><?= (int) ($statusCounts[$key] ?? 0) ?></span>
+          <span class="ge-folder-count" data-ep-tab-count="<?= esc($key, 'attr') ?>"><?= (int) ($statusCounts[$key] ?? 0) ?></span>
         </a>
       <?php endforeach; ?>
     </nav>
@@ -184,7 +187,11 @@ $perPage = (int) $pagination['per_page'];
                   <?php endif; ?>
                 </td>
                 <td data-label="Status">
-                  <span class="ce-status-dot <?= $statusDotClass ?>"><?= esc(ucfirst($epStatus)) ?></span>
+                  <?php if (!empty($ep['deleted_at'])): ?>
+                    <span class="ce-status-dot ce-status-slate">Archived</span>
+                  <?php else: ?>
+                    <span class="ce-status-dot <?= $statusDotClass ?>"><?= esc(ucfirst($epStatus)) ?></span>
+                  <?php endif; ?>
                 </td>
                 <td data-label="Opened">
                   <?php if (! empty($ep['opened_at'])): ?>
@@ -195,11 +202,46 @@ $perPage = (int) $pagination['per_page'];
                   <?php endif; ?>
                 </td>
                 <td data-label="Actions" class="text-end">
-                  <div class="d-flex justify-content-md-end gc-card-actions">
-                    <a href="<?= site_url('guidance/episodes/' . (int) $ep['id']) ?>" class="btn btn-sm btn-outline-primary ce-action-btn">
-                      <i class="bi bi-clock-history" aria-hidden="true"></i> Timeline
-                    </a>
-                  </div>
+                  <?php if (!empty($ep['deleted_at'])): ?>
+                    <?php if (!empty($canArchive)): ?>
+                      <form method="POST"
+                            action="<?= esc(site_url('guidance/episodes/' . (int) $ep['id'] . '/restore'), 'attr') ?>"
+                            class="d-inline"
+                            data-archive-async="restore"
+                            data-archive-undo-url="<?= esc(site_url('guidance/episodes/' . (int) $ep['id'] . '/archive'), 'attr') ?>"
+                            data-archive-undo-label="Re-archive"
+                            data-archive-counter-dec="[data-ep-tab-count='archived']"
+                            data-archive-counter-inc="[data-ep-tab-count=''],[data-ep-tab-count='<?= esc($epStatus, 'attr') ?>']">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-sm btn-outline-primary ce-action-btn">
+                          <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Restore
+                        </button>
+                      </form>
+                    <?php else: ?>
+                      <span class="text-muted small">Archived</span>
+                    <?php endif; ?>
+                  <?php else: ?>
+                    <div class="d-flex justify-content-md-end gap-2 gc-card-actions">
+                      <a href="<?= site_url('guidance/episodes/' . (int) $ep['id']) ?>" class="btn btn-sm btn-outline-primary ce-action-btn">
+                        <i class="bi bi-clock-history" aria-hidden="true"></i> Timeline
+                      </a>
+                      <?php if (!empty($canArchive) && in_array($epStatus, ['closed', 'transferred'], true)): ?>
+                        <form method="POST"
+                              action="<?= esc(site_url('guidance/episodes/' . (int) $ep['id'] . '/archive'), 'attr') ?>"
+                              class="d-inline"
+                              data-archive-async="archive"
+                              data-archive-undo-url="<?= esc(site_url('guidance/episodes/' . (int) $ep['id'] . '/restore'), 'attr') ?>"
+                              data-archive-undo-label="Undo"
+                              data-archive-counter-dec="[data-ep-tab-count=''],[data-ep-tab-count='<?= esc($epStatus, 'attr') ?>']"
+                              data-archive-counter-inc="[data-ep-tab-count='archived']">
+                          <?= csrf_field() ?>
+                          <button type="submit" class="btn btn-sm btn-outline-warning ce-action-btn">
+                            <i class="bi bi-archive" aria-hidden="true"></i> Archive
+                          </button>
+                        </form>
+                      <?php endif; ?>
+                    </div>
+                  <?php endif; ?>
                 </td>
               </tr>
             <?php endforeach; ?>

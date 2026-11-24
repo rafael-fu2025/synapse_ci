@@ -73,7 +73,13 @@ final class TeamTaskService
         if (!in_array($mine, ['', null, '0', '1'], true)) {
             throw new RuntimeException('Invalid mine filter; use "1".', 422);
         }
+        $archived = ($filters['archived'] ?? '') === '1';
         $builder = $this->scope('team_tasks', $unit, $actor);
+        if ($this->hasTaskDeletedAt()) {
+            $archived ? $builder->where('deleted_at !=', null) : $builder->where('deleted_at', null);
+        } elseif ($archived) {
+            $builder->where('1 = 0', null, false);
+        }
         if ($mine === '1') { $builder->where('assignee_user_id', $actor['id']); }
         if ($priority !== null) { $builder->where('priority', $priority); }
         if ($query !== '') {
@@ -312,9 +318,17 @@ final class TeamTaskService
         return $this->db->table($table)->where('tenant_id', $actor['tenant_id'])->where('unit', $unit);
     }
 
+    private function hasTaskDeletedAt(): bool
+    {
+        return $this->db->fieldExists('deleted_at', 'team_tasks');
+    }
+
     private function record(string $unit, int $id, array $actor, bool $lock = false): array
     {
         $builder = $this->scope('team_tasks', $unit, $actor)->where('id', $id);
+        if ($this->hasTaskDeletedAt()) {
+            $builder->where('deleted_at', null);
+        }
         $row = $this->row($builder, $lock);
         if ($row === null) { throw new RuntimeException('Task not found.', 404); }
         return $this->task($row);

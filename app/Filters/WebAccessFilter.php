@@ -59,6 +59,27 @@ final class WebAccessFilter implements FilterInterface
                 $this->permit('portal.appointments.create');
             }
             if (str_starts_with($path, 'admin/audit')) $this->permit('audit.read');
+            if ($path === 'admin/archive' || str_starts_with($path, 'admin/archive/')) {
+                if (!PortalContext::isRolePermitted($actor['role'], 'main')) {
+                    throw new RuntimeException('Archive access forbidden.', 403);
+                }
+                if (!in_array($actor['role'], \App\Services\Archive\ArchiveAccessPolicy::ROLES_MAIN, true)) {
+                    throw new RuntimeException('Archive governance access is not permitted for your role.', 403);
+                }
+                if (str_starts_with($path, 'admin/archive/holds/')) {
+                    $this->permit('archive.legal_hold.manage');
+                } elseif (str_starts_with($path, 'admin/archive/policies/')) {
+                    $this->permit('archive.policies.manage');
+                } elseif (str_starts_with($path, 'admin/archive/records/')) {
+                    $this->permit('archive.manage');
+                } else {
+                    $this->permit('archive.read');
+                }
+            }
+            if (preg_match('~^(?:clinic/isolation|guidance/episodes)/\d+/(?:archive|restore)$~', $path)
+                || preg_match('~^(?:clinic|guidance|facilities)/teams/(?:calendar/events/)?\d+/(?:archive|restore)$~', $path)) {
+                $this->permit('archive.manage');
+            }
             if (str_starts_with($path, 'reports/export')) {
                 if (!PortalContext::isRolePermitted($actor['role'], 'main')) throw new RuntimeException('Reports access forbidden.', 403);
                 $this->permit('reports.read');
@@ -77,12 +98,18 @@ final class WebAccessFilter implements FilterInterface
                         'patients' => str_ends_with($path, '/clearances')
                             ? 'clinic.clearances.write'
                             : (str_ends_with($path, '/labs') ? 'clinic.encounters.addendum' : 'clinic.patients.' . ($write ? 'write' : 'read')),
-                        'encounters' => str_ends_with($path, '/addendum')
-                            ? 'clinic.encounters.addendum'
-                            : 'clinic.encounters.' . (str_contains($path, '/start-') ? 'create' : (str_ends_with($path, '/complete') ? 'seal' : ($write ? 'write' : 'read'))),
-                        'inventory' => 'clinic.inventory.' . ($write ? 'write' : 'read'),
+                        'encounters' => preg_match('~/(?:archive|restore)$~', $path)
+                            ? 'archive.manage'
+                            : (str_ends_with($path, '/addendum')
+                                ? 'clinic.encounters.addendum'
+                                : 'clinic.encounters.' . (str_contains($path, '/start-') ? 'create' : (str_ends_with($path, '/complete') ? 'seal' : ($write ? 'write' : 'read')))),
+                        'inventory' => preg_match('~/(?:archive|restore)$~', $path)
+                            ? 'archive.manage'
+                            : 'clinic.inventory.' . ($write ? 'write' : 'read'),
                         'appointments' => $unit === 'clinic' ? 'clinic.appointments.' . ($write || str_ends_with($path, '/create') ? 'write' : 'read') : 'guidance.schedule.' . ($write || str_ends_with($path, '/create') ? 'manage' : 'read'),
-                        default => 'guidance.cases.' . (str_ends_with($path, '/create') || str_ends_with($path, '/store') || str_ends_with($path, '/session') || str_contains($path, '/start-for-ticket/') || str_contains($path, '/choose-for-ticket/') ? 'create' : ($write ? 'write' : 'read')),
+                        default => preg_match('~^guidance/cases/\d+/(?:archive|restore)$~', $path)
+                            ? 'archive.manage'
+                            : 'guidance.cases.' . (str_ends_with($path, '/create') || str_ends_with($path, '/store') || str_ends_with($path, '/session') || str_contains($path, '/start-for-ticket/') || str_contains($path, '/choose-for-ticket/') ? 'create' : ($write ? 'write' : 'read')),
                     };
                     $this->permit($permission);
                 }
@@ -184,14 +211,22 @@ final class WebAccessFilter implements FilterInterface
             }
         }
         if (preg_match('~^clinic/(?:patients|encounters/start-direct)/(\d+)(?:/(?:health|labs|clearances))?$~', $path, $m)) $this->record('people', (int) $m[1], true);
-        if (preg_match('~^clinic/encounters/(\d+)(?:/|$)~', $path, $m)) {
+        if (preg_match('~^clinic/encounters/(\d+)/(archive|restore)$~', $path, $m)) {
+            $encounter = $this->record('clinic_encounters', (int) $m[1], false);
+            $this->record('people', (int) $encounter['person_id'], false);
+        } elseif (preg_match('~^clinic/encounters/(\d+)(?:/|$)~', $path, $m)) {
             $encounter = $this->record('clinic_encounters', (int) $m[1], true);
             $this->record('people', (int) $encounter['person_id'], true);
             if ($write && !str_ends_with($path, '/addendum') && $encounter['status'] !== 'in_progress') {
                 throw new RuntimeException('Encounter is no longer open.', 409);
             }
         }
-        if (preg_match('~^guidance/cases/(\d+)(?:/|$)~', $path, $m)) $this->caseAccess((int) $m[1], $write);
+        if (preg_match('~^guidance/cases/(\d+)/(archive|restore)$~', $path, $m)) {
+            $case = $this->record('counselling_cases', (int) $m[1], false);
+            $this->record('people', (int) $case['person_id'], false);
+        } elseif (preg_match('~^guidance/cases/(\d+)(?:/|$)~', $path, $m)) {
+            $this->caseAccess((int) $m[1], $write);
+        }
         if (preg_match('~^guidance/sessions/(\d+)(?:/|$)~', $path, $m)) {
             $session = $this->record('counselling_sessions', (int) $m[1], true);
             $this->caseAccess((int) $session['case_id'], $write);

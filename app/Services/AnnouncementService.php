@@ -169,6 +169,30 @@ final class AnnouncementService
         return $this->transition($id, $unit, $version, 'archived');
     }
 
+    public function restore(int $id, string $unit, mixed $version, string $reason = 'Restored from announcement archive'): array
+    {
+        return $this->transaction(function () use ($id, $unit, $version, $reason): array {
+            $actor = $this->manager($unit);
+            $row = $this->record($id, $actor, $unit, true);
+            $this->version($row, $version);
+            if ($row['status'] !== 'archived') {
+                throw new RuntimeException('Announcement is not archived.', 409);
+            }
+            $now = gmdate('Y-m-d H:i:s');
+            $this->must($this->db->table('announcements')->where('tenant_id', $actor['tenant_id'])->where('id', $id)->update([
+                'status'       => 'draft',
+                'published_at' => null,
+                'updated_at'   => $now,
+                'version'      => (int) $row['version'] + 1,
+            ]));
+            $row = $this->record($id, $actor, $unit);
+            (new \App\Services\Archive\ArchiveService($this->db, new AuditService(db: $this->db)))
+                ->recordExternalRestore((int) $actor['tenant_id'], 'announcement', $id, $row, (int) $actor['id'], $reason);
+            $this->audit('restored', $row, $actor);
+            return $row;
+        });
+    }
+
     private function transition(int $id, string $unit, mixed $version, string $status): array
     {
         return $this->transaction(function (array &$notifications) use ($id, $unit, $version, $status): array {
@@ -183,6 +207,10 @@ final class AnnouncementService
                 }
             } elseif (!in_array($row['status'], ['draft', 'published'], true)) {
                 throw new RuntimeException('Announcement is already archived.', 409);
+            }
+            if ($status === 'archived') {
+                (new \App\Services\Archive\ArchiveService($this->db, new AuditService(db: $this->db)))
+                    ->recordExternalArchive((int) $actor['tenant_id'], 'announcement', $id, $row, (int) $actor['id'], 'Archived from announcements workspace');
             }
             $now = gmdate('Y-m-d H:i:s');
             $changes = ['status' => $status, 'updated_at' => $now, 'version' => (int) $row['version'] + 1];

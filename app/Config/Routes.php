@@ -194,12 +194,16 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
             $routes->get('calendar/events/(:num)/edit', 'TeamCalendarController::edit/' . $unit . '/$1');
             $routes->post('calendar/events/(:num)/update', 'TeamCalendarController::update/' . $unit . '/$1');
             $routes->post('calendar/events/(:num)/cancel', 'TeamCalendarController::cancel/' . $unit . '/$1');
+            $routes->post('calendar/events/(:num)/archive', 'TeamCalendarController::archive/' . $unit . '/$1');
+            $routes->post('calendar/events/(:num)/restore', 'TeamCalendarController::restore/' . $unit . '/$1');
             $routes->get('create', 'TeamsController::create/' . $unit);
             $routes->post('store', 'TeamsController::store/' . $unit);
             $routes->get('(:num)', 'TeamsController::show/' . $unit . '/$1');
             $routes->get('(:num)/edit', 'TeamsController::edit/' . $unit . '/$1');
             $routes->post('(:num)/update', 'TeamsController::update/' . $unit . '/$1');
             $routes->post('(:num)/move', 'TeamsController::move/' . $unit . '/$1');
+            $routes->post('(:num)/archive', 'TeamsController::archive/' . $unit . '/$1');
+            $routes->post('(:num)/restore', 'TeamsController::restore/' . $unit . '/$1');
             $routes->post('(:num)/comments', 'TeamsController::comment/' . $unit . '/$1');
         });
     }
@@ -220,6 +224,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
             $routes->post('(:num)/update', 'AnnouncementController::update/$1/' . $unit);
             $routes->post('(:num)/publish', 'AnnouncementController::publish/$1/' . $unit);
             $routes->post('(:num)/archive', 'AnnouncementController::archive/$1/' . $unit);
+            $routes->post('(:num)/restore', 'AnnouncementController::restore/$1/' . $unit);
         });
     }
     $routes->group('guidance/question-bank', ['filter' => 'portal_access:guidance'], static function (RouteCollection $routes): void {
@@ -231,6 +236,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('(:num)/edit', 'QuestionBankController::edit/$1');
         $routes->post('(:num)/update', 'QuestionBankController::update/$1');
         $routes->post('(:num)/archive', 'QuestionBankController::archive/$1');
+        $routes->post('(:num)/restore', 'QuestionBankController::restore/$1');
     });
     $routes->group('guidance/surveys', ['filter' => 'portal_access:guidance'], static function (RouteCollection $routes): void {
         $routes->get('', 'SurveyController::index');
@@ -241,6 +247,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('(:num)/update', 'SurveyController::update/$1');
         $routes->post('(:num)/publish', 'SurveyController::publish/$1');
         $routes->post('(:num)/close', 'SurveyController::close/$1');
+        $routes->post('(:num)/archive', 'SurveyController::archive/$1');
+        $routes->post('(:num)/restore', 'SurveyController::restore/$1');
         $routes->get('(:num)/responses', 'SurveyController::responses/$1');
         $routes->get('(:num)/responses/(:num)', 'SurveyController::responseDetail/$1/$2');
         $routes->post('(:num)/responses/(:num)/interview', 'SurveyController::recordInterview/$1/$2');
@@ -285,7 +293,16 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->get('admin/audit', 'AuditController::index', ['filter' => 'auth:audit.read']);
     $routes->post('admin/audit/verify', 'AuditController::verify', ['filter' => 'auth:audit.read']);
 
-
+    // System-wide Archive Governance Center (RBAC + department-scoped inside WebAccessFilter & ArchiveAccessPolicy)
+    $routes->group('admin/archive', static function (RouteCollection $routes): void {
+        $routes->get('', 'ArchiveController::index');
+        $routes->post('records/archive', 'ArchiveController::archive');
+        $routes->post('records/restore', 'ArchiveController::restore');
+        $routes->post('holds/place', 'ArchiveController::placeHold');
+        $routes->post('holds/(:num)/lift', 'ArchiveController::liftHold/$1');
+        $routes->post('policies/save', 'ArchiveController::savePolicy');
+        $routes->post('policies/(:num)/toggle', 'ArchiveController::togglePolicy/$1');
+    });
 
     // Login Carousel Management - Gated to RBAC managers only
     $routes->group('admin/carousel', ['filter' => 'auth:rbac.manage'], static function (RouteCollection $routes): void {
@@ -296,6 +313,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('(:num)/update', 'AdminCarouselController::update/$1');
         $routes->post('reorder', 'AdminCarouselController::reorder');
         $routes->post('(:num)/toggle', 'AdminCarouselController::toggle/$1');
+        $routes->post('(:num)/archive', 'AdminCarouselController::archive/$1');
+        $routes->post('(:num)/restore', 'AdminCarouselController::restore/$1');
         $routes->post('(:num)/delete', 'AdminCarouselController::delete/$1');
     });
 
@@ -321,6 +340,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('guidance/cases/(:num)/followups', 'GuidanceController::addFollowup/$1');
         $routes->post('guidance/cases/(:num)/close', 'GuidanceController::closeCase/$1');
         $routes->post('guidance/cases/(:num)/monitor', 'GuidanceController::monitorCase/$1');
+        $routes->post('guidance/cases/(:num)/archive', 'GuidanceController::archiveCase/$1');
+        $routes->post('guidance/cases/(:num)/restore', 'GuidanceController::restoreCase/$1');
         $routes->get('guidance/cases/choose-for-ticket/(:num)', 'GuidanceController::chooseSessionForTicket/$1');
         $routes->post('guidance/cases/start-for-ticket/(:num)', 'GuidanceController::startForTicket/$1');
         $routes->get('guidance/cases/start-for-ticket/(:num)', static function () {
@@ -385,6 +406,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('guidance/episodes/(:num)', 'GuidanceEpisodeController::show/$1');
         $routes->post('guidance/episodes/(:num)/close', 'GuidanceEpisodeController::close/$1');
         $routes->post('guidance/episodes/(:num)/transfer', 'GuidanceEpisodeController::transfer/$1');
+        $routes->post('guidance/episodes/(:num)/archive', 'GuidanceEpisodeController::archive/$1');
+        $routes->post('guidance/episodes/(:num)/restore', 'GuidanceEpisodeController::restore/$1');
 
         $routes->get('guidance/call-slips', 'GuidanceCallSlipController::index');
         $routes->post('guidance/call-slips/issue', 'GuidanceCallSlipController::issue');
@@ -476,6 +499,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->post('clinic/encounters/(:num)/dispense', 'ClinicController::dispense/$1', ['filter' => 'inventory_csrf']);
         $routes->post('clinic/encounters/(:num)/complete', 'ClinicController::complete/$1', ['filter' => 'inventory_csrf']);
         $routes->post('clinic/encounters/(:num)/addendum', 'ClinicController::saveAddendum/$1');
+        $routes->post('clinic/encounters/(:num)/archive', 'ClinicController::archiveEncounter/$1');
+        $routes->post('clinic/encounters/(:num)/restore', 'ClinicController::restoreEncounter/$1');
         $routes->get('clinic/encounters/(:num)/certificate', 'ClinicController::encounterCertificate/$1');
         $routes->post('clinic/encounters/start-for-ticket/(:num)', 'ClinicController::startForTicket/$1', ['filter' => 'inventory_csrf']);
         $routes->get('clinic/encounters/start-for-ticket/(:num)', static function () {
@@ -497,6 +522,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
             $routes->post('batches/(:num)/status', 'ClinicInventoryController::status/$1', ['filter' => 'inventory_csrf']);
             $routes->get('operations/(:num)/reverse', 'ClinicInventoryController::reverseForm/$1');
             $routes->post('operations/(:num)/reverse', 'ClinicInventoryController::reverse/$1', ['filter' => 'inventory_csrf']);
+            $routes->post('(:num)/archive', 'ClinicInventoryController::archive/$1', ['filter' => 'inventory_csrf']);
+            $routes->post('(:num)/restore', 'ClinicInventoryController::restore/$1', ['filter' => 'inventory_csrf']);
             $routes->get('(:num)', 'ClinicInventoryController::show/$1');
         });
 
@@ -510,6 +537,8 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('clinic/isolation', 'ClinicIsolationController::index');
         $routes->post('clinic/isolation/store', 'ClinicIsolationController::store');
         $routes->post('clinic/isolation/(:num)/clear', 'ClinicIsolationController::clear/$1');
+        $routes->post('clinic/isolation/(:num)/archive', 'ClinicIsolationController::archive/$1');
+        $routes->post('clinic/isolation/(:num)/restore', 'ClinicIsolationController::restore/$1');
 
         $routes->get('clinic/reports', 'ClinicController::summaryReport');
         $routes->get('clinic/reports/pdf', 'ClinicController::summaryReportPdf');

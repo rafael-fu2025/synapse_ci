@@ -41,6 +41,9 @@ $toVal = ($filters['to'] ?? '') !== '' ? (string) $filters['to'] : (string) ($da
             <option value="in_progress" <?= ($status === 'in_progress') ? 'selected' : '' ?>>In Progress</option>
             <option value="completed" <?= ($status === 'completed') ? 'selected' : '' ?>>Completed</option>
             <option value="referred" <?= ($status === 'referred') ? 'selected' : '' ?>>Referred</option>
+            <?php if (!empty($canArchive) || $status === 'archived'): ?>
+              <option value="archived" <?= ($status === 'archived') ? 'selected' : '' ?>>Archived</option>
+            <?php endif; ?>
           </select>
         </div>
 
@@ -180,7 +183,9 @@ $toVal = ($filters['to'] ?? '') !== '' ? (string) $filters['to'] : (string) ($da
                     </span>
                   </td>
                   <td data-label="Status">
-                    <?php if ($enc['status'] === 'in_progress'): ?>
+                    <?php if (!empty($enc['deleted_at'])): ?>
+                      <span class="ce-status-dot ce-status-slate">Archived</span>
+                    <?php elseif ($enc['status'] === 'in_progress'): ?>
                       <span class="ce-status-dot ce-status-amber">In Progress</span>
                     <?php elseif ($enc['status'] === 'completed'): ?>
                       <span class="ce-status-dot ce-status-emerald">Completed</span>
@@ -200,12 +205,45 @@ $toVal = ($filters['to'] ?? '') !== '' ? (string) $filters['to'] : (string) ($da
                     <?php endif; ?>
                   </td>
                   <td data-label="Action" class="text-end">
-                    <a href="<?= site_url('/clinic/encounters/' . $enc['id']) ?>"
-                       class="btn btn-sm <?= ($enc['status'] === 'in_progress') ? 'btn-primary' : 'btn-outline-secondary' ?> ce-action-btn">
-                      <?= ($enc['status'] === 'in_progress')
-                        ? '<i class="bi bi-pencil-square" aria-hidden="true"></i> Open Stepper'
-                        : '<i class="bi bi-eye" aria-hidden="true"></i> View Chart' ?>
-                    </a>
+                    <?php if (!empty($enc['deleted_at'])): ?>
+                      <?php if (!empty($canArchive)): ?>
+                        <form method="POST"
+                              action="<?= esc(site_url('/clinic/encounters/' . $enc['id'] . '/restore'), 'attr') ?>"
+                              class="d-inline"
+                              data-archive-async="restore"
+                              data-archive-undo-url="<?= esc(site_url('/clinic/encounters/' . $enc['id'] . '/archive'), 'attr') ?>"
+                              data-archive-undo-label="Re-archive">
+                          <?= csrf_field() ?>
+                          <button type="submit" class="btn btn-sm btn-outline-primary ce-action-btn">
+                            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Restore
+                          </button>
+                        </form>
+                      <?php else: ?>
+                        <span class="text-muted small">Archived</span>
+                      <?php endif; ?>
+                    <?php else: ?>
+                      <div class="d-inline-flex align-items-center justify-content-end gap-1">
+                        <a href="<?= site_url('/clinic/encounters/' . $enc['id']) ?>"
+                           class="btn btn-sm <?= ($enc['status'] === 'in_progress') ? 'btn-primary' : 'btn-outline-secondary' ?> ce-action-btn">
+                          <?= ($enc['status'] === 'in_progress')
+                            ? '<i class="bi bi-pencil-square" aria-hidden="true"></i> Open Stepper'
+                            : '<i class="bi bi-eye" aria-hidden="true"></i> View Chart' ?>
+                        </a>
+                        <?php if (!empty($canArchive) && in_array($enc['status'], ['completed', 'referred'], true)): ?>
+                          <form method="POST"
+                                action="<?= esc(site_url('/clinic/encounters/' . $enc['id'] . '/archive'), 'attr') ?>"
+                                class="d-inline"
+                                data-archive-async="archive"
+                                data-archive-undo-url="<?= esc(site_url('/clinic/encounters/' . $enc['id'] . '/restore'), 'attr') ?>"
+                                data-archive-undo-label="Undo">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-sm btn-outline-warning ce-action-btn">
+                              <i class="bi bi-archive" aria-hidden="true"></i> Archive
+                            </button>
+                          </form>
+                        <?php endif; ?>
+                      </div>
+                    <?php endif; ?>
                   </td>
                 </tr>
               <?php endforeach; ?>

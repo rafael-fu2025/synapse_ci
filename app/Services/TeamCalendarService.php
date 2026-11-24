@@ -74,6 +74,9 @@ final class TeamCalendarService
             $start = $this->date($range['startDate'])->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
             $end = $this->date($range['endDate'])->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
             $events = $this->scope('team_events', $unit, $actor)->where('starts_at <', $end)->where('ends_at >', $start);
+            if ($this->db->fieldExists('deleted_at', 'team_events')) {
+                $events->where('deleted_at', null);
+            }
             $status = array_key_exists('status', $filters) ? $filters['status'] : 'scheduled';
             if (!in_array($status, ['scheduled', 'cancelled', 'all'], true)) {
                 throw new RuntimeException('Invalid status filter.', 422);
@@ -85,6 +88,9 @@ final class TeamCalendarService
             }
             $tasks = $this->scope('team_tasks', $unit, $actor)
                 ->where('due_date >=', $range['startDate'])->where('due_date <', $range['endDate']);
+            if ($this->db->fieldExists('deleted_at', 'team_tasks')) {
+                $tasks->where('deleted_at', null);
+            }
             if ($range['mine'] === '1') { $tasks->where('assignee_user_id', $actor['id']); }
             $totalEvents = (clone $events)->countAllResults();
             $totalTasks = (clone $tasks)->countAllResults();
@@ -202,7 +208,11 @@ final class TeamCalendarService
 
     private function event(string $unit, int $id, array $context): array
     {
-        $row = $this->scope('team_events', $unit, $context['actor'])->where('id', $id)->get()->getRowArray();
+        $builder = $this->scope('team_events', $unit, $context['actor'])->where('id', $id);
+        if ($this->db->fieldExists('deleted_at', 'team_events')) {
+            $builder->where('deleted_at', null);
+        }
+        $row = $builder->get()->getRowArray();
         if ($row === null) { throw new RuntimeException('Event not found.', 404); }
         $event = $this->decorate([$row], $unit, $context)[0];
         $event['participant_ids'] = array_column($event['participants'], 'id');
