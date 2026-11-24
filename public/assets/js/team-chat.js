@@ -168,6 +168,12 @@
     const live = () => !state.stopped && root.isConnected;
     const visible = () => live() && !document.hidden && root.getClientRects().length > 0;
     const atBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+    let suppressAutoOlder = false;
+    function setScrollTop(value) {
+      suppressAutoOlder = true;
+      log.scrollTop = value;
+      requestAnimationFrame(() => { suppressAutoOlder = false; });
+    }
     const ids = () => [...state.messages.keys()].sort((a, b) => a - b);
     const maximum = () => ids().at(-1) || 0;
     const warn = message => { error.textContent = message; error.hidden = !message; };
@@ -194,7 +200,7 @@
     }
     function controls() {
       older.hidden = !state.older;
-      find('[data-chat-history-status]').textContent = state.historyPaused ? 'Viewing history; live updates paused. Show latest to resume.' : '40 messages per page · Asia/Manila';
+      find('[data-chat-history-status]').textContent = state.historyPaused ? 'Viewing history; live updates paused.' : '';
       send.disabled = state.sending || state.revoked;
       body.readOnly = Boolean(state.pending) || state.revoked;
       addTask.disabled = !editable(); taskSearch.disabled = !editable();
@@ -392,7 +398,7 @@
       return operation;
     }
     const cadence = () => state.ready ? RECONCILE_MS : POLL_MS;
-    const connectionText = () => state.ready ? '' : 'Updates every 5 seconds while this tab is visible';
+    const connectionText = () => '';
     function invalidate() {
       if (!visible() || state.revoked || state.historyPaused) return;
       state.dirty = true;
@@ -436,7 +442,7 @@
         const data = await request(`${root.dataset.baseUrl}/history?after=${maximum()}`, null, true);
         if (!visible() || state.historyPaused) return;
         const bottom = atBottom();
-        if (data.messages.length) { merge(data.messages, 'newer'); if (bottom) log.scrollTop = log.scrollHeight; }
+        if (data.messages.length) { merge(data.messages, 'newer'); if (bottom) setScrollTop(log.scrollHeight); }
         summary(data); connection.textContent = connectionText();
         if (data.has_more) delay = 150;
         controls(); scheduleRead();
@@ -450,16 +456,16 @@
     }
     async function loadOlder() {
       if (!visible() || state.polling || state.revoked || !state.messages.size) return;
-      state.polling = true; older.disabled = true; clearTimeout(state.timer);
+      state.polling = true; older.disabled = true; older.textContent = 'Loading older messages…'; clearTimeout(state.timer);
       state.historyPaused = true;
       const height = log.scrollHeight, top = log.scrollTop;
       try {
         const data = await request(`${root.dataset.baseUrl}/history?before=${ids()[0]}`);
         state.older = data.has_more; merge(data.messages, 'older');
-        log.scrollTop = Math.max(0, log.scrollHeight - height + top);
+        setScrollTop(Math.max(0, log.scrollHeight - height + top));
         summary(data); controls();
       } catch (failure) { if (live()) warn(failure.message); }
-      finally { state.polling = false; older.disabled = false; }
+      finally { state.polling = false; older.disabled = false; older.textContent = 'Load older messages'; }
     }
     async function latest() {
       if (!visible() || state.polling || state.revoked) return;
@@ -467,7 +473,7 @@
       try {
         const data = await request(`${root.dataset.baseUrl}/history`);
         state.historyPaused = false; state.older = data.has_more;
-        merge(data.messages, 'newer', true); log.scrollTop = log.scrollHeight; summary(data);
+        merge(data.messages, 'newer', true); setScrollTop(log.scrollHeight); summary(data);
         warn(''); controls(); scheduleRead();
       } catch (failure) { if (live()) warn(failure.message); }
       finally { state.polling = false; schedule(state.dirty ? 100 : cadence()); }
@@ -539,9 +545,15 @@
       if (!mentionPicker.contains(event.target) && event.target !== body) closeMentions();
     }, { signal: events.signal });
     older.addEventListener('click', loadOlder, { signal: events.signal });
-    find('[data-chat-latest]').addEventListener('click', latest, { signal: events.signal });
-    fresh.addEventListener('click', () => { if (state.historyPaused) latest(); else { log.scrollTop = log.scrollHeight; controls(); scheduleRead(); } }, { signal: events.signal });
-    log.addEventListener('scroll', () => { controls(); scheduleRead(); }, { signal: events.signal });
+    find('[data-chat-latest]')?.addEventListener('click', latest, { signal: events.signal });
+    fresh.addEventListener('click', () => { if (state.historyPaused) latest(); else { setScrollTop(log.scrollHeight); controls(); scheduleRead(); } }, { signal: events.signal });
+    log.addEventListener('scroll', () => {
+      controls();
+      scheduleRead();
+      if (!suppressAutoOlder && log.scrollTop <= 80 && state.older && !state.polling && !state.revoked && state.messages.size) {
+        loadOlder();
+      }
+    }, { signal: events.signal });
     window.addEventListener('scroll', scheduleRead, { signal: events.signal, passive: true });
     window.addEventListener('beforeunload', event => {
       if (state.pending || body.value.trim() || selectedTasks.size || replyTo) { event.preventDefault(); event.returnValue = ''; }
@@ -601,9 +613,9 @@
     const target = Number.isSafeInteger(initial.target_message_id) ? log.querySelector(`[data-message-id="${initial.target_message_id}"]`) : null;
     const unread = log.querySelector('.team-chat-unread-divider');
     if (target) {
-      log.scrollTop = Math.max(0, target.offsetTop - log.offsetTop - (log.clientHeight - target.offsetHeight) / 2);
+      setScrollTop(Math.max(0, target.offsetTop - log.offsetTop - (log.clientHeight - target.offsetHeight) / 2));
       target.focus({ preventScroll: true });
-    } else if (unread) log.scrollTop = Math.max(0, unread.offsetTop - log.offsetTop - 8); else log.scrollTop = log.scrollHeight;
+    } else if (unread) setScrollTop(Math.max(0, unread.offsetTop - log.offsetTop - 8)); else setScrollTop(log.scrollHeight);
     connection.textContent = state.historyPaused ? 'Viewing history' : connectionText();
     resizeBody(); controls(); scheduleRead(); schedule(initial.after_mode && initial.has_more ? 150 : cadence());
   }

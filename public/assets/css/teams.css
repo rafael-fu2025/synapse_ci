@@ -3106,7 +3106,8 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
   margin-top: .15rem;
 }
 
-.tws-workspace .tws-chat-header-meta:empty {
+.tws-workspace .tws-chat-header-meta:empty,
+.tws-workspace .tws-chat-header-meta:has(> [data-chat-connection]:empty):has(> [data-chat-history-status]:empty) {
   display: none;
 }
 
@@ -3380,16 +3381,57 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
   background: var(--tws-brand-soft);
 }
 
-/* Update Bar (hidden height when [data-chat-new] is hidden) */
+/* Floating circular scroll-to-latest button centered above the composer */
 .tws-workspace .team-chat-update-bar {
-  padding: .4rem 1.35rem;
-  justify-content: center;
-  border-top: 1px solid var(--tws-hairline);
-}
-
-.tws-workspace .team-chat-update-bar:has(> [data-chat-new][hidden]) {
+  position: relative;
+  height: 0;
   padding: 0;
   border-top: 0;
+  overflow: visible;
+  display: flex;
+  justify-content: center;
+  z-index: 5;
+}
+
+.tws-workspace .team-chat-scroll-latest {
+  position: absolute;
+  bottom: .75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--tws-border);
+  background: var(--tws-surface);
+  color: var(--tws-heading);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
+}
+
+.tws-workspace .team-chat-scroll-latest[hidden] {
+  display: none;
+}
+
+.tws-workspace .team-chat-scroll-latest:hover {
+  background: var(--tws-surface-subtle, var(--tws-surface));
+  border-color: var(--tws-accent);
+  color: var(--tws-accent);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .16);
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.tws-workspace .team-chat-scroll-latest:focus-visible {
+  outline: 2px solid var(--tws-accent);
+  outline-offset: 2px;
+}
+
+.tws-workspace .team-chat-scroll-latest i {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 /* Unified Framed Composer Card */

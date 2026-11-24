@@ -18,7 +18,8 @@ use Throwable;
  */
 final class TeamChatService
 {
-    public const PAGE_LIMIT = 40;
+    public const PAGE_LIMIT = 20;
+    public const TASK_LIMIT = 40;
     private BaseConnection $db;
     private TeamAccess $access;
 
@@ -39,7 +40,7 @@ final class TeamChatService
         return $context;
     }
 
-    /** before/around: positive id; after: nonnegative id; exclusive, fixed 40/page. */
+    /** before/around: positive id; after: nonnegative id; exclusive, fixed 20/page. */
     public function history(string $unit, array $filters = []): array
     {
         $context = $this->context($unit);
@@ -171,7 +172,7 @@ final class TeamChatService
             if (trim($q) !== '') { $query->like('title', $this->db->escapeLikeString(trim($q)), 'both', true); }
             return ['tasks' => array_map(static fn (array $row): array => [
                 'id' => (int) $row['id'], 'title' => $row['title'],
-            ], $query->orderBy('id', 'DESC')->limit(self::PAGE_LIMIT)->get()->getResultArray())];
+            ], $query->orderBy('id', 'DESC')->limit(self::TASK_LIMIT)->get()->getResultArray())];
         });
     }
 

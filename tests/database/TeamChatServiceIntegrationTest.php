@@ -410,15 +410,18 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
         $ids = [];
         for ($i = 0; $i < 85; ++$i) { $ids[] = $this->chat->send('clinic', $this->input('Message ' . $i))['id']; }
         $latest = $ids[84];
+        $limit = TeamChatService::PAGE_LIMIT;
         $page = $this->chat->history('clinic');
-        $this->assertSame(array_slice($ids, 45), array_column($page['messages'], 'id'));
+        $this->assertSame(array_slice($ids, 85 - $limit), array_column($page['messages'], 'id'));
         $this->assertTrue($page['has_more']);
-        $this->assertSame($ids[45], $page['next_before']);
-        $page = $this->chat->history('clinic', ['before' => (string) $page['next_before']]);
-        $this->assertSame(array_slice($ids, 5, 40), array_column($page['messages'], 'id'));
-        $this->assertSame($latest, $page['latest_id']);
-        $page = $this->chat->history('clinic', ['before' => $page['next_before']]);
-        $this->assertSame(array_slice($ids, 0, 5), array_column($page['messages'], 'id'));
+        $this->assertSame($ids[85 - $limit], $page['next_before']);
+        $seenBefore = array_column($page['messages'], 'id');
+        while ($page['has_more']) {
+            $page = $this->chat->history('clinic', ['before' => (string) $page['next_before']]);
+            $this->assertSame($latest, $page['latest_id']);
+            $seenBefore = array_merge(array_column($page['messages'], 'id'), $seenBefore);
+        }
+        $this->assertSame($ids, $seenBefore);
         $this->assertFalse($page['has_more']);
         $this->assertNull($page['next_before']);
         $seen = [];
@@ -638,12 +641,13 @@ final class TeamChatServiceIntegrationTest extends CIUnitTestCase
     {
         $ids = [];
         for ($i = 0; $i < 85; ++$i) $ids[] = $this->chat->send('clinic', $this->input())['id'];
-        foreach ([0, 39, 40, 60, 84] as $index) {
+        $limit = TeamChatService::PAGE_LIMIT;
+        foreach ([0, $limit - 1, $limit, 60, 84] as $index) {
             $page = $this->chat->history('clinic', ['around' => (string) $ids[$index]]);
-            $this->assertSame(array_slice($ids, max(0, $index - 39), min(40, $index + 1)), array_column($page['messages'], 'id'));
+            $this->assertSame(array_slice($ids, max(0, $index - ($limit - 1)), min($limit, $index + 1)), array_column($page['messages'], 'id'));
             $this->assertSame($ids[$index], $page['messages'][count($page['messages']) - 1]['id']);
-            $this->assertSame($index >= 40, $page['has_more']);
-            $this->assertSame($index >= 40 ? $ids[$index - 39] : null, $page['next_before']);
+            $this->assertSame($index >= $limit, $page['has_more']);
+            $this->assertSame($index >= $limit ? $ids[$index - ($limit - 1)] : null, $page['next_before']);
             $this->assertSame($ids[84], $page['latest_id']);
             $this->assertSame(0, $page['last_read_id']);
             if ($page['has_more']) {
