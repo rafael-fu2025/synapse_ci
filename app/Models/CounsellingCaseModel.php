@@ -52,7 +52,9 @@ final class CounsellingCaseModel extends TenantModel
             ->orderBy('counselling_cases.opened_at', 'DESC')
             ->orderBy('counselling_cases.id', 'DESC');
 
-        if ($status !== null && $status !== '') {
+        if ($status === 'archived') {
+            $builder->onlyDeleted();
+        } elseif ($status !== null && $status !== '') {
             $builder->where('counselling_cases.status', $status);
         }
         if ($category !== null && $category !== '') {

@@ -36,7 +36,18 @@ final class SurveyService
     public function listing(array $query = []): array
     {
         $actor = $this->staff();
-        $builder = Database::connect()->table('surveys s')->where('s.tenant_id', $actor['tenant_id']);
+        $db = Database::connect();
+        $archived = ($query['view'] ?? '') === 'archived' || ($query['archived'] ?? '') === '1';
+        $builder = $db->table('surveys s')->where('s.tenant_id', $actor['tenant_id']);
+        if ($db->fieldExists('deleted_at', 'surveys')) {
+            if ($archived) {
+                $builder->where('s.deleted_at !=', null);
+            } else {
+                $builder->where('s.deleted_at', null);
+            }
+        } elseif ($archived) {
+            $builder->where('1 = 0', null, false);
+        }
         return $this->page($builder->select('s.*'), $query, 's.id');
     }
 
@@ -160,6 +171,9 @@ final class SurveyService
         $builder = EngagementAudience::apply($db->table('surveys s')
             ->where('s.tenant_id', $actor['tenant_id'])->whereIn('s.status', ['published', 'closed'])
             ->where('s.published_at IS NOT NULL', null, false), $actor, 's');
+        if ($db->fieldExists('deleted_at', 'surveys')) {
+            $builder->where('s.deleted_at', null);
+        }
         // Closed history still obeys today's profile targeting; drafts and future starts stay private.
         $builder->groupStart()->where('s.starts_at', null)->orWhere('s.starts_at <=', $now)->groupEnd();
         if ($filters['q'] !== '') LikePattern::applyGroup($builder, ['s.title', 's.description'], $filters['q']);
@@ -651,7 +665,8 @@ final class SurveyService
     {
         $db = Database::connect();
         $table = $db->protectIdentifiers($db->prefixTable('surveys'));
-        $row = $db->query("SELECT * FROM {$table} WHERE tenant_id=? AND id=?" . ($lock && $db->DBDriver === 'MySQLi' ? ' FOR UPDATE' : ''),
+        $deletedClause = $db->fieldExists('deleted_at', 'surveys') ? ' AND deleted_at IS NULL' : '';
+        $row = $db->query("SELECT * FROM {$table} WHERE tenant_id=? AND id=?{$deletedClause}" . ($lock && $db->DBDriver === 'MySQLi' ? ' FOR UPDATE' : ''),
             [$actor['tenant_id'], $id])->getRowArray();
         if ($row === null) { throw new RuntimeException('Survey not found.', 404); }
         return $row;

@@ -412,6 +412,15 @@ final class GuidanceController extends BaseController
             }
             $this->caseModel->groupEnd();
         }
+        $canViewArchived = ($actor['role'] ?? '') === 'superadmin'
+            || in_array('archive.read', $actor['permissions'] ?? [], true)
+            || in_array('archive.manage', $actor['permissions'] ?? [], true);
+        if ($status === 'archived' && !$canViewArchived) {
+            $status = '';
+        }
+        $canArchive = ($actor['role'] ?? '') === 'superadmin'
+            || in_array('archive.manage', $actor['permissions'] ?? [], true);
+
         $page = filter_var($this->request->getGet('page'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: 1;
         $cases = $this->caseModel->getListWithPatients($status, $category, 25, $page);
 
@@ -424,11 +433,55 @@ final class GuidanceController extends BaseController
             'pager'                 => $this->caseModel->pager,
             'status'                => $status,
             'category'              => $category,
+            'canArchive'            => $canArchive,
+            'canViewArchived'       => $canViewArchived,
             'breadcrumbs'           => [
                 ['label' => 'Guidance', 'url' => site_url('/guidance/cases')],
                 ['label' => 'Cases', 'url' => ''],
             ],
         ]);
+    }
+
+    /**
+     * Reversibly archive a closed counseling case.
+     */
+    public function archiveCase(int $caseId)
+    {
+        $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+        if ($reason === '') {
+            $reason = 'Archived from guidance cases register';
+        }
+
+        return $this->mutate(function () use ($caseId, $reason): array {
+            (new \App\Services\Archive\ArchiveService())->archive('counselling_case', $caseId, $reason);
+
+            return [
+                '/guidance/cases',
+                'Counseling case archived reversibly.',
+                $this->navigationRefresh('/guidance/cases', 'guidance.cases'),
+            ];
+        }, '/guidance/cases', 'archive.manage');
+    }
+
+    /**
+     * Restore a previously archived counseling case.
+     */
+    public function restoreCase(int $caseId)
+    {
+        $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+        if ($reason === '') {
+            $reason = 'Restored from guidance cases archive';
+        }
+
+        return $this->mutate(function () use ($caseId, $reason): array {
+            (new \App\Services\Archive\ArchiveService())->restore('counselling_case', $caseId, $reason);
+
+            return [
+                '/guidance/cases?status=archived',
+                'Counseling case restored from archive.',
+                $this->navigationRefresh('/guidance/cases?status=archived', 'guidance.cases'),
+            ];
+        }, '/guidance/cases?status=archived', 'archive.manage');
     }
 
     /**

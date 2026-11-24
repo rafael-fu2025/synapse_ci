@@ -77,6 +77,14 @@ final class AnnouncementController extends BaseController
         });
     }
 
+    public function restore(int $id, string $unit)
+    {
+        return $this->respond(function () use ($id, $unit) {
+            $this->announcements->restore($id, $unit, $this->request->getPost('version'));
+            return $this->success('Announcement restored as a draft.', '/' . $unit . '/announcements', $this->staffRefresh($unit));
+        });
+    }
+
     public function portalIndex()
     {
         return $this->respond(fn () => view('announcements/portal', $this->announcements->portalListing($this->request->getGet('page') ?? 1, $this->request->getGet())

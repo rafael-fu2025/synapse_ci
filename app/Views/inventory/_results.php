@@ -205,6 +205,27 @@ $nearIso = date('Y-m-d', strtotime('+90 days'));
                   <a href="<?= esc(site_url('/clinic/inventory/' . $id)) ?>" class="btn btn-outline-secondary btn-sm">Details</a>
                   <?php if (!empty($canManage)): ?>
                     <a href="<?= esc(site_url('/clinic/inventory/' . $id . '/edit')) ?>" class="btn btn-outline-secondary btn-sm" data-app-modal-open>Edit</a>
+                    <?php if ($isActive): ?>
+                      <form method="POST"
+                            action="<?= esc(site_url('/clinic/inventory/' . $id . '/archive'), 'attr') ?>"
+                            class="d-inline"
+                            data-archive-async="archive"
+                            data-archive-undo-url="<?= esc(site_url('/clinic/inventory/' . $id . '/restore'), 'attr') ?>"
+                            data-archive-undo-label="Undo">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">Archive</button>
+                      </form>
+                    <?php else: ?>
+                      <form method="POST"
+                            action="<?= esc(site_url('/clinic/inventory/' . $id . '/restore'), 'attr') ?>"
+                            class="d-inline"
+                            data-archive-async="restore"
+                            data-archive-undo-url="<?= esc(site_url('/clinic/inventory/' . $id . '/archive'), 'attr') ?>"
+                            data-archive-undo-label="Re-archive">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Restore</button>
+                      </form>
+                    <?php endif; ?>
                   <?php endif; ?>
                   <?php if (!empty($canWrite) && $isActive): ?>
                     <a href="<?= esc(site_url('/clinic/inventory/' . $id . '/receive')) ?>" class="btn btn-primary btn-sm" data-app-modal-open>Receive</a>

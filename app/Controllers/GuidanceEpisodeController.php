@@ -39,27 +39,34 @@ final class GuidanceEpisodeController extends BaseController
             $tenantId = (int) $actor['tenant_id'];
             $page = TablePage::forList($this->request->getGet());
             $status = trim((string) ($this->request->getGet('status') ?? ''));
+            $perms = $actor['permissions'] ?? [];
+            $canViewArchived = ($actor['role'] ?? '') === 'superadmin'
+                || in_array('archive.read', $perms, true)
+                || in_array('archive.manage', $perms, true);
+            $canArchive = ($actor['role'] ?? '') === 'superadmin'
+                || in_array('archive.manage', $perms, true);
             $allowedStatuses = ['open', 'active', 'closed', 'transferred'];
+            if ($canViewArchived) {
+                $allowedStatuses[] = 'archived';
+            }
             if ($status !== '' && !in_array($status, $allowedStatuses, true)) {
                 $status = '';
             }
 
             $db = Database::connect();
-            $builder = $db->table('guidance_episodes ge')
+            $baseBuilder = $db->table('guidance_episodes ge')
                 ->join('people p', 'p.id = ge.person_id AND p.tenant_id = ge.tenant_id')
                 ->join('users cu', 'cu.id = ge.primary_counselor_user_id AND cu.tenant_id = ge.tenant_id', 'left')
                 ->join('people cp', 'cp.id = cu.person_id AND cp.tenant_id = cu.tenant_id', 'left')
                 ->join('counselling_cases cc', 'cc.id = ge.case_id AND cc.tenant_id = ge.tenant_id', 'left')
                 ->where('ge.tenant_id', $tenantId)
-                ->where('ge.deleted_at', null)
                 ->where('p.deleted_at', null);
 
-            $perms = $actor['permissions'] ?? [];
             $hasOversight = ($actor['role'] ?? '') === 'superadmin'
                 || in_array('guidance.cases.read_any', $perms, true)
                 || in_array($actor['role'] ?? '', ['guidance_admin', 'guidance_supervisor'], true);
             if (!$hasOversight) {
-                $builder->where('ge.primary_counselor_user_id', (int) $actor['id']);
+                $baseBuilder->where('ge.primary_counselor_user_id', (int) $actor['id']);
             }
 
             $statusCounts = [
@@ -68,8 +75,10 @@ final class GuidanceEpisodeController extends BaseController
                 'active'      => 0,
                 'closed'      => 0,
                 'transferred' => 0,
+                'archived'    => 0,
             ];
-            $countRows = (clone $builder)
+            $countRows = (clone $baseBuilder)
+                ->where('ge.deleted_at', null)
                 ->select('ge.status, COUNT(*) AS total', false)
                 ->groupBy('ge.status')
                 ->get()
@@ -82,12 +91,24 @@ final class GuidanceEpisodeController extends BaseController
                     $statusCounts[$stKey] = $cnt;
                 }
             }
-
-            if ($status !== '') {
-                $builder->where('ge.status', $status);
+            if ($canViewArchived) {
+                $statusCounts['archived'] = (int) (clone $baseBuilder)
+                    ->where('ge.deleted_at !=', null)
+                    ->countAllResults();
             }
 
-            $pagination = $page->metadata($statusCounts[''], $statusCounts[$status]);
+            $builder = clone $baseBuilder;
+            if ($status === 'archived') {
+                $builder->where('ge.deleted_at !=', null);
+            } else {
+                $builder->where('ge.deleted_at', null);
+                if ($status !== '') {
+                    $builder->where('ge.status', $status);
+                }
+            }
+
+            $totalForPage = $status === 'archived' ? $statusCounts['archived'] : $statusCounts[''];
+            $pagination = $page->metadata($totalForPage, $statusCounts[$status]);
             $episodes = $builder
                 ->select('ge.*, p.first_name, p.last_name, p.mis_id, p.kind')
                 ->select('cu.username AS counselor_username, cp.first_name AS counselor_first_name, cp.last_name AS counselor_last_name')
@@ -109,6 +130,8 @@ final class GuidanceEpisodeController extends BaseController
                 'statusCounts'        => $statusCounts,
                 'qualifiedCounselors' => $qualifiedCounselors,
                 'actor'               => $actor,
+                'canArchive'          => $canArchive,
+                'canViewArchived'     => $canViewArchived,
                 'breadcrumbs'         => [
                     ['label' => 'Guidance', 'url' => site_url('/guidance')],
                     ['label' => 'Episodes', 'url' => ''],
@@ -119,6 +142,46 @@ final class GuidanceEpisodeController extends BaseController
             return $this->response->setStatusCode($code)->setContentType('text/html')
                 ->setBody('<div class="alert alert-danger m-3">' . esc($message) . '</div>');
         }
+    }
+
+    /**
+     * Reversibly archive a closed or transferred guidance episode.
+     */
+    public function archive(int $id)
+    {
+        $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+        if ($reason === '') {
+            $reason = 'Archived from guidance episodes register';
+        }
+
+        return $this->mutate(function (array $actor) use ($id, $reason): array {
+            if (($actor['role'] ?? '') !== 'superadmin' && !in_array('archive.manage', $actor['permissions'] ?? [], true)) {
+                throw new RuntimeException('Permission required: archive.manage', 403);
+            }
+            (new \App\Services\Archive\ArchiveService())->archive('guidance_episode', $id, $reason);
+
+            return ['/guidance/episodes', 'Guidance episode #' . $id . ' archived reversibly.'];
+        }, '/guidance/episodes');
+    }
+
+    /**
+     * Restore a previously archived guidance episode.
+     */
+    public function restore(int $id)
+    {
+        $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+        if ($reason === '') {
+            $reason = 'Restored from guidance episodes archive';
+        }
+
+        return $this->mutate(function (array $actor) use ($id, $reason): array {
+            if (($actor['role'] ?? '') !== 'superadmin' && !in_array('archive.manage', $actor['permissions'] ?? [], true)) {
+                throw new RuntimeException('Permission required: archive.manage', 403);
+            }
+            (new \App\Services\Archive\ArchiveService())->restore('guidance_episode', $id, $reason);
+
+            return ['/guidance/episodes?status=archived', 'Guidance episode #' . $id . ' restored from archive.'];
+        }, '/guidance/episodes?status=archived');
     }
 
     /**

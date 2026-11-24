@@ -1,0 +1,295 @@
+/* ==========================================================================
+   SYNAPSE — Archive Management & Retention Center (.arc-workspace)
+   Matches .adm-workspace tokens for crisp light/dark editorial contrast.
+   ========================================================================== */
+
+.arc-workspace .arc-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.arc-workspace .arc-kpi-card {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--adm-border);
+  border-radius: 10px;
+  background: var(--adm-surface-subtle);
+  min-width: 0;
+}
+
+.arc-workspace .arc-kpi-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--adm-muted);
+}
+
+.arc-workspace .arc-kpi-value {
+  display: block;
+  margin-top: 0.25rem;
+  font-family: var(--heading-font, "Poppins", sans-serif);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--adm-heading);
+}
+
+.arc-workspace .arc-kpi-meta {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--adm-muted);
+}
+
+/* Folder Tabs Bar */
+.arc-workspace .arc-tabs-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.55rem;
+  background: var(--adm-surface-subtle);
+  border-top: 1px solid var(--adm-border-subtle);
+  border-bottom: 1px solid var(--adm-border-subtle);
+}
+
+.arc-workspace .arc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.arc-workspace .arc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.42rem 0.82rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--adm-text);
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.arc-workspace .arc-tab:hover {
+  background: var(--adm-surface);
+  border-color: var(--adm-border);
+  color: var(--adm-heading);
+}
+
+.arc-workspace .arc-tab.is-active {
+  background: var(--adm-accent);
+  color: #ffffff;
+  border-color: var(--adm-accent);
+}
+
+.arc-workspace .arc-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  background: rgba(15, 23, 42, 0.08);
+  color: inherit;
+}
+
+.arc-workspace .arc-tab.is-active .arc-tab-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* Filters */
+.arc-workspace .arc-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(120px, 0.85fr)) auto;
+  gap: 0.65rem 0.75rem;
+  align-items: end;
+}
+
+.arc-workspace .arc-filter-field {
+  min-width: 0;
+}
+
+.arc-workspace .arc-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+/* Badges & Status Pills */
+.arc-workspace .arc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  border: 1px solid var(--adm-border);
+  background: var(--adm-surface-subtle);
+  color: var(--adm-text);
+}
+
+.arc-workspace .arc-pill.is-archived {
+  border-color: rgba(180, 83, 9, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--adm-warning);
+}
+
+.arc-workspace .arc-pill.is-restored {
+  border-color: rgba(21, 128, 61, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--adm-success);
+}
+
+.arc-workspace .arc-pill.is-hold,
+.arc-workspace .arc-pill.is-past-due {
+  border-color: rgba(185, 28, 28, 0.38);
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--adm-danger);
+}
+
+.arc-workspace .arc-pill.is-confidential {
+  border-color: rgba(30, 64, 175, 0.3);
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+}
+
+:is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .arc-workspace .arc-pill.is-confidential {
+  color: #93c5fd;
+  border-color: rgba(147, 197, 253, 0.28);
+  background: rgba(59, 130, 246, 0.16);
+}
+
+.arc-workspace .arc-ref-title {
+  display: block;
+  font-weight: 600;
+  color: var(--adm-heading);
+  overflow-wrap: anywhere;
+}
+
+.arc-workspace .arc-subtext {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.76rem;
+  color: var(--adm-muted);
+  overflow-wrap: anywhere;
+}
+
+.arc-workspace .arc-mono {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.76rem;
+}
+
+.arc-workspace .arc-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.arc-workspace .arc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.arc-workspace .arc-table th {
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--adm-muted);
+  background: var(--adm-surface-subtle);
+  border-bottom: 1px solid var(--adm-border);
+  white-space: nowrap;
+}
+
+.arc-workspace .arc-table td {
+  padding: 0.78rem 0.9rem;
+  border-bottom: 1px solid var(--adm-border-subtle);
+  vertical-align: top;
+  color: var(--adm-text);
+}
+
+.arc-workspace .arc-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.arc-workspace .arc-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.arc-workspace .arc-immutable-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.arc-workspace .arc-immutable-item {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--adm-border);
+  border-radius: 8px;
+  background: var(--adm-surface-subtle);
+}
+
+.arc-workspace .arc-empty {
+  padding: 2.25rem 1.25rem;
+  text-align: center;
+  color: var(--adm-muted);
+}
+
+.arc-workspace .arc-empty i {
+  font-size: 1.75rem;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+@container adm-workspace (max-width: 980px) {
+  .arc-workspace .arc-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .arc-workspace .arc-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .arc-workspace .arc-immutable-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container adm-workspace (max-width: 600px) {
+  .arc-workspace .arc-band,
+  .arc-workspace .arc-tabs-band {
+    padding: 1rem;
+  }
+  .arc-workspace .arc-kpi-grid,
+  .arc-workspace .arc-filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .arc-workspace .arc-band,
+  .arc-workspace .arc-tabs-band {
+    padding: 1rem;
+  }
+  .arc-workspace .arc-kpi-grid,
+  .arc-workspace .arc-filter-grid,
+  .arc-workspace .arc-immutable-grid {
+    grid-template-columns: 1fr;
+  }
+}

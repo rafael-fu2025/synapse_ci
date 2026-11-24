@@ -18,9 +18,15 @@ final class SurveyController extends BaseController
     public function index()
     {
         try {
-            $data = (new SurveyService())->listing($this->request->getGet());
+            $query = $this->request->getGet();
+            $archivedView = ($query['view'] ?? '') === 'archived';
+            $data = (new SurveyService())->listing($query);
             $this->response->setHeader('Cache-Control', 'private, no-store');
-            return view('surveys/index', $data + ['title' => 'Guidance Surveys', 'baseUrl' => site_url('guidance/surveys')]);
+            return view('surveys/index', $data + [
+                'title'        => 'Guidance Surveys',
+                'baseUrl'      => site_url('guidance/surveys'),
+                'archivedView' => $archivedView,
+            ]);
         } catch (Throwable $e) { return $this->failure($e); }
     }
 
@@ -184,6 +190,30 @@ final class SurveyController extends BaseController
         try {
             (new SurveyService())->close($id, $this->request->getPost('version'));
             return $this->success('Survey closed. Existing responses remain available.', $this->staffRefresh());
+        } catch (Throwable $e) { return $this->failure($e); }
+    }
+
+    public function archive(int $id)
+    {
+        try {
+            $reason = trim((string) ($this->request->getPost('reason') ?? 'Archived from Guidance surveys workspace'));
+            if (mb_strlen($reason) < 5) {
+                $reason = 'Archived from Guidance surveys workspace';
+            }
+            (new \App\Services\Archive\ArchiveService())->archive('survey', $id, $reason);
+            return $this->success('Survey archived reversibly.', $this->staffRefresh());
+        } catch (Throwable $e) { return $this->failure($e); }
+    }
+
+    public function restore(int $id)
+    {
+        try {
+            $reason = trim((string) ($this->request->getPost('reason') ?? 'Restored from Guidance surveys archive'));
+            if (mb_strlen($reason) < 3) {
+                $reason = 'Restored from Guidance surveys archive';
+            }
+            (new \App\Services\Archive\ArchiveService())->restore('survey', $id, $reason);
+            return $this->success('Survey restored from archive.', $this->staffRefresh());
         } catch (Throwable $e) { return $this->failure($e); }
     }
 

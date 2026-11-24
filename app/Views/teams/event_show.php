@@ -44,6 +44,16 @@ $organizerName = $memberNames[$event['created_by_user_id']] ?? 'Former member';
           <button class="btn btn-outline-danger w-100" type="submit">Cancel event</button>
         </form>
       <?php endif; ?>
+      <?php
+        $eventIsArchivable = ($event['status'] === 'cancelled')
+            || ((string) ($event['ends_at'] ?? '') !== '' && (string) ($event['ends_at'] ?? '') < gmdate('Y-m-d H:i:s'));
+      ?>
+      <?php if (!empty($canArchive) && empty($event['deleted_at']) && $eventIsArchivable): ?>
+        <form class="tws-rail-block tws-cancel-form" action="<?= esc($baseUrl . '/events/' . $event['id'] . '/archive') ?>" method="post" data-modal-submit data-confirm="Archive this team event reversibly? It can be restored anytime from the Archive Center." data-confirm-title="Archive team event" data-confirm-label="Archive event" data-confirm-tone="warning">
+          <?= csrf_field() ?>
+          <button class="btn btn-outline-warning w-100" type="submit"><i class="bi bi-archive me-1" aria-hidden="true"></i>Archive event</button>
+        </form>
+      <?php endif; ?>
     </aside>
 
     <div class="tws-inspector-main">

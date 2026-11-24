@@ -38,6 +38,8 @@ $canAiInsights = static function (string $unit) use ($currentUser): bool {
 };
 $canMain = PortalContext::isRolePermitted($role, 'main') && PortalContext::compatibleHost($role);
 $canAuditNavigation = $canMain && in_array($role, ['superadmin', 'audit_reader'], true) && $canContent('audit.read');
+$canArchiveNavigation = $canMain && $canContent('archive.read')
+    && in_array($role, ['superadmin', 'clinic_admin', 'guidance_admin', 'guidance_supervisor', 'bmg_admin', 'audit_reader'], true);
 $canReportsDashboard = $canMain && in_array($role, ['superadmin', 'audit_reader', 'report_viewer'], true) && $canContent('reports.read');
 $canExportNavigation = $canMain && in_array($role, ['superadmin', 'audit_reader', 'report_viewer', 'clinic_admin', 'guidance_admin', 'bmg_admin'], true)
     && $canAll(['reports.read', 'reports.export']);
@@ -139,13 +141,16 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
           <li class="nav-item"><a class="nav-link <?= $isActive('portal/settings') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('main', 'portal/settings')) ?>"><span class="nav-icon"><i class="bi bi-person-gear" aria-hidden="true"></i></span><span class="nav-text">Profile &amp; Settings</span></a></li>
         <?php endif; ?>
 
-        <?php if ($canAuditNavigation || $canReportsDashboard || $canExportNavigation): ?>
+        <?php if ($canAuditNavigation || $canReportsDashboard || $canExportNavigation || $canArchiveNavigation): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Governance</li>
           <?php if ($canAuditNavigation): ?>
             <?= $sidebarLink('main', 'admin', 'Admin Dashboard', 'ph-light ph-squares-four', ['audit.read'], true) ?>
             <?= $sidebarLink('main', 'admin/audit', 'Audit Chain Ledger', 'ph-light ph-fingerprint', ['audit.read']) ?>
           <?php elseif ($canReportsDashboard): ?>
             <?= $sidebarLink('main', 'dashboard', 'Reports Dashboard', 'ph-light ph-squares-four', ['reports.read']) ?>
+          <?php endif; ?>
+          <?php if ($canArchiveNavigation): ?>
+            <?= $sidebarLink('main', 'admin/archive', 'Archive Management', 'bi bi-archive', ['archive.read']) ?>
           <?php endif; ?>
           <?php if ($canExportNavigation): ?>
             <?= $sidebarLink('main', 'reports/export', 'Operational reports', 'bi bi-download', ['reports.read', 'reports.export']) ?>

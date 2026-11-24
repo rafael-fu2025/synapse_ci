@@ -90,6 +90,36 @@ final class ClinicInventoryController extends BaseController
         return $this->catalogForm($id);
     }
 
+    public function archive(int $id)
+    {
+        try {
+            $this->authorize(true, true);
+            $reason = trim((string) ($this->request->getPost('reason') ?? 'Archived from medicine catalog'));
+            if (mb_strlen($reason) < 5) {
+                $reason = 'Archived from medicine catalog';
+            }
+            (new \App\Services\Archive\ArchiveService())->archive('clinic_medicine', $id, $reason);
+            return $this->respond(true, 'Medicine archived.', self::BASE, ['id' => $id], 422, $this->detailRefresh($id));
+        } catch (Throwable $e) {
+            return $this->mutationError($e, self::BASE);
+        }
+    }
+
+    public function restore(int $id)
+    {
+        try {
+            $this->authorize(true, true);
+            $reason = trim((string) ($this->request->getPost('reason') ?? 'Restored to active medicine catalog'));
+            if (mb_strlen($reason) < 3) {
+                $reason = 'Restored to active medicine catalog';
+            }
+            (new \App\Services\Archive\ArchiveService())->restore('clinic_medicine', $id, $reason);
+            return $this->respond(true, 'Medicine restored to active catalog.', self::BASE, ['id' => $id], 422, $this->detailRefresh($id));
+        } catch (Throwable $e) {
+            return $this->mutationError($e, self::BASE);
+        }
+    }
+
     private function catalogForm(?int $id)
     {
         try {

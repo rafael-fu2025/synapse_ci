@@ -16,17 +16,38 @@ final class TeamsController extends BaseController
     public function index(string $unit)
     {
         return $this->respond(function () use ($unit) {
-            $filters = array_intersect_key($this->request->getGet(), array_flip(['mine', 'q', 'status', 'priority', 'page']));
-            $data = (new TeamTaskService())->listing($unit, $filters);
-            $mode = $this->request->getGet('view') ?? 'board';
+            $filters = array_intersect_key($this->request->getGet(), array_flip(['mine', 'q', 'status', 'priority', 'page', 'archived']));
+            $service = new TeamTaskService();
+            $contextCheck = $service->context($unit);
+            $actor = $contextCheck['actor'] ?? [];
+            $perms = is_array($actor['permissions'] ?? null) ? $actor['permissions'] : [];
+            $scope = (new \App\Services\Archive\ArchiveAccessPolicy())->allowedScope($actor);
+            $unitAllowed = in_array($actor['role'] ?? '', \App\Services\Archive\ArchiveAccessPolicy::ROLES_MAIN, true)
+                && in_array($unit, $scope['units'] ?? [], true);
+            $canViewArchived = $unitAllowed
+                && (($actor['role'] ?? '') === 'superadmin' || in_array('archive.read', $perms, true) || in_array('archive.manage', $perms, true));
+            $canArchive = $unitAllowed && (bool) ($scope['can_manage'] ?? false);
+            if (($filters['archived'] ?? '') === '1' && !$canViewArchived) {
+                $filters['archived'] = '';
+            }
+            $data = $service->listing($unit, $filters);
+            $archivedMode = ($filters['archived'] ?? '') === '1';
+            $mode = $archivedMode ? 'list' : ($this->request->getGet('view') ?? 'board');
             if (!in_array($mode, ['board', 'list'], true)) { throw new RuntimeException('Invalid task view.', 422); }
-            $filters += ['mine' => '', 'q' => '', 'status' => '', 'priority' => ''];
+            $filters += ['mine' => '', 'q' => '', 'status' => '', 'priority' => '', 'archived' => ''];
             $data['memberNames'] = array_column($data['members'], 'name', 'id');
             foreach ($data['tasks'] as &$task) {
-                $task['canEdit'] = (new TeamTaskService())->canEdit($task, $data['actor']);
+                $task['canEdit'] = $service->canEdit($task, $data['actor']);
             }
             unset($task);
-            return view('teams/index', $data + $this->shared($unit) + ['filters' => $filters, 'mode' => $mode, 'title' => ucfirst($unit) . ' Teams']);
+            return view('teams/index', $data + $this->shared($unit) + [
+                'filters'         => $filters,
+                'mode'            => $mode,
+                'archivedMode'    => $archivedMode,
+                'canArchive'      => $canArchive,
+                'canViewArchived' => $canViewArchived,
+                'title'           => ucfirst($unit) . ' Teams',
+            ]);
         });
     }
 
@@ -48,8 +69,15 @@ final class TeamsController extends BaseController
             $context = $service->context($unit);
             try { $task = $service->detailPage($unit, $id, $this->request->getGet()); }
             catch (\InvalidArgumentException $e) { throw new RuntimeException($e->getMessage(), 422, $e); }
+            $actor = $context['actor'] ?? [];
+            $scope = (new \App\Services\Archive\ArchiveAccessPolicy())->allowedScope($actor);
+            $canArchive = in_array($actor['role'] ?? '', \App\Services\Archive\ArchiveAccessPolicy::ROLES_MAIN, true)
+                && (bool) ($scope['can_manage'] ?? false)
+                && in_array($unit, $scope['units'] ?? [], true);
+
             return view('teams/show', $context + $this->shared($unit) + [
                 'task' => $task, 'title' => 'Team task #' . $id,
+                'canArchive' => $canArchive,
                 'memberNames' => array_column($context['members'], 'name', 'id'),
                 'cancelUrl' => site_url($unit . '/teams'), 'formModalPage' => true,
             ]);
@@ -100,6 +128,60 @@ final class TeamsController extends BaseController
         return $this->respond(function () use ($unit, $id) {
             (new TeamTaskService())->comment($unit, $id, $this->request->getPost());
             return $this->success('Comment added.', $unit, $id);
+        });
+    }
+
+    /**
+     * Reversibly archive a completed team task.
+     */
+    public function archive(string $unit, int $id)
+    {
+        return $this->respond(function () use ($unit, $id) {
+            (new TeamTaskService())->context($unit);
+            $db = \Config\Database::connect();
+            $row = $db->table('team_tasks')
+                ->where('tenant_id', \App\Services\CurrentTenant::id())
+                ->where('unit', $unit)
+                ->where('id', $id)
+                ->get()
+                ->getRowArray();
+            if ($row === null) {
+                throw new RuntimeException('Task not found.', 404);
+            }
+            $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+            if ($reason === '') {
+                $reason = 'Archived from ' . $unit . ' team workspace';
+            }
+            (new \App\Services\Archive\ArchiveService($db))->archive('team_task', $id, $reason);
+
+            return $this->success('Team task archived reversibly.', $unit);
+        });
+    }
+
+    /**
+     * Restore a previously archived team task.
+     */
+    public function restore(string $unit, int $id)
+    {
+        return $this->respond(function () use ($unit, $id) {
+            (new TeamTaskService())->context($unit);
+            $db = \Config\Database::connect();
+            $row = $db->table('team_tasks')
+                ->where('tenant_id', \App\Services\CurrentTenant::id())
+                ->where('unit', $unit)
+                ->where('id', $id)
+                ->get()
+                ->getRowArray();
+            if ($row === null) {
+                throw new RuntimeException('Task not found.', 404);
+            }
+            $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+            if ($reason === '') {
+                $reason = 'Restored from ' . $unit . ' team archive';
+            }
+            (new \App\Services\Archive\ArchiveService($db))->restore('team_task', $id, $reason);
+
+            return $this->success('Team task restored from archive.', $unit, $id);
         });
     }
 

@@ -53,6 +53,12 @@ $detailUrl = $baseUrl . '/' . (int) $task['id'];
           </form>
         </section>
       <?php endif; ?>
+      <?php if (!empty($canArchive) && empty($task['deleted_at']) && ($task['status'] ?? '') === 'done'): ?>
+        <form class="tws-rail-block tws-cancel-form" action="<?= esc($baseUrl . '/' . $task['id'] . '/archive') ?>" method="post" data-modal-submit data-confirm="Archive this completed team task reversibly? You can restore it from the Archived view or Archive Center." data-confirm-title="Archive team task" data-confirm-label="Archive task" data-confirm-tone="warning">
+          <?= csrf_field() ?>
+          <button class="btn btn-outline-warning w-100" type="submit"><i class="bi bi-archive me-1" aria-hidden="true"></i>Archive task</button>
+        </form>
+      <?php endif; ?>
 
       <dl class="tws-meta-ledger tws-meta-ledger--rail">
         <div>

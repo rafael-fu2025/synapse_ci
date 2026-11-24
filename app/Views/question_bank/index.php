@@ -90,10 +90,16 @@
                       <a class="btn btn-outline-secondary btn-sm" href="<?= esc($url, 'attr') ?>">History</a>
                       <?php if ($item['status'] === 'active'): ?>
                         <a class="btn btn-outline-primary btn-sm" href="<?= esc($url . '/edit', 'attr') ?>" data-app-modal-open>Revise</a>
-                        <form method="POST" action="<?= esc($url . '/archive', 'attr') ?>" data-background-submit data-confirm="Archive this question? It will disappear from new selections. Existing survey copies and revision history will be preserved." data-confirm-title="Archive bank question" data-confirm-label="Archive" data-confirm-tone="warning">
+                        <form method="POST" action="<?= esc($url . '/archive', 'attr') ?>" data-background-submit data-archive-async="archive" data-archive-version-step="1" data-archive-undo-url="<?= esc($url . '/restore', 'attr') ?>" data-archive-undo-label="Undo">
                           <?= csrf_field() ?>
                           <input type="hidden" name="version" value="<?= (int) $item['version'] ?>">
                           <button type="submit" class="btn btn-outline-secondary btn-sm">Archive</button>
+                        </form>
+                      <?php else: ?>
+                        <form method="POST" action="<?= esc($url . '/restore', 'attr') ?>" data-archive-async="restore" data-archive-version-step="1" data-archive-undo-url="<?= esc($url . '/archive', 'attr') ?>" data-archive-undo-label="Re-archive">
+                          <?= csrf_field() ?>
+                          <input type="hidden" name="version" value="<?= (int) $item['version'] ?>">
+                          <button type="submit" class="btn btn-outline-primary btn-sm">Restore</button>
                         </form>
                       <?php endif; ?>
                     </div>

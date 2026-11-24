@@ -181,7 +181,8 @@ final class GuidanceCumulativeService
             $this->allowDocumentContext($builders['callSlips'], 's', $tenantId, $personId, $caseIds, $episodeIds, $formIds);
         }
         if ($can['forms'] && $this->hasTable('guidance_form_definitions')) {
-            $builders['forms'] = $this->personHistory('guidance_form_instances', 'f', $tenantId, $personId)
+            $builders['forms'] = $this->personHistory('guidance_form_instances', 'f', $tenantId, $personId,
+                softDelete: $this->hasTable('guidance_form_instances') && $this->db->fieldExists('deleted_at', 'guidance_form_instances'))
                 ?->select('f.id, f.instance_number, f.case_id, f.session_id, f.status, f.privacy_notice_id, f.created_by_user_id, f.finalized_at, f.created_at, d.internal_key, d.form_code, d.canonical_title')
                 ->join('guidance_form_definitions d', 'd.id = f.form_definition_id AND d.tenant_id = f.tenant_id');
             $this->allowLinkedContext($builders['forms'], 'f.case_id', $caseIds);
@@ -336,8 +337,12 @@ final class GuidanceCumulativeService
             'id', 'tenant_id', 'person_id', 'created_by_user_id', 'form_definition_id', 'definition_revision_id',
             'case_id', 'session_id', 'episode_id', 'appointment_id', 'referral_id', 'intake_id',
         ], $this->db->getFieldNames('guidance_form_instances'));
-        $instances = $this->db->table('guidance_form_instances')->select($fields)
-            ->where('tenant_id', $tenantId)->where('person_id', $personId)->get()->getResultArray();
+        $instancesQuery = $this->db->table('guidance_form_instances')->select($fields)
+            ->where('tenant_id', $tenantId)->where('person_id', $personId);
+        if ($this->db->fieldExists('deleted_at', 'guidance_form_instances')) {
+            $instancesQuery->where('deleted_at', null);
+        }
+        $instances = $instancesQuery->get()->getResultArray();
         $policy = null;
         $ids = [];
         foreach ($instances as $instance) {

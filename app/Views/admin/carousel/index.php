@@ -27,8 +27,16 @@ foreach ($slides as $s) {
           <p class="adm-intro-desc">Drag rows or use Move up / Move down to reorder. Inactive slides are hidden from the login screen.</p>
         </div>
         <div class="adm-carousel-counts">
-          <span class="adm-carousel-count-pill"><?= count($slides) ?> total</span>
-          <span class="adm-carousel-count-pill"><?= $activeSlideCount ?> active</span>
+          <?php $archivedView = !empty($archivedView); $archivedCount = (int) ($archivedCount ?? 0); ?>
+          <a href="<?= site_url('/admin/carousel') ?>" class="btn btn-sm <?= !$archivedView ? 'btn-primary' : 'btn-outline-secondary' ?>">
+            Active (<?= !$archivedView ? count($slides) : 'View' ?>)
+          </a>
+          <a href="<?= site_url('/admin/carousel?view=archived') ?>" class="btn btn-sm <?= $archivedView ? 'btn-primary' : 'btn-outline-secondary' ?>">
+            Archived (<?= $archivedCount ?>)
+          </a>
+          <?php if (!$archivedView): ?>
+            <span class="adm-carousel-count-pill"><?= $activeSlideCount ?> visible</span>
+          <?php endif; ?>
         </div>
       </div>
     </div>
@@ -131,20 +139,42 @@ foreach ($slides as $s) {
                 <?php endif; ?>
 
                 <?php if (!$isProtected || $isSuperadmin): ?>
-                  <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/delete') ?>" method="POST" class="d-inline" data-background-submit
-                                            data-confirm="<?= $isProtected ? 'Delete the slide carrying the permanent default login image? This cannot be undone.' : 'Delete this slide and its uploaded images? This cannot be undone.' ?>"
-                                            data-confirm-title="Delete carousel slide"
-                                            data-confirm-label="Delete slide"
-                                            data-confirm-tone="danger">
-                    <?= csrf_field() ?>
-                    <button type="submit" class="slide-btn slide-btn-danger" aria-label="Delete slide: <?= esc($slideTitle, 'attr') ?>"
-                            data-bs-toggle="tooltip" data-bs-title="Delete slide">
-                      <i class="bi bi-trash" aria-hidden="true"></i>
-                    </button>
-                  </form>
+                  <?php if ($archivedView): ?>
+                    <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/restore') ?>" method="POST" class="d-inline" data-background-submit
+                          data-archive-async="restore"
+                          data-archive-row="li.slide-row"
+                          data-archive-undo-url="<?= esc(site_url('/admin/carousel/' . $slide['id'] . '/archive'), 'attr') ?>"
+                          data-archive-undo-label="Re-archive"
+                          data-confirm="Restore this slide back into the active slide manager (as hidden)?"
+                          data-confirm-title="Restore carousel slide"
+                          data-confirm-label="Restore slide"
+                          data-confirm-tone="primary">
+                      <?= csrf_field() ?>
+                      <button type="submit" class="slide-btn slide-btn-success" aria-label="Restore slide: <?= esc($slideTitle, 'attr') ?>"
+                              data-bs-toggle="tooltip" data-bs-title="Restore slide">
+                        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                      </button>
+                    </form>
+                  <?php else: ?>
+                    <form action="<?= site_url('/admin/carousel/' . $slide['id'] . '/archive') ?>" method="POST" class="d-inline" data-background-submit
+                          data-archive-async="archive"
+                          data-archive-row="li.slide-row"
+                          data-archive-undo-url="<?= esc(site_url('/admin/carousel/' . $slide['id'] . '/restore'), 'attr') ?>"
+                          data-archive-undo-label="Restore (hidden)"
+                          data-confirm="<?= $isProtected ? 'Archive the slide carrying the permanent default login image? It will be hidden from the login screen and can be restored anytime.' : 'Archive this slide? Its uploaded images are retained and it can be restored anytime.' ?>"
+                          data-confirm-title="Archive carousel slide"
+                          data-confirm-label="Archive slide"
+                          data-confirm-tone="warning">
+                      <?= csrf_field() ?>
+                      <button type="submit" class="slide-btn slide-btn-danger" aria-label="Archive slide: <?= esc($slideTitle, 'attr') ?>"
+                              data-bs-toggle="tooltip" data-bs-title="Archive slide">
+                        <i class="bi bi-archive" aria-hidden="true"></i>
+                      </button>
+                    </form>
+                  <?php endif; ?>
                 <?php else: ?>
                   <span class="slide-btn slide-btn-danger" aria-disabled="true"
-                        data-bs-toggle="tooltip" data-bs-title="Only a superadmin may delete the permanent default image">
+                        data-bs-toggle="tooltip" data-bs-title="Only a superadmin may archive or delete the permanent default image">
                     <i class="bi bi-lock" aria-hidden="true"></i>
                   </span>
                 <?php endif; ?>

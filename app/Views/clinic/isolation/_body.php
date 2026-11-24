@@ -359,13 +359,14 @@ if (isset($casesByDay[$today])) {
             <th scope="col">Isolation Window</th>
             <th scope="col">Status</th>
             <th scope="col">Notes &amp; Attribution</th>
-            <?php if (!empty($canWrite)): ?><th scope="col" class="text-end">Action</th><?php endif; ?>
+<?php $hasActionCol = !empty($canWrite) || !empty($canArchive); ?>
+            <?php if ($hasActionCol): ?><th scope="col" class="text-end">Action</th><?php endif; ?>
           </tr>
         </thead>
         <tbody>
           <?php if (empty($cases)): ?>
             <tr class="iso-empty-row">
-              <td colspan="<?= !empty($canWrite) ? 6 : 5 ?>" class="iso-empty-td">
+              <td colspan="<?= $hasActionCol ? 6 : 5 ?>" class="iso-empty-td">
                 <i class="bi bi-shield-check" aria-hidden="true"></i>
                 <span>No communicable isolation cases match the current month and filters.</span>
               </td>
@@ -454,9 +455,25 @@ if (isset($casesByDay[$today])) {
                   <?php if (!empty($c['cleared_by_name'])): ?> · Updated by <?= esc($c['cleared_by_name']) ?><?php endif; ?>
                 </div>
               </td>
-              <?php if (!empty($canWrite)): ?>
+              <?php if ($hasActionCol): ?>
                 <td class="text-end iso-cell-action">
-                  <?php if ($statusVal === 'active_isolation'): ?>
+                  <?php if (!empty($c['deleted_at'])): ?>
+                    <?php if (!empty($canArchive)): ?>
+                      <form method="POST"
+                            action="<?= esc(site_url('/clinic/isolation/' . (int) $c['id'] . '/restore'), 'attr') ?>"
+                            class="d-inline"
+                            data-archive-async="restore"
+                            data-archive-undo-url="<?= esc(site_url('/clinic/isolation/' . (int) $c['id'] . '/archive'), 'attr') ?>"
+                            data-archive-undo-label="Re-archive">
+                        <?= csrf_field() ?>
+                        <button type="submit" class="btn btn-outline-primary btn-sm iso-clear-btn">
+                          <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Restore
+                        </button>
+                      </form>
+                    <?php else: ?>
+                      <span class="iso-closed-label">Archived</span>
+                    <?php endif; ?>
+                  <?php elseif ($statusVal === 'active_isolation' && !empty($canWrite)): ?>
                     <button type="button"
                             class="btn btn-outline-secondary btn-sm iso-clear-btn"
                             data-iso-clear-trigger
@@ -466,8 +483,20 @@ if (isset($casesByDay[$today])) {
                             data-window-label="<?= esc($c['isolation_start_date'] . ' → ' . $c['isolation_end_date'] . ' (' . $days . 'd)', 'attr') ?>">
                       <i class="bi bi-check2-circle" aria-hidden="true"></i> Update / Clear
                     </button>
+                  <?php elseif ($statusVal === 'cleared' && !empty($canArchive)): ?>
+                    <form method="POST"
+                          action="<?= esc(site_url('/clinic/isolation/' . (int) $c['id'] . '/archive'), 'attr') ?>"
+                          class="d-inline"
+                          data-archive-async="archive"
+                          data-archive-undo-url="<?= esc(site_url('/clinic/isolation/' . (int) $c['id'] . '/restore'), 'attr') ?>"
+                          data-archive-undo-label="Undo">
+                      <?= csrf_field() ?>
+                      <button type="submit" class="btn btn-outline-warning btn-sm iso-clear-btn">
+                        <i class="bi bi-archive" aria-hidden="true"></i> Archive
+                      </button>
+                    </form>
                   <?php else: ?>
-                    <span class="iso-closed-label">Closed</span>
+                    <span class="iso-closed-label"><?= $statusVal === 'active_isolation' ? 'Active' : 'Closed' ?></span>
                   <?php endif; ?>
                 </td>
               <?php endif; ?>

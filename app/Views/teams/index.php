@@ -75,8 +75,11 @@ foreach ($tasks as $t) {
 
     <div class="tws-navigation" data-filter-region="navigation" data-refresh-region="navigation">
       <nav class="tws-nav" aria-label="Teams views">
-        <a class="tws-nav-link" data-filter-link href="<?= esc($link(['mine' => '', 'page' => 1])) ?>" <?= $filters['mine'] !== '1' ? 'aria-current="page"' : '' ?>><i class="bi bi-kanban me-2" aria-hidden="true"></i>Team board</a>
-        <a class="tws-nav-link" data-filter-link href="<?= esc($link(['mine' => '1', 'view' => 'list', 'page' => 1])) ?>" <?= $filters['mine'] === '1' ? 'aria-current="page"' : '' ?>><i class="bi bi-list-check me-2" aria-hidden="true"></i>My tasks</a>
+        <a class="tws-nav-link" data-filter-link href="<?= esc($link(['mine' => '', 'archived' => '', 'page' => 1])) ?>" <?= empty($archivedMode) && $filters['mine'] !== '1' ? 'aria-current="page"' : '' ?>><i class="bi bi-kanban me-2" aria-hidden="true"></i>Team board</a>
+        <a class="tws-nav-link" data-filter-link href="<?= esc($link(['mine' => '1', 'archived' => '', 'view' => 'list', 'page' => 1])) ?>" <?= empty($archivedMode) && $filters['mine'] === '1' ? 'aria-current="page"' : '' ?>><i class="bi bi-list-check me-2" aria-hidden="true"></i>My tasks</a>
+        <?php if (!empty($canViewArchived) || !empty($canArchive) || !empty($archivedMode)): ?>
+          <a class="tws-nav-link" data-filter-link href="<?= esc($link(['archived' => '1', 'mine' => '', 'view' => 'list', 'page' => 1])) ?>" <?= !empty($archivedMode) ? 'aria-current="page"' : '' ?>><i class="bi bi-archive me-2" aria-hidden="true"></i>Archived</a>
+        <?php endif; ?>
         <a class="tws-nav-link" href="<?= esc($baseUrl . '/chat') ?>"><i class="bi bi-chat-dots me-2" aria-hidden="true"></i>Team chat</a>
         <a class="tws-nav-link" href="<?= esc($baseUrl . '/calendar') ?>"><i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Team calendar</a>
       </nav>
@@ -87,7 +90,7 @@ foreach ($tasks as $t) {
     </div>
 
     <form class="tws-filter-band" action="<?= esc($baseUrl) ?>" method="get" role="search" data-filter-form>
-      <input type="hidden" name="view" value="<?= esc($mode) ?>"><input type="hidden" name="mine" value="<?= esc($filters['mine']) ?>">
+      <input type="hidden" name="view" value="<?= esc($mode) ?>"><input type="hidden" name="mine" value="<?= esc($filters['mine']) ?>"><input type="hidden" name="archived" value="<?= esc($filters['archived'] ?? '') ?>">
       <div class="tws-filter-grid">
         <div class="tws-search-field">
           <label class="form-label visually-hidden" for="teamSearch">Search tasks</label>
@@ -240,7 +243,11 @@ foreach ($tasks as $t) {
               ?>
                 <tr role="row">
                   <td class="tws-title-cell" role="cell">
-                    <a class="tws-task-link" href="<?= esc($baseUrl . '/' . $task['id']) ?>" data-app-modal-open><?= esc($task['title']) ?></a>
+                    <?php if (!empty($archivedMode) || !empty($task['deleted_at'])): ?>
+                      <span class="tws-task-link text-muted"><?= esc($task['title']) ?></span>
+                    <?php else: ?>
+                      <a class="tws-task-link" href="<?= esc($baseUrl . '/' . $task['id']) ?>" data-app-modal-open><?= esc($task['title']) ?></a>
+                    <?php endif; ?>
                     <div class="tws-task-submeta">
                       <span class="tws-task-id">#<?= $task['id'] ?></span>
                       <?php if ($checkTotal > 0): ?>
@@ -261,7 +268,7 @@ foreach ($tasks as $t) {
                     <span class="tws-cell-label" aria-hidden="true">Due date</span>
                     <span class="tws-date <?= $isOverdue ? 'tws-due-pill tws-overdue' : '' ?>"><?= esc($task['due_date'] ?? 'No due date') ?><?= $isOverdue ? ' · Overdue' : '' ?></span>
                   </td>
-                  <td class="tws-action-cell" role="cell"><span class="tws-cell-label" aria-hidden="true">Actions</span><?php if ($task['canEdit']): ?><a class="btn btn-outline-primary btn-sm" href="<?= esc($baseUrl . '/' . $task['id'] . '/edit') ?>" data-app-modal-open>Edit</a><?php else: ?><a class="btn btn-outline-secondary btn-sm" href="<?= esc($baseUrl . '/' . $task['id']) ?>" data-app-modal-open>View</a><?php endif; ?></td>
+                  <td class="tws-action-cell" role="cell"><span class="tws-cell-label" aria-hidden="true">Actions</span><?php if (!empty($archivedMode) || !empty($task['deleted_at'])): ?><?php if (!empty($canArchive)): ?><form method="post" action="<?= esc($baseUrl . '/' . $task['id'] . '/restore') ?>" class="d-inline" data-archive-async="restore" data-archive-undo-url="<?= esc($baseUrl . '/' . $task['id'] . '/archive', 'attr') ?>" data-archive-undo-label="Re-archive"><?= csrf_field() ?><button type="submit" class="btn btn-outline-primary btn-sm">Restore</button></form><?php else: ?><span class="text-muted small">Archived</span><?php endif; ?><?php else: ?><div class="d-inline-flex align-items-center gap-1"><?php if ($task['canEdit']): ?><a class="btn btn-outline-primary btn-sm" href="<?= esc($baseUrl . '/' . $task['id'] . '/edit') ?>" data-app-modal-open>Edit</a><?php else: ?><a class="btn btn-outline-secondary btn-sm" href="<?= esc($baseUrl . '/' . $task['id']) ?>" data-app-modal-open>View</a><?php endif; ?><?php if (!empty($canArchive) && ($task['status'] ?? '') === 'done'): ?><form method="post" action="<?= esc($baseUrl . '/' . $task['id'] . '/archive') ?>" class="d-inline" data-archive-async="archive" data-archive-undo-url="<?= esc($baseUrl . '/' . $task['id'] . '/restore', 'attr') ?>" data-archive-undo-label="Undo"><?= csrf_field() ?><button type="submit" class="btn btn-outline-warning btn-sm">Archive</button></form><?php endif; ?></div><?php endif; ?></td>
                 </tr>
               <?php endforeach; ?>
               <?php if ($tasks === []): ?><tr role="row"><td colspan="6" class="tws-empty-cell" role="cell">No matching tasks. Create a task or adjust your filters.</td></tr><?php endif; ?>
@@ -273,7 +280,7 @@ foreach ($tasks as $t) {
         <?= view('partials/table_pagination', [
             'pagination' => ['page' => $page, 'pages' => $pages, 'total' => $total, 'per_page' => $limit],
             'filters' => $filters, 'baseUrl' => $baseUrl,
-            'paginationExtraQuery' => ['mine' => $filters['mine'], 'priority' => $filters['priority'], 'view' => $mode],
+            'paginationExtraQuery' => ['mine' => $filters['mine'], 'priority' => $filters['priority'], 'view' => $mode, 'archived' => $filters['archived'] ?? ''],
             'paginationLiveFilters' => true, 'paginationLabel' => 'Task pages',
         ], ['saveData' => false]) ?>
       </div>

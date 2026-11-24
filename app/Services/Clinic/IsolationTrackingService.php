@@ -74,8 +74,12 @@ final class IsolationTrackingService
             ->join('employee_profiles ep', 'ep.person_id = p.id AND ep.tenant_id = p.tenant_id', 'left')
             ->join('users rep', 'rep.id = c.reported_by_user_id AND rep.tenant_id = c.tenant_id', 'left')
             ->join('users clr', 'clr.id = c.cleared_by_user_id AND clr.tenant_id = c.tenant_id', 'left')
-            ->where('c.tenant_id', $tenantId)
-            ->where('c.deleted_at', null);
+            ->where('c.tenant_id', $tenantId);
+        if ($status === 'archived') {
+            $builder->where('c.deleted_at !=', null);
+        } else {
+            $builder->where('c.deleted_at', null);
+        }
 
         if ($condition !== 'all' && isset(self::CONDITIONS[$condition])) {
             $builder->where('c.condition_code', $condition);

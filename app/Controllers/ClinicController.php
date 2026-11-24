@@ -341,6 +341,9 @@ final class ClinicController extends BaseController
             return $this->response->setStatusCode(422)->setBody(esc($e->getMessage()));
         }
         $result = $this->encounterModel->getListPage($page, $status, $date, $filters);
+        $actor = (new \App\Services\AuthenticatedUser())->current();
+        $scope = is_array($actor) ? (new \App\Services\Archive\ArchiveAccessPolicy())->allowedScope($actor) : ['can_manage' => false, 'modules' => []];
+        $canArchive = (bool) ($scope['can_manage'] ?? false) && in_array('clinic', $scope['modules'] ?? [], true);
 
         return view('clinic/encounters/index', [
             'title'            => 'Clinic Encounters',
@@ -350,6 +353,7 @@ final class ClinicController extends BaseController
             'status'           => $status,
             'date'             => $date,
             'filters'          => $filters,
+            'canArchive'       => $canArchive,
             'complaintCatalog' => EncounterService::COMPLAINT_CATALOG,
             'dispositions'     => ClinicReportInsights::DISPOSITIONS,
             'breadcrumbs'      => [
@@ -357,6 +361,60 @@ final class ClinicController extends BaseController
                 ['label' => 'Encounters', 'url' => ''],
             ],
         ]);
+    }
+
+    /**
+     * Reversibly archive a completed or referred clinic encounter.
+     */
+    public function archiveEncounter(int $id)
+    {
+        $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+        if ($reason === '') {
+            $reason = 'Archived from clinic encounters register';
+        }
+
+        try {
+            $this->authorizeClinicPermission('archive.manage');
+            (new \App\Services\Archive\ArchiveService())->archive('clinic_encounter', $id, $reason);
+
+            return $this->inventoryFormResponse(
+                true,
+                'Clinic encounter archived reversibly.',
+                '/clinic/encounters',
+                200,
+                [],
+                $this->navigationRefresh('/clinic/encounters', 'clinic.encounters')
+            );
+        } catch (\Throwable $e) {
+            return $this->inventoryFailure($e, '/clinic/encounters');
+        }
+    }
+
+    /**
+     * Restore a previously archived clinic encounter.
+     */
+    public function restoreEncounter(int $id)
+    {
+        $reason = trim((string) ($this->request->getPost('reason') ?? ''));
+        if ($reason === '') {
+            $reason = 'Restored from clinic encounters archive';
+        }
+
+        try {
+            $this->authorizeClinicPermission('archive.manage');
+            (new \App\Services\Archive\ArchiveService())->restore('clinic_encounter', $id, $reason);
+
+            return $this->inventoryFormResponse(
+                true,
+                'Clinic encounter restored from archive.',
+                '/clinic/encounters?status=archived',
+                200,
+                [],
+                $this->navigationRefresh('/clinic/encounters?status=archived', 'clinic.encounters')
+            );
+        } catch (\Throwable $e) {
+            return $this->inventoryFailure($e, '/clinic/encounters?status=archived');
+        }
     }
 
     /**

@@ -46,6 +46,9 @@ $actor = $actor ?? [];
           <option value="active" <?= ($status === 'active') ? 'selected' : '' ?>>Active</option>
           <option value="monitoring" <?= ($status === 'monitoring') ? 'selected' : '' ?>>Monitoring</option>
           <option value="closed" <?= ($status === 'closed') ? 'selected' : '' ?>>Closed</option>
+          <?php if (!empty($canArchive) || !empty($canViewArchived) || $status === 'archived'): ?>
+            <option value="archived" <?= ($status === 'archived') ? 'selected' : '' ?>>Archived</option>
+          <?php endif; ?>
         </select>
       </div>
 
@@ -166,7 +169,9 @@ $actor = $actor ?? [];
                     </div>
                   </td>
                   <td data-label="Status">
-                    <?php if ($caseStatus === 'open'): ?>
+                    <?php if (!empty($c['deleted_at'])): ?>
+                      <span class="ce-status-dot ce-status-slate">Archived</span>
+                    <?php elseif ($caseStatus === 'open'): ?>
                       <span class="ce-status-dot ce-status-sky">Open</span>
                     <?php elseif ($caseStatus === 'active'): ?>
                       <span class="ce-status-dot ce-status-emerald">Active</span>
@@ -182,19 +187,50 @@ $actor = $actor ?? [];
                     <div class="ce-date-primary ce-mono"><?= date('M j, Y', strtotime((string) $c['opened_at'])) ?></div>
                   </td>
                   <td data-label="Action" class="text-end">
-                    <div class="d-flex flex-nowrap justify-content-md-end gap-2 gc-card-actions">
-                      <?php if (!empty($c['person_id'])): ?>
-                        <a href="<?= site_url('/guidance/students/' . (int) $c['person_id'] . '/cumulative') ?>"
-                           class="btn btn-outline-secondary btn-sm"
-                           title="View Client Cumulative Guidance Record"
-                           aria-label="View Cumulative Record for <?= esc($c['last_name'] . ', ' . $c['first_name']) ?>">
-                          <i class="bi bi-person-lines-fill" aria-hidden="true"></i>
-                        </a>
+                    <?php if (!empty($c['deleted_at'])): ?>
+                      <?php if (!empty($canArchive)): ?>
+                        <form method="POST"
+                              action="<?= esc(site_url('/guidance/cases/' . $c['id'] . '/restore'), 'attr') ?>"
+                              class="d-inline"
+                              data-archive-async="restore"
+                              data-archive-undo-url="<?= esc(site_url('/guidance/cases/' . $c['id'] . '/archive'), 'attr') ?>"
+                              data-archive-undo-label="Re-archive">
+                          <?= csrf_field() ?>
+                          <button type="submit" class="btn btn-outline-primary btn-sm ce-action-btn">
+                            <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Restore
+                          </button>
+                        </form>
+                      <?php else: ?>
+                        <span class="text-muted small">Archived</span>
                       <?php endif; ?>
-                      <a href="<?= site_url('/guidance/cases/' . $c['id']) ?>" class="btn btn-outline-primary btn-sm ce-action-btn">
-                        <i class="bi bi-folder2-open" aria-hidden="true"></i> Workspace
-                      </a>
-                    </div>
+                    <?php else: ?>
+                      <div class="d-flex flex-nowrap justify-content-md-end gap-2 gc-card-actions">
+                        <?php if (!empty($c['person_id'])): ?>
+                          <a href="<?= site_url('/guidance/students/' . (int) $c['person_id'] . '/cumulative') ?>"
+                             class="btn btn-outline-secondary btn-sm"
+                             title="View Client Cumulative Guidance Record"
+                             aria-label="View Cumulative Record for <?= esc($c['last_name'] . ', ' . $c['first_name']) ?>">
+                            <i class="bi bi-person-lines-fill" aria-hidden="true"></i>
+                          </a>
+                        <?php endif; ?>
+                        <a href="<?= site_url('/guidance/cases/' . $c['id']) ?>" class="btn btn-outline-primary btn-sm ce-action-btn">
+                          <i class="bi bi-folder2-open" aria-hidden="true"></i> Workspace
+                        </a>
+                        <?php if (!empty($canArchive) && $caseStatus === 'closed'): ?>
+                          <form method="POST"
+                                action="<?= esc(site_url('/guidance/cases/' . $c['id'] . '/archive'), 'attr') ?>"
+                                class="d-inline"
+                                data-archive-async="archive"
+                                data-archive-undo-url="<?= esc(site_url('/guidance/cases/' . $c['id'] . '/restore'), 'attr') ?>"
+                                data-archive-undo-label="Undo">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-outline-warning btn-sm ce-action-btn">
+                              <i class="bi bi-archive" aria-hidden="true"></i> Archive
+                            </button>
+                          </form>
+                        <?php endif; ?>
+                      </div>
+                    <?php endif; ?>
                   </td>
                 </tr>
               <?php endforeach; ?>

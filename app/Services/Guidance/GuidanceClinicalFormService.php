@@ -877,8 +877,12 @@ class GuidanceClinicalFormService
         $this->accessPolicy->assertCanReadCase($case, $authority);
 
         // Fetch controlled form instances linked to this case
-        $instances = $this->instanceModel->scoped($tid)
-            ->where('case_id', $caseId)
+        $instancesBuilder = $this->instanceModel->scoped($tid)
+            ->where('case_id', $caseId);
+        if ($this->db->fieldExists('deleted_at', 'guidance_form_instances')) {
+            $instancesBuilder->where('deleted_at', null);
+        }
+        $instances = $instancesBuilder
             ->orderBy('id', 'ASC')
             ->findAll();
 
