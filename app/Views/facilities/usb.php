@@ -12,13 +12,16 @@ $builder = $builder ?? [];
 ?>
 <?= $this->section('styles') ?>
 <link rel="stylesheet" href="<?= esc(base_url('assets/css/bmg.css'), 'attr') ?>">
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/bmg-workstation.css'), 'attr') ?>">
 <link rel="stylesheet" href="<?= esc(base_url('assets/css/bmg-usb.css'), 'attr') ?>">
 <?= $this->endSection() ?>
 <?= $this->section('page_actions') ?>
-<a class="btn btn-outline-secondary btn-sm" href="<?= esc(site_url($base), 'attr') ?>" data-navigation="false">Back to drum</a>
+<div class="ce-page-actions">
+  <a class="btn btn-outline-secondary btn-sm" href="<?= esc(site_url($base), 'attr') ?>" data-navigation="false"><i class="bi bi-arrow-left" aria-hidden="true"></i> Back to drum</a>
+</div>
 <?= $this->endSection() ?>
 <?= $this->section('content') ?>
-<section class="bmg-workspace bmg-usb-workspace" data-bmg-usb
+<section class="bmg-workspace bmg-workstation ce-workspace bmg-usb-workspace" data-bmg-usb
          data-unit-id="<?= $id ?>"
          data-usb-build-url="<?= esc(site_url($base . '/usb/build'), 'attr') ?>"
          data-usb-setup-status-url="<?= esc(site_url($base . '/usb/setup-status'), 'attr') ?>"
@@ -34,41 +37,46 @@ $builder = $builder ?? [];
   <form id="bmgUsbCsrf" hidden>
     <?= csrf_field() ?>
   </form>
-  <header class="card"><div class="card-body pt-3">
-    <div class="small text-muted">USB commissioning · <?= esc($unit['unit_code'] ?? '') ?></div>
-    <h2 class="card-title" id="usbHeading">USB commissioning · <?= esc($unit['name'] ?? 'Drum') ?></h2>
-    <p class="small text-muted mb-0">Set up Zynapse compost networking, build the reviewed template, then explicitly install it. Commissioning firmware has motor outputs hard-disabled. No RTC verification, motor approval, automatic connection or automatic reboot is provided.</p>
-  </div></header>
+  <header class="card ce-card bmg-unit-intro mb-3">
+    <div class="card-body bmg-intro-body">
+      <div class="bmg-intro-copy">
+        <span class="bmg-eyebrow"><span class="bmg-code"><?= esc($unit['unit_code'] ?? '') ?></span> · USB commissioning</span>
+        <h2 class="card-title" id="usbHeading">USB commissioning · <?= esc($unit['name'] ?? 'Drum') ?></h2>
+        <p class="bmg-caption mb-0">Set up Zynapse compost networking, build the reviewed template, then explicitly install it. Commissioning firmware has motor outputs hard-disabled. No RTC verification, motor approval, automatic connection or automatic reboot is provided.</p>
+      </div>
+      <span class="ce-tag"><span class="ce-status-dot ce-status-<?= $flashEnabled ? 'emerald' : 'slate' ?>"><?= $flashEnabled ? 'Commissioning ready' : 'Install gated' ?></span></span>
+    </div>
+  </header>
 
   <ol class="bmg-usb-workflow" aria-label="Commissioning workflow">
-    <li><span class="bmg-usb-step" aria-hidden="true">1</span><div><strong>Connect &amp; identify</strong><span>Select the intended USB port</span></div></li>
-    <li><span class="bmg-usb-step" aria-hidden="true">2</span><div><strong>Configure &amp; build</strong><span>Wi-Fi and pasted device token</span></div></li>
-    <li><span class="bmg-usb-step" aria-hidden="true">3</span><div><strong>Install</strong><span>Use a reviewed firmware build</span></div></li>
-    <li><span class="bmg-usb-step" aria-hidden="true">4</span><div><strong>Verify network</strong><span>Manually check backend heartbeat</span></div></li>
+    <li><span class="bmg-usb-step" aria-hidden="true">01</span><div><strong>Connect &amp; identify</strong><span>Select the intended USB port</span></div></li>
+    <li><span class="bmg-usb-step" aria-hidden="true">02</span><div><strong>Configure &amp; build</strong><span>Wi-Fi and pasted device token</span></div></li>
+    <li><span class="bmg-usb-step" aria-hidden="true">03</span><div><strong>Install</strong><span>Use a reviewed firmware build</span></div></li>
+    <li><span class="bmg-usb-step" aria-hidden="true">04</span><div><strong>Verify network</strong><span>Manually check backend heartbeat</span></div></li>
   </ol>
 
-  <div class="card"><div class="card-body pt-3 bmg-usb-connection-status">
-    <div class="small text-muted"><i class="bi bi-usb-symbol" aria-hidden="true"></i> Connection status</div>
+  <div class="card ce-card bmg-usb-connection-card mb-3"><div class="card-body bmg-usb-connection-status">
+    <div class="bmg-eyebrow"><i class="bi bi-usb-symbol" aria-hidden="true"></i> Connection status</div>
     <p class="bmg-usb-status" data-usb-status role="status" aria-live="polite" aria-atomic="true">No USB port selected. Nothing opens or resets automatically.</p>
-    <p class="small text-muted mb-0" data-usb-support role="status">Browser support has not been checked. Web Serial requires a supported desktop browser (such as Chrome or Edge), a secure context (HTTPS or localhost), and permission to access a USB serial port.</p>
+    <p class="bmg-caption mb-0" data-usb-support role="status">Browser support has not been checked. Web Serial requires a supported desktop browser (such as Chrome or Edge), a secure context (HTTPS or localhost), and permission to access a USB serial port.</p>
 
     <noscript><p class="alert alert-warning mt-3 mb-0">JavaScript is required for USB commissioning. No USB operation will run without it.</p></noscript>
   </div></div>
 
-  <aside class="alert alert-warning bmg-usb-safety" role="note">
+  <aside class="alert alert-warning bmg-safety-note bmg-usb-safety mb-3" role="note">
     <h3 class="h6"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Physically isolate motor power before opening the port</h3>
     <p>Opening a serial port or identifying the chip can reset the controller. A reset may restart existing firmware and motor behavior. A disabled web control or schedule is not physical isolation. Use the local isolation procedure and keep the work area clear.</p>
     <p class="mb-0"><strong>USB release and Stop monitor are not emergency stops.</strong> Use the local physical emergency stop when needed. Connectivity and serial output do not prove that the motor is stopped.</p>
   </aside>
 
-  <div class="row g-4">
+  <div class="row g-3">
     <div class="col-xl-6">
-      <section class="card bmg-panel h-100">
-        <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading">
-          <span class="text-primary fs-4" aria-hidden="true"><i class="bi bi-usb-plug"></i></span>
-          <div><div class="small text-muted">Step 1 · Connection</div><h3 class="card-title mb-0 p-0">Select and identify</h3></div>
+      <section class="card ce-card bmg-panel h-100">
+        <div class="card-header bmg-panel-heading">
+          <h3 class="card-title"><i class="bi bi-usb-plug" aria-hidden="true"></i> Select and identify</h3>
+          <span class="ce-tag">Step 1 · Connection</span>
         </div>
-        <div class="card-body pt-3 bmg-panel-body">
+        <div class="card-body bmg-panel-body">
         <p id="usbSelectHelp" class="text-muted small">Selecting a port only grants browser access; it does not open it, reset it, or verify that it is an ESP32. Check the physical USB connection to the intended drum.</p>
         <button type="button" class="btn btn-primary mb-3" data-usb-select aria-describedby="usbSelectHelp">Select USB port</button>
         <div class="form-check mb-3">
@@ -89,12 +97,12 @@ $builder = $builder ?? [];
       </div></section>
     </div>
     <div class="col-xl-6">
-      <section class="card bmg-panel h-100">
-        <div class="card-header py-3 d-block">
-          <div class="small text-muted">Step 2 · Network commissioning only</div>
-          <h3 class="card-title mb-0 p-0">Wi-Fi &amp; device token</h3>
+      <section class="card ce-card bmg-panel h-100">
+        <div class="card-header bmg-panel-heading">
+          <h3 class="card-title"><i class="bi bi-wifi" aria-hidden="true"></i> Wi-Fi &amp; device token</h3>
+          <span class="ce-tag">Step 2 · Network only</span>
         </div>
-        <div class="card-body pt-3">
+        <div class="card-body bmg-panel-body">
         <div class="alert alert-info small">Before compiling, set this drum to <strong>maintenance</strong>, keep its schedule disabled, and register its controller. Paste the current token from registration; this page never retrieves or reuses an old token. <a href="<?= esc(site_url($base), 'attr') ?>" data-navigation="false">Review drum setup</a>.</div>
         <p data-setup-builder role="status"><?= esc($builder['message'] ?? 'Builder prerequisites have not been checked. Check status before building.') ?></p>
         <p class="small">Reviewed board profile: <span data-setup-profile><?= esc($builder['board_profile'] ?? 'Not confirmed') ?></span>. Firmware: <span data-setup-version><?= esc($builder['firmware_version'] ?? 'Not confirmed') ?></span>. Motors remain hard-disabled.</p>
@@ -143,12 +151,12 @@ $builder = $builder ?? [];
       </div></section>
     </div>
     <div class="col-12">
-      <section class="card bmg-panel h-100">
-        <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading">
-          <span class="text-primary fs-4" aria-hidden="true"><i class="bi bi-box-arrow-in-down"></i></span>
-          <div><div class="small text-muted">Step 3 · Firmware</div><h3 class="card-title mb-0 p-0">Install approved firmware</h3></div>
+      <section class="card ce-card bmg-panel h-100">
+        <div class="card-header bmg-panel-heading">
+          <h3 class="card-title"><i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> Install approved firmware</h3>
+          <span class="ce-tag">Step 3 · Firmware</span>
         </div>
-        <div class="card-body pt-3 bmg-panel-body">
+        <div class="card-body bmg-panel-body">
         <p class="text-muted small">Only server-approved releases, including your private trusted-template build, can be installed. Local editor exports cannot be compiled or installed here. No manual address entry or guessed flash offsets.</p>
         <label class="form-label" for="usbRelease">Approved firmware release</label>
         <select id="usbRelease" class="form-select mb-3" data-usb-release aria-describedby="usbFlashHelp">
@@ -189,24 +197,25 @@ $builder = $builder ?? [];
       </div></section>
     </div>
     <div class="col-12">
-      <section class="card">
-        <div class="card-body pt-3">
-          <div class="small text-muted">Step 4 · Verify backend heartbeat</div>
-          <h3 class="card-title">Check network reporting</h3>
+      <section class="card ce-card bmg-panel">
+        <div class="card-header bmg-panel-heading">
+          <h3 class="card-title"><i class="bi bi-activity" aria-hidden="true"></i> Check network reporting</h3>
+          <span class="ce-tag">Step 4 · Heartbeat</span>
+        </div>
+        <div class="card-body bmg-panel-body">
           <p class="small">After installation, keep motor power isolated and review reset safety before any physical reset. Nothing reboots automatically. A historical last-seen timestamp is not proof of a new heartbeat, RTC correctness or a safe motor state.</p>
           <button type="button" class="btn btn-outline-primary" data-setup-verify>Check backend heartbeat now</button>
-          <p data-setup-heartbeat class="small mt-3" role="status" aria-live="polite">No backend status received in this session.</p>
+          <p data-setup-heartbeat class="small mt-3 mb-0" role="status" aria-live="polite">No backend status received in this session.</p>
         </div>
       </section>
     </div>
     <div class="col-12">
-      <section class="card bmg-panel bmg-usb-monitor">
-        <div class="card-header py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 bmg-panel-heading">
-          <span class="text-primary fs-4" aria-hidden="true"><i class="bi bi-terminal"></i></span>
-          <div><div class="small text-muted">Diagnostics · Separate from installation</div><h3 class="card-title mb-0 p-0" id="usbLogHeading">Receive-only serial monitor</h3></div>
-          <span class="badge bg-light text-dark border bmg-usb-monitor-mode">Receive only</span>
+      <section class="card ce-card bmg-panel bmg-usb-monitor">
+        <div class="card-header bmg-panel-heading">
+          <h3 class="card-title" id="usbLogHeading"><i class="bi bi-terminal" aria-hidden="true"></i> Receive-only serial monitor</h3>
+          <span class="ce-tag bmg-usb-monitor-mode">Receive only</span>
         </div>
-        <div class="card-body pt-3 bmg-panel-body">
+        <div class="card-body bmg-panel-body">
         <p id="usbMonitorHelp">Starting the monitor opens the serial port and may reset the controller. Physical isolation confirmation is required. Monitoring never starts automatically.</p>
         <p class="small"><strong>No command entry or serial transmit controls.</strong> Legacy serial commands <code>s</code> and <code>r</code> can activate the motor. Do not use another serial terminal to send commands while commissioning.</p>
         <p id="usbLogPrivacy" class="small text-muted">Logs stay local to this page and may contain credentials or other secrets. They are not automatically sent or downloaded. Review and redact before sharing; clear sensitive output when finished. The log area is bounded and scrollable; new lines are not announced by screen readers.</p>

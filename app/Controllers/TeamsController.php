@@ -46,7 +46,8 @@ final class TeamsController extends BaseController
         return $this->respond(function () use ($unit, $id) {
             $service = new TeamTaskService();
             $context = $service->context($unit);
-            $task = $service->detail($unit, $id);
+            try { $task = $service->detailPage($unit, $id, $this->request->getGet()); }
+            catch (\InvalidArgumentException $e) { throw new RuntimeException($e->getMessage(), 422, $e); }
             return view('teams/show', $context + $this->shared($unit) + [
                 'task' => $task, 'title' => 'Team task #' . $id,
                 'memberNames' => array_column($context['members'], 'name', 'id'),

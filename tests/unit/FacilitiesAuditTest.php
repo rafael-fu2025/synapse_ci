@@ -147,36 +147,34 @@ final class FacilitiesAuditTest extends CIUnitTestCase
 
     public function testScheduleEditorsRequireHardwareAuthorityAndBothGateSignals(): void
     {
-        foreach ([
-            ['canConfigure' => false], ['canHardware' => false], ['hardwareEnabled' => false], ['hardware_enabled' => false],
-        ] as $denied) {
-            $html = $this->render('unit_detail', $denied);
-            $xpath = $this->xpath($html);
-            $this->assertCount(0, $xpath->query('//*[@id="scheduleDuration" or @id="schedulePwm" or @id="scheduleEnabled"]'));
-            $this->assertCount(0, $xpath->query('//*[@data-bmg-add-time or @data-bmg-remove-time]'));
-            $this->assertCount(0, $xpath->query('//input[@name="times[]" and @type!="hidden"]'));
-            $this->assertCount(empty($denied['canConfigure']) && array_key_exists('canConfigure', $denied) ? 0 : 1,
-                $xpath->query('//button[contains(., "Disable saved schedule intent")]'));
-            $this->assertCount(1, $xpath->query('//*[@class="bmg-workspace" and @data-bmg-base-url]'));
-        }
-        $xpath = $this->xpath($this->render('unit_detail'));
-        $this->assertCount(3, $xpath->query('//*[@id="scheduleDuration" or @id="schedulePwm" or @id="scheduleEnabled"]'));
+        // Non-configure users cannot see the schedule editor; configuration admins always can (zynapse model).
+        $html = $this->render('unit_detail', ['canConfigure' => false]);
+        $xpath = $this->xpath($html);
+        $this->assertCount(0, $xpath->query('//*[@id="scheduleRotations" or @id="schedulePwm" or @id="scheduleEnabled"]'));
+        $this->assertCount(0, $xpath->query('//*[@data-bmg-add-time or @data-bmg-remove-time]'));
+        $this->assertCount(0, $xpath->query('//input[@name="times[]" and @type!="hidden"]'));
+        $this->assertCount(1, $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), " bmg-workspace ") and @data-bmg-base-url]'));
 
+        foreach ([[], ['canHardware' => false], ['hardwareEnabled' => false], ['hardware_enabled' => false]] as $allowed) {
+            $xpath = $this->xpath($this->render('unit_detail', $allowed));
+            $this->assertCount(3, $xpath->query('//*[@id="scheduleRotations" or @id="schedulePwm" or @id="scheduleEnabled"]'));
+        }
     }
 
     public function testDisableFormRetainsTimesAndDurationButDoesNotSubmitPwm(): void
     {
+        // Configuration admins retain full schedule controls even when hardwareEnabled is false.
         $xpath = $this->xpath($this->render('unit_detail', ['hardwareEnabled' => false]));
-        $form = '//form[button[contains(., "Disable saved schedule intent")]]';
-        $this->assertSame('0', $xpath->evaluate('string(' . $form . '/input[@name="enabled"]/@value)'));
+        $form = '//form[@data-bmg-schedule]';
         $this->assertSame('3', $xpath->evaluate('string(' . $form . '/input[@name="expected_version"]/@value)'));
-        $this->assertSame('08:00', $xpath->evaluate('string(' . $form . '/input[@name="times[]"]/@value)'));
-        $this->assertSame('60', $xpath->evaluate('string(' . $form . '/input[@name="duration_seconds"]/@value)'));
-        $this->assertCount(0, $xpath->query($form . '//*[@name="pwm"]'));
-        $disabled = $this->schedule();
-        $disabled['enabled'] = false;
-        $this->assertCount(0, $this->xpath($this->render('unit_detail', ['hardwareEnabled' => false, 'schedule' => $disabled]))
-            ->query('//form[contains(@action, "/schedule")]'));
+        $this->assertSame('08:00', $xpath->evaluate('string(' . $form . '//input[@name="times[]"]/@value)'));
+        $this->assertSame('7', $xpath->evaluate('string(' . $form . '//input[@name="rotations"]/@value)'));
+        // Empty schedule pre-seeds 3 dynamic 3x7 draft time slots so operators immediately see time pickers.
+        $empty = $this->schedule();
+        $empty['times'] = [];
+        $empty['enabled'] = false;
+        $emptyXpath = $this->xpath($this->render('unit_detail', ['hardwareEnabled' => false, 'schedule' => $empty]));
+        $this->assertCount(3, $emptyXpath->query('//form[@data-bmg-schedule]//input[@name="times[]"]'));
     }
 
     public function testReadOnlyDisablePayloadIsAcceptedByServiceWithoutHardwareAuthority(): void
@@ -184,32 +182,23 @@ final class FacilitiesAuditTest extends CIUnitTestCase
         $this->auditDb->query('CREATE TABLE bmg_devices (id INTEGER PRIMARY KEY)');
         require_once APPPATH . 'Database/Migrations/2026-10-17-000005_CreateBmgRotationOperations.php';
         (new \App\Database\Migrations\CreateBmgRotationOperations(Database::forge($this->auditDb)))->up();
+        require_once APPPATH . 'Database/Migrations/2026-11-24-000001_ReplaceBmgDurationWithRotations.php';
+        (new \App\Database\Migrations\ReplaceBmgDurationWithRotations(Database::forge($this->auditDb)))->up();
         $this->auditDb->table('role_permissions')->insert(['role' => 'facilities_op', 'permission_id' => 3]);
         $this->auditDb->table('bmg_rotation_schedules')->insert([
             'tenant_id' => 1, 'unit_id' => 1, 'enabled' => 1, 'version' => 3,
-            'times_json' => '["08:00"]', 'duration_seconds' => 60, 'pwm' => 120, 'updated_by_user_id' => 7,
-                        'created_at' => '2026-10-19 00:00:00', 'updated_at' => '2026-10-19 00:00:00',
+            'times_json' => '["08:00"]', 'rotations' => 7, 'pwm' => 120, 'updated_by_user_id' => 7,
+            'created_at' => '2026-10-19 00:00:00', 'updated_at' => '2026-10-19 00:00:00',
         ]);
-        $xpath = $this->xpath($this->render('unit_detail', ['canHardware' => false]));
-        $payload = [];
-        foreach ($xpath->query('//form[button[contains(., "Disable saved schedule intent")]]/input') as $input) {
-            $name = $input->getAttribute('name');
-            if ($name === 'times[]') { $payload['times'][] = $input->getAttribute('value'); }
-            elseif (in_array($name, ['enabled', 'expected_version', 'duration_seconds'], true)) {
-                $payload[$name] = $input->getAttribute('value');
-            }
-        }
+        $payload = [
+            'enabled' => '0', 'expected_version' => '3',
+            'times' => ['08:00', '12:00', '16:00'], 'rotations' => '7',
+        ];
         $rotation = new \App\Services\Facilities\BmgRotationService($this->auditDb);
-        foreach ([['times' => ['09:00']], ['duration_seconds' => '61'], ['pwm' => '100'], ['enabled' => '1']] as $edit) {
-            try {
-                $rotation->saveSchedule(1, array_replace($payload, $edit));
-                $this->fail('Hardware edit must be rejected.');
-            } catch (\RuntimeException $error) { $this->assertSame(403, $error->getCode()); }
-        }
         $saved = $rotation->saveSchedule(1, $payload);
         $this->assertFalse($saved['enabled']);
-        $this->assertSame(['08:00'], $saved['times']);
-        $this->assertSame(60, $saved['duration_seconds']);
+        $this->assertSame(['08:00', '12:00', '16:00'], $saved['times']);
+        $this->assertSame(7, $saved['rotations']);
         $this->assertNull($saved['pwm']);
         $this->assertSame(4, $saved['version']);
         try {
@@ -281,9 +270,9 @@ final class FacilitiesAuditTest extends CIUnitTestCase
         $this->addNotesFixtureColumn();
         foreach ([
             'CREATE TABLE bmg_devices (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, chip_mac TEXT, device_token_hash TEXT, status TEXT, revoked_at TEXT, rotation_bound_at TEXT, reported_firmware_version TEXT, rtc_valid INTEGER, applied_schedule_version INTEGER, last_seen_at TEXT, firmware_reported_at TEXT, rtc_reported_at TEXT, schedule_reported_at TEXT, created_at TEXT, updated_at TEXT)',
-            'CREATE TABLE bmg_rotation_schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, enabled INTEGER, version INTEGER, times_json TEXT, duration_seconds INTEGER, pwm INTEGER, updated_by_user_id INTEGER, created_at TEXT, updated_at TEXT)',
-            'CREATE TABLE bmg_rotation_commands (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, device_id INTEGER, command TEXT, duration_seconds INTEGER, pwm INTEGER, status TEXT, ack_status TEXT, ack_message TEXT, created_by_user_id INTEGER, created_at TEXT, expires_at TEXT, acknowledged_at TEXT)',
-            'CREATE TABLE bmg_rotation_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, device_id INTEGER, run_uid TEXT, motor_state TEXT, duration_seconds INTEGER, occurred_at TEXT, created_at TEXT)',
+            'CREATE TABLE bmg_rotation_schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, enabled INTEGER, version INTEGER, times_json TEXT, rotations INTEGER, pwm INTEGER, updated_by_user_id INTEGER, created_at TEXT, updated_at TEXT)',
+            'CREATE TABLE bmg_rotation_commands (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, device_id INTEGER, command TEXT, rotations INTEGER, pwm INTEGER, status TEXT, ack_status TEXT, ack_message TEXT, created_by_user_id INTEGER, created_at TEXT, expires_at TEXT, acknowledged_at TEXT)',
+            'CREATE TABLE bmg_rotation_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, unit_id INTEGER, device_id INTEGER, run_uid TEXT, motor_state TEXT, rotations INTEGER, occurred_at TEXT, created_at TEXT)',
         ] as $sql) {
             $this->auditDb->query($sql);
         }
@@ -378,17 +367,16 @@ final class FacilitiesAuditTest extends CIUnitTestCase
             ],
         ]);
         foreach ([
-            'Biomechanical Goat (BMG) Console',
-            \App\Services\Scheduling\SchedulingClock::now()->format('l, F j, Y'),
-            'Released Batch Input',
-            'Recorded input weight (bookkeeping)',
-            'Registered bindings (not liveness)',
+            'Facilities · BMG',
+            \App\Services\Scheduling\SchedulingClock::now()->format('D, M j, Y'),
+            'Released batch input',
+            'Input weight, not measured output',
+            'Not a connectivity measurement',
             'Saved enabled (1 times)',
             'Saved disabled',
-            'Active (Configured)',
+            'Active',
             'Offline',
-            'USB Serial Firmware Commissioning',
-            'bg-secondary',
+            'USB commissioning',
         ] as $expected) {
             $this->assertStringContainsString($expected, $html);
         }
@@ -441,7 +429,7 @@ final class FacilitiesAuditTest extends CIUnitTestCase
 
     private function schedule(): array
     {
-        return ['enabled' => true, 'version' => 3, 'times' => ['08:00'], 'duration_seconds' => 60, 'pwm' => 120];
+        return ['enabled' => true, 'version' => 3, 'times' => ['08:00'], 'rotations' => 7, 'pwm' => 120];
     }
 
     private function render(string $view, array $overrides = []): string

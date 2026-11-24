@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="pagination-isolated-bootstrap.php" colors="false" cacheResult="false" failOnRisky="true" failOnWarning="true" failOnSkipped="true">
+    <testsuites>
+        <testsuite name="Shared pagination contracts">
+            <file>../unit/TablePageTest.php</file>
+            <file>../unit/TablePaginationViewTest.php</file>
+            <file>../unit/PortalPaginationViewTest.php</file>
+            <file>../unit/DirectoryPaginationQueryTest.php</file>
+            <file>../feature/StaffListPaginationTest.php</file>
+        </testsuite>
+        <testsuite name="Record pagination fixes">
+            <file>../unit/GuidanceRegistryPaginationTest.php</file>
+            <file>../unit/GuidanceRegistryPaginationViewTest.php</file>
+            <file>../unit/DetailFormsPaginationTest.php</file>
+            <file>../unit/DetailFormsPaginationViewTest.php</file>
+            <file>../unit/ResourceHistoryPaginationTest.php</file>
+            <file>../unit/ResourceHistoryPaginationViewTest.php</file>
+            <file>../unit/ClinicPortalPaginationTest.php</file>
+            <file>../unit/ClinicPortalPaginationViewTest.php</file>
+            <file>../unit/AiPanelPaginationTest.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>

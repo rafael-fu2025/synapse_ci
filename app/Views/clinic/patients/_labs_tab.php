@@ -1,5 +1,6 @@
         <!-- Tab 3: Lab & Diagnostic Results -->
-        <div class="tab-pane fade" id="tab-labs" role="tabpanel">
+        <div class="tab-pane fade <?= ($chartTab ?? 'tab-visits') === 'tab-labs' || !empty($printChart) ? 'show active' : '' ?>" id="tab-labs" role="tabpanel">
+          <h3 class="h5 d-none d-print-block">Lab &amp; Diagnostic Results</h3>
           <?php if (empty($labResults)): ?>
             <div class="cp-empty-pane">
               <i class="bi bi-flask" aria-hidden="true"></i>
@@ -57,7 +58,11 @@
             </div>
           <?php endif; ?>
 
-          <?php if (!empty($canWriteLabs)): ?>
+          <div class="d-print-none" data-chart-history-pager="labs">
+            <?= isset($historyPager) ? $historyPager('labs', 'tab-labs') : '' ?>
+          </div>
+
+          <?php if (!empty($canWriteLabs) && empty($printChart)): ?>
             <div class="cp-subform-panel">
               <h4 class="cp-subform-title"><i class="bi bi-plus-circle" aria-hidden="true"></i>Record Laboratory / Diagnostic Result</h4>
               <form method="POST" action="<?= site_url('/clinic/patients/' . (int) $person['id'] . '/labs') ?>">

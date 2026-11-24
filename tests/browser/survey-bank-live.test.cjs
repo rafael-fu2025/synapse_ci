@@ -9,7 +9,9 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.resolve(__dirname, '../../public/assets/js/survey-builder.js'), 'utf8');
 const item = id => ({ id, revision: 1, category: 'Feedback', audience: 'all',
   question: { type: 'single', label: 'Question ' + id, required: true, options: ['A', 'B'] } });
-const payload = (id = 1, page = 1) => ({ success: true, items: [item(id)], page, pages: 3 });
+const payload = (id = 1, page = 1, total = 60) => ({ success: true,
+  items: Array.from({ length: Math.min(20, Math.max(0, total - (page - 1) * 20)) }, (_, index) => item(id + index)),
+  total, page, pages: Math.max(1, Math.ceil(total / 20)) });
 const response = data => ({ ok: true, headers: new Headers({ 'Content-Type': 'application/json' }),
   json: async () => data });
 const input = (value, isComposing = false) => ({ target: { value }, isComposing });
@@ -173,7 +175,9 @@ test('guards catalog destination, redirects, content type and malformed JSON sha
   }
   const malformed = [null, { success: true, items: null, page: 1, pages: 1 },
     { ...payload(), items: [null] }, { ...payload(), items: [{ ...item(1), question: { options: null } }] },
-    { ...payload(), page: '1' }, { ...payload(), pages: 0 }];
+    { ...payload(), page: '1' }, { ...payload(), pages: 0 }, { ...payload(), total: -1 },
+    { ...payload(), total: '60' }, { ...payload(), total: Number.MAX_SAFE_INTEGER + 1 },
+    { ...payload(), total: 2 }, { ...payload(), items: [item(1)] }];
   for (const data of malformed) {
     const { state, calls } = harness();
     state.openBank();
@@ -194,6 +198,31 @@ test('guards catalog destination, redirects, content type and malformed JSON sha
     assert.equal(state.bankItems.length, 0);
     state.destroy();
   }
+});
+
+test('range and totals match full, final, empty and clamped pages', async () => {
+  for (const [page, total, from, to] of [[1, 45, 1, 20], [2, 45, 21, 40], [3, 45, 41, 45], [1, 0, 0, 0]]) {
+    const { state, calls } = harness();
+    state.bankOpen = true;
+    state.searchBank(page);
+    calls[0].resolve(response(payload(1, page, total)));
+    await flush();
+    assert.equal(state.bankError, '');
+    assert.equal(state.bankLoaded, true);
+    assert.equal(state.bankTotal, total);
+    assert.equal(state.bankFrom, from);
+    assert.equal(state.bankTo, to);
+    state.destroy();
+  }
+  const { state, calls } = harness();
+  state.bankOpen = true;
+  state.searchBank(999);
+  calls[0].resolve(response(payload(1, 3, 45)));
+  await flush();
+  assert.equal(state.bankPage, 3);
+  assert.equal(state.bankFrom, 41);
+  assert.equal(state.bankTo, 45);
+  state.destroy();
 });
 
 test('a newer request owns busy/error state while an older JSON body is still pending', async () => {

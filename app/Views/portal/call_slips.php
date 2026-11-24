@@ -12,6 +12,8 @@ $callSlips = is_array($callSlips ?? null) ? $callSlips : [];
 $filter = (string) ($filter ?? 'all');
 $counts = array_replace(['all' => 0, 'pending' => 0, 'acknowledged' => 0, 'history' => 0], is_array($counts ?? null) ? $counts : []);
 $baseUrl = (string) ($baseUrl ?? site_url('/portal/call-slips'));
+$perPage = (int) ($pagination['per_page'] ?? $filters['per_page'] ?? 20);
+$perPage = in_array($perPage, [20, 25, 50, 100], true) ? $perPage : 20;
 
 $statusMetaMap = [
     'pending'      => ['tone' => 'is-requested', 'label' => 'Awaiting acknowledgment'],
@@ -52,7 +54,7 @@ $tabs = [
       <nav class="pa-cs-tabs" aria-label="Filter guidance call slips">
         <?php foreach ($tabs as $tabKey => $tabLabel): ?>
           <?php
-          $tabUrl = $tabKey === 'all' ? $baseUrl : ($baseUrl . '?status=' . urlencode($tabKey));
+          $tabUrl = $baseUrl . '?' . http_build_query(['status' => $tabKey, 'per_page' => $perPage]);
           $isCurrent = $filter === $tabKey;
           ?>
           <a href="<?= esc($tabUrl, 'attr') ?>"
@@ -63,6 +65,16 @@ $tabs = [
           </a>
         <?php endforeach; ?>
       </nav>
+      <form method="get" action="<?= esc($baseUrl, 'attr') ?>" class="d-flex flex-wrap justify-content-end align-items-center gap-2 mt-3">
+        <input type="hidden" name="status" value="<?= esc($filter, 'attr') ?>">
+        <label for="call-slips-per-page" class="small text-muted">Call slips per page</label>
+        <select name="per_page" id="call-slips-per-page" class="form-select form-select-sm w-auto">
+          <?php foreach ([20, 25, 50, 100] as $size): ?>
+            <option value="<?= $size ?>" <?= $perPage === $size ? 'selected' : '' ?>><?= $size ?></option>
+          <?php endforeach; ?>
+        </select>
+        <button class="btn btn-outline-secondary btn-sm pa-btn" type="submit">Apply</button>
+      </form>
     </div>
 
     <div class="pa-results-region">
@@ -169,6 +181,7 @@ $tabs = [
             'baseUrl' => $baseUrl,
             'paginationPageParam' => 'page',
             'paginationLiveFilters' => false,
+            'paginationNavigation' => true,
             'paginationLabel' => 'Guidance call slip pages',
             'totalLabel' => 'total call slips',
         ]) ?>

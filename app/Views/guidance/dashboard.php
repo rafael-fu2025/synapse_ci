@@ -664,16 +664,26 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
 <script>
   (function() {
     'use strict';
+    var pageLoadHandler;
     function initGuidanceDashboard(root) {
       var scope = root && typeof root.querySelector === 'function' ? root : document;
       var activityTarget = scope.querySelector('#guidanceActivityChart');
       var categoryTarget = scope.querySelector('#guidanceCategoryChart');
-      if (typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
+      if (!activityTarget || typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
+      // Only this dashboard may own its chart state and shared range controls.
+      if (activityTarget.dataset.guidanceDashboardBound === 'true') return;
+      activityTarget.dataset.guidanceDashboardBound = 'true';
+      document.removeEventListener('synapse:page-load', pageLoadHandler);
+      var bindings = new AbortController();
+      var stopped = false;
+      var activeController = null;
+      var counterRaf = 0;
 
-      var intakePanel = scope.querySelector('[data-cdc-intake-panel]');
+      var intakePanel = activityTarget.closest('[data-cdc-intake-panel]');
       var intakeUrl = intakePanel ? (intakePanel.getAttribute('data-intake-url') || '') : '';
       var rangeSwitch = intakePanel ? intakePanel.querySelector('.cdc-range-switch') : null;
-      var monoFont = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
+      var numericFont = getComputedStyle(document.body).getPropertyValue('--default-font').trim()
+        || '"Nunito Sans", system-ui, sans-serif';
 
       var escapeHtml = function(value) {
         return String(value == null ? '' : value)
@@ -764,7 +774,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
               background: dark ? '#1b1b1f' : '#f8f9fb',
               fontSize: '10px',
               fontWeight: 700,
-              fontFamily: monoFont,
+              fontFamily: numericFont,
               padding: { left: 6, right: 6, top: 2, bottom: 2 }
             },
             position: 'left',
@@ -787,7 +797,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
               background: '#800000',
               fontSize: '10px',
               fontWeight: 700,
-              fontFamily: monoFont,
+              fontFamily: numericFont,
               padding: { left: 6, right: 6, top: 2, bottom: 2 }
             },
             text: 'PEAK ' + peakVal
@@ -857,7 +867,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
             labels: {
               rotate: 0,
               hideOverlappingLabels: true,
-              style: { colors: axisColor, fontSize: '11px', fontFamily: monoFont }
+              style: { colors: axisColor, fontSize: '11px', fontFamily: numericFont }
             }
           },
           yaxis: {
@@ -865,7 +875,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
             max: yMax,
             tickAmount: 5,
             labels: {
-              style: { colors: axisColor, fontSize: '11px', fontFamily: monoFont },
+              style: { colors: axisColor, fontSize: '11px', fontFamily: numericFont },
               formatter: function(val) { return String(Math.round(val)); }
             }
           },
@@ -897,10 +907,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
         ChartTheme.create(activityTarget, buildActivityOptions);
       }
 
-      if (intakePanel && rangeSwitch && intakeUrl && typeof window.fetch === 'function' && rangeSwitch.dataset.cdcBound !== '1') {
-        rangeSwitch.dataset.cdcBound = '1';
-        var activeController = null;
-        var counterRaf = 0;
+      if (intakePanel && rangeSwitch && intakeUrl && typeof window.fetch === 'function') {
         var animateCounters = function(fromState, toState, totalEl, avgEl, peakEl) {
           if (counterRaf) {
             cancelAnimationFrame(counterRaf);
@@ -1031,6 +1038,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
 
           event.preventDefault();
           var nextRange = link.getAttribute('data-cdc-range') || '7d';
+          if (stopped || !activityTarget.isConnected) return;
           if (nextRange === sessionState.rangeKey && !activeController) return;
 
           if (activeController) {
@@ -1065,6 +1073,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
             },
             signal: controller ? controller.signal : undefined
           }).then(function(response) {
+            if (stopped || !activityTarget.isConnected || (controller && controller.signal.aborted)) return null;
             if (window.SynapseCsrf && window.SynapseCsrf.fromResponse(response)) {
               return null;
             }
@@ -1077,39 +1086,41 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
             }
             return response.json();
           }).then(function(data) {
-            if (!data || (controller && controller.signal.aborted)) return;
+            if (!data || stopped || !activityTarget.isConnected || (controller && controller.signal.aborted)) return;
             if (!Array.isArray(data.series) || !Array.isArray(data.days)) {
               throw new Error('Invalid payload');
             }
             seriesCache[nextRange] = data;
             applySessionPayload(data);
           }).catch(function(err) {
-            if (err && err.name === 'AbortError') return;
+            if (stopped || !activityTarget.isConnected || (err && err.name === 'AbortError')) return;
             setActiveRangeButton(previousRange);
             setRangeError('Unable to update timeframe right now. Please try again.');
           }).finally(function() {
-            if (activeController === controller) {
+            if (!stopped && activeController === controller) {
               activeController = null;
               intakePanel.classList.remove('is-loading');
               intakePanel.removeAttribute('aria-busy');
             }
           });
-        });
-
-        document.addEventListener('synapse:before-swap', function(event) {
-          var swapRoot = event && event.detail && event.detail.root;
-          if (!swapRoot || swapRoot === intakePanel || swapRoot.contains(intakePanel)) {
-            if (activeController) {
-              activeController.abort();
-              activeController = null;
-            }
-            if (counterRaf) {
-              cancelAnimationFrame(counterRaf);
-              counterRaf = 0;
-            }
-          }
-        }, { once: true });
+        }, { signal: bindings.signal });
       }
+
+      document.addEventListener('synapse:before-swap', function(event) {
+        var swapRoot = event && event.detail && event.detail.root;
+        if (!swapRoot || (swapRoot !== activityTarget && !swapRoot.contains(activityTarget))) return;
+        stopped = true;
+        if (activeController) {
+          activeController.abort();
+          activeController = null;
+        }
+        if (counterRaf) {
+          cancelAnimationFrame(counterRaf);
+          counterRaf = 0;
+        }
+        bindings.abort();
+        delete activityTarget.dataset.guidanceDashboardBound;
+      }, { signal: bindings.signal });
 
       if (categoryTarget) {
         ChartTheme.create(categoryTarget, function(t) {
@@ -1153,7 +1164,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
                       show: true,
                       fontSize: '25px',
                       fontWeight: 700,
-                      fontFamily: monoFont,
+                      fontFamily: numericFont,
                       color: headingColor,
                       offsetY: -12,
                       formatter: function(val) { return totalCat === 0 ? '0' : String(val); }
@@ -1287,6 +1298,10 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
       initPeriodicSummary(root);
     }
 
+    pageLoadHandler = function(event) {
+      boot(event && event.detail && event.detail.root);
+    };
+    document.addEventListener('synapse:page-load', pageLoadHandler);
     if (!document.body.classList.contains('is-navigating')) {
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() { boot(document); }, { once: true });
@@ -1294,9 +1309,6 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
         boot(document);
       }
     }
-    document.addEventListener('synapse:page-load', function(event) {
-      boot(event && event.detail && event.detail.root);
-    });
   })();
 </script>
 <?= $this->endSection() ?>

@@ -43,6 +43,25 @@ final class TablePageTest extends CIUnitTestCase
         }
     }
 
+    public function testIndependentListsUseTheirOwnSizesAndDefaults(): void
+    {
+        $query = ['drafts_page' => '4', 'drafts_per_page' => '20', 'jobs_page' => '2', 'jobs_per_page' => '50', 'per_page' => '100'];
+        $drafts = TablePage::forList($query, 'drafts_page', 'drafts_per_page', 20);
+        $jobs = TablePage::forList($query, 'jobs_page', 'jobs_per_page', 20);
+        $this->assertSame(['page' => 4, 'per_page' => 20, 'total' => 75, 'filtered' => 75, 'pages' => 4, 'from' => 61, 'to' => 75], $drafts->metadata(75, 75));
+        $this->assertSame(50, $jobs->perPage);
+        $this->assertSame(2, $jobs->page);
+        $this->assertSame(20, TablePage::forList([], 'jobs_page', 'jobs_per_page', 20)->perPage);
+        $this->assertSame(25, TablePage::forList([])->perPage);
+    }
+
+    public function testMalformedNamedPaginationIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionCode(422);
+        TablePage::forList(['jobs_per_page' => ['20']], 'jobs_page', 'jobs_per_page', 20);
+    }
+
     public static function invalidQueries(): iterable
     {
         foreach (['q', 'page', 'per_page', 'kind', 'status', 'fragment'] as $key) {

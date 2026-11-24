@@ -31,7 +31,7 @@
   --iso-slate: #334155;
   --iso-violet: #6d28d9;
   --iso-zinc: #52525b;
-  --iso-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  --iso-mono: var(--mono-font, "Courier New", Courier, monospace);
   color: var(--iso-fg-secondary);
   min-width: 0;
 }

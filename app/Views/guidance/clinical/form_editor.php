@@ -1,6 +1,5 @@
 <?= $this->extend('layouts/app') ?>
 
-<?= $this->section('page_actions') ?>
 <?php
 $mode = (string) ($mode ?? 'create');
 $formKey = (string) ($formKey ?? '');
@@ -25,7 +24,17 @@ $instanceId = (int) ($instance['id'] ?? 0);
 $status = (string) ($instance['status'] ?? 'draft');
 $caseId = (int) ($contextIds['case_id'] ?? 0);
 $episodeId = (int) ($contextIds['episode_id'] ?? 0);
+$isInterview = $formKey === 'psychosocial_support_interview';
 ?>
+
+<?= $this->section('styles') ?>
+<?php if ($isInterview): ?>
+  <link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/guidance-interview.css'), 'attr') ?>">
+<?php endif; ?>
+<?= $this->endSection() ?>
+
+<?= $this->section('page_actions') ?>
+<?php if ($isInterview): ?><div class="ce-page-actions giw-page-actions"><?php endif; ?>
 <?php if ($caseId > 0): ?>
     <a href="<?= site_url('guidance/cases/' . $caseId) ?>" class="btn btn-outline-secondary btn-sm">
         <i class="bi bi-arrow-left me-1"></i>Back to Case
@@ -40,7 +49,7 @@ $episodeId = (int) ($contextIds['episode_id'] ?? 0);
     </a>
 <?php endif; ?>
 
-<a href="<?= site_url('guidance/clinical/cosign-queue') ?>" class="btn btn-outline-warning btn-sm">
+<a href="<?= site_url('guidance/clinical/cosign-queue') ?>" class="btn <?= $isInterview ? 'btn-outline-secondary' : 'btn-outline-warning' ?> btn-sm">
     <i class="bi bi-pen me-1"></i>Co-Sign Queue
 </a>
 
@@ -54,10 +63,15 @@ $episodeId = (int) ($contextIds['episode_id'] ?? 0);
         </a>
     <?php endif; ?>
 <?php endif; ?>
+<?php if ($isInterview): ?></div><?php endif; ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
+<?php if ($isInterview): ?>
+<section class="guidance-ui guidance-interview ce-encounter" aria-label="Psychosocial support interview workspace">
+<?php else: ?>
 <div class="guidance-ui">
+<?php endif; ?>
 <?php
 $statusBadges = [
     'draft'          => ['bg' => 'secondary', 'label' => 'Draft (Editable)'],
@@ -148,6 +162,80 @@ if ($fieldsToRender === [] && $schemaFields !== []) {
 ?>
 
 <!-- Controlled Form Metadata Header -->
+<?php if ($isInterview): ?>
+  <?php
+  $statusDot = match ($status) {
+      'pending_cosign' => 'ce-status-amber',
+      'finalized' => 'ce-status-emerald',
+      default => 'ce-status-slate',
+  };
+  $clientLabel = $personName !== '' ? $personName : (!empty($contextIds['person_id']) ? 'Person #' . (int) $contextIds['person_id'] : 'New client interview');
+  $initials = '';
+  foreach (array_slice(explode(' ', $personName), 0, 2) as $namePart) {
+      $initials .= strtoupper(substr($namePart, 0, 1));
+  }
+  $authorName = $authorInfo !== null ? (trim((string) (($authorInfo['first_name'] ?? '') . ' ' . ($authorInfo['last_name'] ?? ''))) ?: (string) ($authorInfo['username'] ?? '')) : '';
+  $supervisorName = $supervisorInfo !== null ? (trim((string) (($supervisorInfo['first_name'] ?? '') . ' ' . ($supervisorInfo['last_name'] ?? ''))) ?: (string) ($supervisorInfo['username'] ?? '')) : '';
+  ?>
+  <div class="ce-patient-card giw-identity">
+    <div class="ce-patient-top">
+      <div class="ce-patient-identity">
+        <span class="ce-avatar" aria-hidden="true"><?= esc($initials !== '' ? $initials : 'PI') ?></span>
+        <div class="giw-identity-copy">
+          <div class="giw-form-reference">
+            <span class="ce-mono"><?= esc((string) ($definition['form_code'] ?? $formKey)) ?></span>
+            <span class="ce-tag ce-mono"><?= esc($instanceId > 0 ? (string) ($instance['instance_number'] ?? ('#' . $instanceId)) : 'New Draft') ?></span>
+          </div>
+          <h2 class="ce-patient-name"><?= esc($clientLabel) ?></h2>
+          <div class="ce-patient-meta">
+            <?php if (!empty($person['mis_id'])): ?><span class="ce-mono"><?= esc((string) $person['mis_id']) ?></span><?php endif; ?>
+            <span>Psychosocial Support Interview</span>
+          </div>
+        </div>
+      </div>
+      <span class="ce-tag giw-status"><span class="ce-status-dot <?= $statusDot ?>"><?= esc($stMeta['label']) ?></span></span>
+    </div>
+    <dl class="giw-context">
+      <div>
+        <dt>Record context</dt>
+        <dd class="giw-context-links">
+          <?php if ($caseId > 0): ?><a href="<?= esc(site_url('guidance/cases/' . $caseId), 'attr') ?>" class="ce-mono">Case #<?= $caseId ?></a><?php endif; ?>
+          <?php if ($episodeId > 0): ?><a href="<?= esc(site_url('guidance/episodes/' . $episodeId), 'attr') ?>" class="ce-mono">Episode #<?= $episodeId ?></a><?php endif; ?>
+          <?php if (!empty($contextIds['session_id'])): ?><span class="ce-mono">Session #<?= (int) $contextIds['session_id'] ?></span><?php endif; ?>
+          <?php if ($caseId <= 0 && $episodeId <= 0 && empty($contextIds['session_id'])): ?><span>Client interview</span><?php endif; ?>
+        </dd>
+      </div>
+      <div><dt>Author</dt><dd><?= esc($authorName !== '' ? $authorName : 'Not yet recorded') ?></dd></div>
+      <div><dt>Assigned supervisor</dt><dd><?= esc($supervisorName !== '' ? $supervisorName : ($isAssociate && $activeSupervision === null ? 'No active assignment' : 'Not recorded')) ?></dd></div>
+      <div><dt>Your credential tier</dt><dd><?= esc($tier !== '' ? ucwords(str_replace('_', ' ', $tier)) : 'Not recorded') ?></dd></div>
+    </dl>
+  </div>
+
+  <div class="ce-notice ce-notice-sky">
+    <div class="ce-notice-body">
+      <i class="bi bi-shield-lock ce-notice-icon" aria-hidden="true"></i>
+      <span><strong>Confidential clinical documentation</strong> — Sensitive narrative fields are encrypted at rest. PDF preview uses the saved record; it does not include unsaved edits.</span>
+    </div>
+  </div>
+  <?php if ($status === 'pending_cosign'): ?>
+    <?php
+    $submittedAt = $instance['submitted_for_cosign_at'] ?? $draft['submitted_for_cosign_at'] ?? null;
+    $subNotes = $instance['submission_notes'] ?? $draft['submission_notes'] ?? null;
+    ?>
+    <div class="ce-notice ce-notice-amber">
+      <div class="ce-notice-body">
+        <i class="bi bi-hourglass-split ce-notice-icon" aria-hidden="true"></i>
+        <div><strong>Awaiting Supervisor Co-Sign</strong>
+          <?php if (!empty($submittedAt)): ?><span class="ce-mono"> · <?= esc(date('M d, Y g:i A', strtotime((string) $submittedAt))) ?></span><?php endif; ?>
+          <div class="giw-notice-detail">The submitted documentation is locked during review.</div>
+          <?php if (!empty($subNotes)): ?><div class="giw-submission-notes"><strong>Associate Notes:</strong> <?= esc((string) $subNotes) ?></div><?php endif; ?>
+        </div>
+      </div>
+    </div>
+  <?php elseif ($status === 'finalized'): ?>
+    <div class="ce-notice ce-notice-emerald"><div class="ce-notice-body"><i class="bi bi-patch-check ce-notice-icon" aria-hidden="true"></i><span><strong>Finalized &amp; Attested</strong> — This record is read-only. Corrections follow the existing addendum process.</span></div></div>
+  <?php endif; ?>
+<?php else: ?>
 <div class="card border-0 shadow-sm mb-3">
     <div class="card-body">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
@@ -219,13 +307,30 @@ if ($fieldsToRender === [] && $schemaFields !== []) {
     </div>
 </div>
 
+<?php endif; ?>
+
 <!-- Main Form Body -->
 <?php
 $formAction = $mode === 'create'
     ? site_url('guidance/clinical/forms/create')
     : site_url('guidance/clinical/forms/' . $instanceId . '/save');
+$interviewSections = [
+    'giw-client' => ['title' => 'Client & Demographics', 'hint' => 'Confirm client identity and interview details.', 'fields' => ['student_name', 'student_id', 'interview_date', 'course_year', 'demographics']],
+    'giw-concerns' => ['title' => 'Concerns & Screening', 'hint' => 'Document presenting concerns and any completed screening.', 'fields' => ['presenting_concerns', 'mental_health_screening']],
+    'giw-support' => ['title' => 'Family & Social Support', 'hint' => 'Record relevant family, social, and support context.', 'fields' => ['family_social_support']],
+    'giw-plan' => ['title' => 'Assessment & Follow-Up Plan', 'hint' => 'Document your clinical assessment and agreed next steps.', 'fields' => ['counselor_assessment', 'intervention_plan']],
+    'giw-consent' => ['title' => 'Privacy & Consent', 'hint' => 'Confirm the client privacy notice and informed consent.', 'fields' => ['privacy_consent_acknowledged']],
+];
 ?>
-<form id="clinicalFormEditor" method="post" action="<?= $formAction ?>" class="card border-0 shadow-sm mb-3" data-background-submit>
+<?php if ($isInterview): ?>
+  <nav class="giw-section-nav" aria-label="Interview documentation sections">
+    <?php foreach ($interviewSections as $sectionId => $sectionMeta): ?>
+      <a href="#<?= esc($sectionId, 'attr') ?>"><?= esc($sectionMeta['title']) ?></a>
+    <?php endforeach; ?>
+  </nav>
+  <div class="giw-layout">
+<?php endif; ?>
+<form id="clinicalFormEditor" method="post" action="<?= esc($formAction, 'attr') ?>" class="<?= $isInterview ? 'giw-documentation' : 'card border-0 shadow-sm mb-3' ?>" data-background-submit>
     <?= csrf_field() ?>
     <?php if ($mode === 'create'): ?>
         <input type="hidden" name="form_key" value="<?= esc($formKey) ?>">
@@ -236,6 +341,29 @@ $formAction = $mode === 'create'
         <?php endforeach; ?>
     <?php endif; ?>
 
+    <?php if ($isInterview): ?>
+      <div class="giw-document-heading">
+        <h2 class="ce-card-title">Clinical Documentation Fields</h2>
+        <span class="ce-tag"><?= $isEditable ? 'Required fields marked *' : 'Read-Only' ?></span>
+      </div>
+      <?php foreach ($interviewSections as $sectionId => $sectionMeta): ?>
+        <section class="ce-card giw-section" id="<?= esc($sectionId, 'attr') ?>" aria-labelledby="<?= esc($sectionId . '-heading', 'attr') ?>">
+          <div class="ce-card-header">
+            <div>
+              <h3 class="ce-card-title" id="<?= esc($sectionId . '-heading', 'attr') ?>"><?= esc($sectionMeta['title']) ?></h3>
+              <p class="giw-section-hint"><?= esc($sectionMeta['hint']) ?></p>
+            </div>
+          </div>
+          <div class="ce-card-body">
+            <div class="row g-3">
+              <?php foreach ($sectionMeta['fields'] as $fieldName): ?>
+                <?= view('guidance/clinical/_field', ['fieldName' => $fieldName, 'meta' => $fieldsToRender[$fieldName], 'schemaFields' => $schemaFields, 'formData' => $formData, 'isEditable' => $isEditable, 'isInterview' => true], ['saveData' => false]) ?>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        </section>
+      <?php endforeach; ?>
+    <?php else: ?>
     <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0 p-0">Clinical Documentation Fields</h5>
         <?php if (! $isEditable): ?>
@@ -246,191 +374,45 @@ $formAction = $mode === 'create'
     <div class="card-body">
         <div class="row g-3">
             <?php foreach ($fieldsToRender as $fieldName => $meta): ?>
-                <?php
-                $schemaMeta = is_array($schemaFields[$fieldName] ?? null) ? $schemaFields[$fieldName] : [];
-                $type = (string) ($meta['type'] ?? $schemaMeta['type'] ?? 'string');
-                $label = (string) ($meta['label'] ?? $schemaMeta['label'] ?? ucwords(str_replace('_', ' ', (string) $fieldName)));
-                $required = (bool) ($meta['required'] ?? $schemaMeta['required'] ?? false);
-                $encrypted = (bool) ($meta['encrypted'] ?? $schemaMeta['encrypted'] ?? false);
-                $colClass = (string) ($meta['col'] ?? 'col-12');
-                $val = $formData[$fieldName] ?? ($schemaMeta['default'] ?? '');
-                $disabledAttr = $isEditable ? '' : 'disabled';
-                $reqAttr = $required ? 'required' : '';
-                ?>
-
-                <?php if ($type === 'object'): ?>
-                    <?php
-                    $subProps = $meta['properties'] ?? $schemaMeta['properties'] ?? [];
-                    $objVal = is_array($val) ? $val : [];
-                    ?>
-                    <div class="col-12">
-                        <div class="border rounded p-3 bg-light-subtle">
-                            <div class="fw-semibold small text-uppercase text-muted mb-2">
-                                <?= esc($label) ?>
-                                <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                            </div>
-                            <div class="row g-2">
-                                <?php foreach ($subProps as $subKey => $subMeta): ?>
-                                    <?php
-                                    $subLabel = (string) ($subMeta['label'] ?? ucwords(str_replace('_', ' ', (string) $subKey)));
-                                    $subType = (string) ($subMeta['type'] ?? 'string');
-                                    $subVal = $objVal[$subKey] ?? '';
-                                    $inputId = 'field_' . $fieldName . '_' . $subKey;
-                                    ?>
-                                    <div class="col-md-4">
-                                        <label for="<?= esc($inputId) ?>" class="form-label small fw-semibold"><?= esc($subLabel) ?></label>
-                                        <?php if ($subType === 'enum'): ?>
-                                            <select id="<?= esc($inputId) ?>" name="fields[<?= esc($fieldName) ?>][<?= esc($subKey) ?>]" class="form-select form-select-sm" <?= $disabledAttr ?>>
-                                                <?php foreach (($subMeta['options'] ?? []) as $opt): ?>
-                                                    <option value="<?= esc((string) $opt) ?>" <?= ((string) $subVal === (string) $opt) ? 'selected' : '' ?>>
-                                                        <?= $opt === '' ? '-- Not Specified --' : esc(ucwords(str_replace('_', ' ', (string) $opt))) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        <?php elseif ($subType === 'integer'): ?>
-                                            <input type="number" id="<?= esc($inputId) ?>" name="fields[<?= esc($fieldName) ?>][<?= esc($subKey) ?>]" class="form-control form-control-sm" value="<?= esc((string) $subVal) ?>" <?= $disabledAttr ?>>
-                                        <?php else: ?>
-                                            <input type="text" id="<?= esc($inputId) ?>" name="fields[<?= esc($fieldName) ?>][<?= esc($subKey) ?>]" class="form-control form-control-sm" value="<?= esc((string) $subVal) ?>" <?= $disabledAttr ?>>
-                                        <?php endif; ?>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </div>
-
-                <?php elseif ($type === 'boolean'): ?>
-                    <div class="col-12">
-                        <div class="form-check">
-                            <input type="hidden" name="fields[<?= esc($fieldName) ?>]" value="0">
-                            <input class="form-check-input" type="checkbox" id="field_<?= esc($fieldName) ?>"
-                                   name="fields[<?= esc($fieldName) ?>]" value="1"
-                                   <?= ! empty($val) ? 'checked' : '' ?> <?= $disabledAttr ?> <?= $reqAttr ?>>
-                            <label class="form-check-label fw-semibold" for="field_<?= esc($fieldName) ?>">
-                                <?= esc($label) ?>
-                                <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                            </label>
-                        </div>
-                    </div>
-
-                <?php elseif ($type === 'textarea'): ?>
-                    <div class="col-12">
-                        <label for="field_<?= esc($fieldName) ?>" class="form-label fw-semibold">
-                            <?= esc($label) ?>
-                            <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                            <?php if ($encrypted): ?>
-                                <span class="badge bg-light text-success border ms-1"><i class="bi bi-lock-fill me-1"></i>Encrypted</span>
-                            <?php endif; ?>
-                        </label>
-                        <textarea id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]" rows="3"
-                                  class="form-control" <?= $disabledAttr ?> <?= $reqAttr ?>><?= esc((string) $val) ?></textarea>
-                    </div>
-
-                <?php elseif ($type === 'enum'): ?>
-                    <?php $options = $meta['options'] ?? $schemaMeta['options'] ?? []; ?>
-                    <div class="<?= esc($colClass) ?>">
-                        <label for="field_<?= esc($fieldName) ?>" class="form-label fw-semibold">
-                            <?= esc($label) ?>
-                            <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                        </label>
-                        <select id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]" class="form-select" <?= $disabledAttr ?> <?= $reqAttr ?>>
-                            <?php foreach ($options as $opt): ?>
-                                <option value="<?= esc((string) $opt) ?>" <?= ((string) $val === (string) $opt) ? 'selected' : '' ?>>
-                                    <?= esc(ucwords(str_replace('_', ' ', (string) $opt))) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                <?php elseif ($type === 'integer'): ?>
-                    <div class="<?= esc($colClass) ?>">
-                        <label for="field_<?= esc($fieldName) ?>" class="form-label fw-semibold">
-                            <?= esc($label) ?>
-                            <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                        </label>
-                        <input type="number" min="1" id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]"
-                               class="form-control" value="<?= esc((string) $val) ?>" <?= $disabledAttr ?> <?= $reqAttr ?>>
-                    </div>
-
-                <?php elseif ($type === 'date'): ?>
-                    <div class="<?= esc($colClass) ?>">
-                        <label for="field_<?= esc($fieldName) ?>_display" class="form-label fw-semibold">
-                            <?= esc($label) ?>
-                            <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                        </label>
-                        <input type="text" id="field_<?= esc($fieldName) ?>_display"
-                               class="form-control" data-datepicker data-target="#field_<?= esc($fieldName) ?>"
-                               placeholder="DD/MM/YYYY" autocomplete="off" <?= $disabledAttr ?> <?= $reqAttr ?>>
-                        <input type="hidden" id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]"
-                               value="<?= esc(substr((string) $val, 0, 10)) ?>">
-                    </div>
-
-                <?php elseif ($type === 'time'): ?>
-                    <div class="<?= esc($colClass) ?>">
-                        <label for="field_<?= esc($fieldName) ?>_display" class="form-label fw-semibold">
-                            <?= esc($label) ?>
-                            <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                        </label>
-                        <input type="text" id="field_<?= esc($fieldName) ?>_display"
-                               class="form-control" data-timepicker data-target="#field_<?= esc($fieldName) ?>"
-                               placeholder="hh:mm A" autocomplete="off" <?= $disabledAttr ?> <?= $reqAttr ?>>
-                        <input type="hidden" id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]"
-                               value="<?= esc(substr((string) $val, 0, 5)) ?>">
-                    </div>
-
-                <?php elseif ($type === 'datetime'): ?>
-                    <?php
-                    $dtVal = (string) $val;
-                    if ($dtVal !== '' && strpos($dtVal, ' ') !== false && strpos($dtVal, 'T') === false) {
-                        $dtVal = str_replace(' ', 'T', substr($dtVal, 0, 16));
-                    }
-                    ?>
-                    <div class="<?= esc($colClass) ?>">
-                        <label for="field_<?= esc($fieldName) ?>_display" class="form-label fw-semibold">
-                            <?= esc($label) ?>
-                            <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                        </label>
-                        <input type="text" id="field_<?= esc($fieldName) ?>_display"
-                               class="form-control" data-datetimepicker data-target="#field_<?= esc($fieldName) ?>"
-                               placeholder="DD/MM/YYYY hh:mm A" autocomplete="off" <?= $disabledAttr ?> <?= $reqAttr ?>>
-                        <input type="hidden" id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]"
-                               value="<?= esc($dtVal) ?>">
-                    </div>
-
-                <?php else: ?>
-                    <div class="<?= esc($colClass) ?>">
-                        <label for="field_<?= esc($fieldName) ?>" class="form-label fw-semibold">
-                            <?= esc($label) ?>
-                            <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
-                        </label>
-                        <input type="text" id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]"
-                               class="form-control" value="<?= esc((string) $val) ?>" <?= $disabledAttr ?> <?= $reqAttr ?>>
-                    </div>
-                <?php endif; ?>
+              <?= view('guidance/clinical/_field', ['fieldName' => $fieldName, 'meta' => $meta, 'schemaFields' => $schemaFields, 'formData' => $formData, 'isEditable' => $isEditable, 'isInterview' => false], ['saveData' => false]) ?>
             <?php endforeach; ?>
         </div>
     </div>
+    <?php endif; ?>
 
     <?php if ($isEditable): ?>
-        <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="<?= $isInterview ? 'ce-card giw-save-bar' : 'card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2' ?>">
             <span class="small text-muted">
                 <?= $mode === 'create'
                     ? 'Creating the draft enables PDF preview, co-sign submission, or attestation.'
                     : 'Save edits before submitting or finalizing.' ?>
             </span>
             <button type="submit" class="btn btn-primary w-100 w-sm-auto">
-                <i class="bi bi-save me-1"></i><?= $mode === 'create' ? 'Create Encrypted Draft' : 'Save Encrypted Draft' ?>
+                <i class="bi bi-save me-1" aria-hidden="true"></i> <?= $mode === 'create' ? 'Create Encrypted Draft' : 'Save Encrypted Draft' ?>
             </button>
         </div>
     <?php endif; ?>
 </form>
 
 <!-- Role-Aware Workflow & Attestation Panels -->
+<?php if ($isInterview): ?>
+<aside class="giw-review" aria-label="Review and attestation">
+  <div class="ce-card giw-review-context">
+    <div class="ce-card-header"><h2 class="ce-card-title"><i class="bi bi-shield-check" aria-hidden="true"></i> Record workflow</h2></div>
+    <div class="ce-card-body">
+      <span class="ce-status-dot <?= $statusDot ?>"><?= esc($stMeta['label']) ?></span>
+      <p class="giw-review-hint">
+        <?= $mode === 'create' ? 'Create the encrypted draft to enable PDF preview and review actions.' : ($status === 'finalized' ? 'This documentation is locked. The attestation ledger records its finalized review.' : ($status === 'pending_cosign' ? ($isAssignedSupervisor ? 'Review the submitted documentation before applying your co-signature.' : 'You can inspect this submission. Co-signature belongs to its eligible assigned supervisor.') : 'Save your draft independently of submission or finalization. Review actions include the current documentation fields.')) ?>
+      </p>
+    </div>
+  </div>
+<?php endif; ?>
 <?php if ($instanceId > 0 && $status === 'draft'): ?>
     <?php if (! $canFinalizeDirectly): ?>
         <!-- Associate Action: Submit for Supervisor Co-Sign -->
-        <div class="card border-warning shadow-sm mb-3">
-            <div class="card-header bg-warning-subtle border-0 py-2">
-                <h6 class="card-title mb-0 p-0 text-dark">
+        <div class="<?= $isInterview ? 'ce-card giw-workflow-card' : 'card border-warning shadow-sm mb-3' ?>">
+            <div class="<?= $isInterview ? 'ce-card-header' : 'card-header bg-warning-subtle border-0 py-2' ?>">
+                <h6 class="<?= $isInterview ? 'ce-card-title' : 'card-title mb-0 p-0 text-dark' ?>">
                     <i class="bi bi-send-check me-2"></i>Submit for Supervisor Co-Sign
                 </h6>
             </div>
@@ -458,9 +440,9 @@ $formAction = $mode === 'create'
         </div>
     <?php else: ?>
         <!-- Licensed Counselor / Supervisor Action: Digitally Attest & Finalize -->
-        <div class="card border-success shadow-sm mb-3">
-            <div class="card-header bg-success-subtle border-0 py-2">
-                <h6 class="card-title mb-0 p-0 text-success-emphasis">
+        <div class="<?= $isInterview ? 'ce-card giw-workflow-card' : 'card border-success shadow-sm mb-3' ?>">
+            <div class="<?= $isInterview ? 'ce-card-header' : 'card-header bg-success-subtle border-0 py-2' ?>">
+                <h6 class="<?= $isInterview ? 'ce-card-title' : 'card-title mb-0 p-0 text-success-emphasis' ?>">
                     <i class="bi bi-patch-check me-2"></i>Digitally Attest &amp; Finalize
                 </h6>
             </div>
@@ -494,9 +476,9 @@ $formAction = $mode === 'create'
 
 <?php if ($instanceId > 0 && $status === 'pending_cosign' && $isAssignedSupervisor): ?>
     <!-- Assigned Supervisor Action: Co-Sign & Finalize -->
-    <div class="card border-success shadow-sm mb-3">
-        <div class="card-header bg-success-subtle border-0 py-2">
-            <h6 class="card-title mb-0 p-0 text-success-emphasis">
+    <div class="<?= $isInterview ? 'ce-card giw-workflow-card' : 'card border-success shadow-sm mb-3' ?>">
+        <div class="<?= $isInterview ? 'ce-card-header' : 'card-header bg-success-subtle border-0 py-2' ?>">
+            <h6 class="<?= $isInterview ? 'ce-card-title' : 'card-title mb-0 p-0 text-success-emphasis' ?>">
                 <i class="bi bi-pen-fill me-2"></i>Supervisor Review: Co-Sign &amp; Finalize
             </h6>
         </div>
@@ -534,15 +516,15 @@ $formAction = $mode === 'create'
 
 <?php if ($status === 'finalized' && ! empty($attestations)): ?>
     <!-- Finalized Attestation Ledger -->
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white border-0 py-3">
-            <h6 class="card-title mb-0 p-0">
-                <i class="bi bi-shield-check me-2 text-success"></i>Digital Attestations &amp; Co-Sign Ledger
+    <div class="<?= $isInterview ? 'ce-card giw-attestation-ledger' : 'card border-0 shadow-sm' ?>">
+        <div class="<?= $isInterview ? 'ce-card-header' : 'card-header bg-white border-0 py-3' ?>">
+            <h6 class="<?= $isInterview ? 'ce-card-title' : 'card-title mb-0 p-0' ?>">
+                <i class="bi bi-shield-check me-2 text-success" aria-hidden="true"></i>Digital Attestations &amp; Co-Sign Ledger
             </h6>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
+                <table class="table table-sm align-middle mb-0 <?= $isInterview ? 'ce-table giw-attestations-table' : '' ?>">
                     <thead class="table-light">
                         <tr>
                             <th>Role</th>
@@ -561,17 +543,17 @@ $formAction = $mode === 'create'
                             }
                             ?>
                             <tr>
-                                <td>
+                                <td data-label="Role">
                                     <span class="badge bg-light text-dark border">
                                         <?= esc(ucwords(str_replace('_', ' ', (string) ($att['attestation_role'] ?? 'author')))) ?>
                                     </span>
                                 </td>
-                                <td class="small fw-semibold"><?= esc($attName) ?></td>
-                                <td class="small"><?= esc((string) ($att['attestation_statement'] ?? '')) ?></td>
-                                <td class="small text-muted text-md-nowrap">
+                                <td data-label="Practitioner / Attestor" class="small fw-semibold"><?= esc($attName) ?></td>
+                                <td data-label="Statement" class="small"><?= esc((string) ($att['attestation_statement'] ?? '')) ?></td>
+                                <td data-label="Attested At" class="small text-muted text-md-nowrap">
                                     <?= ! empty($att['attested_at']) ? esc(date('M d, Y g:i A', strtotime((string) $att['attested_at']))) : '—' ?>
                                 </td>
-                                <td class="small font-monospace text-muted">
+                                <td data-label="Signature Hash" class="small font-monospace text-muted">
                                     <?= esc(substr((string) ($att['signature_hash'] ?? ''), 0, 16)) ?>...
                                 </td>
                             </tr>
@@ -582,10 +564,19 @@ $formAction = $mode === 'create'
         </div>
     </div>
 <?php endif; ?>
+<?php if ($isInterview): ?>
+</aside>
 </div>
+</section>
+<?php else: ?>
+</div>
+<?php endif; ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?php if ($isInterview): ?>
+<script src="<?= esc(base_url('assets/js/pages/guidance-interview.js'), 'attr') ?>"></script>
+<?php else: ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const editor = document.getElementById('clinicalFormEditor');
@@ -611,4 +602,5 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+<?php endif; ?>
 <?= $this->endSection() ?>

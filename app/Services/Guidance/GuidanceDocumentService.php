@@ -216,6 +216,9 @@ class GuidanceDocumentService
         try {
             $pdf = LatexReportCompiler::compile($source);
         } catch (Throwable $e) {
+            if ($key === 'guidance_call_slip' || str_contains($code, 'CSP-007')) {
+                throw new RuntimeException('PDF report compilation is unavailable.', 503);
+            }
             // In headless/test environments where pdflatex is not present or mock TeX,
             // produce synthetic PDF content for testing
             $pdf = "%PDF-1.4\n% SYNAPSE CONTROLLED GUIDANCE FORM\n" . hash('sha256', $source);
@@ -363,12 +366,7 @@ class GuidanceDocumentService
             );
         }
 
-        $pdf = '';
-        try {
-            $pdf = LatexReportCompiler::compile($source);
-        } catch (Throwable) {
-            $pdf = "%PDF-1.4\n% DRAFT PREVIEW\n" . hash('sha256', $source);
-        }
+        $pdf = LatexReportCompiler::compile($source);
 
         return [
             'latex' => $source,
@@ -411,12 +409,7 @@ class GuidanceDocumentService
     public function renderCallSlipPdf(array $snapshot, array $options = []): array
     {
         $source = GuidanceFormLatex::renderCallSlip($snapshot, $options);
-        $pdf = '';
-        try {
-            $pdf = LatexReportCompiler::compile($source);
-        } catch (Throwable) {
-            $pdf = "%PDF-1.4\n% SYNAPSE CALL SLIP\n" . hash('sha256', $source);
-        }
+        $pdf = LatexReportCompiler::compile($source);
 
         return [
             'latex' => $source,
@@ -435,12 +428,7 @@ class GuidanceDocumentService
     public function renderPsychosocialInterviewPdf(array $snapshot, array $options = []): array
     {
         $source = GuidanceFormLatex::renderPsychosocialInterview($snapshot, $options);
-        $pdf = '';
-        try {
-            $pdf = LatexReportCompiler::compile($source);
-        } catch (Throwable) {
-            $pdf = "%PDF-1.4\n% SYNAPSE PSYCHOSOCIAL INTERVIEW\n" . hash('sha256', $source);
-        }
+        $pdf = LatexReportCompiler::compile($source);
 
         return [
             'latex' => $source,
@@ -459,12 +447,7 @@ class GuidanceDocumentService
     public function renderPsychosocialContactPdf(array $snapshot, array $options = []): array
     {
         $source = GuidanceFormLatex::renderPsychosocialContact($snapshot, $options);
-        $pdf = '';
-        try {
-            $pdf = LatexReportCompiler::compile($source);
-        } catch (Throwable) {
-            $pdf = "%PDF-1.4\n% SYNAPSE PSYCHOSOCIAL CONTACT\n" . hash('sha256', $source);
-        }
+        $pdf = LatexReportCompiler::compile($source);
 
         return [
             'latex' => $source,
@@ -483,12 +466,7 @@ class GuidanceDocumentService
     public function renderCounselingContactPdf(array $snapshot, array $options = []): array
     {
         $source = GuidanceFormLatex::renderCounselingContact($snapshot, $options);
-        $pdf = '';
-        try {
-            $pdf = LatexReportCompiler::compile($source);
-        } catch (Throwable) {
-            $pdf = "%PDF-1.4\n% SYNAPSE COUNSELING CONTACT\n" . hash('sha256', $source);
-        }
+        $pdf = LatexReportCompiler::compile($source);
 
         return [
             'latex' => $source,

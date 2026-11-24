@@ -80,7 +80,7 @@ p.lead {
     color: var(--light-text-color);
     padding: 0.5em 1em;
     border-radius: 5px;
-    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-family: var(--mono-font, "Courier New", Courier, monospace);
     font-size: 0.85rem;
     margin: 0;
     overflow-x: scroll;

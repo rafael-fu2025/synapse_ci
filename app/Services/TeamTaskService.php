@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Libraries\TablePage;
 use CodeIgniter\Database\BaseBuilder;
 use CodeIgniter\Database\BaseConnection;
 use Config\Database;
@@ -114,6 +115,38 @@ final class TeamTaskService
             $task[$kind . '_total'] = (clone $builder)->countAllResults();
             $task[$kind . '_limit'] = $limit;
             $task[$kind] = $builder->orderBy('id', 'DESC')->limit($limit)->get()->getResultArray();
+            foreach ($task[$kind] as &$entry) {
+                foreach (['id', 'tenant_id', 'task_id', 'actor_user_id'] as $field) { $entry[$field] = (int) $entry[$field]; }
+                unset($entry['api_client_nonce'], $entry['api_request_hash']);
+            }
+            unset($entry);
+        }
+        return $task;
+    }
+
+    /**
+     * Web-only detail with independent, counted child histories. The legacy/API
+     * detail() envelope and fixed latest-50 histories remain unchanged.
+     */
+    public function detailPage(string $unit, int $id, array $query = []): array
+    {
+        $actor = $this->access->actor($unit);
+        $this->ready();
+        $task = $this->record($unit, $id, $actor);
+        $task['canEdit'] = $this->canEdit($task, $actor);
+        $pages = [
+            'comments' => TablePage::forList($query, 'comments_page', 'comments_per_page', self::COMMENTS_LIMIT),
+            'activity' => TablePage::forList($query, 'activity_page', 'activity_per_page', self::ACTIVITY_LIMIT),
+        ];
+        foreach ($pages as $kind => $page) {
+            $builder = $this->scope('team_task_' . $kind, $unit, $actor)->where('task_id', $id);
+            $total = (clone $builder)->countAllResults();
+            $pagination = $page->metadata($total, $total);
+            $task[$kind . '_total'] = $total;
+            $task[$kind . '_limit'] = $page->perPage;
+            $task[$kind . 'Pagination'] = $pagination;
+            $task[$kind] = $builder->orderBy('id', 'DESC')
+                ->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage)->get()->getResultArray();
             foreach ($task[$kind] as &$entry) {
                 foreach (['id', 'tenant_id', 'task_id', 'actor_user_id'] as $field) { $entry[$field] = (int) $entry[$field]; }
                 unset($entry['api_client_nonce'], $entry['api_request_hash']);

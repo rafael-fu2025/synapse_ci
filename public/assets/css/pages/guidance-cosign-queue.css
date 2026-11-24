@@ -1,0 +1,363 @@
+/* Supervisor Co-Sign Queue — shared Guidance surfaces, isolated review layout. */
+.guidance-cosign-queue.ce-workspace {
+  container: cosign-queue / inline-size;
+}
+
+.guidance-cosign-queue .gcq-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.guidance-cosign-queue .gcq-access {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  padding: 1.2rem;
+  min-width: 0;
+}
+
+.guidance-cosign-queue .gcq-access-icon,
+.guidance-cosign-queue .gcq-empty-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--ce-border);
+  border-radius: 0.375rem;
+  background: var(--ce-subtle);
+  color: var(--ce-slate);
+  font-size: 1.25rem;
+}
+
+.guidance-cosign-queue .gcq-access-body {
+  min-width: 0;
+}
+
+.guidance-cosign-queue .gcq-access-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.guidance-cosign-queue .gcq-access-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.guidance-cosign-queue .ce-tag {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.guidance-cosign-queue .gcq-credential {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.65rem 0 0;
+  font-size: 0.76rem;
+  color: var(--ce-muted-fg);
+}
+
+.guidance-cosign-queue .gcq-access-hint,
+.guidance-cosign-queue .gcq-ledger-hint {
+  margin: 0.45rem 0 0;
+  color: var(--ce-muted-fg);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.guidance-cosign-queue .gcq-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  align-items: center;
+  margin: 0;
+  border-left: 1px solid var(--ce-border);
+  background: var(--ce-subtle);
+}
+
+.guidance-cosign-queue .gcq-metric {
+  padding: 1.05rem 1.2rem;
+}
+
+.guidance-cosign-queue .gcq-metric + .gcq-metric {
+  border-left: 1px solid var(--ce-border);
+}
+
+.guidance-cosign-queue .gcq-metric dt {
+  color: var(--ce-muted-fg);
+  font-size: 0.74rem;
+  font-weight: 500;
+}
+
+.guidance-cosign-queue .gcq-metric dd {
+  margin: 0.3rem 0 0;
+  color: var(--ce-fg);
+  font-size: 1.6rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.guidance-cosign-queue .gcq-ledger > .ce-card-header > div {
+  min-width: 0;
+}
+
+.guidance-cosign-queue .gcq-ledger .ce-card-title {
+  line-height: 1.5;
+}
+
+.guidance-cosign-queue .gcq-ledger .ce-card-title i {
+  flex-shrink: 0;
+}
+
+.guidance-cosign-queue .gcq-table-wrap {
+  overflow: visible;
+}
+
+.guidance-cosign-queue .gcq-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.guidance-cosign-queue .gcq-col-form { width: 21%; }
+.guidance-cosign-queue .gcq-col-client { width: 13%; }
+.guidance-cosign-queue .gcq-col-author { width: 11%; }
+.guidance-cosign-queue .gcq-col-supervisor { width: 13%; }
+.guidance-cosign-queue .gcq-col-submitted { width: 12%; }
+.guidance-cosign-queue .gcq-col-notes { width: 15%; }
+.guidance-cosign-queue .gcq-col-actions { width: 15%; }
+
+/* Override legacy case-specific column sizing without changing shared styles. */
+html body section.guidance-ui.guidance-cosign-queue.ce-workspace .table.ce-table.gcq-table > tbody > tr > td:nth-child(n) {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+html body section.guidance-ui.guidance-cosign-queue.ce-workspace .table.ce-table.gcq-table > thead > tr > th {
+  white-space: normal;
+  overflow-wrap: normal;
+  line-height: 1.5;
+}
+
+.guidance-cosign-queue .gcq-form-title,
+.guidance-cosign-queue .gcq-name {
+  display: block;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ce-fg);
+}
+
+.guidance-cosign-queue .gcq-form-title {
+  margin-top: 0.5rem;
+  font-size: 0.81rem;
+}
+
+.guidance-cosign-queue .gcq-form-code {
+  margin-top: 0.3rem;
+  font-size: 0.67rem;
+  color: var(--ce-muted-fg);
+  overflow-wrap: anywhere;
+}
+
+.guidance-cosign-queue .gcq-staff-name {
+  font-size: 0.8rem;
+}
+
+.guidance-cosign-queue .ce-patient-sub {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.guidance-cosign-queue .gcq-case-link {
+  display: inline-block;
+  margin-top: 0.3rem;
+  font-size: 0.74rem;
+}
+
+.guidance-cosign-queue .gcq-assignment {
+  margin-top: 0.4rem;
+  font-size: 0.68rem;
+}
+
+.guidance-cosign-queue .gcq-submitted {
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.guidance-cosign-queue .gcq-submitted > span {
+  font-size: 0.73rem;
+  white-space: normal;
+}
+
+.guidance-cosign-queue .gcq-notes {
+  margin: 0;
+  color: var(--ce-fg-secondary);
+  font-size: 0.79rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.guidance-cosign-queue .gcq-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+html body section.guidance-cosign-queue.ce-workspace .gcq-row-actions .btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.4;
+  padding: 0.4rem 0.55rem;
+}
+
+.guidance-cosign-queue a:focus-visible {
+  outline: 2px solid var(--ce-sky);
+  outline-offset: 3px;
+}
+
+.guidance-cosign-queue .gcq-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 3rem 1.25rem;
+  text-align: center;
+}
+
+.guidance-cosign-queue .gcq-empty-icon {
+  width: 52px;
+  height: 52px;
+  color: var(--ce-emerald);
+  font-size: 1.6rem;
+}
+
+.guidance-cosign-queue .gcq-empty h3 {
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.guidance-cosign-queue .gcq-empty p {
+  margin: 0;
+  max-width: 34rem;
+  color: var(--ce-muted-fg);
+  font-size: 0.81rem;
+  line-height: 1.6;
+}
+
+/* Adapt to the actual workspace width, including the expanded desktop sidebar. */
+@container cosign-queue (max-width: 980px) {
+  .guidance-cosign-queue .gcq-table > colgroup,
+  html body section.guidance-cosign-queue.ce-workspace .table.gcq-table > thead {
+    display: none;
+  }
+
+  html body section.guidance-cosign-queue.ce-workspace .table.gcq-table,
+  html body section.guidance-cosign-queue.ce-workspace .table.gcq-table > tbody {
+    display: block;
+    width: 100%;
+  }
+
+  html body section.guidance-cosign-queue.ce-workspace .table.gcq-table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem 1rem;
+    width: 100%;
+    padding: 1rem 1.1rem;
+    border-bottom: 1px solid var(--ce-border);
+  }
+
+  html body section.guidance-cosign-queue.ce-workspace .table.gcq-table > tbody > tr:last-child {
+    border-bottom: 0;
+  }
+
+  html body section.guidance-ui.guidance-cosign-queue.ce-workspace .table.ce-table.gcq-table > tbody > tr > td:nth-child(n) {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.18rem;
+    width: auto;
+    padding: 0.5rem 0 !important;
+    border-bottom: 0;
+    text-align: start;
+  }
+
+  .guidance-cosign-queue .gcq-table > tbody > tr > td::before {
+    content: attr(data-label);
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.055em;
+    color: var(--ce-muted-fg);
+  }
+
+  .guidance-cosign-queue .gcq-table > tbody > tr > :is(.gcq-form-cell, .gcq-notes-cell, .gcq-actions-cell) {
+    grid-column: 1 / -1;
+  }
+
+  .guidance-cosign-queue .gcq-form-cell::before,
+  .guidance-cosign-queue .gcq-actions-cell::before {
+    display: none;
+  }
+
+  .guidance-cosign-queue .gcq-row-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@container cosign-queue (max-width: 640px) {
+  .guidance-cosign-queue .gcq-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .guidance-cosign-queue .gcq-access {
+    padding: 1rem;
+  }
+
+  .guidance-cosign-queue .gcq-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-left: 0;
+    border-top: 1px solid var(--ce-border);
+  }
+
+  .guidance-cosign-queue .gcq-metric {
+    padding: 0.85rem 1rem;
+  }
+
+  .guidance-cosign-queue .gcq-metric dd {
+    font-size: 1.4rem;
+  }
+
+  html body section.guidance-cosign-queue.ce-workspace .table.gcq-table > tbody > tr {
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 0.8rem 1rem;
+  }
+
+  html body section.guidance-ui.guidance-cosign-queue.ce-workspace .table.ce-table.gcq-table > tbody > tr > td:nth-child(n) {
+    border-bottom: 1px dashed var(--ce-hairline);
+  }
+
+  html body section.guidance-ui.guidance-cosign-queue.ce-workspace .table.ce-table.gcq-table > tbody > tr > td.gcq-actions-cell {
+    border-bottom: 0;
+    padding-top: 0.8rem !important;
+  }
+
+  html body section.guidance-cosign-queue.ce-workspace .gcq-row-actions .btn {
+    min-height: 40px;
+    flex: 1 1 auto;
+  }
+}

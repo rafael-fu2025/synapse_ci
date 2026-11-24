@@ -7,14 +7,20 @@ $contentFrom = $contentCount === 0 ? 0 : ($contentPage - 1) * $contentSize + 1;
 $contentTo = min($contentPage * $contentSize, $contentCount);
 $contentQuery = array_intersect_key($filters ?? [], array_flip(['q', 'status', 'unit']));
 $contentLiveFilters = !empty($liveFilters);
-$contentUrl = static fn (int $page): string => $baseUrl . '?' . http_build_query($contentQuery + ['page' => $page, 'per_page' => $contentSize], '', '&', PHP_QUERY_RFC3986);
+$contentPageParam = $paginationPageParam ?? 'page';
+$contentPerPageParam = $paginationPerPageParam ?? 'per_page';
+$contentFragment = empty($paginationFragment) ? '' : '#' . rawurlencode((string) $paginationFragment);
+$contentUrl = static fn (int $page): string => $baseUrl . '?' . http_build_query(
+    array_merge($paginationExtraQuery ?? [], $contentQuery, [$contentPageParam => $page, $contentPerPageParam => $contentSize]),
+    '', '&', PHP_QUERY_RFC3986,
+) . $contentFragment;
 $contentWindowStart = max(1, $contentPage - 2);
 $contentWindowEnd = min($contentPages, $contentPage + 2);
 ?>
-<div class="pe-pagination" data-page="<?= $contentPage ?>" data-per-page="<?= $contentSize ?>" data-filtered="<?= $contentCount ?>">
+<div class="pe-pagination" data-page-param="<?= esc($contentPageParam, 'attr') ?>" data-per-page-param="<?= esc($contentPerPageParam, 'attr') ?>" data-page="<?= $contentPage ?>" data-per-page="<?= $contentSize ?>" data-filtered="<?= $contentCount ?>">
   <p class="small text-muted mb-0">Showing <?= number_format($contentFrom) ?>–<?= number_format($contentTo) ?> of <?= number_format($contentCount) ?></p>
   <nav aria-label="<?= esc($paginationLabel ?? 'Content pages') ?>">
-    <ul class="pagination pagination-sm flex-wrap mb-0">
+    <ul class="pagination pagination-sm flex-wrap mb-0 synapse-pagination">
       <?php foreach (['First' => 1, 'Previous' => max(1, $contentPage - 1)] as $linkLabel => $target): ?>
         <?php if ($contentPage === 1): ?>
           <li class="page-item disabled"><span class="page-link" aria-disabled="true"><?= esc($linkLabel) ?></span></li>

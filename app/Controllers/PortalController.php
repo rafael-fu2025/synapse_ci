@@ -186,84 +186,27 @@ final class PortalController extends BaseController
             $filter = 'all';
         }
 
+        try {
+            $page = \App\Libraries\TablePage::forList($this->request->getGet(), 'page', 'per_page', 20);
+        } catch (\InvalidArgumentException $error) {
+            return $this->response->setStatusCode(422)->setBody(esc($error->getMessage()));
+        }
         $tenantId = (int) ($user['tenant_id'] ?? \App\Services\CurrentTenant::id());
         $db = \Config\Database::connect();
-        $rows = [];
+        $counts = ['all' => 0, 'pending' => 0, 'acknowledged' => 0, 'history' => 0];
+        $pagedCallSlips = [];
+        $pagination = $page->metadata(0, 0);
         try {
             if ($db->tableExists('guidance_call_slips')) {
-                $rows = $db->table('guidance_call_slips')
-                    ->where('tenant_id', $tenantId)
-                    ->where('person_id', $personId)
-                    ->where('deleted_at', null)
-                    ->orderBy('call_date', 'DESC')
-                    ->orderBy('id', 'DESC')
-                    ->limit(500)
-                    ->get()
-                    ->getResultArray();
+                $result = $this->portalCallSlipPage($db, $tenantId, $personId, $filter, $page);
+                $counts = $result['counts'];
+                $pagedCallSlips = $result['callSlips'];
+                $pagination = $result['pagination'];
             }
         } catch (\Throwable) {
             // Optional Guidance self-service schema guard.
         }
-
-        $counts = ['all' => count($rows), 'pending' => 0, 'acknowledged' => 0, 'history' => 0];
-        foreach ($rows as $row) {
-            $status = (string) ($row['attendance_status'] ?? 'pending');
-            if ($status === 'pending') {
-                $counts['pending']++;
-            } elseif ($status === 'acknowledged') {
-                $counts['acknowledged']++;
-            } else {
-                $counts['history']++;
-            }
-        }
-
-        usort($rows, static function (array $a, array $b): int {
-            $rank = static fn (string $s): int => match ($s) {
-                'pending' => 0,
-                'acknowledged' => 1,
-                default => 2,
-            };
-            $ra = $rank((string) ($a['attendance_status'] ?? ''));
-            $rb = $rank((string) ($b['attendance_status'] ?? ''));
-            if ($ra !== $rb) {
-                return $ra <=> $rb;
-            }
-            if ($ra < 2) {
-                return strcmp((string) ($a['call_date'] ?? ''), (string) ($b['call_date'] ?? ''))
-                    ?: ((int) ($b['id'] ?? 0) <=> (int) ($a['id'] ?? 0));
-            }
-            return strcmp((string) ($b['call_date'] ?? ''), (string) ($a['call_date'] ?? ''))
-                ?: ((int) ($b['id'] ?? 0) <=> (int) ($a['id'] ?? 0));
-        });
-
-        $callSlips = array_values(array_filter($rows, static function (array $row) use ($filter): bool {
-            $status = (string) ($row['attendance_status'] ?? 'pending');
-            return match ($filter) {
-                'pending' => $status === 'pending',
-                'acknowledged' => $status === 'acknowledged',
-                'history' => !in_array($status, ['pending', 'acknowledged'], true),
-                default => true,
-            };
-        }));
-
-        $filteredCount = count($callSlips);
-        $perPage = (int) ($this->request->getGet('per_page') ?? 20);
-        if (!in_array($perPage, [20, 25, 50, 100], true)) {
-            $perPage = 20;
-        }
-        $totalPages = max(1, (int) ceil($filteredCount / $perPage));
-        $page = max(1, min($totalPages, (int) ($this->request->getGet('page') ?? 1)));
-        $offset = ($page - 1) * $perPage;
-        $pagedCallSlips = array_slice($callSlips, $offset, $perPage);
-        $pagination = [
-            'page'     => $page,
-            'per_page' => $perPage,
-            'filtered' => $filteredCount,
-            'total'    => $counts['all'],
-            'pages'    => $totalPages,
-            'from'     => $filteredCount === 0 ? 0 : $offset + 1,
-            'to'       => min($offset + $perPage, $filteredCount),
-        ];
+        $perPage = $pagination['per_page'];
 
         return view('portal/call_slips', [
             'title'         => 'Guidance Call Slips',
@@ -280,6 +223,36 @@ final class PortalController extends BaseController
                 ['label' => 'Guidance Call Slips', 'url' => ''],
             ],
         ]);
+    }
+
+    /** A private, already-authorized read seam; count and filter the complete person scope. */
+    private function portalCallSlipPage(\CodeIgniter\Database\BaseConnection $db, int $tenantId, int $personId, string $filter, \App\Libraries\TablePage $page): array
+    {
+        $builder = $db->table('guidance_call_slips')
+            ->where('tenant_id', $tenantId)->where('person_id', $personId)->where('deleted_at', null);
+        $status = 'COALESCE(' . $db->protectIdentifiers('attendance_status') . ", 'pending')";
+        $active = $status . " IN ('pending', 'acknowledged')";
+        $conditions = [
+            'pending' => $status . " = 'pending'",
+            'acknowledged' => $status . " = 'acknowledged'",
+            'history' => 'NOT (' . $active . ')',
+        ];
+        $counts = ['all' => (clone $builder)->countAllResults()];
+        foreach ($conditions as $state => $condition) {
+            $counts[$state] = (clone $builder)->where($condition, null, false)->countAllResults();
+        }
+        $pagination = $page->metadata($counts['all'], $counts[$filter]);
+        if ($filter !== 'all') {
+            $builder->where($conditions[$filter], null, false);
+        }
+        $callDate = $db->protectIdentifiers('call_date');
+        $callSlips = $builder
+            ->orderBy('CASE WHEN ' . $status . " = 'pending' THEN 0 WHEN " . $status . " = 'acknowledged' THEN 1 ELSE 2 END", 'ASC', false)
+            ->orderBy('CASE WHEN ' . $active . ' THEN ' . $callDate . ' END', 'ASC', false)
+            ->orderBy('CASE WHEN NOT (' . $active . ') THEN ' . $callDate . ' END', 'DESC', false)
+            ->orderBy('id', 'DESC')
+            ->get($page->perPage, ($pagination['page'] - 1) * $page->perPage)->getResultArray();
+        return compact('callSlips', 'pagination', 'counts');
     }
 
     /** @return array{service: string, status: string, sort: string, page: int, per_page: int} */

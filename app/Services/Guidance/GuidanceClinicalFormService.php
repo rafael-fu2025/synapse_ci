@@ -849,12 +849,14 @@ class GuidanceClinicalFormService
      * @param int $caseId
      * @param int|null $tenantId
      * @param array<string, mixed>|null $actor
+     * @param \App\Libraries\TablePage|null $formsPage Optional display paging; legacy history arrays remain complete.
      * @return array<string, mixed>
      */
     public function getClinicalHistoryForCase(
         int $caseId,
         ?int $tenantId = null,
-        ?array $actor = null
+        ?array $actor = null,
+        ?\App\Libraries\TablePage $formsPage = null
     ): array {
         $authority = $this->resolveActorIdentity($actor, $tenantId);
         $tid = (int) $authority['tenant_id'];
@@ -994,17 +996,27 @@ class GuidanceClinicalFormService
 
         usort($timeline, static fn ($a, $b) => strcmp((string) ($a['date'] ?? ''), (string) ($b['date'] ?? '')));
 
+        // Page only the display list after every existing context exclusion and audited read.
+        // The categorized histories and unified timeline keep their legacy complete contents.
+        $controlledForms = $allForms;
+        $formsPagination = null;
+        if ($formsPage !== null) {
+            $total = count($allForms);
+            $formsPagination = $formsPage->metadata($total, $total);
+            $controlledForms = array_slice($allForms, ($formsPagination['page'] - 1) * $formsPage->perPage, $formsPage->perPage);
+        }
+
         return [
             'case_id'              => $caseId,
             'case'                 => $case,
-            'controlled_forms'     => $allForms,
+            'controlled_forms'     => $controlledForms,
             'interviews'           => $interviews,
             'contact_forms'        => $contactForms,
             'contact_sheets'       => $contactSheets,
             'legacy_session_notes' => $legacyNotes,
             'session_notes'        => $legacyNotes,
             'timeline'             => $timeline,
-        ];
+        ] + ($formsPagination === null ? [] : ['formsPagination' => $formsPagination]);
     }
 
     /**

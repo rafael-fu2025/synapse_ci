@@ -295,6 +295,23 @@ class GuidanceMultipleIntelligenceService
      */
     public function listPortalAssignments(array $actor): array
     {
+        return $this->portalAssignments($actor)['assignments'];
+    }
+
+    /** Count and page MI independently without changing the legacy assignment list. */
+    public function listPortalAssignmentsPage(array $actor, array $query = []): array
+    {
+        $page = \App\Libraries\TablePage::forList($query, 'mi_page', 'mi_per_page');
+        if (!in_array($page->perPage, [25, 50, 100], true)) {
+            throw new InvalidArgumentException('MI per page must be 25, 50 or 100.', 422);
+        }
+        $filters = \App\Services\PortalContent::filters(array_intersect_key($query, array_flip(['q', 'status'])),
+            ['all', 'available', 'submitted', 'closed']);
+        return $this->portalAssignments($actor, $page, $filters);
+    }
+
+    private function portalAssignments(array $actor, ?\App\Libraries\TablePage $page = null, array $filters = []): array
+    {
         $tenantId = (int) ($actor['tenant_id'] ?? 0);
         if ($tenantId <= 0) {
             throw new DomainException('An active account is required to access assessments.', 403);
@@ -304,20 +321,51 @@ class GuidanceMultipleIntelligenceService
         if ($personId <= 0) {
             throw new DomainException('An identified person profile is required to access assessments.', 403);
         }
+        $counts = array_fill_keys(['all', 'available', 'submitted', 'closed'], 0);
         if (!$this->db->tableExists('guidance_mi_assignments') || !$this->db->tableExists('guidance_mi_submissions')) {
-            return [];
+            return ['assignments' => [], 'counts' => $counts, 'pagination' => $page?->metadata(0, 0)];
         }
 
-        $assignments = $this->db->table('guidance_mi_assignments a')
+        $builder = $this->db->table('guidance_mi_assignments a')
             ->select('a.*, s.id AS submission_id, s.status AS submission_status, s.attested_at')
             ->join('guidance_mi_submissions s', 's.assignment_id = a.id AND s.tenant_id = a.tenant_id AND s.deleted_at IS NULL', 'left')
-            ->where('a.tenant_id', $tenantId)
-            ->where('a.person_id', $personId)
-            ->where('a.deleted_at', null)
-            ->orderBy('a.id', 'DESC')
-            ->get()
-            ->getResultArray();
-
+            ->where('a.tenant_id', $tenantId)->where('a.person_id', $personId)->where('a.deleted_at', null);
+        $pagination = null;
+        if ($page !== null) {
+            $total = (clone $builder)->countAllResults();
+            $search = (string) ($filters['q'] ?? '');
+            $catalogText = 'Multiple Intelligences Survey Walter McKenzie Guidance Office Assessment';
+            if ($search !== '' && !str_contains(mb_strtolower($catalogText, 'UTF-8'), mb_strtolower($search, 'UTF-8'))) {
+                // Match the former card haystack, including phrases crossing term/year.
+                $term = $this->db->protectIdentifiers('a.academic_term');
+                $year = $this->db->protectIdentifiers('a.academic_year');
+                $constant = $this->db->escape($catalogText . ' ');
+                $haystack = $this->db->DBDriver === 'SQLite3'
+                    ? $constant . " || COALESCE({$term}, '') || ' ' || COALESCE({$year}, '')"
+                    : "CONCAT({$constant}, COALESCE({$term}, ''), ' ', COALESCE({$year}, ''))";
+                $literal = strtr(mb_strtolower($search, 'UTF-8'), ['!' => '!!', '%' => '!%', '_' => '!_']);
+                $builder->where('LOWER(' . $haystack . ') LIKE ' . $this->db->escape('%' . $literal . '%') . " ESCAPE '!'", null, false);
+            }
+            $status = 'COALESCE(' . $this->db->protectIdentifiers('a.status') . ", 'assigned')";
+            $completed = '(' . $status . " = 'completed' AND " . $this->db->protectIdentifiers('s.id') . ' IS NOT NULL)';
+            $cancelled = '(' . $status . " = 'cancelled')";
+            $conditions = [
+                'available' => 'NOT ' . $completed . ' AND NOT ' . $cancelled,
+                'submitted' => $completed,
+                'closed' => '(' . $completed . ' OR ' . $cancelled . ')',
+            ];
+            $counts['all'] = (clone $builder)->countAllResults();
+            foreach ($conditions as $state => $condition) {
+                $counts[$state] = (clone $builder)->where($condition, null, false)->countAllResults();
+            }
+            $filter = (string) ($filters['status'] ?? 'all');
+            $pagination = $page->metadata($total, $counts[$filter]);
+            if ($filter !== 'all') {
+                $builder->where($conditions[$filter], null, false);
+            }
+            $builder->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage);
+        }
+        $assignments = $builder->orderBy('a.id', 'DESC')->get()->getResultArray();
         foreach ($assignments as &$row) {
             $row['draft_count'] = 0;
             if (($row['status'] ?? '') !== 'completed') {
@@ -327,7 +375,7 @@ class GuidanceMultipleIntelligenceService
         }
         unset($row);
 
-        return $assignments;
+        return compact('assignments', 'counts', 'pagination');
     }
 
     /**

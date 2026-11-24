@@ -1,92 +1,99 @@
+/* BMG USB Commissioning Workspace — aligned with bmg-workstation architectural tokens. */
 [data-bmg-usb].bmg-usb-workspace {
   min-width: 0;
-  color: var(--na-text);
+  color: var(--ce-fg-secondary);
 }
 
 [data-bmg-usb] .bmg-usb-workflow {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 1rem;
-  margin: 0 0 1.25rem;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin: 0 0 1rem;
   list-style: none;
-  border: 1px solid var(--na-border);
-  border-radius: 0.75rem;
-  background: var(--na-surface);
+  border: 1px solid var(--ce-border);
+  border-radius: 0.375rem;
+  background: var(--ce-card);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 [data-bmg-usb] .bmg-usb-workflow li {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.7rem;
   min-width: 0;
 }
 
 [data-bmg-usb] .bmg-usb-step {
   display: grid;
-  place-items: center;
-  flex: 0 0 2rem;
-  height: 2rem;
-  border: 1px solid var(--na-border);
-  border-radius: 50%;
-  color: var(--na-text);
-  background: var(--na-surface-2);
+  place-content: center;
+  flex: 0 0 1.85rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--ce-border);
+  border-radius: 0.25rem;
+  color: var(--ce-fg-secondary);
+  background: var(--ce-subtle);
+  font-family: var(--default-font);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
 [data-bmg-usb] .bmg-usb-workflow strong,
-[data-bmg-usb] .bmg-usb-workflow li div > span {
+[data-bmg-usb] .bmg-usb-workflow li div>span {
   display: block;
   overflow-wrap: anywhere;
 }
 
 [data-bmg-usb] .bmg-usb-workflow strong {
-  color: var(--na-heading);
-  font-size: 0.9rem;
-}
-
-[data-bmg-usb] .bmg-usb-workflow li div > span {
-  margin-top: 0.15rem;
-  color: var(--na-text-muted);
+  color: var(--ce-fg);
   font-size: 0.8rem;
+  line-height: 1.4;
 }
 
-[data-bmg-usb] .bmg-usb-connection-status {
-  margin-bottom: 1.25rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--na-border);
-  border-inline-start: 3px solid var(--na-primary);
-  border-radius: 0.5rem;
-  background: var(--na-surface);
+[data-bmg-usb] .bmg-usb-workflow li div>span {
+  margin-top: 0.1rem;
+  color: var(--ce-muted-fg);
+  font-size: 0.73rem;
+  line-height: 1.4;
+}
+
+[data-bmg-usb] .bmg-usb-connection-card {
+  border-inline-start: 3px solid var(--ce-brand, #800000);
 }
 
 [data-bmg-usb] .bmg-usb-status {
-  margin: 0.5rem 0;
-  color: var(--na-heading);
+  margin: 0.35rem 0;
+  color: var(--ce-fg);
+  font-size: 0.88rem;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-[data-bmg-usb] .bmg-usb-safety {
-  margin-bottom: 1.5rem;
-  font-size: 0.875rem;
+[data-bmg-usb] .bmg-usb-safety h3 {
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.45;
+  margin-bottom: 0.4rem;
 }
 
-[data-bmg-usb] .bmg-usb-safety h3 {
-  line-height: 1.5;
+[data-bmg-usb] .bmg-usb-safety p {
+  font-size: 0.78rem;
+  margin-bottom: 0.45rem;
+}
+
+[data-bmg-usb] .alert.alert-dismissible,
+[data-bmg-usb] .alert:has(.btn-close) {
+  padding-right: 2.75rem;
+  padding-inline-end: 2.75rem;
 }
 
 [data-bmg-usb] .bmg-panel,
 [data-bmg-usb] .bmg-panel-body,
-[data-bmg-usb] .bmg-panel-heading > div,
-[data-bmg-usb] .row > div {
+[data-bmg-usb] .bmg-panel-heading>div,
+[data-bmg-usb] .row>div {
   min-width: 0;
-}
-
-[data-bmg-usb] .bmg-panel-heading {
-  flex-wrap: wrap;
-  justify-content: flex-start !important;
-  gap: 0.75rem !important;
 }
 
 [data-bmg-usb] .bmg-panel-body {
@@ -96,10 +103,11 @@
 [data-bmg-usb] .bmg-usb-identity,
 [data-bmg-usb] .bmg-usb-gates,
 [data-bmg-usb] .bmg-usb-unavailable {
-  padding: 1rem;
-  border: 1px solid var(--na-border);
-  border-radius: 0.5rem;
-  background: var(--na-surface-2);
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--ce-border) !important;
+  border-radius: 0.375rem !important;
+  background: var(--ce-subtle) !important;
+  color: var(--ce-fg-secondary);
 }
 
 [data-bmg-usb] .bmg-usb-gates,
@@ -111,18 +119,30 @@
   margin-bottom: 0;
 }
 
-[data-bmg-usb] .bmg-usb-gates li + li {
-  margin-top: 0.4rem;
+[data-bmg-usb] .bmg-usb-gates li+li {
+  margin-top: 0.35rem;
 }
 
 [data-bmg-usb] .bmg-usb-unavailable {
-  border-inline-start: 3px solid var(--na-text-muted);
+  border-inline-start: 3px solid var(--ce-slate) !important;
+  text-align: start;
 }
 
 [data-bmg-usb] .bmg-usb-unavailable-heading {
-  margin-bottom: 0.5rem;
-  color: var(--na-heading);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  color: var(--ce-fg);
+  font-size: 0.82rem;
   font-weight: 700;
+}
+
+[data-bmg-usb] details summary {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ce-fg);
+  cursor: pointer;
 }
 
 [data-bmg-usb] .btn {
@@ -140,28 +160,28 @@
 [data-bmg-usb] .bmg-usb-progress {
   display: block;
   width: 100%;
-  height: 0.65rem;
-  margin-bottom: 0.5rem;
+  height: 0.55rem;
+  margin-bottom: 0.45rem;
   overflow: hidden;
   border: 0;
-  border-radius: 1rem;
-  accent-color: var(--na-primary);
-  background: var(--na-surface-2);
+  border-radius: 999px;
+  accent-color: var(--ce-brand, #800000);
+  background: var(--ce-subtle);
 }
 
 [data-bmg-usb] .bmg-usb-progress::-webkit-progress-bar {
-  border-radius: 1rem;
-  background: var(--na-surface-2);
+  border-radius: 999px;
+  background: var(--ce-subtle);
 }
 
 [data-bmg-usb] .bmg-usb-progress::-webkit-progress-value {
-  border-radius: 1rem;
-  background: var(--na-primary);
+  border-radius: 999px;
+  background: var(--ce-brand, #800000);
 }
 
 [data-bmg-usb] .bmg-usb-progress::-moz-progress-bar {
-  border-radius: 1rem;
-  background: var(--na-primary);
+  border-radius: 999px;
+  background: var(--ce-brand, #800000);
 }
 
 [data-bmg-usb] .bmg-usb-monitor-mode {
@@ -170,9 +190,9 @@
 
 [data-bmg-usb] .bmg-usb-terminal {
   overflow: hidden;
-  border: 1px solid var(--na-border);
-  border-radius: 0.625rem;
-  background: var(--na-bg);
+  border: 1px solid var(--ce-border);
+  border-radius: 0.375rem;
+  background: var(--ce-subtle);
 }
 
 [data-bmg-usb] .bmg-usb-log-header {
@@ -181,14 +201,17 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--na-border);
-  background: var(--na-surface-2);
+  padding: 0.7rem 0.95rem;
+  border-bottom: 1px solid var(--ce-border);
+  background: var(--ce-subtle);
 }
 
 [data-bmg-usb] .bmg-usb-log-title {
-  color: var(--na-heading);
-  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ce-fg);
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
@@ -199,7 +222,7 @@
 }
 
 [data-bmg-usb] .bmg-usb-log-toolbar .btn {
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 [data-bmg-usb] .bmg-usb-log {
@@ -210,19 +233,22 @@
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: var(--na-text);
-  background: var(--na-bg);
-  font-size: 0.8125rem;
-  line-height: 1.65;
+  color: var(--ce-fg);
+  background: var(--ce-card);
+  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-size: 0.78rem;
+  line-height: 1.6;
 }
 
 [data-bmg-usb] .bmg-usb-log:focus-visible {
-  outline: 3px solid var(--na-primary);
-  outline-offset: -3px;
+  outline: 2px solid var(--ce-brand, #800000);
+  outline-offset: -2px;
 }
 
 @media (min-width: 576px) and (max-width: 1199.98px) {
-  [data-bmg-usb] .bmg-usb-workflow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-bmg-usb] .bmg-usb-workflow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 991.98px) {
@@ -230,7 +256,7 @@
     min-height: 40px;
   }
 
-  [data-bmg-usb] details > summary {
+  [data-bmg-usb] details>summary {
     min-height: 40px;
     padding-block: 0.5rem;
   }
@@ -239,7 +265,7 @@
 @media (max-width: 575.98px) {
   [data-bmg-usb] .bmg-usb-workflow {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.875rem;
+    gap: 0.75rem;
   }
 
   [data-bmg-usb] .bmg-usb-monitor-mode {
@@ -248,5 +274,9 @@
 
   [data-bmg-usb] .bmg-usb-log-toolbar {
     width: 100%;
+  }
+
+  [data-bmg-usb] .bmg-usb-log-toolbar .btn {
+    flex: 1 1 8.5rem;
   }
 }

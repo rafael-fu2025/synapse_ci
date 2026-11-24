@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\TablePage;
 use App\Services\AuthenticatedUser;
 use App\Services\Guidance\GuidanceAccessPolicy;
 use App\Services\Guidance\GuidanceActivationGateService;
@@ -387,6 +388,9 @@ final class GuidanceIntakeController extends BaseController
         try {
             $actor    = $this->freshActor('guidance.intake.process');
             $tenantId = (int) $actor['tenant_id'];
+            $query = $this->request->getGet();
+            $intakePage = TablePage::forList($query, 'intake_page');
+            $incomingPage = TablePage::forList($query, 'incoming_page');
 
             $statusFilter   = trim((string) ($this->request->getGet('status') ?? ''));
             $priorityFilter = trim((string) ($this->request->getGet('priority_hint') ?? ''));
@@ -397,32 +401,40 @@ final class GuidanceIntakeController extends BaseController
                 ->join('users u', 'u.id = gir.assigned_counsellor_user_id AND u.tenant_id = gir.tenant_id', 'left')
                 ->where('gir.tenant_id', $tenantId);
 
+            $intakeTotal = (clone $builder)->countAllResults();
             if ($statusFilter !== '' && in_array($statusFilter, GuidanceIntakeService::STATUSES, true)) {
                 $builder->where('gir.status', $statusFilter);
             }
             if ($priorityFilter !== '' && in_array($priorityFilter, GuidanceIntakeService::PRIORITY_HINTS, true)) {
                 $builder->where('gir.priority_hint', $priorityFilter);
             }
+            $intakeFiltered = (clone $builder)->countAllResults();
+            $intakePagination = $intakePage->metadata($intakeTotal, $intakeFiltered);
 
             $referrals = $builder
                 ->orderBy("CASE gir.priority_hint WHEN 'crisis' THEN 1 WHEN 'urgent' THEN 2 ELSE 3 END", '', false)
                 ->orderBy('gir.created_at', 'DESC')
-                ->limit(100)
+                ->orderBy('gir.id', 'DESC')
+                ->limit($intakePagination['per_page'], ($intakePagination['page'] - 1) * $intakePagination['per_page'])
                 ->get()
                 ->getResultArray();
 
             // Incoming Clinic referrals targeting guidance (read-only view + bridge status)
-            $clinicReferrals = $this->db->table('referrals r')
+            $incomingBuilder = $this->db->table('referrals r')
                 ->select('r.id, r.referral_code, r.priority, r.reason_code, r.status, r.created_at, p.first_name, p.last_name, p.mis_id, u.username as issuer_name, gir.id as bridged_intake_id, gir.referral_number as bridged_referral_number')
                 ->join('people p', 'p.id = r.patient_person_id AND p.tenant_id = r.tenant_id AND p.deleted_at IS NULL', 'left')
                 ->join('users u', 'u.id = r.issuer_user_id AND u.tenant_id = r.tenant_id', 'left')
                 ->join('guidance_intake_referrals gir', 'gir.clinic_referral_id = r.id AND gir.tenant_id = r.tenant_id', 'left')
                 ->where('r.tenant_id', $tenantId)
                 ->where('r.target_module', 'guidance')
-                ->whereIn('r.status', ['submitted', 'acknowledged'])
+                ->whereIn('r.status', ['submitted', 'acknowledged']);
+            $incomingTotal = (clone $incomingBuilder)->countAllResults();
+            $incomingPagination = $incomingPage->metadata($incomingTotal, $incomingTotal);
+            $clinicReferrals = $incomingBuilder
                 ->orderBy("CASE r.priority WHEN 'crisis' THEN 1 WHEN 'urgent' THEN 2 ELSE 3 END", '', false)
                 ->orderBy('r.created_at', 'DESC')
-                ->limit(50)
+                ->orderBy('r.id', 'DESC')
+                ->limit($incomingPagination['per_page'], ($incomingPagination['page'] - 1) * $incomingPagination['per_page'])
                 ->get()
                 ->getResultArray();
 
@@ -436,6 +448,8 @@ final class GuidanceIntakeController extends BaseController
                 'pageTitle'            => 'Guidance Intake Queue',
                 'referrals'            => $referrals,
                 'clinicReferrals'      => $clinicReferrals,
+                'intakePagination'     => $intakePagination,
+                'incomingPagination'   => $incomingPagination,
                 'statuses'             => GuidanceIntakeService::STATUSES,
                 'priorityHints'        => GuidanceIntakeService::PRIORITY_HINTS,
                 'concernCatalog'       => $this->intakeService->getConcernCatalog(),

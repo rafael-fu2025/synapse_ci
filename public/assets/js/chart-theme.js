@@ -296,13 +296,17 @@
     if (entry.chart) entry.chart.destroy();
   }
 
-  function updateEntry(entry, themeChanged) {
+  function updateEntry(entry, themeChanged, animate) {
     if (entry.destroyed) return;
     if (!entry.target.isConnected) { destroyEntry(entry); return; }
     var width = measuredWidth(entry.target);
     if (themeChanged) entry.pending = true;
+    // Background refreshes must not erase an explicit data animation in the queue.
+    entry.pendingAnimate = entry.pendingAnimate || animate === true;
     if (!width || (!entry.pending && entry.width === width && entry.chart)) return;
     if (entry.busy) { entry.pending = true; return; }
+    var animateUpdate = entry.pendingAnimate;
+    entry.pendingAnimate = false;
     var options = entry.build(readTokens());
     options.chart = merge(options.chart || {}, {
       width: width,
@@ -321,7 +325,7 @@
         entry.target.dataset.chartThemeRendered = 'true';
         operation = entry.chart.render();
       } else {
-        operation = entry.chart.updateOptions(options, false, false, false);
+        operation = entry.chart.updateOptions(options, animateUpdate, animateUpdate, false);
       }
     } catch (error) {
       entry.busy = false;
@@ -368,15 +372,22 @@
       if (registry[i].target === target) return null;
     }
     var entry = { target: target, build: build, chart: null, width: 0,
-      busy: false, pending: false, destroyed: false };
+      busy: false, pending: false, pendingAnimate: false, destroyed: false };
     registry.push(entry);
     if (resizeObserver) resizeObserver.observe(target);
     updateEntry(entry, false);
     return entry.chart;
   }
 
+  /** Rebuild current data/theme; only explicit data refreshes opt in to animation. */
+  function refresh(target, animate) {
+    registry.slice().forEach(function (entry) {
+      if (!target || entry.target === target) updateEntry(entry, true, animate);
+    });
+  }
+
   function refreshAll() {
-    registry.slice().forEach(function (entry) { updateEntry(entry, true); });
+    refresh();
   }
 
   global.addEventListener('resize', scheduleResize, { passive: true });
@@ -417,6 +428,6 @@
     themedSlices: themedSlices,
     create: create,
     initialize: initialize,
-    refresh: refreshAll
+    refresh: refresh
   };
 })(window);

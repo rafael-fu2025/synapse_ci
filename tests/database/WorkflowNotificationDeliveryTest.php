@@ -235,7 +235,7 @@ final class WorkflowNotificationDeliveryTest extends FreshDatabaseTestCase
         if (str_starts_with($kind, 'bmg_run_')) {
             $id = $this->insert('bmg_rotation_runs', ['tenant_id' => $this->tenant, 'unit_id' => $drum, 'device_id' => $device,
                 'run_uid' => bin2hex(random_bytes(8)), 'motor_state' => substr($kind, strlen('bmg_run_')),
-                'duration_seconds' => 60, 'occurred_at' => $this->local(), 'created_at' => $this->stamp()]);
+                'rotations' => 7, 'occurred_at' => $this->local(), 'created_at' => $this->stamp()]);
             return [$id, '1', $this->operator, 'bmg_rotation_runs'];
         }
         $opening = str_starts_with($kind, 'bmg_device_') ? 'bmg_device_offline' : 'bmg_rtc_invalid';

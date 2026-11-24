@@ -53,7 +53,7 @@
         <p class="small text-muted mb-0 notif-range" data-history-range>Loading notification count…</p>
         <span class="visually-hidden" data-history-page>Page 1</span>
         <nav aria-label="Notification pages">
-          <ul class="pagination pagination-sm flex-wrap mb-0 notif-pagination" data-history-pagination></ul>
+          <ul class="pagination pagination-sm flex-wrap mb-0 notif-pagination synapse-pagination" data-history-pagination></ul>
         </nav>
       </div>
     </div>

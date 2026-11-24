@@ -630,7 +630,24 @@ final class ClinicController extends BaseController
     public function patientChart(int $personId)
     {
         $this->authorizeEncounter();
-        $chart = $this->historyService->getPatientChart($personId, includeAppointments: false);
+        $this->response->setHeader('Cache-Control', 'private, no-store');
+        $query = $this->request->getGet();
+        $printChart = ($query['print'] ?? null) === '1';
+        $chartTab = $query['tab'] ?? 'tab-visits';
+        if (!is_string($chartTab) || !in_array($chartTab, ['tab-visits', 'tab-vitals', 'tab-labs', 'tab-clearances', 'tab-edit-health'], true)) {
+            $chartTab = 'tab-visits';
+        }
+        try {
+            // Printing uses the same authorized route and the legacy complete-history read.
+            $chart = $printChart
+                ? $this->historyService->getPatientChart($personId, includeAppointments: false)
+                : $this->historyService->getPatientChart($personId, includeAppointments: false, historyQuery: $query);
+        } catch (\InvalidArgumentException $error) {
+            if ($error->getCode() !== 422) {
+                throw $error;
+            }
+            return $this->response->setStatusCode(422)->setBody(esc($error->getMessage()));
+        }
         $sessionUser = session()->get('user') ?? [];
         $perms = is_array($sessionUser['permissions'] ?? null) ? $sessionUser['permissions'] : [];
         $isSuperadmin = ($sessionUser['role'] ?? '') === 'superadmin';
@@ -647,6 +664,9 @@ final class ClinicController extends BaseController
             'title'             => 'Patient Chart: ' . $chart['person']['last_name'],
             'pageTitle'         => 'Patient Medical Record',
             'chart'             => $chart,
+            'chartTab'          => $chartTab,
+            'printChart'        => $printChart,
+            'chartBaseUrl'      => site_url('/clinic/patients/' . $personId),
             'canStartVisit'     => (new \App\Services\Clinic\PatientDirectoryService())->assertAccess($this->inventoryActorId()),
             'canWriteHealth'    => $isSuperadmin || in_array('clinic.patients.write', $perms, true),
             'canWriteClearance' => $isSuperadmin || in_array('clinic.clearances.write', $perms, true),

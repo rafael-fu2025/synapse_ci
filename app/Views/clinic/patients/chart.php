@@ -1,7 +1,32 @@
+<?php
+$printChart = (bool) ($printChart ?? false);
+$chartBaseUrl = (string) ($chartBaseUrl ?? site_url('/clinic/patients/' . (int) $chart['person']['id']));
+$chartTabs = ['tab-visits', 'tab-vitals', 'tab-labs', 'tab-clearances', 'tab-edit-health'];
+$chartTab = is_string($chartTab ?? null) && in_array($chartTab, $chartTabs, true) ? $chartTab : 'tab-visits';
+$historyPagination = is_array($chart['history_pagination'] ?? null) ? $chart['history_pagination'] : [];
+$historyQuery = ['tab' => $chartTab];
+foreach ($historyPagination as $list => $meta) {
+    $historyQuery[$list . '_page'] = (int) $meta['page'];
+}
+$historyPerPage = (int) ($historyPagination['visits']['per_page'] ?? 25);
+$historyQuery['per_page'] = $historyPerPage;
+$historyPager = static function (string $list, string $tab) use ($printChart, $historyPagination, $historyQuery, $chartBaseUrl): string {
+    if ($printChart || !isset($historyPagination[$list])) {
+        return '';
+    }
+    return view('partials/table_pagination', [
+        'pagination' => $historyPagination[$list], 'filters' => [], 'baseUrl' => $chartBaseUrl,
+        'paginationPageParam' => $list . '_page', 'paginationPerPageParam' => 'per_page',
+        'paginationExtraQuery' => array_replace($historyQuery, ['tab' => $tab]),
+        'paginationFragment' => $tab, 'paginationLabel' => ucfirst($list) . ' history pages',
+        'paginationNavigation' => true,
+    ], ['saveData' => false]);
+};
+?>
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2 clinic-page-actions cp-page-actions">
+<div class="d-flex flex-wrap gap-2 clinic-page-actions cp-page-actions d-print-none">
   <?php $referralActor = session()->get('user') ?? []; ?>
   <?php if (($referralActor['role'] ?? '') === 'superadmin' || in_array('referrals.create', $referralActor['permissions'] ?? [], true)): ?>
     <a href="<?= esc(site_url('/clinic/referrals/create?' . http_build_query(['person_id' => $chart['person']['id']]))) ?>" class="btn btn-outline-secondary" data-app-modal-open>
@@ -11,9 +36,11 @@
   <a href="<?= site_url('/clinic/patients') ?>" class="btn btn-outline-secondary">
     <i class="bi bi-arrow-left" aria-hidden="true"></i>Patient Directory
   </a>
-  <?php $openVisit = null;
-  foreach ($chart['encounters'] as $visit) {
-      if ($visit['status'] === 'in_progress') { $openVisit = $visit; break; }
+  <?php $openVisit = $chart['open_visit'] ?? null;
+  if (!array_key_exists('open_visit', $chart)) {
+      foreach ($chart['encounters'] as $visit) {
+          if ($visit['status'] === 'in_progress') { $openVisit = $visit; break; }
+      }
   } ?>
   <?php if ($openVisit !== null): ?>
     <a href="<?= site_url('/clinic/encounters/' . (int) $openVisit['id']) ?>" class="btn btn-success">Resume Open Visit</a>
@@ -69,6 +96,8 @@ $bloodType = trim((string) ($health['blood_type'] ?? ''));
 $allergiesText = trim((string) ($health['allergies'] ?? ''));
 ?>
 <section class="clinic-chart-section cp-chart" data-patient-chart="<?= (int) $person['id'] ?>"
+         data-chart-tab="<?= esc($chartTab, 'attr') ?>"
+         data-chart-print="<?= $printChart ? '1' : '0' ?>"
          data-refresh-owner="clinic.patient.<?= (int) $person['id'] ?>"
          data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>">
 
@@ -96,9 +125,9 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
             </div>
           </div>
         </div>
-        <button type="button" class="btn btn-outline-secondary btn-sm d-print-none" data-print-chart>
-          <i class="bi bi-printer" aria-hidden="true"></i>Print Chart
-        </button>
+        <a href="<?= esc($chartBaseUrl . '?print=1', 'attr') ?>" class="btn btn-outline-secondary btn-sm d-print-none" data-print-chart target="_blank" rel="noopener">
+          <i class="bi bi-printer" aria-hidden="true"></i>Print Full Chart
+        </a>
       </div>
 
       <div class="cp-snapshot-grid">
@@ -136,6 +165,20 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
   </div>
 
   <div data-refresh-region="history">
+    <?php if (!$printChart && $historyPagination !== []): ?>
+      <form method="get" action="<?= esc($chartBaseUrl, 'attr') ?>" class="d-flex flex-wrap justify-content-end align-items-center gap-2 mb-3 d-print-none" data-chart-page-size>
+        <input type="hidden" name="tab" value="<?= esc($chartTab, 'attr') ?>">
+        <label for="chart-per-page" class="small text-muted">Records per history page</label>
+        <select id="chart-per-page" name="per_page" class="form-select form-select-sm w-auto">
+          <?php foreach ([25, 50, 100] as $size): ?>
+            <option value="<?= $size ?>" <?= $historyPerPage === $size ? 'selected' : '' ?>><?= $size ?></option>
+          <?php endforeach; ?>
+        </select>
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Apply</button>
+      </form>
+    <?php elseif ($printChart): ?>
+      <p class="small text-muted d-print-none">Complete patient history is loaded for printing; no history page limits apply.</p>
+    <?php endif; ?>
     <div class="cp-chart-grid">
       <!-- Left Column: Clinical Summary, Visit Frequency, Isolation, Emergency Contact -->
       <aside class="cp-sidebar-stack">
@@ -217,14 +260,15 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
           </div>
         </div>
 
-        <?php if (!empty($isolationCases)): ?>
-          <div class="cp-side-card cp-side-card--warn">
+        <?php if (!empty($isolationCases) || (!$printChart && isset($historyPagination['isolation']))): ?>
+          <div class="cp-side-card cp-side-card--warn" id="chart-isolation">
             <div class="cp-side-head">
               <i class="bi bi-shield-exclamation" aria-hidden="true"></i>
               <h3 class="cp-side-title">Isolation / Communicable History</h3>
             </div>
             <div class="cp-side-body">
               <ul class="cp-iso-list">
+                <?php if ($isolationCases === []): ?><li class="text-muted small">No isolation history recorded.</li><?php endif; ?>
                 <?php foreach ($isolationCases as $iso): ?>
                   <?php
                     $condLabel = \App\Services\Clinic\IsolationTrackingService::CONDITIONS[$iso['condition_code']]
@@ -247,6 +291,9 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
                   </li>
                 <?php endforeach; ?>
               </ul>
+              <div class="d-print-none" data-chart-history-pager="isolation">
+                <?= $historyPager('isolation', $chartTab) ?>
+              </div>
             </div>
           </div>
         <?php endif; ?>
@@ -277,30 +324,30 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
 
       <!-- Right Column: Tabbed Clinical History & Editors -->
       <div class="cp-main-panel">
-        <div class="cp-tabs-bar">
+        <div class="cp-tabs-bar d-print-none">
           <ul class="nav nav-tabs clinic-chart-tabs cp-chart-tabs" role="tablist">
             <li class="nav-item" role="presentation">
-              <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-visits" type="button" role="tab" aria-selected="true">
-                <i class="bi bi-clock-history" aria-hidden="true"></i>Visit History <span class="cp-tab-count"><?= count($encounters) ?></span>
+              <button class="nav-link <?= $chartTab === 'tab-visits' ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#tab-visits" type="button" role="tab" aria-selected="<?= $chartTab === 'tab-visits' ? 'true' : 'false' ?>">
+                <i class="bi bi-clock-history" aria-hidden="true"></i>Visit History <span class="cp-tab-count"><?= $totalVisits ?></span>
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-vitals" type="button" role="tab" aria-selected="false">
+              <button class="nav-link <?= $chartTab === 'tab-vitals' ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#tab-vitals" type="button" role="tab" aria-selected="<?= $chartTab === 'tab-vitals' ? 'true' : 'false' ?>">
                 <i class="bi bi-graph-up" aria-hidden="true"></i>Vitals <span class="cp-tab-count"><?= count($vitalsHistory) ?></span>
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-labs" type="button" role="tab" aria-selected="false">
-                <i class="bi bi-flask" aria-hidden="true"></i>Labs <span class="cp-tab-count"><?= count($labResults) ?></span>
+              <button class="nav-link <?= $chartTab === 'tab-labs' ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#tab-labs" type="button" role="tab" aria-selected="<?= $chartTab === 'tab-labs' ? 'true' : 'false' ?>">
+                <i class="bi bi-flask" aria-hidden="true"></i>Labs <span class="cp-tab-count"><?= (int) ($historyPagination['labs']['total'] ?? count($labResults)) ?></span>
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-clearances" type="button" role="tab" aria-selected="false">
-                <i class="bi bi-patch-check" aria-hidden="true"></i>Clearances <span class="cp-tab-count"><?= count($enrollmentClearances) ?></span>
+              <button class="nav-link <?= $chartTab === 'tab-clearances' ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#tab-clearances" type="button" role="tab" aria-selected="<?= $chartTab === 'tab-clearances' ? 'true' : 'false' ?>">
+                <i class="bi bi-patch-check" aria-hidden="true"></i>Clearances <span class="cp-tab-count"><?= (int) ($historyPagination['clearances']['total'] ?? count($enrollmentClearances)) ?></span>
               </button>
             </li>
             <li class="nav-item" role="presentation">
-              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-edit-health" type="button" role="tab" aria-selected="false">
+              <button class="nav-link <?= $chartTab === 'tab-edit-health' ? 'active' : '' ?>" data-bs-toggle="tab" data-bs-target="#tab-edit-health" type="button" role="tab" aria-selected="<?= $chartTab === 'tab-edit-health' ? 'true' : 'false' ?>">
                 <i class="bi bi-pencil-square" aria-hidden="true"></i>Health Profile
               </button>
             </li>
@@ -309,7 +356,8 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
 
         <div class="cp-tab-body tab-content">
           <!-- Tab 1: Visit History -->
-          <div class="tab-pane fade show active" id="tab-visits" role="tabpanel">
+          <div class="tab-pane fade <?= $chartTab === 'tab-visits' || $printChart ? 'show active' : '' ?>" id="tab-visits" role="tabpanel">
+            <h3 class="h5 d-none d-print-block">Visit History</h3>
             <?php if (empty($encounters)): ?>
               <div class="cp-empty-pane">
                 <i class="bi bi-inbox" aria-hidden="true"></i>
@@ -389,10 +437,14 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
                 <?php endforeach; ?>
               </div>
             <?php endif; ?>
+            <div class="d-print-none" data-chart-history-pager="visits">
+              <?= $historyPager('visits', 'tab-visits') ?>
+            </div>
           </div>
 
           <!-- Tab 2: Vitals History -->
-          <div class="tab-pane fade" id="tab-vitals" role="tabpanel">
+          <div class="tab-pane fade <?= $chartTab === 'tab-vitals' || $printChart ? 'show active' : '' ?>" id="tab-vitals" role="tabpanel">
+            <h3 class="h5 d-none d-print-block">Recent Vitals</h3>
             <?php if (empty($vitalsHistory)): ?>
               <div class="cp-empty-pane">
                 <i class="bi bi-activity" aria-hidden="true"></i>
@@ -442,7 +494,7 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
           <?= view('clinic/patients/_clearances_tab', get_defined_vars(), ['saveData' => false]) ?>
 
           <!-- Tab 5: Update Health Profile Form -->
-          <div class="tab-pane fade" id="tab-edit-health" role="tabpanel">
+          <div class="tab-pane fade d-print-none <?= $chartTab === 'tab-edit-health' ? 'show active' : '' ?>" id="tab-edit-health" role="tabpanel">
             <?php if (empty($canWriteHealth)): ?>
               <div class="cp-notice mb-3">
                 <i class="bi bi-lock me-1" aria-hidden="true"></i>Editing baseline Health Profile records requires full Clinic Staff or Physician permissions.
@@ -545,35 +597,66 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
 (function () {
   if (window.synapsePatientTabs) return;
   window.synapsePatientTabs = true;
+  const allowedTabs = ['tab-visits', 'tab-vitals', 'tab-labs', 'tab-clearances', 'tab-edit-health'];
+  const tabName = value => allowedTabs.includes(String(value || '').replace(/^#/, '')) ? String(value).replace(/^#/, '') : null;
+  function showTab(root, name) {
+    if (!root || !allowedTabs.includes(name) || root.dataset.chartPrint === '1') return;
+    root.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+      const active = tab.dataset.bsTarget === '#' + name;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', String(active));
+      const pane = root.querySelector(tab.dataset.bsTarget);
+      pane?.classList.toggle('active', active);
+      pane?.classList.toggle('show', active);
+    });
+    root.dataset.chartTab = name;
+    const sizeTab = root.querySelector('[data-chart-page-size] [name="tab"]');
+    if (sizeTab) sizeTab.value = name;
+  }
   document.addEventListener('synapse:before-swap', event => {
     const old = event.detail.root.querySelector('[data-patient-chart]');
     const next = event.detail.incoming?.querySelector('[data-patient-chart]');
     if (!old || !next || old.dataset.patientChart !== next.dataset.patientChart) return;
-    const target = old.querySelector('[data-bs-toggle="tab"].active')?.dataset.bsTarget;
-    const tabs = [...next.querySelectorAll('[data-bs-toggle="tab"]')];
-    if (!tabs.some(tab => tab.dataset.bsTarget === target)) return;
-    tabs.forEach(tab => {
-      const active = tab.dataset.bsTarget === target;
-      tab.classList.toggle('active', active);
-      tab.setAttribute('aria-selected', String(active));
-      const pane = next.querySelector(tab.dataset.bsTarget);
-      pane?.classList.toggle('active', active);
-      pane?.classList.toggle('show', active);
-    });
+    const requested = new URL(event.detail.url || window.location.href, window.location.href);
+    const target = tabName(requested.hash) || tabName(requested.searchParams.get('tab'))
+      || tabName(old.querySelector('[data-bs-toggle="tab"].active')?.dataset.bsTarget);
+    if (target) showTab(next, target);
   });
-
-  function activateHashTab() {
-    const hash = window.location.hash;
-    if (!hash) return;
-    const btn = document.querySelector(`[data-patient-chart] [data-bs-toggle="tab"][data-bs-target="${hash}"]`);
-    if (btn && window.bootstrap?.Tab) {
-      window.bootstrap.Tab.getOrCreateInstance(btn).show();
+  function restoreTab() {
+    const root = document.querySelector('[data-patient-chart]');
+    const url = new URL(window.location.href);
+    const target = tabName(url.hash) || tabName(url.searchParams.get('tab')) || tabName(root?.dataset.chartTab);
+    if (target) showTab(root, target);
+    if (root?.dataset.chartPrint === '1' && !root.dataset.printOpened) {
+      root.dataset.printOpened = '1';
+      window.print();
     }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', activateHashTab);
-  else activateHashTab();
+  document.addEventListener('shown.bs.tab', event => {
+    const root = event.target.closest('[data-patient-chart]');
+    const target = tabName(event.target.dataset.bsTarget);
+    if (!root || !target || root.dataset.chartPrint === '1') return;
+    showTab(root, target);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', target);
+    url.hash = target;
+    if (window.SynapseNavigation) window.SynapseNavigation.updateHistory(url.href, 'replace');
+    else window.history.replaceState(window.history.state, '', url.href);
+    root.querySelectorAll('[data-chart-history-pager="isolation"] a').forEach(link => {
+      const pagerUrl = new URL(link.href, window.location.href);
+      pagerUrl.searchParams.set('tab', target);
+      pagerUrl.hash = target;
+      link.href = pagerUrl.href;
+    });
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', restoreTab);
+  else restoreTab();
+  document.addEventListener('synapse:page-load', restoreTab);
+  window.addEventListener('hashchange', restoreTab);
   document.addEventListener('click', event => {
-    if (event.target.closest('[data-print-chart]')) {
+    if (!event.target.closest('[data-print-chart]')) return;
+    if (document.querySelector('[data-patient-chart]')?.dataset.chartPrint === '1') {
+      event.preventDefault();
       window.print();
     }
   });

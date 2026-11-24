@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\TablePage;
 use App\Services\AuthenticatedUser;
 use App\Services\Guidance\GuidanceAccessPolicy;
 use App\Services\Guidance\GuidanceActivationGateService;
@@ -132,16 +133,24 @@ final class GuidanceGovernanceController extends BaseController
         try {
             $actor    = $this->freshActor('guidance.cases.read');
             $tenantId = (int) $actor['tenant_id'];
+            $query = $this->request->getGet();
+            $profilesPage = TablePage::forList($query, 'profiles_page');
+            $supervisionPage = TablePage::forList($query, 'supervision_page');
 
-            $profiles = $this->db->table('guidance_practitioner_profiles gp')
+            $profilesBuilder = $this->db->table('guidance_practitioner_profiles gp')
                 ->select('gp.*, u.username, u.email, u.role as user_role, u.status as user_status, p.first_name, p.last_name, p.mis_id')
                 ->join('users u', 'u.id = gp.user_id AND u.tenant_id = gp.tenant_id')
                 ->join('people p', 'p.id = u.person_id AND p.tenant_id = u.tenant_id AND p.deleted_at IS NULL', 'left')
                 ->where('gp.tenant_id', $tenantId)
-                ->where('u.deleted_at', null)
+                ->where('u.deleted_at', null);
+            $profilesTotal = (clone $profilesBuilder)->countAllResults();
+            $profilesPagination = $profilesPage->metadata($profilesTotal, $profilesTotal);
+            $profiles = $profilesBuilder
                 ->orderBy('gp.is_active', 'DESC')
                 ->orderBy('gp.credential_tier', 'ASC')
                 ->orderBy('u.username', 'ASC')
+                ->orderBy('gp.id', 'ASC')
+                ->limit($profilesPagination['per_page'], ($profilesPagination['page'] - 1) * $profilesPagination['per_page'])
                 ->get()
                 ->getResultArray();
 
@@ -150,15 +159,20 @@ final class GuidanceGovernanceController extends BaseController
             }
             unset($profile);
 
-            $supervisions = $this->db->table('guidance_supervision_assignments sa')
+            $supervisionBuilder = $this->db->table('guidance_supervision_assignments sa')
                 ->select('sa.*, au.username as associate_username, ap.first_name as associate_first_name, ap.last_name as associate_last_name, su.username as supervisor_username, sp.first_name as supervisor_first_name, sp.last_name as supervisor_last_name')
                 ->join('users au', 'au.id = sa.associate_user_id AND au.tenant_id = sa.tenant_id')
                 ->join('people ap', 'ap.id = au.person_id AND ap.tenant_id = au.tenant_id AND ap.deleted_at IS NULL', 'left')
                 ->join('users su', 'su.id = sa.supervisor_user_id AND su.tenant_id = sa.tenant_id')
                 ->join('people sp', 'sp.id = su.person_id AND sp.tenant_id = su.tenant_id AND sp.deleted_at IS NULL', 'left')
                 ->where('sa.tenant_id', $tenantId)
-                ->where('sa.status', 'active')
+                ->where('sa.status', 'active');
+            $supervisionTotal = (clone $supervisionBuilder)->countAllResults();
+            $supervisionPagination = $supervisionPage->metadata($supervisionTotal, $supervisionTotal);
+            $supervisions = $supervisionBuilder
                 ->orderBy('sa.starts_at', 'DESC')
+                ->orderBy('sa.id', 'DESC')
+                ->limit($supervisionPagination['per_page'], ($supervisionPagination['page'] - 1) * $supervisionPagination['per_page'])
                 ->get()
                 ->getResultArray();
 
@@ -182,6 +196,8 @@ final class GuidanceGovernanceController extends BaseController
                 'pageTitle'              => 'Guidance Practitioner Credentials & Supervision',
                 'profiles'               => $profiles,
                 'supervisions'           => $supervisions,
+                'profilesPagination'     => $profilesPagination,
+                'supervisionPagination'  => $supervisionPagination,
                 'guidanceUsers'          => $guidanceUsers,
                 'tiers'                  => GuidancePractitionerService::TIERS,
                 'availableScopes'        => [

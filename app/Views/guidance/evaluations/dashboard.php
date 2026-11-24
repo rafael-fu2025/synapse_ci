@@ -1,20 +1,19 @@
 <?= $this->extend('layouts/app') ?>
 
 <?= $this->section('page_actions') ?>
-<div class="d-flex flex-wrap gap-2">
+<div class="ce-page-actions">
   <?php if (!empty($canModerate)): ?>
     <a href="<?= esc(site_url('/guidance/evaluations/moderate'), 'attr') ?>" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-chat-square-text me-1" aria-hidden="true"></i>Comment Moderation Queue
+      <i class="bi bi-chat-square-text" aria-hidden="true"></i>Comment Moderation Queue
     </a>
   <?php endif; ?>
   <a href="<?= esc(site_url('/guidance'), 'attr') ?>" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Guidance Dashboard
+    <i class="bi bi-arrow-left" aria-hidden="true"></i>Guidance Dashboard
   </a>
 </div>
 <?= $this->endSection() ?>
 
 <?= $this->section('content') ?>
-<div class="guidance-ui">
 <?php
 $psychosocial = $psychosocial ?? [];
 $counseling = $counseling ?? [];
@@ -52,29 +51,41 @@ $renderAggregateCard = static function (
 
     ob_start();
     ?>
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-header bg-transparent d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
-        <div>
-          <h5 class="card-title fw-bold mb-0"><?= esc($title) ?></h5>
-          <small class="text-muted">Form Code: <code><?= esc($formCode) ?></code></small>
+    <article class="ce-card gse-aggregate" data-evaluation-type="<?= esc($evaluationType, 'attr') ?>">
+      <header class="ce-card-header gse-aggregate-header">
+        <div class="gse-heading">
+          <h2 class="ce-card-title"><?= esc($title) ?></h2>
+          <p class="gse-caption">Form <span class="ce-mono gse-form-code"><?= esc($formCode) ?></span></p>
         </div>
-        <a href="<?= esc($pdfHref, 'attr') ?>" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener">
-          <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Aggregate PDF
+        <a href="<?= esc($pdfHref, 'attr') ?>" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener" data-navigation="false" aria-label="<?= esc($title . ' Aggregate PDF', 'attr') ?>">
+          <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>Aggregate PDF
         </a>
+      </header>
+      <div class="gse-cohort-status">
+        <span class="ce-status-dot <?= $cohortMet ? 'ce-status-emerald' : 'ce-status-amber' ?>">
+          <?= $cohortMet ? 'Cohort threshold met' : 'Reporting suppressed' ?>
+        </span>
+        <span class="ce-tag"><span class="gse-number"><?= $total ?></span> responses</span>
       </div>
-      <div class="card-body">
+      <div class="ce-card-body gse-aggregate-body">
         <?php if (!$cohortMet): ?>
-          <div class="alert alert-warning border-0 mb-0" role="status">
-            <div class="d-flex align-items-start gap-2">
-              <i class="bi bi-shield-lock fs-4 mt-1" aria-hidden="true"></i>
+          <div class="gse-threshold">
+            <div class="gse-threshold-count">
+              <span class="gse-section-label">Responses toward reporting threshold</span>
+              <strong class="gse-number"><?= $total ?>/<?= $minReq ?></strong>
+            </div>
+            <div class="gse-meter" aria-hidden="true"><span style="width: <?= number_format(min(100, max(0, $total / max(1, $minReq) * 100)), 1) ?>%;"></span></div>
+            <?php if ($total === 0): ?>
+              <p class="gse-caption">No evaluation responses for this provider and the selected filters.</p>
+            <?php endif; ?>
+          </div>
+          <div class="ce-notice ce-notice-amber" role="status">
+            <div class="ce-notice-body">
+              <i class="bi bi-shield-lock ce-notice-icon" aria-hidden="true"></i>
               <div>
-                <h6 class="fw-bold mb-1">Cohort Threshold Suppression Active</h6>
-                <p class="mb-2">
-                  Minimum <?= $minReq ?> responses required; currently <?= $total ?>/<?= $minReq ?>.
-                </p>
-                <p class="small text-muted mb-0">
-                  To protect student pseudonymity under RA 10173, dimension averages, willingness/recommendation rates, and qualitative comments are suppressed until at least <?= $minReq ?> responses are recorded.
-                </p>
+                <h3 class="gse-notice-title">Cohort Threshold Suppression Active</h3>
+                <p>At least <?= $minReq ?> response records are required for this provider, service, and filtered cohort.</p>
+                <p class="gse-caption">To protect student pseudonymity under RA 10173, dimension averages, willingness/recommendation rates, visit-type distribution, and qualitative comments remain suppressed.</p>
               </div>
             </div>
           </div>
@@ -86,124 +97,132 @@ $renderAggregateCard = static function (
           $comments = $agg['comments'] ?? [];
           $visitDist = $agg['visit_type_distribution'] ?? null;
           ?>
-          <div class="row g-3 mb-4">
-            <div class="col-sm-4">
-              <div class="p-3 rounded bg-body-tertiary text-center h-100">
-                <div class="small text-muted">Cohort Size</div>
-                <div class="h4 fw-bold mb-0"><?= $total ?></div>
-              </div>
+          <dl class="gse-summary">
+            <div class="gse-stat">
+              <dt>Cohort Size</dt>
+              <dd class="gse-number"><?= $total ?><span>responses</span></dd>
             </div>
-            <div class="col-sm-4">
-              <div class="p-3 rounded bg-body-tertiary text-center h-100">
-                <div class="small text-muted">Overall Mean (1–5)</div>
-                <div class="h4 fw-bold text-primary mb-0"><?= number_format($overallMean, 2) ?></div>
-              </div>
+            <div class="gse-stat">
+              <dt>Overall Mean (1–5)</dt>
+              <dd class="gse-number"><?= number_format($overallMean, 2) ?></dd>
             </div>
-            <div class="col-sm-4">
-              <div class="p-3 rounded bg-body-tertiary text-center h-100">
-                <div class="small text-muted"><?= esc($booleanLabel) ?></div>
-                <div class="h4 fw-bold text-success mb-0"><?= number_format($booleanPct, 1) ?>%</div>
-              </div>
+            <div class="gse-stat">
+              <dt><?= esc($booleanLabel) ?></dt>
+              <dd class="gse-number"><?= number_format($booleanPct, 1) ?>%</dd>
             </div>
-          </div>
+          </dl>
 
-          <h6 class="fw-bold mb-2">Dimension Means (1.00 – 5.00)</h6>
-          <div class="vstack gap-2 mb-4">
-            <?php foreach ($dimensionLabels as $dimKey => $dimText): ?>
-              <?php
-              $mean = (float) ($averages[$dimKey] ?? 0);
-              $pct = min(100, max(0, ($mean / 5.0) * 100));
-              ?>
-              <div>
-                <div class="d-flex justify-content-between small mb-1 gap-2">
-                  <span><?= esc($dimText) ?></span>
-                  <strong><?= number_format($mean, 2) ?> / 5.00</strong>
-                </div>
-                <div class="progress" style="height: 8px;">
-                  <div class="progress-bar bg-primary" style="width: <?= number_format($pct, 1) ?>%;"></div>
-                </div>
-              </div>
-            <?php endforeach; ?>
-          </div>
-
-          <?php if (is_array($visitDist)): ?>
-            <h6 class="fw-bold mb-2">Visit Type Distribution</h6>
-            <div class="d-flex flex-wrap gap-2 mb-4">
-              <?php foreach ($visitTypeLabels as $vtKey => $vtLabel): ?>
-                <span class="badge bg-light text-dark border">
-                  <?= esc($vtLabel) ?>: <strong><?= (int) ($visitDist[$vtKey] ?? 0) ?></strong>
-                </span>
-              <?php endforeach; ?>
+          <section class="gse-detail-section" aria-label="<?= esc($title . ' dimension means', 'attr') ?>">
+            <div class="gse-section-heading">
+              <h3>Dimension Means</h3>
+              <span class="gse-caption">Scale 1.00–5.00</span>
             </div>
-          <?php endif; ?>
-
-          <h6 class="fw-bold mb-2">Approved Qualitative Comments</h6>
-          <?php if ($comments === []): ?>
-            <p class="small text-muted mb-0">No moderator-approved qualitative comments for this cohort yet.</p>
-          <?php else: ?>
-            <ul class="list-group list-group-flush">
-              <?php foreach ($comments as $comment): ?>
-                <li class="list-group-item px-0 small">
-                  <i class="bi bi-chat-quote text-primary me-2" aria-hidden="true"></i><?= esc($comment) ?>
+            <ul class="gse-dimensions">
+              <?php foreach ($dimensionLabels as $dimKey => $dimText): ?>
+                <?php
+                $mean = (float) ($averages[$dimKey] ?? 0);
+                $pct = min(100, max(0, ($mean / 5.0) * 100));
+                ?>
+                <li>
+                  <div class="gse-dimension-label">
+                    <span><?= esc($dimText) ?></span>
+                    <strong class="gse-number"><?= number_format($mean, 2) ?> <span>/ 5.00</span></strong>
+                  </div>
+                  <div class="gse-meter" aria-hidden="true"><span style="width: <?= number_format($pct, 1) ?>%;"></span></div>
                 </li>
               <?php endforeach; ?>
             </ul>
+          </section>
+
+          <?php if (is_array($visitDist)): ?>
+            <section class="gse-detail-section" aria-label="<?= esc($title . ' visit type distribution', 'attr') ?>">
+              <div class="gse-section-heading"><h3>Visit Type Distribution</h3></div>
+              <dl class="gse-visits">
+                <?php foreach ($visitTypeLabels as $vtKey => $vtLabel): ?>
+                  <div>
+                    <dt><?= esc($vtLabel) ?></dt>
+                    <dd class="gse-number"><?= (int) ($visitDist[$vtKey] ?? 0) ?></dd>
+                  </div>
+                <?php endforeach; ?>
+              </dl>
+            </section>
           <?php endif; ?>
+
+          <section class="gse-detail-section" aria-label="<?= esc($title . ' approved qualitative comments', 'attr') ?>">
+            <div class="gse-section-heading"><h3>Approved Qualitative Comments</h3></div>
+            <?php if ($comments === []): ?>
+              <p class="gse-comments-empty"><i class="bi bi-chat-square-text" aria-hidden="true"></i>No moderator-approved qualitative comments for this cohort yet.</p>
+            <?php else: ?>
+              <p class="gse-caption">Only moderator-approved comments are included.</p>
+              <ul class="gse-comments">
+                <?php foreach ($comments as $comment): ?>
+                  <li><i class="bi bi-chat-quote" aria-hidden="true"></i><p><?= esc($comment) ?></p></li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
+          </section>
         <?php endif; ?>
       </div>
-    </div>
+    </article>
     <?php
     return (string) ob_get_clean();
 };
 ?>
+<section class="guidance-ui ce-workspace gse-workspace" aria-label="Service evaluation aggregates workspace">
+  <section class="ce-card gse-context" aria-label="Provider and reporting policy">
+    <div class="ce-card-body gse-context-body">
+      <div class="gse-provider">
+        <span class="gse-section-label">Guidance Provider</span>
+        <h2><?= esc($providerName) ?></h2>
+        <p class="gse-caption">Pseudonymous aggregate reporting · Minimum cohort size: 5 response records per service.</p>
+      </div>
+      <div class="gse-policy">
+        <span class="ce-tag"><span class="ce-status-dot <?= $cohortGateEnabled ? 'ce-status-emerald' : 'ce-status-amber' ?>"><?= $cohortGateEnabled ? 'Policy Sign-off Active' : 'Cohort Policy Sign-off Pending' ?></span></span>
+        <p class="gse-caption">Sign-off status is informational here. The response threshold always applies.</p>
+      </div>
+    </div>
+  </section>
 
-<div class="alert alert-light border shadow-sm mb-4 d-flex flex-wrap justify-content-between align-items-center gap-2">
-  <div>
-    <strong>Provider:</strong> <?= esc($providerName) ?>
-    <span class="text-muted small ms-2">· Strictly pseudonymous, threshold-safe reporting (MIN_COHORT_SIZE = 5)</span>
-  </div>
-  <span class="badge <?= $cohortGateEnabled ? 'bg-success' : 'bg-warning text-dark' ?>">
-    <?= $cohortGateEnabled ? 'Policy Sign-off Active' : 'Cohort Policy Sign-off Pending' ?>
-  </span>
-</div>
-
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body">
-    <form method="GET" action="<?= esc(site_url('/guidance/evaluations/dashboard'), 'attr') ?>" class="row g-2 align-items-end">
-      <?php if ($canViewAnyProvider && $providers !== []): ?>
-        <div class="col-md-4">
-          <label for="eval-provider-select" class="form-label small fw-semibold">Guidance Provider</label>
-          <select id="eval-provider-select" name="provider_user_id" class="form-select">
-            <?php foreach ($providers as $prov): ?>
-              <?php
-              $pName = trim(trim((string) ($prov['first_name'] ?? '')) . ' ' . trim((string) ($prov['last_name'] ?? '')));
-              $pDisplay = $pName !== '' ? $pName : (string) $prov['username'];
-              ?>
-              <option value="<?= (int) $prov['id'] ?>" <?= (int) $prov['id'] === $providerUserId ? 'selected' : '' ?>>
-                <?= esc($pDisplay) ?> (<?= esc(ucwords(str_replace('_', ' ', (string) $prov['role']))) ?>)
-              </option>
-            <?php endforeach; ?>
-          </select>
+  <section class="ce-card gse-filters" aria-label="Cohort filters">
+    <header class="ce-card-header">
+      <div class="gse-heading">
+        <h2 class="ce-card-title"><i class="bi bi-funnel" aria-hidden="true"></i>Cohort Filters</h2>
+        <p class="gse-caption">Apply the same provider and academic period to both services.</p>
+      </div>
+    </header>
+    <div class="ce-card-body">
+      <form method="GET" action="<?= esc(site_url('/guidance/evaluations/dashboard'), 'attr') ?>" class="gse-filter-form <?= $canViewAnyProvider && $providers !== [] ? 'gse-filter-form-provider' : '' ?>">
+        <?php if ($canViewAnyProvider && $providers !== []): ?>
+          <div class="gse-filter-field gse-provider-field">
+            <label for="eval-provider-select" class="form-label">Guidance Provider</label>
+            <select id="eval-provider-select" name="provider_user_id" class="form-select" data-searchable="true">
+              <?php foreach ($providers as $prov): ?>
+                <?php
+                $pName = trim(trim((string) ($prov['first_name'] ?? '')) . ' ' . trim((string) ($prov['last_name'] ?? '')));
+                $pDisplay = $pName !== '' ? $pName : (string) $prov['username'];
+                ?>
+                <option value="<?= (int) $prov['id'] ?>" <?= (int) $prov['id'] === $providerUserId ? 'selected' : '' ?>><?= esc($pDisplay) ?> (<?= esc(ucwords(str_replace('_', ' ', (string) $prov['role']))) ?>)</option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        <?php endif; ?>
+        <div class="gse-filter-field">
+          <label for="eval-filter-term" class="form-label">Academic Term</label>
+          <input id="eval-filter-term" type="text" name="academic_term" class="form-control" maxlength="64" value="<?= esc($filters['academic_term'] ?? '', 'attr') ?>" placeholder="All terms">
         </div>
-      <?php endif; ?>
-      <div class="col-md-3">
-        <label for="eval-filter-term" class="form-label small fw-semibold">Academic Term</label>
-        <input id="eval-filter-term" type="text" name="academic_term" class="form-control" value="<?= esc($filters['academic_term'] ?? '', 'attr') ?>" placeholder="All terms">
-      </div>
-      <div class="col-md-3">
-        <label for="eval-filter-year" class="form-label small fw-semibold">Academic Year</label>
-        <input id="eval-filter-year" type="text" name="academic_year" class="form-control" value="<?= esc($filters['academic_year'] ?? '', 'attr') ?>" placeholder="All years">
-      </div>
-      <div class="col-12 col-md-2 d-flex flex-nowrap gap-2">
-        <button type="submit" class="btn btn-primary flex-fill">Apply</button>
-        <a href="<?= esc(site_url('/guidance/evaluations/dashboard'), 'attr') ?>" class="btn btn-outline-secondary flex-fill">Reset</a>
-      </div>
-    </form>
-  </div>
-</div>
+        <div class="gse-filter-field">
+          <label for="eval-filter-year" class="form-label">Academic Year</label>
+          <input id="eval-filter-year" type="text" name="academic_year" class="form-control" maxlength="32" value="<?= esc($filters['academic_year'] ?? '', 'attr') ?>" placeholder="All years">
+        </div>
+        <div class="gse-filter-actions">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-funnel" aria-hidden="true"></i>Apply</button>
+          <a href="<?= esc(site_url('/guidance/evaluations/dashboard'), 'attr') ?>" class="btn btn-outline-secondary">Reset</a>
+        </div>
+      </form>
+    </div>
+  </section>
 
-<div class="row g-4">
-  <div class="col-xl-6">
+  <div class="gse-aggregate-grid">
     <?= $renderAggregateCard(
         'Psychosocial Support Evaluation',
         'F-OGC-GPS-PEF-008-00',
@@ -215,8 +234,6 @@ $renderAggregateCard = static function (
         $providerUserId,
         $filters
     ) ?>
-  </div>
-  <div class="col-xl-6">
     <?= $renderAggregateCard(
         'Counseling Service Evaluation',
         'F-OGC-GCS-CEF-009-00',
@@ -229,6 +246,9 @@ $renderAggregateCard = static function (
         $filters
     ) ?>
   </div>
-</div>
-</div>
+</section>
+<?= $this->endSection() ?>
+
+<?= $this->section('styles') ?>
+<link rel="stylesheet" href="<?= esc(base_url('assets/css/pages/guidance-service-evaluations.css'), 'attr') ?>">
 <?= $this->endSection() ?>

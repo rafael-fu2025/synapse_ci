@@ -557,7 +557,7 @@
 
 .portal-profile-card .card-id {
   font-size: 0.72rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--mono-font, "Courier New", Courier, monospace);
   color: rgba(255, 255, 255, 0.75);
   margin-bottom: 0.85rem;
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Clinic;
 
+use App\Libraries\TablePage;
 use App\Models\AppointmentModel;
 use App\Models\ClinicEncounterAddendumModel;
 use App\Models\ClinicEncounterModel;
@@ -17,6 +18,8 @@ use App\Models\PersonModel;
 use App\Models\StudentProfileModel;
 use App\Services\CurrentTenant;
 use App\Services\Scheduling\SchedulingClock;
+use CodeIgniter\Database\BaseBuilder;
+use CodeIgniter\Database\BaseConnection;
 
 final class PatientHistoryService
 {
@@ -29,24 +32,28 @@ final class PatientHistoryService
     private ClinicEncounterModel $encounterModel;
     private ClinicVitalsModel $vitalsModel;
     private AppointmentModel $appointmentModel;
+    private ?BaseConnection $db = null;
 
-    public function __construct()
+    public function __construct(?BaseConnection $db = null)
     {
-        $this->personModel = new PersonModel();
-        $this->studentModel = new StudentProfileModel();
-        $this->employeeModel = new EmployeeProfileModel();
-        $this->healthModel = new HealthProfileModel();
-        $this->encounterModel = new ClinicEncounterModel();
-        $this->vitalsModel = new ClinicVitalsModel();
-        $this->appointmentModel = new AppointmentModel();
+        $this->db = $db;
+        $this->personModel = new PersonModel($db);
+        $this->studentModel = new StudentProfileModel($db);
+        $this->employeeModel = new EmployeeProfileModel($db);
+        $this->healthModel = new HealthProfileModel($db);
+        $this->encounterModel = new ClinicEncounterModel($db);
+        $this->vitalsModel = new ClinicVitalsModel($db);
+        $this->appointmentModel = new AppointmentModel($db);
     }
 
     /**
-     * Builds a comprehensive patient health chart.
+     * Builds a comprehensive patient health chart. Portal and print callers retain
+     * complete history unless the authorized staff route opts into named pages.
      *
+     * @param array<string, mixed>|null $historyQuery Null retains the legacy full-history contract.
      * @return array<string, mixed>
      */
-    public function getPatientChart(int $personId, bool $includeAppointments = true): array
+    public function getPatientChart(int $personId, bool $includeAppointments = true, ?array $historyQuery = null): array
     {
         $person = $this->personModel->scoped()->find($personId);
         if ($person === null) {
@@ -63,15 +70,39 @@ final class PatientHistoryService
         $employeeProfile = ($person['kind'] === 'employee') ? $this->employeeModel->select('department, position, employment_status, is_teaching')->findByPersonId($personId) : null;
         $healthProfile = $this->healthModel->findByPersonId($personId);
 
-        // Past encounters
-        $encounters = $this->encounterModel->scoped()
+        $db = $this->db ?? \Config\Database::connect();
+        $tenant = CurrentTenant::id();
+        $historyPages = [];
+        $historyPagination = [];
+        if ($historyQuery !== null) {
+            foreach (['visits', 'labs', 'clearances', 'isolation'] as $list) {
+                $historyPages[$list] = TablePage::forList($historyQuery, $list . '_page');
+                if (!in_array($historyPages[$list]->perPage, [25, 50, 100], true)) {
+                    throw new \InvalidArgumentException('Per page must be 25, 50 or 100.', 422);
+                }
+                $historyPagination[$list] = $historyPages[$list]->metadata(0, 0);
+            }
+        }
+
+        $encounterQuery = $db->table('clinic_encounters')
+            ->where('clinic_encounters.tenant_id', $tenant)
+            ->where('clinic_encounters.person_id', $personId)
+            ->where('clinic_encounters.deleted_at', null);
+        $encounterPage = $this->chartHistoryPage((clone $encounterQuery)
             ->select('clinic_encounters.*, u.username as attending_name, enc_u.username as encoder_name')
             ->join('users u', 'u.id = clinic_encounters.attending_user_id AND u.tenant_id = clinic_encounters.tenant_id', 'left')
             ->join('users enc_u', 'enc_u.id = clinic_encounters.encoded_by_user_id AND enc_u.tenant_id = clinic_encounters.tenant_id', 'left')
-            ->where('clinic_encounters.person_id', $personId)
             ->orderBy('COALESCE(clinic_encounters.visited_at, clinic_encounters.started_at)', 'DESC', false)
-            ->orderBy('clinic_encounters.id', 'DESC')
-            ->findAll();
+            ->orderBy('clinic_encounters.id', 'DESC'), $historyPages['visits'] ?? null);
+        $encounters = $encounterPage['rows'];
+        $openVisit = null;
+        if ($historyQuery !== null) {
+            $historyPagination['visits'] = $encounterPage['pagination'];
+            // An older unfinished encounter must never disappear behind a history page.
+            $openVisit = (clone $encounterQuery)->where('clinic_encounters.status', 'in_progress')
+                ->orderBy('COALESCE(clinic_encounters.visited_at, clinic_encounters.started_at)', 'DESC', false)
+                ->orderBy('clinic_encounters.id', 'DESC')->get(1)->getRowArray();
+        }
 
         // Recent vitals trend
         $vitalsHistory = $this->vitalsModel->scoped()
@@ -81,8 +112,6 @@ final class PatientHistoryService
             ->orderBy('clinic_vitals.recorded_at', 'DESC')
             ->findAll(10);
 
-        $db = \Config\Database::connect();
-        $tenant = \App\Services\CurrentTenant::id();
         $treatments = $db->table('clinic_treatments t')
             ->select('t.encounter_id, t.diagnosis, t.treatment_plan, t.services_rendered')
             ->join('clinic_encounters e', 'e.id = t.encounter_id AND e.tenant_id = t.tenant_id AND e.deleted_at IS NULL')
@@ -131,60 +160,100 @@ final class PatientHistoryService
         $currentSy = self::currentSchoolYear();
         $syWindow = self::schoolYearUtcBounds($currentSy);
         $syVisits = 0;
-        $complaintCounts = [];
-        foreach ($encounters as $enc) {
-            $ts = (string) ($enc['visited_at'] ?? $enc['started_at'] ?? '');
-            if ($ts >= $syWindow[0] && $ts < $syWindow[1]) {
-                $syVisits++;
-            }
-            $label = trim((string) ($enc['chief_complaint'] ?? ''));
-            if ($label !== '') {
-                $complaintCounts[$label] = ($complaintCounts[$label] ?? 0) + 1;
-            }
-        }
-        arsort($complaintCounts);
         $topComplaints = [];
-        foreach (array_slice($complaintCounts, 0, 5, true) as $label => $cnt) {
-            $topComplaints[] = ['label' => $label, 'count' => $cnt];
+        $totalVisits = count($encounters);
+        $lastVisitAt = $encounters[0]['visited_at'] ?? ($encounters[0]['started_at'] ?? null);
+        if ($historyQuery !== null) {
+            $visitAt = 'COALESCE(' . $db->protectIdentifiers('clinic_encounters.visited_at') . ', '
+                . $db->protectIdentifiers('clinic_encounters.started_at') . ')';
+            $summary = (clone $encounterQuery)
+                ->select('COUNT(*) AS total_visits, MAX(' . $visitAt . ') AS last_visit_at, '
+                    . 'SUM(CASE WHEN ' . $visitAt . ' >= ' . $db->escape($syWindow[0])
+                    . ' AND ' . $visitAt . ' < ' . $db->escape($syWindow[1])
+                    . ' THEN 1 ELSE 0 END) AS current_sy_visits', false)
+                ->get()->getRowArray();
+            $totalVisits = (int) ($summary['total_visits'] ?? 0);
+            $syVisits = (int) ($summary['current_sy_visits'] ?? 0);
+            $lastVisitAt = $summary['last_visit_at'] ?? null;
+            $complaint = 'TRIM(' . $db->protectIdentifiers('clinic_encounters.chief_complaint') . ')';
+            $complaints = (clone $encounterQuery)->select($complaint . ' AS label, COUNT(*) AS complaint_count', false)
+                ->where($complaint . " <> ''", null, false)->groupBy($complaint, false)
+                ->orderBy('complaint_count', 'DESC')->orderBy('MAX(' . $visitAt . ')', 'DESC', false)
+                ->orderBy('MAX(' . $db->protectIdentifiers('clinic_encounters.id') . ')', 'DESC', false)
+                ->get(5)->getResultArray();
+            foreach ($complaints as $row) {
+                $topComplaints[] = ['label' => $row['label'], 'count' => (int) $row['complaint_count']];
+            }
+        } else {
+            $complaintCounts = [];
+            foreach ($encounters as $enc) {
+                $ts = (string) ($enc['visited_at'] ?? $enc['started_at'] ?? '');
+                if ($ts >= $syWindow[0] && $ts < $syWindow[1]) {
+                    $syVisits++;
+                }
+                $label = trim((string) ($enc['chief_complaint'] ?? ''));
+                if ($label !== '') {
+                    $complaintCounts[$label] = ($complaintCounts[$label] ?? 0) + 1;
+                }
+            }
+            arsort($complaintCounts);
+            foreach (array_slice($complaintCounts, 0, 5, true) as $label => $cnt) {
+                $topComplaints[] = ['label' => $label, 'count' => $cnt];
+            }
         }
         $visitSummary = [
-            'total_visits'        => count($encounters),
+            'total_visits'        => $totalVisits,
             'current_sy_visits'   => $syVisits,
             'current_school_year' => $currentSy,
-            'last_visit_at'       => $encounters[0]['visited_at'] ?? ($encounters[0]['started_at'] ?? null),
+            'last_visit_at'       => $lastVisitAt,
             'top_complaints'      => $topComplaints,
         ];
 
         $labResults = [];
         if ($db->tableExists('clinic_lab_results')) {
-            $labResults = $db->table('clinic_lab_results l')
+            $labPage = $this->chartHistoryPage($db->table('clinic_lab_results l')
                 ->select('l.*, u.username AS recorded_by_name')
                 ->join('users u', 'u.id = l.recorded_by_user_id AND u.tenant_id = l.tenant_id', 'left')
                 ->where('l.tenant_id', $tenant)->where('l.person_id', $personId)->where('l.deleted_at', null)
-                ->orderBy('COALESCE(l.submitted_at, l.created_at)', 'DESC', false)->orderBy('l.id', 'DESC')
-                ->get()->getResultArray();
+                ->orderBy('COALESCE(l.submitted_at, l.created_at)', 'DESC', false)->orderBy('l.id', 'DESC'),
+                $historyPages['labs'] ?? null);
+            $labResults = $labPage['rows'];
+            if ($historyQuery !== null) {
+                $historyPagination['labs'] = $labPage['pagination'];
+            }
         }
         $enrollmentClearances = [];
         if ($db->tableExists('clinic_enrollment_clearances')) {
-            $enrollmentClearances = $db->table('clinic_enrollment_clearances c')
+            $clearancePage = $this->chartHistoryPage($db->table('clinic_enrollment_clearances c')
                 ->select('c.*, u.username AS cleared_by_name')
                 ->join('users u', 'u.id = c.cleared_by_user_id AND u.tenant_id = c.tenant_id', 'left')
                 ->where('c.tenant_id', $tenant)->where('c.person_id', $personId)->where('c.deleted_at', null)
-                ->orderBy('c.school_year', 'DESC')->orderBy('c.id', 'DESC')
-                ->get()->getResultArray();
+                ->orderBy('c.school_year', 'DESC')->orderBy('c.id', 'DESC'), $historyPages['clearances'] ?? null);
+            $enrollmentClearances = $clearancePage['rows'];
+            if ($historyQuery !== null) {
+                $historyPagination['clearances'] = $clearancePage['pagination'];
+            }
         }
         $isolationCases = [];
         if ($db->tableExists('clinic_isolation_cases')) {
-            $isolationCases = $db->table('clinic_isolation_cases i')
+            $isolationPage = $this->chartHistoryPage($db->table('clinic_isolation_cases i')
                 ->select('i.*, rep.username AS reported_by_name, clr.username AS cleared_by_name')
                 ->join('users rep', 'rep.id = i.reported_by_user_id AND rep.tenant_id = i.tenant_id', 'left')
                 ->join('users clr', 'clr.id = i.cleared_by_user_id AND clr.tenant_id = i.tenant_id', 'left')
                 ->where('i.tenant_id', $tenant)->where('i.person_id', $personId)->where('i.deleted_at', null)
-                ->orderBy('i.isolation_start_date', 'DESC')->orderBy('i.id', 'DESC')
-                ->get()->getResultArray();
+                ->orderBy('i.isolation_start_date', 'DESC')->orderBy('i.id', 'DESC'), $historyPages['isolation'] ?? null);
+            $isolationCases = $isolationPage['rows'];
+            if ($historyQuery !== null) {
+                $historyPagination['isolation'] = $isolationPage['pagination'];
+            }
         }
 
-        return [
+        $historyState = [];
+        if ($historyQuery !== null) {
+            $historyState = ['history_pagination' => $historyPagination, 'open_visit' => $openVisit];
+        }
+
+        return $historyState + [
             'person'                => $person,
             'student_profile'       => $studentProfile,
             'employee_profile'      => $employeeProfile,
@@ -199,6 +268,18 @@ final class PatientHistoryService
             'enrollment_clearances' => $enrollmentClearances,
             'isolation_cases'       => $isolationCases,
         ];
+    }
+
+    /** Counts the full scoped history before applying a staff cursor. */
+    private function chartHistoryPage(BaseBuilder $builder, ?TablePage $page): array
+    {
+        if ($page === null) {
+            return ['rows' => $builder->get()->getResultArray()];
+        }
+        $total = (clone $builder)->countAllResults();
+        $pagination = $page->metadata($total, $total);
+        $rows = $builder->get($page->perPage, ($pagination['page'] - 1) * $page->perPage)->getResultArray();
+        return compact('rows', 'pagination');
     }
 
     /**

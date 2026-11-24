@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\TablePage;
 use App\Services\AuthenticatedUser;
 use App\Services\DashboardCache;
 use App\Services\Facilities\BmgRotationService;
@@ -101,9 +102,12 @@ final class FacilitiesController extends BaseController
 
     public function unitView(int $id)
     {
-        return $this->respond(fn () => view('facilities/unit_detail', $this->rotation->unit($id)
-            + $this->batches->batchOverview($id) + $this->access()
-            + ['title' => 'Drum Operations', 'pageTitle' => 'Drum Operations']));
+        return $this->respond(function () use ($id) {
+            $query = $this->request->getGet();
+            return view('facilities/unit_detail', $this->rotation->unitPage($id, $query)
+                + $this->batches->batchOverviewPage($id, $query) + $this->access()
+                + ['title' => 'Drum Operations', 'pageTitle' => 'Drum Operations']);
+        });
     }
 
     public function storeUnit()
@@ -141,11 +145,11 @@ final class FacilitiesController extends BaseController
     public function saveSchedule(int $id)
     {
         return $this->respond(function () use ($id) {
-            $data = $this->input(['times', 'duration_seconds', 'pwm', 'enabled', 'expected_version']);
+            $data = $this->input(['times', 'rotations', 'pwm', 'enabled', 'expected_version']);
             if (isset($data['times']) && !is_array($data['times'])) { throw new InvalidArgumentException('Schedule times must be a list.'); }
             $data['times'] = array_values(array_filter($data['times'] ?? [], static fn ($time): bool => $time !== ''));
             $data['enabled'] ??= false;
-                        if (($data['pwm'] ?? null) === '') { $data['pwm'] = null; }
+            if (($data['pwm'] ?? null) === '') { $data['pwm'] = null; }
             $this->rotation->saveSchedule($id, $data);
             return $this->success('Schedule saved. Controller application must be confirmed separately.', $id);
         });
@@ -173,7 +177,7 @@ final class FacilitiesController extends BaseController
     public function command(int $id)
     {
         return $this->respond(function () use ($id) {
-            $result = $this->rotation->command($id, $this->input(['command', 'duration_seconds', 'expected_version']));
+            $result = $this->rotation->command($id, $this->input(['command', 'rotations', 'expected_version']));
             return $this->success('Command #' . $result['command_id'] . ' queued; motor execution is not yet confirmed.', $id);
         });
     }
@@ -233,6 +237,7 @@ final class FacilitiesController extends BaseController
         DashboardCache::forget('facilities.dashboard');
         $listOwner = $scope === 'list' && $this->request->getHeaderLine('X-Synapse-Refresh-Owner') === 'facilities.list';
         $target = site_url($listOwner || $unit < 1 ? '/facilities' : '/facilities/unit/' . $unit);
+        if ($scope === 'unit' && $unit > 0) { $target = $this->unitHistoryTarget($unit, $target); }
         if ($this->json()) {
             $payload = ['success' => true, 'message' => $message, 'redirect' => $target,
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]];
@@ -241,6 +246,46 @@ final class FacilitiesController extends BaseController
             return $this->response->setJSON($payload);
         }
         return redirect()->to($target)->with('success', $message)->setHeader('Cache-Control', 'private, no-store');
+    }
+
+    /**
+     * A refresh hint may retain this unit's read cursors, never its authority or
+     * a foreign destination. Invalid hints must not turn a committed write into an error.
+     */
+    private function unitHistoryTarget(int $unit, string $target): string
+    {
+        if ($this->request->getHeaderLine('X-Synapse-Refresh-Owner') !== 'facilities.unit.' . $unit) {
+            return $target;
+        }
+        $hint = $this->request->getHeaderLine('X-Synapse-Refresh-Url');
+        if ($hint === '' || strlen($hint) > 4096 || preg_match('/[\x00-\x20\x7F]/', $hint)) { return $target; }
+        $source = parse_url($hint);
+        $expected = parse_url($target);
+        if (!is_array($source) || !is_array($expected) || isset($source['user']) || isset($source['pass'])
+            || isset($source['fragment'])
+            || strtolower($source['scheme'] ?? '') !== strtolower($expected['scheme'] ?? '')
+            || strtolower($source['host'] ?? '') !== strtolower($expected['host'] ?? '')
+            || ($source['port'] ?? (strtolower($source['scheme'] ?? '') === 'https' ? 443 : 80))
+                !== ($expected['port'] ?? (strtolower($expected['scheme'] ?? '') === 'https' ? 443 : 80))
+            || ($source['path'] ?? '') !== ($expected['path'] ?? '')) {
+            return $target;
+        }
+        parse_str($source['query'] ?? '', $query);
+        $query = array_intersect_key($query, array_flip([
+            'commands_page', 'commands_per_page', 'runs_page', 'runs_per_page', 'batches_page', 'batches_per_page',
+        ]));
+        if ($query === []) { return $target; }
+        $cursors = [];
+        try {
+            foreach (['commands' => 20, 'runs' => 20, 'batches' => 50] as $kind => $default) {
+                $page = TablePage::forList($query, $kind . '_page', $kind . '_per_page', $default);
+                $cursors[$kind . '_page'] = $page->page;
+                $cursors[$kind . '_per_page'] = $page->perPage;
+            }
+        } catch (InvalidArgumentException) {
+            return $target;
+        }
+        return $target . '?' . http_build_query($cursors, '', '&', PHP_QUERY_RFC3986);
     }
 
     private function successRefresh(int $unit, string $scope, string $target): ?array

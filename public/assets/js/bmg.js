@@ -55,6 +55,8 @@
     const mutations = window.SynapseMutations;
     if (committed.has(form)) return;
 
+    const refreshRoot = form.closest('[data-refresh-owner]');
+    const refreshUrl = refreshRoot && facilitiesUrl(refreshRoot.dataset.refreshUrl);
     const data = new FormData(form);
     if (submitter?.name) data.append(submitter.name, submitter.value);
     const modal = form.closest('[data-bmg-modal]');
@@ -75,8 +77,9 @@
       const response = await fetch(url.href, {
         method: 'POST', body: data, credentials: 'same-origin', redirect: 'error',
         headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers(), ...(mutations ? { 'X-Synapse-Feedback': 'toast' } : {}),
-          ...(form.closest('[data-refresh-owner]')?.dataset.refreshOwner
-            ? { 'X-Synapse-Refresh-Owner': form.closest('[data-refresh-owner]').dataset.refreshOwner } : {}) }
+          ...(refreshRoot?.dataset.refreshOwner
+            ? { 'X-Synapse-Refresh-Owner': refreshRoot.dataset.refreshOwner,
+              ...(refreshUrl ? { 'X-Synapse-Refresh-Url': refreshUrl.href } : {}) } : {}) }
       });
       window.SynapseCsrf?.fromResponse(response);
       const payload = await response.json();
@@ -125,20 +128,78 @@
     }
   }
 
+  function formatTime12(hhmm) {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm || '');
+    if (!match) return '';
+    const hour = Number(match[1]);
+    return `${String(hour % 12 || 12).padStart(2, '0')}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`;
+  }
+  function createTimeRow(initialTime = '') {
+    const row = document.createElement('div');
+    row.className = 'd-flex align-items-end gap-2 mb-2';
+    row.setAttribute('data-bmg-time-row', '');
+    const id = `rotationTimeAdded${++timeId}`;
+    const display = formatTime12(initialTime);
+    row.innerHTML = `<div class="flex-grow-1"><label class="form-label" for="${id}" data-bmg-session-label>Start time</label><input id="${id}" class="form-control" type="text" data-timepicker data-target="#${id}Value" value="${display}" placeholder="hh:mm AM/PM" aria-label="Start time" autocomplete="off" required><input id="${id}Value" type="hidden" name="times[]" value="${initialTime}"></div><button class="btn btn-outline-secondary" type="button" data-bmg-remove-time aria-label="Remove start time">Remove</button>`;
+    return row;
+  }
+  function defaultSpacedTimes(count) {
+    const presets = {
+      1: ['08:00'],
+      2: ['08:00', '16:00'],
+      3: ['08:00', '12:00', '16:00'],
+      4: ['07:00', '11:00', '15:00', '19:00'],
+      5: ['06:00', '09:00', '12:00', '15:00', '18:00'],
+      6: ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00'],
+      7: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00'],
+      8: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'],
+    };
+    return presets[count] || presets[3];
+  }
   function refresh(form) {
-    const count = form.querySelectorAll('[data-bmg-time-row]').length;
-    form.querySelector('[data-bmg-add-time]').disabled = count >= 8;
-    form.querySelector('[data-bmg-time-count]').textContent = `${count} of 8 times`;
+    const rows = Array.from(form.querySelectorAll('[data-bmg-time-row]'));
+    const count = rows.length;
+    rows.forEach((row, index) => {
+      const label = row.querySelector('[data-bmg-session-label]');
+      if (label) label.textContent = `Session ${index + 1} start time`;
+    });
+    const sessionSelect = form.querySelector('[data-bmg-session-count]');
+    if (sessionSelect && count >= 1 && count <= 8 && sessionSelect.value !== String(count)) {
+      sessionSelect.dataset.bmgSyncing = '1';
+      sessionSelect.value = String(count);
+      sessionSelect.dispatchEvent(new Event('change', { bubbles: false }));
+      delete sessionSelect.dataset.bmgSyncing;
+    }
+    const addBtn = form.querySelector('[data-bmg-add-time]');
+    if (addBtn) addBtn.disabled = count >= 8;
+    const countEl = form.querySelector('[data-bmg-time-count]');
+    if (countEl) countEl.textContent = `${count} of 8 times`;
+    const panel = form.closest('#bmg-schedule') || form.parentElement;
+    const summaryEl = panel?.querySelector('[data-bmg-daily-summary]');
+    const targetEl = panel?.querySelector('[data-bmg-daily-target]');
+    const rotInput = form.querySelector('[name="rotations"]');
+    const rotations = Math.max(0, parseInt(rotInput?.value || '0', 10) || 0);
+    const total = count * rotations;
+    if (summaryEl) {
+      summaryEl.textContent = `${count} ${count === 1 ? 'session' : 'sessions'} × ${rotations} ${rotations === 1 ? 'rotation' : 'rotations'} = ${total} rotations / day`;
+    }
+    if (targetEl) {
+      targetEl.textContent = total === 21 ? '21 / 21 · Daily target met' : `${total} / 21 · Target 3 × 7`;
+      targetEl.classList.toggle('ce-status-emerald', total === 21);
+      targetEl.classList.toggle('ce-status-amber', total !== 21);
+    }
   }
   function validate(form) {
     const times = Array.from(form.querySelectorAll('[name="times[]"]'), input => input.value);
     const enabled = form.querySelector('[name="enabled"]');
-    const seconds = Number(form.querySelector('[name="duration_seconds"]').value);
+    const rotations = Number(form.querySelector('[name="rotations"]').value);
+    const windowSeconds = rotations * 6;
     const minutes = times.map(time => Number(time.slice(0, 2)) * 60 + Number(time.slice(3))).sort((a, b) => a - b);
     let error = '';
     if (times.length > 8 || new Set(times).size !== times.length) error = 'Use up to eight distinct start times.';
     else if (enabled.checked && !enabled.disabled && times.length === 0) error = 'Add at least one time to enable daily rotation.';
-    else if (minutes.length > 1 && minutes.some((minute, i) => ((minutes[(i + 1) % minutes.length] - minute + 1440) % 1440) * 60 < seconds)) error = 'Scheduled runs must not overlap, including across midnight.';
+    else if (!Number.isInteger(rotations) || rotations < 1 || rotations > 100) error = 'Rotations per run must be a whole number between 1 and 100.';
+    else if (minutes.length > 1 && minutes.some((minute, i) => ((minutes[(i + 1) % minutes.length] - minute + 1440) % 1440) * 60 < windowSeconds)) error = 'Scheduled runs must not overlap, including across midnight.';
     const box = form.querySelector('[data-bmg-schedule-error]');
     box.textContent = error;
     box.classList.toggle('d-none', !error);
@@ -157,7 +218,51 @@
       bootstrap.Modal.getOrCreateInstance(modal).show();
     }
   }
+  document.addEventListener('input', event => {
+    const form = event.target?.closest?.('[data-bmg-schedule]');
+    if (form && event.target.matches('[name="rotations"]')) refresh(form);
+  });
+  document.addEventListener('change', event => {
+    const select = event.target?.closest?.('[data-bmg-session-count]');
+    if (!select || select.dataset.bmgSyncing === '1') return;
+    const form = select.closest('[data-bmg-schedule]');
+    if (!form) return;
+    const desired = Math.min(8, Math.max(1, parseInt(select.value || '3', 10) || 3));
+    const container = form.querySelector('[data-bmg-times]');
+    const existing = Array.from(container.querySelectorAll('[name="times[]"]'), input => input.value);
+    const defaults = defaultSpacedTimes(desired);
+    container.replaceChildren();
+    for (let i = 0; i < desired; i++) {
+      const value = existing[i] && !defaults.slice(0, i).includes(existing[i]) ? existing[i] : defaults[i];
+      const row = createTimeRow(value);
+      container.append(row);
+      window.BalayDateTimePicker?.init(row);
+    }
+    const rotInput = form.querySelector('[name="rotations"]');
+    if (rotInput) {
+      rotInput.value = String(Math.max(1, Math.round(21 / desired)));
+    }
+    refresh(form);
+  });
   document.addEventListener('click', event => {
+    const preset = event.target.closest('[data-bmg-preset]');
+    if (preset) {
+      const form = preset.closest('[data-bmg-schedule]');
+      if (!form) return;
+      const times = (preset.getAttribute('data-bmg-preset') || '').split(',').map(s => s.trim()).filter(Boolean);
+      const container = form.querySelector('[data-bmg-times]');
+      container.replaceChildren();
+      times.slice(0, 8).forEach(time => {
+        const row = createTimeRow(time);
+        container.append(row);
+        window.BalayDateTimePicker?.init(row);
+      });
+      const rotInput = form.querySelector('[name="rotations"]');
+      const presetRot = preset.getAttribute('data-bmg-preset-rotations');
+      if (rotInput && presetRot) rotInput.value = presetRot;
+      refresh(form);
+      return;
+    }
     const add = event.target.closest('[data-bmg-add-time]');
     const remove = event.target.closest('[data-bmg-remove-time]');
     if (!add && !remove) return;
@@ -167,11 +272,7 @@
       remove.closest('[data-bmg-time-row]').remove();
       form.querySelector('[data-bmg-add-time]').focus();
     } else if (form.querySelectorAll('[data-bmg-time-row]').length < 8) {
-      const row = document.createElement('div');
-      row.className = 'd-flex align-items-end gap-2 mb-2';
-      row.setAttribute('data-bmg-time-row', '');
-      const id = `rotationTimeAdded${++timeId}`;
-      row.innerHTML = `<div class="flex-grow-1"><label class="form-label" for="${id}">Start time</label><input id="${id}" class="form-control" type="text" data-timepicker data-target="#${id}Value" placeholder="hh:mm AM/PM" aria-label="Start time" autocomplete="off" required><input id="${id}Value" type="hidden" name="times[]" value=""></div><button class="btn btn-outline-secondary" type="button" data-bmg-remove-time aria-label="Remove start time">Remove</button>`;
+      const row = createTimeRow('');
       form.querySelector('[data-bmg-times]').append(row);
       window.BalayDateTimePicker?.init(row);
       row.querySelector('input').focus();

@@ -49,6 +49,7 @@
   let emergencyObserver = null;
   let emergencyTimer = null;
   let isHydratingShell = false;
+  let hydrationAbort = null;
   let shellUnavailable = false;
   let preHiddenMain = null;
   let initializedListeners = false;
@@ -406,25 +407,51 @@
     emergencyTimer = window.setTimeout(stopEmergencyObserver, 15000);
   }
 
-  /** Replace #portal-pane-styles with incoming sub-view #page-styles, or clear for appointments. */
-  function syncPaneStyles(paneKey, incomingDoc, finalHref) {
-    const styleSlot = document.querySelector(STYLES_SELECTOR);
-    if (!styleSlot) return;
-
-    if (paneKey === 'appointments') {
-      styleSlot.replaceChildren();
-      return;
+  /** Older synthetic hosts may omit the helper, but must never mount unready CSS links. */
+  async function stagePageStyles(incomingDoc, finalHref, signal, clear = false) {
+    const helper = window.SynapsePageStyles;
+    if (helper?.collect && helper?.stage) {
+      const fragment = clear ? document.createDocumentFragment() : helper.collect(incomingDoc);
+      return await helper.stage(fragment, { signal, baseUrl: finalHref });
     }
 
-    const incomingStyles = incomingDoc.querySelector('#page-styles');
-    if (!incomingStyles || incomingStyles.querySelector('script')) {
-      styleSlot.replaceChildren();
-      return;
+    const fragment = document.createDocumentFragment();
+    const owner = clear ? null : incomingDoc.getElementById('page-styles');
+    let nodes = Array.from(owner?.childNodes || []);
+    if (owner?.matches('template[data-page-style-owner="head"]')) {
+      nodes = [];
+      let node = owner.nextSibling;
+      while (node && !node.matches?.('template[data-page-styles-end]')) {
+        nodes.push(node);
+        node = node.nextSibling;
+      }
+      if (!node) throw new Error('The portal styles could not be loaded. Your current view has been kept.');
     }
+    for (const node of nodes) {
+      if (node.nodeType === Node.COMMENT_NODE || (node.nodeType === Node.TEXT_NODE && !node.textContent.trim())) continue;
+      if (node.nodeType !== Node.ELEMENT_NODE || node.tagName !== 'STYLE' || /@import\b/i.test(node.textContent)) {
+        throw new Error('The portal styles could not be loaded. Your current view has been kept.');
+      }
+      const style = document.createElement('style');
+      style.textContent = node.textContent;
+      if (node.hasAttribute('media')) style.setAttribute('media', node.getAttribute('media'));
+      fragment.append(style);
+    }
+    let disposed = false;
+    return {
+      commit(target) {
+        if (disposed || signal?.aborted) throw new DOMException('Portal loading was interrupted.', 'AbortError');
+        if (!target || target.matches('template')) throw new Error('The portal style owner is unavailable.');
+        target.replaceChildren(fragment);
+        disposed = true;
+      },
+      dispose() { disposed = true; fragment.replaceChildren(); },
+    };
+  }
 
-    const imported = document.importNode(incomingStyles, true);
-    resolveUrls(imported, finalHref);
-    styleSlot.replaceChildren(...Array.from(imported.childNodes));
+  /** Stage incoming pane CSS without touching the still-live outgoing owner. */
+  async function syncPaneStyles(paneKey, incomingDoc, finalHref, signal) {
+    return await stagePageStyles(incomingDoc, finalHref, signal, paneKey === 'appointments');
   }
 
   /** Check whether an external script is already loaded in the host document. */
@@ -462,12 +489,21 @@
       if (rawSrc) {
         const resolved = urlFor(rawSrc, finalHref);
         if (!resolved || isScriptAlreadyLoaded(resolved.href)) continue;
-        await new Promise((resolve) => {
+        await new Promise((resolve, reject) => {
           const el = document.createElement('script');
+          const cleanup = () => {
+            el.onload = el.onerror = null;
+            signal.removeEventListener('abort', onAbort);
+          };
+          const onAbort = () => {
+            cleanup();
+            el.remove();
+            reject(new DOMException('Portal loading was interrupted.', 'AbortError'));
+          };
           el.src = resolved.href;
-          el.onload = () => resolve();
-          el.onerror = () => resolve();
-          container.appendChild(el);
+          el.onload = el.onerror = () => { cleanup(); resolve(); };
+          signal.addEventListener('abort', onAbort, { once: true });
+          if (signal.aborted) onAbort(); else container.appendChild(el);
         });
       } else {
         const text = (source.textContent || '').trim();
@@ -562,7 +598,7 @@
     return { fragment, scriptNodes };
   }
 
-  /** Swap the right-hand workspace pane using an already-parsed HTML Document. */
+  /** Swap the right-hand workspace pane only after the incoming CSS is ready. */
   async function applyDocumentToPane(pane, incomingDoc, finalHref, response, options = {}) {
     const finalUrl = urlFor(finalHref);
     if (!finalUrl) return false;
@@ -580,94 +616,93 @@
       return false;
     }
 
-    const payload = extractPanePayload(paneKey, incomingDoc, finalUrl.href);
-    if (!payload) return false;
-
-    if (paneKey === 'appointments') {
-      syncDockAndStripFromDocument(incomingDoc);
-    }
-
-    stopEmergencyObserver();
-
-    // Tear down sub-view listeners and widgets strictly inside #portal-workspace-pane.
-    document.dispatchEvent(
-      new CustomEvent('synapse:before-swap', {
-        detail: { url: finalUrl.href, root: pane, portalPaneSwap: true },
-      }),
-    );
-
-    clearPaneDirtyState(pane);
-    window.SynapseNavigation?.workspace?.dispose(pane);
-    syncPaneStyles(paneKey, incomingDoc, finalUrl.href);
-
-    const doSwap = () => {
-      window.Alpine?.destroyTree?.(pane);
-      pane.replaceChildren(payload.fragment);
-      window.Alpine?.initTree?.(pane);
-    };
-    if (window.Alpine?.mutateDom) {
-      window.Alpine.mutateDom(doSwap);
-    } else {
-      doSwap();
-    }
-
-    pane.dataset.activePane = paneKey;
-    pane.dataset.currentPaneUrl = finalUrl.href;
-    setActiveTile(paneKey, incomingDoc);
-    if (!options.skipCsrfSync) {
-      syncCsrfFromDocument(incomingDoc, response);
-    }
-
-    const historyMode = options.history || 'push';
-    if (options.navigation) {
-      if (!options.navigation.commitHistory(finalUrl.href, historyMode)) return false;
-    } else if (historyMode !== 'none' && window.SynapseNavigation?.updateHistory) {
-      window.SynapseNavigation.updateHistory(finalUrl.href, historyMode);
-    }
-
-    if (incomingDoc.title) {
-      document.title = incomingDoc.title;
-    }
-
-    if (payload.scriptNodes.length > 0) {
-      const abortCtrl = options.abortController || new AbortController();
-      await runPaneScripts(payload.scriptNodes, finalUrl.href, abortCtrl.signal);
-    }
-
-    window.htmx?.process?.(pane);
-    const heading = pane.querySelector('.portal-workspace-title, h1, h2, [aria-labelledby] [id]');
-    heading?.setAttribute('tabindex', '-1');
-    heading?.focus({ preventScroll: true });
-    document.dispatchEvent(
-      new CustomEvent('synapse:page-load', {
-        detail: { root: pane, url: finalUrl.href, portalPane: paneKey, popstate: Boolean(options.popEntry) },
-      }),
-    );
-    document.dispatchEvent(
-      new CustomEvent('synapse:page-ready', {
-        detail: { root: pane, url: finalUrl.href, portalPane: paneKey },
-      }),
-    );
-
-    const restoredScroll = options.popEntry?.scroll || (Array.isArray(options.scroll) ? options.scroll : null);
-    if (restoredScroll) {
-      window.scrollTo({ left: Number(restoredScroll[0]) || 0, top: Number(restoredScroll[1]) || 0, behavior: 'instant' });
-    } else if (options.scroll === 'top' || (historyMode === 'push' && !options.preserveScroll)) {
-      const paneTop = pane.getBoundingClientRect().top;
-      const isStackedViewport = window.matchMedia('(max-width: 1199.98px)').matches;
-      const shouldScrollToPane = options.scroll === 'top' || paneTop < 80 || (isStackedViewport && paneTop > 120);
-      if (shouldScrollToPane) {
-        window.scrollTo({
-          top: Math.max(0, window.scrollY + paneTop - 76),
-          behavior: 'smooth',
-        });
+    const payload = options.payload || extractPanePayload(paneKey, incomingDoc, finalUrl.href);
+    const styleSlot = pane.querySelector(STYLES_SELECTOR) || document.querySelector(STYLES_SELECTOR);
+    if (!payload || !styleSlot) return false;
+    const controller = options.abortController || new AbortController();
+    const signal = controller.signal;
+    const isCurrent = () => !signal.aborted && pane === getPane() && (!options.isCurrent || options.isCurrent());
+    let styles = options.styleTransaction || null;
+    try {
+      styles ||= await syncPaneStyles(paneKey, incomingDoc, finalUrl.href, signal);
+      if (!isCurrent()) return false;
+      // CSS can outlast the HTML GET. Recheck late edits and modal/save vetoes
+      // while both the outgoing form and its committed styles are still intact.
+      if (!options.skipLeaveCheck) {
+        const changed = options.approvedEdits !== (window.SynapseNavigation?.workspace?.editVersion ?? localEditVersion);
+        if (!await mayLeavePane(pane, finalUrl, { ...options, bypassDirtyCheck: options.bypassDirtyCheck || !changed })) return false;
+        if (!isCurrent()) return false;
       }
-    }
 
-    if (paneKey !== 'appointments' && !options.skipBadgeRefresh) {
-      scheduleBadgeRefresh();
+      if (paneKey === 'appointments') syncDockAndStripFromDocument(incomingDoc);
+      stopEmergencyObserver();
+      document.dispatchEvent(
+        new CustomEvent('synapse:before-swap', {
+          detail: { url: finalUrl.href, root: pane, portalPaneSwap: true },
+        }),
+      );
+
+      clearPaneDirtyState(pane);
+      window.SynapseNavigation?.workspace?.dispose(pane);
+      const doSwap = () => {
+        window.Alpine?.destroyTree?.(pane);
+        styles.commit(styleSlot);
+        pane.replaceChildren(payload.fragment);
+        if (!options.skipAlpineInit) window.Alpine?.initTree?.(pane);
+      };
+      if (window.Alpine?.mutateDom) window.Alpine.mutateDom(doSwap); else doSwap();
+
+      pane.dataset.activePane = paneKey;
+      pane.dataset.currentPaneUrl = finalUrl.href;
+      options.onSwap?.();
+      setActiveTile(paneKey, incomingDoc);
+      if (!options.skipCsrfSync) syncCsrfFromDocument(incomingDoc, response);
+
+      const historyMode = options.history || 'push';
+      if (options.navigation) {
+        if (!options.navigation.commitHistory(finalUrl.href, historyMode)) return false;
+      } else if (historyMode !== 'none' && window.SynapseNavigation?.updateHistory) {
+        window.SynapseNavigation.updateHistory(finalUrl.href, historyMode);
+      }
+      if (incomingDoc.title) document.title = incomingDoc.title;
+
+      // The committed styles remain owned by this pane throughout script setup.
+      if (payload.scriptNodes.length > 0) await runPaneScripts(payload.scriptNodes, finalUrl.href, signal);
+      if (signal.aborted || pane !== getPane() || pane.dataset.currentPaneUrl !== finalUrl.href ||
+          (options.isActive && !options.isActive())) return false;
+      options.beforePageLoad?.();
+
+      window.htmx?.process?.(pane);
+      const heading = pane.querySelector('.portal-workspace-title, h1, h2, [aria-labelledby] [id]');
+      heading?.setAttribute('tabindex', '-1');
+      heading?.focus({ preventScroll: true });
+      document.dispatchEvent(
+        new CustomEvent('synapse:page-load', {
+          detail: { root: pane, url: finalUrl.href, portalPane: paneKey, popstate: Boolean(options.popEntry) },
+        }),
+      );
+      document.dispatchEvent(
+        new CustomEvent('synapse:page-ready', {
+          detail: { root: pane, url: finalUrl.href, portalPane: paneKey },
+        }),
+      );
+
+      const restoredScroll = options.popEntry?.scroll || (Array.isArray(options.scroll) ? options.scroll : null);
+      if (restoredScroll) {
+        window.scrollTo({ left: Number(restoredScroll[0]) || 0, top: Number(restoredScroll[1]) || 0, behavior: 'instant' });
+      } else if (options.scroll === 'top' || (historyMode === 'push' && !options.preserveScroll)) {
+        const paneTop = pane.getBoundingClientRect().top;
+        const isStackedViewport = window.matchMedia('(max-width: 1199.98px)').matches;
+        const shouldScrollToPane = options.scroll === 'top' || paneTop < 80 || (isStackedViewport && paneTop > 120);
+        if (shouldScrollToPane) {
+          window.scrollTo({ top: Math.max(0, window.scrollY + paneTop - 76), behavior: 'smooth' });
+        }
+      }
+      if (paneKey !== 'appointments' && !options.skipBadgeRefresh) scheduleBadgeRefresh();
+      return true;
+    } finally {
+      styles?.dispose();
     }
-    return true;
   }
 
   /** Fetch and swap the right-hand workspace pane for GET links or POST form submissions. */
@@ -701,7 +736,7 @@
     activeRequest = controller;
     const isCurrent = () => activeRequest === controller && !controller.signal.aborted && pane === getPane() &&
       (!navigation || navigation.isCurrent());
-    let applied = false, restoreEntry = false, timedOut = false;
+    let applied = false, swapped = false, restoreEntry = false, timedOut = false;
     const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
 
     const previousKey = pane.dataset.activePane || 'appointments';
@@ -748,14 +783,6 @@
       const html = await response.text();
       if (!isCurrent()) return false;
       const incomingDoc = new DOMParser().parseFromString(html, 'text/html');
-      const changed = (bridge?.editVersion ?? localEditVersion) !== approvedEdits;
-      // The old pane remains usable during GET. Recheck late edits and newly opened
-      // modal/save vetoes before disposal, without a second prompt for the same draft.
-      if (!await mayLeavePane(pane, finalUrl, { ...options, bypassDirtyCheck: options.bypassDirtyCheck || !changed })) {
-        restoreEntry = true;
-        return false;
-      }
-      if (!isCurrent()) return false;
       const currentScope = document.body?.dataset.navigationScope;
       const incomingScope = incomingDoc.body?.dataset.navigationScope;
       const needsFullDocument = !classifyPortalPane(finalUrl, pane) ||
@@ -765,14 +792,19 @@
         history: options.history || 'push',
         abortController: controller,
         navigation,
+        approvedEdits,
+        isCurrent,
+        isActive: () => activeRequest === controller,
+        onSwap: () => { swapped = true; },
       });
-      restoreEntry = !applied && !needsFullDocument;
+      restoreEntry = !applied && !swapped && !needsFullDocument;
       return applied;
     } catch (error) {
       if (activeRequest !== controller || (controller.signal.aborted && !timedOut)) return false;
-      restoreEntry = true;
+      restoreEntry = !swapped;
       window.SynapseToast?.show(
-        timedOut ? 'Loading timed out. Your current portal view has been kept.' :
+        timedOut ? (swapped ? 'Portal setup timed out. Reload this view to finish loading.' :
+          'Loading timed out. Your current portal view has been kept.') :
           error?.message || 'Unable to load the selected section. Staying on current portal view.',
         { type: 'error', key: 'portal-workspace' },
       );
@@ -785,7 +817,7 @@
         pane.classList.remove('is-loading');
         pane.style.pointerEvents = previousPointerEvents;
         pane.removeAttribute('aria-busy');
-        if (!applied) setActiveTile(previousKey);
+        if (!applied && !swapped) setActiveTile(previousKey);
         if (restoreEntry && options.popEntry) bridge?.restoreHistory(options.popEntry);
       }
     }
@@ -1020,12 +1052,13 @@
   }
 
   /** Load any external #page-scripts declared on /portal that are not yet in host document. */
-  async function loadShellScripts(shellDoc, baseHref) {
+  async function loadShellScripts(shellDoc, baseHref, signal) {
     const container = document.getElementById('page-scripts');
     const incomingScripts = shellDoc?.querySelector('#page-scripts');
     if (!container || !incomingScripts) return;
 
     for (const source of incomingScripts.querySelectorAll('script[src]')) {
+      if (signal?.aborted) throw new DOMException('Portal hydration was interrupted.', 'AbortError');
       const resolved = urlFor(source.getAttribute('src'), baseHref);
       if (!resolved) continue;
       const targetPath = normalizeRoutePath(resolved.pathname);
@@ -1038,12 +1071,21 @@
       });
       if (alreadyPresent) continue;
 
-      await new Promise((resolve) => {
+      await new Promise((resolve, reject) => {
         const el = document.createElement('script');
+        const cleanup = () => {
+          el.onload = el.onerror = null;
+          signal?.removeEventListener('abort', onAbort);
+        };
+        const onAbort = () => {
+          cleanup();
+          el.remove();
+          reject(new DOMException('Portal hydration was interrupted.', 'AbortError'));
+        };
         el.src = resolved.href;
-        el.onload = () => resolve();
-        el.onerror = () => resolve();
-        container.appendChild(el);
+        el.onload = el.onerror = () => { cleanup(); resolve(); };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        if (signal?.aborted) onAbort(); else container.appendChild(el);
       });
     }
   }
@@ -1074,6 +1116,12 @@
 
     const { shellUrl, main } = target;
     const standaloneHref = location.href;
+    const controller = new AbortController();
+    hydrationAbort = controller;
+    const isCurrent = () => !controller.signal.aborted && !getPane() && location.href === standaloneHref &&
+      document.getElementById('main') === main && !document.body.classList.contains('is-navigating');
+    const timeout = window.setTimeout(() => controller.abort(), 20000);
+    let shellStyles = null, paneStyles = null;
     isHydratingShell = true;
     preHiddenMain = main;
     main.style.opacity = '0';
@@ -1087,13 +1135,23 @@
         prefetch.promise &&
         typeof prefetch.promise.then === 'function'
       );
-      let response = canUsePrefetch ? await prefetch.promise : null;
+      let response = null;
+      if (canUsePrefetch) {
+        response = await new Promise((resolve, reject) => {
+          const onAbort = () => reject(new DOMException('Portal hydration was interrupted.', 'AbortError'));
+          controller.signal.addEventListener('abort', onAbort, { once: true });
+          Promise.resolve(prefetch.promise).then(resolve, reject).finally(() => controller.signal.removeEventListener('abort', onAbort));
+          if (controller.signal.aborted) onAbort();
+        });
+      }
+      if (!isCurrent()) return false;
       if (!response) {
         response = await fetch(shellUrl.href, {
           method: 'GET',
           credentials: 'same-origin',
           cache: 'no-store',
           redirect: 'follow',
+          signal: controller.signal,
           headers: {
             Accept: 'text/html',
             'X-Synapse-Navigation': '1',
@@ -1101,6 +1159,7 @@
           },
         });
       }
+      if (!isCurrent()) return false;
       // /portal is only an optional shell for independently authorized sub-routes.
       // A denied shell must not replace the functioning standalone page.
       const finalShellUrl = urlFor(response.url || shellUrl.href);
@@ -1119,8 +1178,7 @@
       if (!/\btext\/html\b/i.test(contentType)) return false;
 
       const html = await response.text();
-      if (getPane() || location.href !== standaloneHref || document.getElementById('main') !== main ||
-          document.body.classList.contains('is-navigating')) return false;
+      if (!isCurrent()) return false;
 
       const shellDoc = new DOMParser().parseFromString(html, 'text/html');
       const currentScope = document.body?.dataset.navigationScope;
@@ -1162,56 +1220,65 @@
       const subViewHref = location.href;
       const savedScroll = { x: window.scrollX, y: window.scrollY };
 
-      document.dispatchEvent(
-        new CustomEvent('synapse:before-swap', {
-          detail: { url: finalShellUrl.href, root: liveMain },
-        }),
-      );
-      window.SynapseNavigation?.workspace?.dispose(liveMain);
-
+      const payload = extractPanePayload(target.paneKey, subViewDoc, subViewHref);
       const livePageStyles = document.getElementById('page-styles');
-      const shellPageStyles = shellDoc.querySelector('#page-styles');
-      if (livePageStyles && shellPageStyles && !shellPageStyles.querySelector('script')) {
-        const importedStyles = document.importNode(shellPageStyles, true);
-        resolveUrls(importedStyles, finalShellUrl.href);
-        livePageStyles.replaceChildren(...Array.from(importedStyles.childNodes));
-      }
-
       const importedMain = document.importNode(shellMain, true);
+      const importedPane = importedMain.querySelector(PANE_SELECTOR);
+      const importedStyleSlot = importedMain.querySelector(STYLES_SELECTOR);
+      if (!payload || !livePageStyles || !importedPane || !importedStyleSlot) return false;
       importedMain.querySelectorAll('script').forEach((s) => s.remove());
       resolveUrls(importedMain, finalShellUrl.href);
 
+      // Stage both owners before touching the live standalone editor. Loading
+      // shell factories also must not remove its CSS or expose an empty pane.
+      shellStyles = await stagePageStyles(shellDoc, finalShellUrl.href, controller.signal);
+      paneStyles = await syncPaneStyles(target.paneKey, subViewDoc, subViewHref, controller.signal);
+      if (!isCurrent()) return false;
+      await loadShellScripts(shellDoc, finalShellUrl.href, controller.signal);
+      if (!isCurrent()) return false;
+      if (window.SynapseNavigation?.hasUnsavedChanges(null, { within: [liveMain] })) return false;
+      const finalDetail = { url: standaloneHref, from: standaloneHref, root: liveMain, portalHydration: true };
+      if (!document.dispatchEvent(new CustomEvent('synapse:before-navigate', { detail: finalDetail, cancelable: true })) ||
+          finalDetail.dirty || !isCurrent()) return false;
+
+      document.dispatchEvent(
+        new CustomEvent('synapse:before-swap', {
+          detail: { url: finalShellUrl.href, root: liveMain, portalHydration: true },
+        }),
+      );
+      window.SynapseNavigation?.workspace?.dispose(liveMain);
       const doMount = () => {
         window.Alpine?.destroyTree?.(liveMain);
+        shellStyles.commit(livePageStyles);
+        // Prepared transactions let the complete subview mount in this same task.
         liveMain.replaceChildren(...Array.from(importedMain.childNodes));
-        window.Alpine?.initTree?.(liveMain);
       };
-      if (window.Alpine?.mutateDom) {
-        window.Alpine.mutateDom(doMount);
-      } else {
-        doMount();
-      }
-
-      await loadShellScripts(shellDoc, finalShellUrl.href);
+      if (window.Alpine?.mutateDom) window.Alpine.mutateDom(doMount); else doMount();
 
       const mountedPane = getPane();
       if (!mountedPane) return false;
-
       const applied = await applyDocumentToPane(mountedPane, subViewDoc, subViewHref, null, {
         history: 'none',
         preserveScroll: true,
         skipBadgeRefresh: true,
         skipCsrfSync: true,
+        skipLeaveCheck: true,
+        skipAlpineInit: true,
+        beforePageLoad: () => window.Alpine?.initTree?.(liveMain),
+        abortController: controller,
+        payload,
+        styleTransaction: paneStyles,
       });
-
       syncCsrfFromDocument(shellDoc, response);
-      if (savedScroll.x || savedScroll.y) {
-        window.scrollTo(savedScroll.x, savedScroll.y);
-      }
+      if (savedScroll.x || savedScroll.y) window.scrollTo(savedScroll.x, savedScroll.y);
       return applied;
     } catch (_) {
       return false;
     } finally {
+      clearTimeout(timeout);
+      shellStyles?.dispose();
+      paneStyles?.dispose();
+      if (hydrationAbort === controller) hydrationAbort = null;
       isHydratingShell = false;
       clearHydrationPreHide();
     }
@@ -1239,10 +1306,14 @@
         }
       });
 
+      window.addEventListener('pagehide', () => { activeRequest?.abort(); hydrationAbort?.abort(); });
       document.addEventListener('synapse:page-load', () => sync());
       document.addEventListener('synapse:before-swap', (event) => {
         const root = event.detail?.root;
         const pane = getPane();
+        if (hydrationAbort && !event.detail?.portalHydration && root?.contains?.(document.getElementById('main'))) {
+          hydrationAbort.abort();
+        }
         if (!root || !pane || (root !== pane && !root.contains(pane))) return;
         stopEmergencyObserver();
         clearTimeout(badgeRefreshTimer);

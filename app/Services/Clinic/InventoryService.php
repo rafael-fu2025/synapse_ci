@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Clinic;
 
 use App\Libraries\LikePattern;
+use App\Libraries\TablePage;
 use App\Services\CurrentTenant;
 use CodeIgniter\Database\BaseConnection;
 use Config\Database;
@@ -396,6 +397,19 @@ final class InventoryService
         if (!in_array($movementPageSize, [20, 25, 50, 100], true)) {
             throw new InvalidArgumentException('Invalid movement page size.', 422);
         }
+        return $this->detailRows($medicineId, $movementPage, $movementPageSize);
+    }
+
+    /** Web-only operation history; existing movement page/per_page and legacy details() stay independent. */
+    public function detailsPage(int $medicineId, array $query = []): array
+    {
+        $movements = TablePage::forList($query, 'page', 'per_page', 100);
+        $operations = TablePage::forList($query, 'operations_page', 'operations_per_page', 100);
+        return $this->detailRows($medicineId, $movements->page, $movements->perPage, $operations);
+    }
+
+    private function detailRows(int $medicineId, int $movementPage, int $movementPageSize, ?TablePage $operationsPage = null): array
+    {
         $medicine = $this->stockSummary($this->medicine($medicineId));
         $batches = $this->db->table('clinic_medicine_batches')->where('tenant_id', CurrentTenant::id())->where('medicine_id', $medicineId)->orderBy('expiration_date')->orderBy('id')->get()->getResultArray();
         $movementQuery = $this->db->table('stock_movements')->where('tenant_id', CurrentTenant::id())->where('medicine_id', $medicineId);
@@ -408,8 +422,20 @@ final class InventoryService
             'from' => $total === 0 ? 0 : ($movementPage - 1) * $movementPageSize + 1,
             'to' => min($movementPage * $movementPageSize, $total),
         ];
-        $operations = $this->db->query('SELECT o.*, actor.username AS actor_name, r.id AS reversed_by_operation_id, r.reversal_mode AS correction_mode FROM ' . $this->t('inventory_operations') . ' o LEFT JOIN ' . $this->t('users') . ' actor ON actor.id=o.actor_id AND actor.tenant_id=o.tenant_id LEFT JOIN ' . $this->t('inventory_operations') . ' r ON r.reversal_of=o.id AND r.tenant_id=o.tenant_id WHERE o.tenant_id=? AND o.medicine_id=? ORDER BY o.id DESC LIMIT 100', [CurrentTenant::id(), $medicineId])->getResultArray();
-        return ['medicine' => $medicine, 'batches' => $batches, 'movements' => $movements, 'operations' => $operations, 'movement_page' => $movementPage, 'movement_page_size' => $movementPageSize, 'movementPagination' => $pagination];
+        $operationLimit = 100;
+        $operationOffset = 0;
+        $operationMetadata = [];
+        if ($operationsPage !== null) {
+            // Count base operations, not actor/correction joins, over the full matching medicine scope.
+            $operationTotal = $this->db->table('inventory_operations')->where('tenant_id', CurrentTenant::id())
+                ->where('medicine_id', $medicineId)->countAllResults();
+            $operationPagination = $operationsPage->metadata($operationTotal, $operationTotal);
+            $operationLimit = $operationsPage->perPage;
+            $operationOffset = ($operationPagination['page'] - 1) * $operationLimit;
+            $operationMetadata['operationsPagination'] = $operationPagination;
+        }
+        $operations = $this->db->query('SELECT o.*, actor.username AS actor_name, r.id AS reversed_by_operation_id, r.reversal_mode AS correction_mode FROM ' . $this->t('inventory_operations') . ' o LEFT JOIN ' . $this->t('users') . ' actor ON actor.id=o.actor_id AND actor.tenant_id=o.tenant_id LEFT JOIN ' . $this->t('inventory_operations') . ' r ON r.reversal_of=o.id AND r.tenant_id=o.tenant_id WHERE o.tenant_id=? AND o.medicine_id=? ORDER BY o.id DESC LIMIT ' . $operationLimit . ' OFFSET ' . $operationOffset, [CurrentTenant::id(), $medicineId])->getResultArray();
+        return ['medicine' => $medicine, 'batches' => $batches, 'movements' => $movements, 'operations' => $operations, 'movement_page' => $movementPage, 'movement_page_size' => $movementPageSize, 'movementPagination' => $pagination] + $operationMetadata;
     }
 
     /** HTTP creates must supply a key; null is reserved for trusted internal catalog setup. Updates use version checks. */

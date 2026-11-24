@@ -1,0 +1,445 @@
+/* Multiple Intelligence registry; shared Guidance workstation surfaces and controls. */
+/* `hidden` makes the shell a scroll container and defeats the desktop sticky rail. */
+body:has(.gmi-workspace) :is(#main.main, .main-content) {
+  overflow-x: clip;
+}
+
+.gmi-workspace {
+  container: gmi-workspace / inline-size;
+}
+
+.gmi-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.gmi-assignment-rail,
+.gmi-ledger-area {
+  min-width: 0;
+}
+
+.gmi-ledger-area {
+  container: gmi-ledger / inline-size;
+}
+
+.gmi-ledger,
+.gmi-assignment-card {
+  overflow: visible;
+}
+
+.gmi-workspace .ce-card-header {
+  border-radius: 0.375rem 0.375rem 0 0;
+}
+
+.gmi-workspace .ce-card-title {
+  line-height: 1.5;
+}
+
+.gmi-workspace .ce-card-title i {
+  flex-shrink: 0;
+}
+
+.gmi-caption,
+.gmi-meta {
+  color: var(--ce-muted-fg);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.gmi-caption {
+  margin: 0.25rem 0 0;
+}
+
+.gmi-readonly {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--ce-muted-fg);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.gmi-readonly i {
+  flex-shrink: 0;
+}
+
+.gmi-assignment-form,
+.gmi-form-section,
+.gmi-recipient-panel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.gmi-assignment-form {
+  gap: 1rem;
+}
+
+.gmi-form-section {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.gmi-form-section + .gmi-form-section {
+  border-top: 1px solid var(--ce-hairline);
+  padding-top: 0.9rem;
+}
+
+.gmi-section-title {
+  float: none;
+  width: auto;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  color: var(--ce-muted-fg);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.gmi-mode-switch,
+.gmi-checklist-actions,
+.gmi-academic-fields,
+.gmi-year-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.gmi-checklist-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.gmi-checklist-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.gmi-academic-fields > div {
+  min-width: 0;
+}
+
+#main .gmi-workspace .gmi-mode-switch .btn,
+#main .gmi-workspace .gmi-result-actions .btn {
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.gmi-student-checklist,
+.gmi-cohort-options {
+  background: var(--ce-subtle);
+  border: 1px solid var(--ce-border);
+  border-radius: 0.25rem;
+}
+
+.gmi-student-checklist {
+  max-height: 250px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.gmi-workspace .gmi-check-option {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.65rem;
+  min-height: 40px;
+}
+
+.gmi-student-checklist .gmi-check-option + .gmi-check-option,
+.gmi-cohort-options .gmi-check-option + .gmi-check-option {
+  border-top: 1px solid var(--ce-hairline);
+}
+
+.gmi-workspace .gmi-check-option .form-check-input {
+  float: none;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15rem 0 0;
+  border-color: var(--ce-input-border);
+}
+
+.gmi-workspace .gmi-check-option .form-check-input:checked {
+  background-color: var(--ce-brand);
+  border-color: var(--ce-brand);
+}
+
+.gmi-workspace .gmi-check-option .form-check-input:focus-visible {
+  box-shadow: 0 0 0 3px var(--ce-brand-ring);
+}
+
+.gmi-check-option .form-check-label {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  color: var(--ce-fg-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.gmi-person-name {
+  color: var(--ce-fg);
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.gmi-workspace :is(.ce-tag, .ce-status-dot) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.gmi-active-assignment {
+  justify-self: start;
+  max-width: 100%;
+}
+
+.gmi-active-assignment .ce-status-dot {
+  font-size: 0.7rem;
+}
+
+.gmi-checklist-empty {
+  margin: 0;
+  padding: 1rem 0.7rem;
+  color: var(--ce-muted-fg);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.gmi-all-students {
+  background: var(--ce-subtle);
+  border: 1px solid var(--ce-border);
+  border-radius: 0.25rem;
+}
+
+.gmi-field-heading {
+  margin: 0 0 0.4rem;
+  color: var(--ce-fg);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.gmi-year-options {
+  gap: 0.25rem;
+}
+
+.gmi-filter-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(85px, 0.6fr) auto;
+  align-items: end;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--ce-border);
+}
+
+.gmi-filter-form > div {
+  min-width: 0;
+}
+
+.gmi-table-wrap {
+  overflow: visible;
+}
+
+.gmi-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.gmi-table col:nth-child(1) { width: 24%; }
+.gmi-table col:nth-child(2) { width: 14%; }
+.gmi-table col:nth-child(3) { width: 23%; }
+.gmi-table col:nth-child(4) { width: 14%; }
+.gmi-table col:nth-child(5) { width: 25%; }
+
+/* Beat case-specific nth-child constraints only inside this registry. */
+#main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > tbody > tr > td {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  background: transparent !important;
+  font-size: 0.8125rem;
+}
+
+#main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > thead > tr > th {
+  white-space: normal;
+}
+
+#main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > tbody > .gmi-program-group > td {
+  background: var(--ce-subtle) !important;
+  border-bottom: 1px solid var(--ce-border);
+  border-top: 1px solid var(--ce-border);
+}
+
+.gmi-group-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.gmi-group-heading h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.gmi-group-heading h3 i {
+  color: var(--ce-slate);
+  margin-right: 0.3rem;
+}
+
+.gmi-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.gmi-pagination {
+  padding: 0 1rem 1rem;
+  border-top: 1px solid var(--ce-border);
+}
+
+/* Shared partials use .synapse-pagination paint; retain legacy markup coverage. */
+.gmi-pagination .pagination:not(.synapse-pagination) .page-link {
+  background: var(--ce-card);
+  color: var(--ce-fg-secondary);
+  border-color: var(--ce-border);
+}
+
+.gmi-pagination .pagination:not(.synapse-pagination) .page-item.active .page-link {
+  background: var(--ce-brand);
+  color: #fff;
+  border-color: var(--ce-brand);
+}
+
+.gmi-pagination .pagination:not(.synapse-pagination) .page-item.disabled .page-link {
+  color: var(--ce-muted-fg);
+  background: var(--ce-subtle);
+}
+
+.gmi-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.4rem;
+  padding: 1.2rem 0.5rem;
+  margin: auto;
+  max-width: 400px;
+  color: var(--ce-muted-fg);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.gmi-empty-state > i {
+  color: var(--ce-slate);
+  font-size: 1.4rem;
+}
+
+@container gmi-workspace (min-width: 1080px) {
+  .gmi-grid-managed {
+    grid-template-columns: 340px minmax(0, 1fr);
+  }
+
+  /* Keep assignment controls independent while the longer registry ledger scrolls. */
+  .gmi-grid-managed .gmi-assignment-rail {
+    position: sticky;
+    top: calc(var(--header-height, 64px) + 1rem);
+    align-self: start;
+    max-height: calc(100dvh - var(--header-height, 64px) - 2rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+}
+
+@container gmi-ledger (max-width: 720px) {
+  .gmi-table colgroup {
+    display: none;
+  }
+
+  #main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  #main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table,
+  #main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > tbody {
+    display: block;
+  }
+
+  #main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > tbody > .gmi-assignment-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid var(--ce-border);
+  }
+
+  #main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > tbody > tr > td {
+    display: block;
+    padding: 0 !important;
+    margin: 0;
+    border: 0;
+  }
+
+  #main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table > tbody > .gmi-program-group {
+    display: block;
+    background: var(--ce-subtle);
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--ce-border);
+  }
+
+  #main section.guidance-ui.ce-workspace.gmi-workspace .table.ce-table.gmi-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.3rem;
+    color: var(--ce-muted-fg);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .gmi-assignment-row > td:first-child,
+  .gmi-assignment-row > td:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .gmi-filter-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container gmi-workspace (max-width: 360px) {
+  .gmi-academic-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gmi-workspace .ce-card-header,
+  .gmi-workspace .ce-card-body {
+    padding: 0.85rem;
+  }
+}

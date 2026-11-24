@@ -204,7 +204,7 @@ foreach (['event_type', 'action', 'entity_type', 'entity_id', 'actor_user_id', '
     <div class="adm-pagination-band d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
       <p class="small text-muted mb-0"><?= esc((string) count($events)) ?> events shown</p>
       <nav aria-label="Audit ledger pagination">
-        <ul class="pagination pagination-sm flex-wrap mb-0">
+        <ul class="pagination pagination-sm flex-wrap mb-0 synapse-pagination">
           <li class="page-item">
             <a class="page-link" href="<?= esc($pagination['first_url'], 'attr') ?>"><span class="d-none d-sm-inline">Latest matching events</span><span class="d-sm-none">First</span></a>
           </li>

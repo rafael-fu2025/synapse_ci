@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ai;
 
+use App\Libraries\TablePage;
 use App\Services\Realtime\AiInsightInvalidation;
 use Closure;
 use CodeIgniter\Database\BaseBuilder;
@@ -434,6 +435,28 @@ final class InsightStore
         });
     }
 
+    /** Web-only paging. Counts never materialize jobs or run retry checks off the selected page. */
+    public function listJobsPage(int $tenantId, string $unit, TablePage $page, ?string $analysis = null, ?string $profileRevision = null): array
+    {
+        return $this->read(function () use ($tenantId, $unit, $page, $analysis, $profileRevision): array {
+            // Fresh builders retain the snapshot alias after CI count queries reset alias state.
+            $query = fn (): BaseBuilder => $this->metadataTable('ai_jobs', $tenantId, $unit, $analysis);
+            $total = $query()->countAllResults();
+            $pending = $query()->whereIn('ai_jobs.status', ['queued', 'running'])->countAllResults();
+            $active = $profileRevision === null ? $pending
+                : $query()->whereIn('ai_jobs.status', ['queued', 'running'])->where('ai_jobs.profile_revision', $profileRevision)->countAllResults();
+            $pagination = $page->metadata($total, $total);
+            $rows = $query()->orderBy('ai_jobs.id', 'DESC')
+                ->limit($pagination['per_page'], ($pagination['page'] - 1) * $pagination['per_page'])->get()->getResultArray();
+            return [
+                'rows' => array_map(fn (array $row): array => $this->jobMetadata($row), $rows),
+                'pagination' => $pagination,
+                'counts' => ['total' => $total, 'active' => $active, 'pending' => $pending,
+                    'older_active' => $pending - $active, 'history' => $total - $active],
+            ];
+        });
+    }
+
     public function getInsight(int $tenantId, string $unit, int $id): array
     {
         return $this->read(function () use ($tenantId, $unit, $id): array {
@@ -468,6 +491,38 @@ final class InsightStore
             $rows = $this->metadataTable('ai_insights', $tenantId, $unit, $analysis)->where('ai_insights.expires_at >', $this->now())
                 ->where('ai_insights.payload !=', null)->orderBy('ai_insights.id', 'DESC')->limit(20)->get()->getResultArray();
             return array_map(fn (array $row): array => $this->insight($tenantId, $unit, $row), $rows);
+        });
+    }
+
+    /** Web-only paging. Retention, scope and status counts precede bounded decryption. */
+    public function listInsightsPage(int $tenantId, string $unit, TablePage $page, ?string $analysis = null, string $status = 'all'): array
+    {
+        if (!in_array($status, ['all', 'draft', 'reviewed', 'rejected'], true)) {
+            throw new AiFailure('invalid_request', 422);
+        }
+        return $this->read(function () use ($tenantId, $unit, $page, $analysis, $status): array {
+            $query = fn (): BaseBuilder => $this->metadataTable('ai_insights', $tenantId, $unit, $analysis)
+                ->where('ai_insights.expires_at >', $this->now())->where('ai_insights.payload !=', null);
+            $total = $query()->countAllResults();
+            $counts = ['total' => $total];
+            foreach (['draft', 'accepted', 'approved', 'rejected'] as $value) {
+                $counts[$value] = $query()->where('ai_insights.status', $value)->countAllResults();
+            }
+            $counts['reviewed'] = $counts['accepted'] + $counts['approved'];
+            $rowsQuery = $query();
+            if ($status === 'reviewed') {
+                $rowsQuery->whereIn('ai_insights.status', ['accepted', 'approved']);
+            } elseif ($status !== 'all') {
+                $rowsQuery->where('ai_insights.status', $status);
+            }
+            $filtered = $status === 'all' ? $total : $counts[$status];
+            $pagination = $page->metadata($total, $filtered);
+            $rows = $rowsQuery->orderBy('ai_insights.id', 'DESC')
+                ->limit($pagination['per_page'], ($pagination['page'] - 1) * $pagination['per_page'])->get()->getResultArray();
+            return [
+                'rows' => array_map(fn (array $row): array => $this->insight($tenantId, $unit, $row), $rows),
+                'pagination' => $pagination, 'counts' => $counts,
+            ];
         });
     }
 

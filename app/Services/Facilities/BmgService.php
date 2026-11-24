@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Facilities;
 
+use App\Libraries\TablePage;
 use App\Models\AuditEventModel;
 use App\Services\Audit\AuditService;
 use App\Services\AuthenticatedUser;
@@ -107,6 +108,25 @@ final class BmgService
                 ->orderBy('started_at', 'DESC')->orderBy('id', 'DESC')->get()->getRowArray(),
             'pastBatches' => $this->batches($tenant, $unitId)->whereNotIn('status', self::ACTIVE_STATUSES)
                 ->orderBy('started_at', 'DESC')->orderBy('id', 'DESC')->limit(50)->get()->getResultArray(),
+        ];
+    }
+
+    /** Web history pages never determine or hide the current active batch. */
+    public function batchOverviewPage(int $unitId, array $query = []): array
+    {
+        $actor = $this->actor('facilities.read');
+        $tenant = (int) $actor['tenant_id'];
+        $this->findUnit($tenant, $unitId);
+        $page = TablePage::forList($query, 'batches_page', 'batches_per_page', 50);
+        $history = $this->batches($tenant, $unitId)->whereNotIn('status', self::ACTIVE_STATUSES);
+        $total = (clone $history)->countAllResults();
+        $pagination = $page->metadata($total, $total);
+        return [
+            'activeBatch' => $this->batches($tenant, $unitId)->whereIn('status', self::ACTIVE_STATUSES)
+                ->orderBy('started_at', 'DESC')->orderBy('id', 'DESC')->get()->getRowArray(),
+            'pastBatches' => $history->orderBy('started_at', 'DESC')->orderBy('id', 'DESC')
+                ->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage)->get()->getResultArray(),
+            'batchesPagination' => $pagination,
         ];
     }
 

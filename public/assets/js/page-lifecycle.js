@@ -43,7 +43,9 @@
       control.addEventListener('change', () => {
         const form = control.form;
         if (!form) return;
-        for (const name of ['pending_page', 'scheduled_page']) {
+        const names = (control.dataset.resetPages || 'pending_page scheduled_page').split(/\s+/)
+          .filter(name => /^[a-z][a-z0-9_]{0,63}$/.test(name));
+        for (const name of names) {
           const field = form.elements.namedItem(name);
           if (field) field.value = '1';
         }

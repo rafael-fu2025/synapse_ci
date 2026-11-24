@@ -339,7 +339,7 @@
     const controller = new AbortController();
     pending = controller;
     const token = ++sequence;
-    let timedOut = false, destructive = false;
+    let timedOut = false, destructive = false, stagedStyles = null;
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
     failed = null;
     busy(true);
@@ -401,13 +401,24 @@
       if (!finalUrl.hash) finalUrl.hash = url.hash;
       const main = document.importNode(incoming.main, true);
       const pageScripts = document.importNode(incoming.pageScripts, false);
-      const pageStyles = document.importNode(incoming.pageStyles, true);
       resolveUrls(main, finalUrl.href);
-      resolveUrls(pageStyles, finalUrl.href);
       // Keep script execution controlled, including any legacy scripts embedded in main.
       const sources = [...Array.from(incoming.main.querySelectorAll('script')).filter(executable), ...incoming.pageScripts.querySelectorAll('script')];
       main.querySelectorAll('script').forEach(script => { if (executable(script)) script.remove(); });
-      if (pageStyles.querySelector('script')) { if (options.fallback !== false) fullNavigation(finalUrl.href); return false; }
+      let legacyStyles = null;
+      if (window.SynapsePageStyles) {
+        stagedStyles = await window.SynapsePageStyles.stage(window.SynapsePageStyles.collect(incomingDocument),
+          { signal: controller.signal, baseUrl: finalUrl.href });
+      } else {
+        // Old static fixtures/pages retain inline style ownership. New linked assets
+        // require the readiness owner rather than exposing unstyled content.
+        if (incoming.pageStyles.matches('template') || incoming.pageStyles.querySelector('script, link[rel="stylesheet"]')) {
+          if (options.fallback !== false) fullNavigation(finalUrl.href);
+          return false;
+        }
+        legacyStyles = document.importNode(incoming.pageStyles, true);
+        resolveUrls(legacyStyles, finalUrl.href);
+      }
       const csrf = csrfFromDocument(incomingDocument);
       // The outgoing page stays usable during a request. Do not discard edits
       // made after the user originally approved leaving it.
@@ -418,21 +429,25 @@
       if (token !== sequence || controller.signal.aborted) throw new Error('Navigation was interrupted.');
       const swapDetail = { ...detail, url: finalUrl.href, root: old.main, incoming: main };
       committing = true;
+      // Executable page scripts cannot be rolled back, but outgoing widgets and
+      // CSS remain intact while their network requests are still pending.
       destructive = true;
-      emit('synapse:before-swap', swapDetail);
-      dispose(old.main);
       old.pageScripts.replaceWith(pageScripts);
-      old.pageStyles.replaceWith(pageStyles);
       seedScripts();
       for (const source of sources) {
         await installScript(source, pageScripts, finalUrl.href, controller.signal);
         if (token !== sequence || controller.signal.aborted) throw new Error('Navigation was interrupted.');
       }
       if (controller.signal.aborted) throw new Error('Navigation timed out.');
+      if (editVersion !== approvedEdits && !await mayLeave(detail)) throw new Error('Navigation was cancelled after script preparation.');
+      emit('synapse:before-swap', swapDetail);
+      dispose(old.main);
 
       // Factories now exist before Alpine sees the inserted main through its mutation observer.
       const slot = document.createComment('navigation-main');
       old.main.before(slot);
+      if (stagedStyles) stagedStyles.commit(old.pageStyles);
+      else old.pageStyles.replaceWith(legacyStyles);
       if (window.htmx?.remove) window.htmx.remove(old.main);
       // HTMX removes synchronously by default and owns cleanup of its nested widgets.
       old.main.remove();
@@ -474,6 +489,7 @@
       announce(timedOut ? 'Loading timed out. Retry or open the full page.' : 'Unable to load the page. Your current page has been kept. Retry or open the full page.', url.href);
       return false;
     } finally {
+      stagedStyles?.dispose();
       clearTimeout(timeout);
       if (token === sequence) {
         pending = null;
@@ -583,7 +599,8 @@
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || restoring) return;
       const link = target?.closest('a[href]');
       if (!link || !link.matches('.sidebar-nav a.nav-link, a[data-navigation], #main a')) return;
-      if (link.closest('[data-navigation="false"], [data-app-modal], [data-app-modal-open], [data-app-modal-close], [data-table-page], [data-table-reset], [download], [target], [onclick], [hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [data-hx-get], [data-hx-post], [data-hx-put], [data-hx-patch], [data-hx-delete]')) return;
+      if (link.closest('[data-table-page], [data-table-reset]') && !link.hasAttribute('data-pagination-navigation')) return;
+      if (link.closest('[data-navigation="false"], [data-app-modal], [data-app-modal-open], [data-app-modal-close], [data-app-modal-page], [download], [target], [onclick], [hx-get], [hx-post], [hx-put], [hx-patch], [hx-delete], [data-hx-get], [data-hx-post], [data-hx-put], [data-hx-patch], [data-hx-delete]')) return;
       // Explicit account links can live inside tooltip wrappers, but never act as Bootstrap toggles.
       for (let ancestor = link; ancestor; ancestor = ancestor.parentElement) {
         if (ancestor.hasAttribute('data-bs-toggle') && (!link.hasAttribute('data-navigation') || ancestor === link || ancestor.dataset.bsToggle !== 'tooltip')) return;

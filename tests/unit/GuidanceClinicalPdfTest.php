@@ -4,13 +4,20 @@ declare(strict_types=1);
 
 namespace Tests\Unit;
 
+use App\Controllers\GuidanceClinicalController;
 use App\Services\Guidance\GuidanceDocumentService;
 use App\Services\Reporting\GuidanceFormLatex;
 use App\Services\Reporting\LatexReportCompiler;
 use CodeIgniter\Test\CIUnitTestCase;
+use Config\ReportExport;
+use PHPUnit\Framework\Attributes\DataProvider;
+use ReflectionClass;
+use ReflectionMethod;
 
 final class GuidanceClinicalPdfTest extends CIUnitTestCase
 {
+    private const PRIVATE_MARKER = 'SYNTHETIC CLINICAL PDF PRIVATE MARKER';
+
     private array $sampleInterviewData;
     private array $samplePsychosocialContactData;
     private array $sampleCounselingContactData;
@@ -320,9 +327,127 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('100\\%', $latex);
     }
 
+    public static function clinicalPdfForms(): iterable
+    {
+        yield 'psychosocial interview' => [
+            'renderPsychosocialInterviewPdf',
+            ['internal_key' => 'psychosocial_support_interview', 'form_code' => 'F-OGC-GPS-PIF-008-00'],
+            'sampleInterviewData',
+        ];
+        yield 'psychosocial contact' => [
+            'renderPsychosocialContactPdf',
+            ['internal_key' => 'psychosocial_support_contact', 'form_code' => 'F-OGC-GPS-PCF-008-00'],
+            'samplePsychosocialContactData',
+        ];
+        yield 'counseling contact' => [
+            'renderCounselingContactPdf',
+            ['internal_key' => 'counseling_contact_sheet', 'form_code' => 'F-OGC-GCS-CCF-009-00'],
+            'sampleCounselingContactData',
+        ];
+    }
+
+    #[DataProvider('clinicalPdfForms')]
+    public function testClinicalPdfRenderersPropagateCompilerFailure(
+        string $renderer,
+        array $definition,
+        string $dataProperty
+    ): void {
+        $service = (new ReflectionClass(GuidanceDocumentService::class))->newInstanceWithoutConstructor();
+        $snapshot = [
+            'definition' => $definition,
+            'data' => array_merge($this->{$dataProperty}, ['student_name' => self::PRIVATE_MARKER]),
+            'is_draft' => true,
+        ];
+
+        $this->assertCompilationUnavailable(static fn (): array => $service->{$renderer}($snapshot));
+    }
+
+    #[DataProvider('clinicalPdfForms')]
+    public function testClinicalDraftPreviewPropagatesCompilerFailure(
+        string $_renderer,
+        array $definition,
+        string $dataProperty
+    ): void {
+        $service = (new ReflectionClass(GuidanceDocumentService::class))->newInstanceWithoutConstructor();
+        $instance = ['id' => 10, 'instance_number' => 'SYNTHETIC-CLINICAL-DRAFT', 'status' => 'draft'];
+        $revision = ['revision_number' => '00', 'effectivity_date' => '2025-09-01'];
+        $data = array_merge($this->{$dataProperty}, ['student_name' => self::PRIVATE_MARKER]);
+
+        $this->assertCompilationUnavailable(
+            static fn (): array => $service->generateDraftPreview($instance, $definition, $revision, $data)
+        );
+    }
+
+    public function testClinicalPdfFailurePreserves503WithoutLeakingCompilerDetails(): void
+    {
+        $controller = (new ReflectionClass(GuidanceClinicalController::class))->newInstanceWithoutConstructor();
+        $privatePath = '/synthetic/private/clinical/report.tex';
+        $error = new \RuntimeException(self::PRIVATE_MARKER . ' at ' . $privatePath, 503,
+            new \RuntimeException('Synthetic private compiler diagnostic'));
+
+        [$status, $message] = (new ReflectionMethod($controller, 'safeFailure'))->invoke($controller, $error, 'clinical.pdf', 10);
+
+        $this->assertSame(503, $status);
+        $this->assertSame('PDF preview is unavailable because the document could not be generated. Please contact your administrator to check the PDF compiler and try again.', $message);
+        $this->assertStringNotContainsString(self::PRIVATE_MARKER, $message);
+        $this->assertStringNotContainsString($privatePath, $message);
+        $this->assertStringNotContainsString('Synthetic private compiler diagnostic', $message);
+    }
+
+    public function testClinicalNonPdfFailureKeepsGeneric503Message(): void
+    {
+        $controller = (new ReflectionClass(GuidanceClinicalController::class))->newInstanceWithoutConstructor();
+        $error = new \RuntimeException(self::PRIVATE_MARKER, 503);
+
+        [$status, $message] = (new ReflectionMethod($controller, 'safeFailure'))->invoke($controller, $error, 'clinical.save', 10);
+
+        $this->assertSame(503, $status);
+        $this->assertSame('Unable to complete the clinical form operation. Please try again later.', $message);
+        $this->assertStringNotContainsString(self::PRIVATE_MARKER, $message);
+    }
+
+    private function assertCompilationUnavailable(callable $render): void
+    {
+        $config = config(ReportExport::class);
+        $originalPdflatex = $config->pdflatex;
+        $temporaryDirectory = realpath(sys_get_temp_dir());
+        $this->assertIsString($temporaryDirectory);
+        $missingDirectory = $temporaryDirectory . DIRECTORY_SEPARATOR . 'guidance-clinical-missing-' . bin2hex(random_bytes(16));
+        $missingCompiler = $missingDirectory . DIRECTORY_SEPARATOR . 'pdflatex.exe';
+        $this->assertDirectoryDoesNotExist($missingDirectory);
+        $this->assertFileDoesNotExist($missingCompiler);
+
+        try {
+            $config->pdflatex = $missingCompiler;
+            try {
+                $render();
+            } catch (\RuntimeException $error) {
+                $this->assertSame(503, $error->getCode());
+                $this->assertSame('PDF report compilation is unavailable.', $error->getMessage());
+                $this->assertNull($error->getPrevious());
+                $this->assertStringNotContainsString(self::PRIVATE_MARKER, $error->getMessage());
+                $this->assertStringNotContainsString($missingCompiler, $error->getMessage());
+                return;
+            }
+
+            $this->fail('Compiler failure must propagate instead of returning placeholder PDF bytes.');
+        } finally {
+            $config->pdflatex = $originalPdflatex;
+        }
+    }
+
+    private function assertCompiledPdf(string $pdf, ?string $sha256 = null): void
+    {
+        $this->assertStringStartsWith('%PDF-', $pdf);
+        $this->assertMatchesRegularExpression('/startxref\s+[0-9]+\s+%%EOF\s*\z/', $pdf);
+        if ($sha256 !== null) {
+            $this->assertSame(hash('sha256', $pdf), $sha256);
+        }
+    }
+
     public function testGuidanceDocumentServiceIntegrationForClinicalForms(): void
     {
-        $service = new GuidanceDocumentService();
+        $service = (new ReflectionClass(GuidanceDocumentService::class))->newInstanceWithoutConstructor();
 
         // 1. Interview PDF helper
         $interviewRes = $service->renderPsychosocialInterviewPdf([
@@ -330,8 +455,7 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
             'is_draft' => true,
         ]);
         $this->assertNotEmpty($interviewRes['latex']);
-        $this->assertNotEmpty($interviewRes['pdf']);
-        $this->assertNotEmpty($interviewRes['pdf_sha256']);
+        $this->assertCompiledPdf($interviewRes['pdf'], $interviewRes['pdf_sha256']);
         $this->assertStringContainsString('F-OGC-GPS-PIF-008-00', $interviewRes['latex']);
 
         // 2. Psychosocial Contact PDF helper
@@ -340,8 +464,7 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
             'is_draft' => true,
         ]);
         $this->assertNotEmpty($pcfRes['latex']);
-        $this->assertNotEmpty($pcfRes['pdf']);
-        $this->assertNotEmpty($pcfRes['pdf_sha256']);
+        $this->assertCompiledPdf($pcfRes['pdf'], $pcfRes['pdf_sha256']);
         $this->assertStringContainsString('F-OGC-GPS-PCF-008-00', $pcfRes['latex']);
 
         // 3. Counseling Contact PDF helper
@@ -350,8 +473,7 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
             'is_draft' => true,
         ]);
         $this->assertNotEmpty($ccfRes['latex']);
-        $this->assertNotEmpty($ccfRes['pdf']);
-        $this->assertNotEmpty($ccfRes['pdf_sha256']);
+        $this->assertCompiledPdf($ccfRes['pdf'], $ccfRes['pdf_sha256']);
         $this->assertStringContainsString('F-OGC-GCS-CCF-009-00', $ccfRes['latex']);
 
         // 4. Draft preview routing
@@ -366,6 +488,7 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         );
         $this->assertStringContainsString('F-OGC-GPS-PIF-008-00', $pifPreview['latex']);
         $this->assertStringContainsString('DRAFT - PREVIEW ONLY', $pifPreview['latex']);
+        $this->assertCompiledPdf($pifPreview['pdf'], $pifPreview['pdf_sha256']);
 
         $pcfPreview = $service->generateDraftPreview(
             $instance,
@@ -374,6 +497,8 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
             $this->samplePsychosocialContactData
         );
         $this->assertStringContainsString('F-OGC-GPS-PCF-008-00', $pcfPreview['latex']);
+        $this->assertStringContainsString('DRAFT - PREVIEW ONLY', $pcfPreview['latex']);
+        $this->assertCompiledPdf($pcfPreview['pdf'], $pcfPreview['pdf_sha256']);
 
         $ccfPreview = $service->generateDraftPreview(
             $instance,
@@ -382,6 +507,8 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
             $this->sampleCounselingContactData
         );
         $this->assertStringContainsString('F-OGC-GCS-CCF-009-00', $ccfPreview['latex']);
+        $this->assertStringContainsString('DRAFT - PREVIEW ONLY', $ccfPreview['latex']);
+        $this->assertCompiledPdf($ccfPreview['pdf'], $ccfPreview['pdf_sha256']);
     }
 
     public function testGuidanceFormLatexRenderDelegation(): void
@@ -444,25 +571,8 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
             'attestation' => $this->authorAttestation,
         ]);
 
-        try {
-            $pdfPif = LatexReportCompiler::compile($pifTex);
-            $this->assertStringStartsWith('%PDF-', $pdfPif);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(\RuntimeException::class, $e);
-        }
-
-        try {
-            $pdfPcf = LatexReportCompiler::compile($pcfTex);
-            $this->assertStringStartsWith('%PDF-', $pdfPcf);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(\RuntimeException::class, $e);
-        }
-
-        try {
-            $pdfCcf = LatexReportCompiler::compile($ccfTex);
-            $this->assertStringStartsWith('%PDF-', $pdfCcf);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(\RuntimeException::class, $e);
-        }
+        $this->assertCompiledPdf(LatexReportCompiler::compile($pifTex));
+        $this->assertCompiledPdf(LatexReportCompiler::compile($pcfTex));
+        $this->assertCompiledPdf(LatexReportCompiler::compile($ccfTex));
     }
 }

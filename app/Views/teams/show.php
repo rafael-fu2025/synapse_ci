@@ -25,6 +25,13 @@ $creatorName = $name((int) $task['created_by_user_id']);
 $checkTotal = is_array($task['checklist']) ? count($task['checklist']) : 0;
 $checkDone = $checkTotal > 0 ? count(array_filter($task['checklist'], static fn(array $item): bool => !empty($item['done']))) : 0;
 $checkPct = $checkTotal > 0 ? (int) round(($checkDone / $checkTotal) * 100) : 0;
+$commentsPagination = $task['commentsPagination'] ?? ['page' => 1, 'per_page' => $task['comments_limit'], 'total' => $task['comments_total']];
+$activityPagination = $task['activityPagination'] ?? ['page' => 1, 'per_page' => $task['activity_limit'], 'total' => $task['activity_total']];
+$historyQuery = [
+    'comments_page' => $commentsPagination['page'], 'comments_per_page' => $commentsPagination['per_page'],
+    'activity_page' => $activityPagination['page'], 'activity_per_page' => $activityPagination['per_page'],
+];
+$detailUrl = $baseUrl . '/' . (int) $task['id'];
 ?>
 <div class="teams-detail tws-detail">
   <div class="tws-inspector-grid">
@@ -126,9 +133,6 @@ $checkPct = $checkTotal > 0 ? (int) round(($checkDone / $checkTotal) * 100) : 0;
             <div class="tws-inline-actions"><button type="submit" class="btn btn-primary">Post comment</button></div>
           </div>
         </form>
-        <?php if ($task['comments_total'] > $task['comments_limit']): ?>
-          <p class="tws-field-note">Showing the latest <?= $task['comments_limit'] ?> comments.</p>
-        <?php endif; ?>
         <div class="tws-discussion">
           <?php foreach ($task['comments'] as $comment):
               $author = $name((int) $comment['actor_user_id']);
@@ -143,12 +147,18 @@ $checkPct = $checkTotal > 0 ? (int) round(($checkDone / $checkTotal) * 100) : 0;
           <?php endforeach; ?>
           <?php if ($task['comments'] === []): ?><p class="tws-field-note mb-0">No comments yet.</p><?php endif; ?>
         </div>
+        <?= view('partials/table_pagination', [
+            'pagination' => $commentsPagination, 'filters' => [], 'baseUrl' => $detailUrl,
+            'paginationPageParam' => 'comments_page', 'paginationPerPageParam' => 'comments_per_page',
+            'paginationExtraQuery' => $historyQuery, 'paginationLabel' => 'Task discussion pages',
+            'paginationModalPages' => true,
+        ], ['saveData' => false]) ?>
       </section>
 
-      <details class="tws-activity">
+      <details class="tws-activity"<?= (int) $activityPagination['page'] > 1 ? ' open' : '' ?>>
         <summary>Activity history (<?= $task['activity_total'] ?>)</summary>
         <div class="tws-detail-section">
-          <p class="tws-field-note">Latest <?= $task['activity_limit'] ?> entries. All times Asia/Manila.</p>
+          <p class="tws-field-note">Newest entries first. All times Asia/Manila.</p>
           <ol class="teams-activity">
             <?php foreach ($task['activity'] as $entry): ?>
               <li>
@@ -158,6 +168,13 @@ $checkPct = $checkTotal > 0 ? (int) round(($checkDone / $checkTotal) * 100) : 0;
               </li>
             <?php endforeach; ?>
           </ol>
+          <?php if ($task['activity'] === []): ?><p class="tws-field-note mb-0">No activity yet.</p><?php endif; ?>
+          <?= view('partials/table_pagination', [
+              'pagination' => $activityPagination, 'filters' => [], 'baseUrl' => $detailUrl,
+              'paginationPageParam' => 'activity_page', 'paginationPerPageParam' => 'activity_per_page',
+              'paginationExtraQuery' => $historyQuery, 'paginationLabel' => 'Task activity pages',
+              'paginationModalPages' => true,
+          ], ['saveData' => false]) ?>
         </div>
       </details>
     </div>

@@ -116,7 +116,7 @@ final class BmgDeviceApiTest extends BmgIsolatedRouteCase
         foreach ([['get', 'schedule'], ['get', 'commands'], ['post', 'heartbeat'], ['post', 'runs'], ['post', 'commands/ack']] as [$method, $endpoint]) {
             $this->json($this->api($method, $endpoint, [], ''), 401);
             $valid = match ($endpoint) {
-                'runs' => ['run_uid' => 'unauthorized', 'motor_state' => 'stopped', 'duration_seconds' => 0,
+                'runs' => ['run_uid' => 'unauthorized', 'motor_state' => 'stopped', 'rotations' => 0,
                     'occurred_at' => '2020-01-02 00:00:00'],
                 'commands/ack' => ['command_id' => 1, 'status' => 'completed'],
                 'heartbeat' => ['rtc_valid' => false],
@@ -168,11 +168,11 @@ final class BmgDeviceApiTest extends BmgIsolatedRouteCase
     {
         $logs = $this->bmgDb->table('bmg_process_logs')->countAllResults();
         $legacy = $this->bmgDb->table('bmg_device_runs')->countAllResults();
-        $facts = ['run_uid' => 'isolated-run', 'motor_state' => 'turned_normal', 'duration_seconds' => 60,
+        $facts = ['run_uid' => 'isolated-run', 'motor_state' => 'turned_normal', 'rotations' => 7,
             'occurred_at' => (new \DateTimeImmutable('-1 minute', new \DateTimeZone('Asia/Manila')))->format('Y-m-d H:i:s')];
         $this->assertSame('created', $this->json($this->api('post', 'runs', $facts), 201)['status']);
         $this->assertSame('acknowledged', $this->json($this->api('post', 'runs', $facts))['status']);
-        $this->json($this->api('post', 'runs', array_replace($facts, ['duration_seconds' => 61])), 409);
+        $this->json($this->api('post', 'runs', array_replace($facts, ['rotations' => 8])), 409);
         $this->assertSame(1, $this->bmgDb->table('bmg_rotation_runs')->where('device_id', $this->device)->countAllResults());
         $this->assertSame($logs, $this->bmgDb->table('bmg_process_logs')->countAllResults());
         $this->assertSame($legacy, $this->bmgDb->table('bmg_device_runs')->countAllResults());

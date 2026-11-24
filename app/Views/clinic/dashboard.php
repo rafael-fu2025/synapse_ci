@@ -603,16 +603,28 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
 <script>
   (function() {
     'use strict';
+    var pageLoadHandler;
     function initClinicDashboard(root) {
       var scope = root && typeof root.querySelector === 'function' ? root : document;
       var activityTarget = scope.querySelector('#clinicActivityChart');
       var triageTarget = scope.querySelector('#clinicTriageChart');
-      if (typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
+      if (!activityTarget || typeof ApexCharts === 'undefined' || typeof ChartTheme === 'undefined') return;
+      // Initial DOM readiness and page-load can both fire; the chart and controls
+      // must share exactly one state closure for the lifetime of this target.
+      if (activityTarget.dataset.clinicDashboardBound === 'true') return;
+      activityTarget.dataset.clinicDashboardBound = 'true';
+      document.removeEventListener('synapse:page-load', pageLoadHandler);
+      var bindings = new AbortController();
+      var stopped = false;
+      var activeController = null;
+      var counterRaf = 0;
+      var requestToken = 0;
 
       var intakePanel = scope.querySelector('[data-cdc-intake-panel]');
       var intakeUrl = intakePanel ? (intakePanel.getAttribute('data-intake-url') || '') : '';
       var rangeSwitch = intakePanel ? intakePanel.querySelector('.cdc-range-switch') : null;
-      var monoFont = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
+      var numericFont = getComputedStyle(document.body).getPropertyValue('--default-font').trim()
+        || '"Nunito Sans", system-ui, sans-serif';
 
       var escapeHtml = function(value) {
         return String(value == null ? '' : value)
@@ -699,7 +711,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
               background: dark ? '#1b1b1f' : '#f8f9fb',
               fontSize: '10px',
               fontWeight: 700,
-              fontFamily: monoFont,
+              fontFamily: numericFont,
               padding: { left: 6, right: 6, top: 2, bottom: 2 }
             },
             position: 'left',
@@ -722,7 +734,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
               background: '#800000',
               fontSize: '10px',
               fontWeight: 700,
-              fontFamily: monoFont,
+              fontFamily: numericFont,
               padding: { left: 6, right: 6, top: 2, bottom: 2 }
             },
             text: 'PEAK ' + peakVal
@@ -792,7 +804,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
             labels: {
               rotate: 0,
               hideOverlappingLabels: true,
-              style: { colors: axisColor, fontSize: '11px', fontFamily: monoFont }
+              style: { colors: axisColor, fontSize: '11px', fontFamily: numericFont }
             }
           },
           yaxis: {
@@ -800,7 +812,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
             max: yMax,
             tickAmount: 5,
             labels: {
-              style: { colors: axisColor, fontSize: '11px', fontFamily: monoFont },
+              style: { colors: axisColor, fontSize: '11px', fontFamily: numericFont },
               formatter: function(val) { return String(Math.round(val)); }
             }
           },
@@ -831,8 +843,6 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
       ChartTheme.create(activityTarget, buildActivityOptions);
 
       if (intakePanel && rangeSwitch && intakeUrl && typeof window.fetch === 'function') {
-        var activeController = null;
-        var counterRaf = 0;
         var animateCounters = function(fromState, toState, totalEl, avgEl, peakEl) {
           if (counterRaf) {
             cancelAnimationFrame(counterRaf);
@@ -937,21 +947,10 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
           setIntakeError('');
           syncAddressRange(intakeState.rangeKey);
 
-          var chartInst = (typeof ApexCharts.getChartByID === 'function')
-            ? ApexCharts.getChartByID(activityChartId)
-            : null;
-          if (chartInst && typeof chartInst.updateOptions === 'function') {
-            var nextOpts = buildActivityOptions(ChartTheme.tokens());
-            var targetWidth = activityTarget ? Math.floor(activityTarget.clientWidth) : 0;
-            if (targetWidth > 32) {
-              nextOpts.chart.width = targetWidth;
-            }
-            nextOpts.chart.redrawOnParentResize = false;
-            nextOpts.chart.redrawOnWindowResize = false;
-            chartInst.updateOptions(nextOpts, true, !reducedMotion, false);
-          } else {
-            ChartTheme.refresh();
-          }
+          // ChartTheme owns this target and serializes data refreshes with its
+          // pending initial render, resize and theme updates. Do not race it with
+          // a second direct ApexCharts update or resolve a stale global chart ID.
+          ChartTheme.refresh(activityTarget, !reducedMotion);
         };
 
         rangeSwitch.addEventListener('click', function(event) {
@@ -963,7 +962,9 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
 
           event.preventDefault();
           var nextRange = link.getAttribute('data-cdc-range') || '7d';
+          if (stopped || !activityTarget.isConnected || !['7d', '30d', 'sy'].includes(nextRange)) return;
           if (nextRange === intakeState.rangeKey && !activeController) return;
+          var token = ++requestToken;
 
           if (activeController) {
             activeController.abort();
@@ -991,12 +992,14 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
           fetch(requestUrl, {
             method: 'GET',
             credentials: 'same-origin',
+            cache: 'no-store',
             headers: {
               'Accept': 'application/json',
               'X-Requested-With': 'XMLHttpRequest'
             },
             signal: controller ? controller.signal : undefined
           }).then(function(response) {
+            if (stopped || token !== requestToken || !activityTarget.isConnected || (controller && controller.signal.aborted)) return null;
             if (window.SynapseCsrf && window.SynapseCsrf.fromResponse(response)) {
               return null;
             }
@@ -1009,39 +1012,42 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
             }
             return response.json();
           }).then(function(data) {
-            if (!data || (controller && controller.signal.aborted)) return;
-            if (!Array.isArray(data.series) || !Array.isArray(data.days)) {
+            if (!data || stopped || token !== requestToken || !activityTarget.isConnected || (controller && controller.signal.aborted)) return;
+            if (data.rangeKey !== nextRange || !Array.isArray(data.series) || !Array.isArray(data.days) || data.series.length !== data.days.length) {
               throw new Error('Invalid payload');
             }
             seriesCache[nextRange] = data;
             applyIntakePayload(data);
           }).catch(function(err) {
-            if (err && err.name === 'AbortError') return;
+            if (stopped || token !== requestToken || !activityTarget.isConnected || (err && err.name === 'AbortError')) return;
             setActiveRangeButton(previousRange);
             setIntakeError('Unable to update timeframe right now. Please try again.');
           }).finally(function() {
-            if (activeController === controller) {
+            if (!stopped && token === requestToken && activeController === controller) {
               activeController = null;
               intakePanel.classList.remove('is-loading');
               intakePanel.removeAttribute('aria-busy');
             }
           });
-        });
-
-        document.addEventListener('synapse:before-swap', function(event) {
-          var swapRoot = event && event.detail && event.detail.root;
-          if (!swapRoot || swapRoot === intakePanel || swapRoot.contains(intakePanel)) {
-            if (activeController) {
-              activeController.abort();
-              activeController = null;
-            }
-            if (counterRaf) {
-              cancelAnimationFrame(counterRaf);
-              counterRaf = 0;
-            }
-          }
-        }, { once: true });
+        }, { signal: bindings.signal });
       }
+
+      document.addEventListener('synapse:before-swap', function(event) {
+        var swapRoot = event && event.detail && event.detail.root;
+        if (!swapRoot || (swapRoot !== activityTarget && !swapRoot.contains(activityTarget))) return;
+        stopped = true;
+        ++requestToken;
+        if (activeController) {
+          activeController.abort();
+          activeController = null;
+        }
+        if (counterRaf) {
+          cancelAnimationFrame(counterRaf);
+          counterRaf = 0;
+        }
+        bindings.abort();
+        delete activityTarget.dataset.clinicDashboardBound;
+      }, { signal: bindings.signal });
 
       ChartTheme.create(triageTarget, function(t) {
         var dark = ChartTheme.isDark();
@@ -1081,7 +1087,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
                     show: true,
                     fontSize: '25px',
                     fontWeight: 700,
-                    fontFamily: monoFont,
+                    fontFamily: numericFont,
                     color: headingColor,
                     offsetY: -12,
                     formatter: function(val) { return totalTriage === 0 ? '0' : String(val); }
@@ -1130,6 +1136,10 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
       ChartTheme.initialize();
     }
 
+    pageLoadHandler = function(event) {
+      initClinicDashboard(event && event.detail && event.detail.root);
+    };
+    document.addEventListener('synapse:page-load', pageLoadHandler);
     if (!document.body.classList.contains('is-navigating')) {
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() { initClinicDashboard(document); }, { once: true });
@@ -1137,9 +1147,6 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
         initClinicDashboard(document);
       }
     }
-    document.addEventListener('synapse:page-load', function(event) {
-      initClinicDashboard(event && event.detail && event.detail.root);
-    }, { once: true });
   })();
 </script>
 <?= $this->endSection() ?>

@@ -31,7 +31,7 @@
   --q-crimson: #b91c1c;
   --q-sky: #0369a1;
   --q-slate: #475569;
-  --q-mono: var(--mono-font, ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace);
+  --q-mono: var(--mono-font, "Courier New", Courier, monospace);
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) {

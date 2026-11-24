@@ -43,7 +43,7 @@ final class StaffListPaginationTest extends CIUnitTestCase
             'permissions' => 'id INTEGER PRIMARY KEY, code TEXT',
             'role_permissions' => 'role TEXT, permission_id INTEGER',
             'department_staff' => 'id INTEGER PRIMARY KEY, tenant_id INTEGER, person_id INTEGER, unit TEXT',
-            'clinic_encounters' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, person_id INTEGER, attending_user_id INTEGER, status TEXT, started_at TEXT, deleted_at TEXT',
+            'clinic_encounters' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, person_id INTEGER, attending_user_id INTEGER, encoded_by_user_id INTEGER, status TEXT, started_at TEXT, visited_at TEXT, chief_complaint TEXT, complaint_category TEXT, disposition TEXT, deleted_at TEXT',
             'appointments' => 'id INTEGER PRIMARY KEY AUTOINCREMENT, tenant_id INTEGER, person_id INTEGER, provider_user_id INTEGER, staff_assignment_id INTEGER, unit TEXT, status TEXT, local_date TEXT, starts_at TEXT, created_at TEXT, deleted_at TEXT',
         ] as $table => $columns) {
             $this->fixture->query('CREATE TABLE ' . $table . ' (' . $columns . ')');
@@ -250,9 +250,9 @@ final class StaffListPaginationTest extends CIUnitTestCase
             ]);
             $this->assertStringContainsString('Showing 21–40 of 61', $html);
             $this->assertStringContainsString('Showing 41–60 of 81', $html);
-            $this->assertStringContainsString('badge bg-light text-muted border">61</span>', $html);
-                        $this->assertStringContainsString('data-datepicker-counts-url=', $html);
-                        $this->assertStringContainsString('/' . $unit . '/appointments/calendar-counts', html_entity_decode($html, ENT_QUOTES | ENT_HTML5));
+            $this->assertCount(1, $this->xpath($html)->query('//*[@data-filter-region="requests"]//span[normalize-space(.)="61"]'));
+            $this->assertStringContainsString('data-datepicker-counts-url=', $html);
+            $this->assertStringContainsString('/' . $unit . '/appointments/calendar-counts', html_entity_decode($html, ENT_QUOTES | ENT_HTML5));
             $xpath = $this->xpath($html);
             foreach (['requests' => ['pending_page', 'scheduled_page', '3'], 'schedule' => ['scheduled_page', 'pending_page', '2']] as $region => [$own, $other, $cursor]) {
                 $footers = $xpath->query('//*[@data-filter-region="' . $region . '"]//*[@data-table-pagination]');
