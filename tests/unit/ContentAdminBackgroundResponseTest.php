@@ -400,12 +400,22 @@ final class ContentAdminBackgroundResponseTest extends CIUnitTestCase
         foreach ($expected as $view => $actions) {
             $source = file_get_contents(APPPATH . 'Views/' . $view);
 
-            $marked = array_values(array_filter(explode("\n", $source), static fn ($line) => str_contains($line, 'data-background-submit')));
+            preg_match_all('~<form\b.*?</form>~s', $source, $matches);
+            $marked = array_values(array_filter($matches[0], static fn ($form) => str_contains($form, 'data-background-submit')));
             self::assertCount(count($actions), $marked, $view);
             foreach ($actions as $index => $action) {
                 self::assertStringContainsString('/' . $action, $marked[$index]);
                 self::assertStringNotContainsString('data-modal-submit', $marked[$index]);
-                if (in_array($action, ['publish', 'archive', 'close'], true)) self::assertStringContainsString('data-confirm=', $marked[$index]);
+                if (in_array($action, ['publish', 'close'], true)) {
+                    self::assertStringContainsString('data-confirm=', $marked[$index]);
+                } elseif ($action === 'archive') {
+                    self::assertTrue(
+                        str_contains($marked[$index], 'data-confirm=')
+                        || (str_contains($marked[$index], 'data-archive-async="archive"')
+                            && str_contains($marked[$index], 'data-archive-undo-url=')),
+                        $view
+                    );
+                }
                 if (($view === 'announcements/index.php') || $view === 'question_bank/index.php') self::assertStringContainsString('name="version"', $marked[$index]);
             }
             self::assertStringContainsString('csrf_field()', $source);

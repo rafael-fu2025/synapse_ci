@@ -744,7 +744,7 @@ final class EncounterService
         ])));
         $userMap = [];
         if ($userIds !== []) {
-            foreach ($this->db->table('users')->select('id, username')->whereIn('id', $userIds)->get()->getResultArray() as $uRow) {
+            foreach ($this->db->table('users')->select('id, username')->where('tenant_id', $tenant)->whereIn('id', $userIds)->get()->getResultArray() as $uRow) {
                 $userMap[(int) $uRow['id']] = $uRow['username'];
             }
         }

@@ -81,7 +81,7 @@ final class AiHttpTest extends CIUnitTestCase
         $request->setHeader('Accept', 'application/json');
         $request->setHeader('Content-Type', $contentType);
         $request->setGlobal('get', $get);
-        $request->setGlobal('post', [csrf_token() => csrf_hash()] + $post);
+        $request->setGlobal('post', strtoupper($method) === 'GET' ? $post : [csrf_token() => csrf_hash()] + $post);
         Services::injectMock('request', $request);
         $response = new Response(config('App'));
         Services::injectMock('response', $response);

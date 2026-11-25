@@ -384,8 +384,18 @@ final class BackendRoleAuthorizationTest extends CIUnitTestCase
                 $result = $this->requestAs('counsellor', $method, $path);
                 $result->assertStatus(403);
                 $this->assertStringContainsString('another counselor', $result->getBody());
-                foreach (['superadmin', 'guidance_admin', 'guidance_supervisor'] as $role) {
-                    $this->assertNull($this->boundary($role, $method, $path));
+                if ($method === 'GET') {
+                    foreach (['superadmin', 'guidance_admin', 'guidance_supervisor'] as $role) {
+                        $this->assertNull($this->boundary($role, $method, $path));
+                    }
+                } else {
+                    // Case mutations stay scoped to the assigned owner ($owner = guidance_admin).
+                    $this->assertNull($this->boundary('guidance_admin', $method, $path));
+                    foreach (['superadmin', 'guidance_supervisor'] as $role) {
+                        $denied = $this->requestAs($role, $method, $path);
+                        $denied->assertStatus(403);
+                        $this->assertStringContainsString('another counselor', $denied->getBody());
+                    }
                 }
             }
         }

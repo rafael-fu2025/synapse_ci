@@ -632,7 +632,7 @@ if (!empty($diagnostics['misLastSyncedAt'])) {
     'employeesCount' => (int) $employeesCount,
     'roleLabels' => array_map(static fn ($k) => str_replace('Bmg', 'BMG', ucwords(str_replace('_', ' ', (string) $k))), array_keys($privilegedRoles)),
     'roleCounts' => array_map('intval', array_values($privilegedRoles)),
-    'canReadAudit' => $canReadAudit,
+    'hasLedger' => $canReadAudit,
 ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?></script>
 <script src="<?= esc(base_url('assets/js/admin-dashboard.js') . '?v=' . ((defined('FCPATH') ? @filemtime(FCPATH . 'assets/js/admin-dashboard.js') : false) ?: 1), 'attr') ?>"></script>
 <?= $this->endSection() ?>

@@ -100,7 +100,7 @@ final class ReferralEncounterAuthorizationTest extends CIUnitTestCase
         Events::on('DBQuery', $listener);
         try {
             try {
-                $this->service->createReferral($data, $actor);
+                $this->service->createReferral($data, $actor ?? $this->identity());
                 self::fail('Expected referral rejection.');
             } catch (RuntimeException $exception) {
                 self::assertSame($code, $exception->getCode(), $exception->getMessage());
@@ -212,7 +212,7 @@ final class ReferralEncounterAuthorizationTest extends CIUnitTestCase
                 // Invalid issuer IDs fail even before the first identity query.
                 if ($field === 'issuer_user_id') {
                     try {
-                        $this->service->createReferral(array_replace($this->data(), [$field => $invalid]));
+                        $this->service->createReferral(array_replace($this->data(), [$field => $invalid]), $this->identity());
                         self::fail('Expected positive ID validation.');
                     } catch (RuntimeException $exception) {
                         self::assertSame(422, $exception->getCode());
@@ -237,16 +237,24 @@ final class ReferralEncounterAuthorizationTest extends CIUnitTestCase
         $method = new ReflectionMethod(ReferralService::class, 'createReferral');
         $source = implode('', array_slice(file($method->getFileName()), $method->getStartLine() - 1,
             $method->getEndLine() - $method->getStartLine() + 1));
+        $txMethod = new ReflectionMethod(ReferralService::class, 'transaction');
+        $txSource = implode('', array_slice(file($txMethod->getFileName()), $txMethod->getStartLine() - 1,
+            $txMethod->getEndLine() - $txMethod->getStartLine() + 1));
+        $mutex = strpos($txSource, '$this->referralModel->lockTenant();');
+        $invoke = strpos($txSource, '$result = $operation($notifications);');
+        self::assertNotFalse($mutex);
+        self::assertNotFalse($invoke);
+        self::assertTrue($mutex < $invoke);
+
         $guard = '$this->authorize($fresh, \'clinic.encounters.read\', \'clinic\');';
         self::assertSame(2, substr_count($source, $guard));
         $upfront = strpos($source, $guard);
         $transaction = strpos($source, 'return $this->transaction(');
-        $mutex = strpos($source, '$this->referralModel->lockTenant();');
-        $actor = strpos($source, '$fresh = $this->actor(', $mutex);
-        $recheck = strpos($source, $guard, $mutex);
+        $actor = strpos($source, '$fresh = $this->actor(', $transaction);
+        $recheck = strpos($source, $guard, $transaction);
         $lookup = strpos($source, 'SELECT * FROM');
-        foreach ([$upfront, $transaction, $mutex, $actor, $recheck, $lookup] as $position) self::assertNotFalse($position);
-        self::assertTrue($upfront < $transaction && $transaction < $mutex && $mutex < $actor
+        foreach ([$upfront, $transaction, $actor, $recheck, $lookup] as $position) self::assertNotFalse($position);
+        self::assertTrue($upfront < $transaction && $transaction < $actor
             && $actor < $recheck && $recheck < $lookup);
     }
 }

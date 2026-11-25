@@ -334,9 +334,10 @@ test('permission rows expose labels, state, source reason, and unsafe grant revo
   const formLocator = form(h, 'access').filter({ has: h.page.locator('[name="role"][value="counsellor"]') })
     .filter({ has: h.page.locator('[name="permission"][value="ai.insights.generate"]') });
   const row = formLocator.locator('xpath=ancestor::*[@data-ai-permission-row]');
-  assert.equal(await row.locator('.ai-settings-permission-title').textContent(), 'Generate insights');
-  assert.equal(await row.locator('[data-ai-permission-state]').textContent(), 'Granted');
-  assert.match(await row.locator('[data-ai-source-reason]').textContent(), /cannot enable generation.*revocable/);
+  assert.equal(await row.getAttribute('data-label'), 'Generate');
+  assert.equal(await row.locator('[data-ai-permission-state]').textContent(), 'Revoke');
+  assert.equal(await row.getAttribute('data-state'), 'restricted-granted');
+  assert.match(await h.page.locator('#ai-access-guidance-source-note [data-ai-source-reason]').textContent(), /cannot enable generation.*revocable/);
   assert.match(await formLocator.locator('button').getAttribute('aria-label'), /Revoke Generate for Counsellor in Guidance/);
   assert.equal(await formLocator.locator('button').isDisabled(), false);
 
@@ -344,8 +345,9 @@ test('permission rows expose labels, state, source reason, and unsafe grant revo
     csrf: { name: 'csrf_fixture', hash: 'fresh-token' } });
   await formLocator.locator('button').click();
   await idle(h);
-  assert.equal(await row.locator('[data-ai-permission-state]').textContent(), 'Unavailable');
-  assert.match(await row.locator('[data-ai-source-reason]').textContent(), /lack guidance\.cases\.read_any/);
+  assert.equal(await row.locator('[data-ai-permission-state]').textContent(), 'Locked');
+  assert.equal(await row.getAttribute('data-state'), 'unavailable');
+  assert.match(await h.page.locator('#ai-access-guidance-source-note [data-ai-source-reason]').textContent(), /lack guidance\.cases\.read_any/);
   assert.equal(await formLocator.locator('button').isDisabled(), true);
 });
 
@@ -363,7 +365,8 @@ test('initial persisted grant survives initialization without a status fetch', {
   const access = form(h, 'access').filter({ has: h.page.locator('[name="role"][value="counsellor"]') })
     .filter({ has: h.page.locator('[name="permission"][value="ai.insights.read"]') });
   assert.equal(await access.locator('[name="operation"]').inputValue(), 'revoke');
-  assert.match(await access.locator('button').textContent(), /Revoke Read/);
+  assert.match(await access.locator('button').getAttribute('aria-label'), /Revoke Read/);
+  assert.equal(await access.locator('[data-ai-permission-state]').textContent(), 'Granted');
   assert.deepEqual(h.requests, []);
 });
 
@@ -476,14 +479,16 @@ test('department matrix grants and revokes scoped permissions without saving dir
   });
   assert.equal(h.posts()[0].path, '/admin/ai/access');
   assert.equal(h.posts()[0].headers['x-csrf-token'], 'initial-token');
-  assert.match(await access.locator('button').textContent(), /Revoke Read/);
+  assert.match(await access.locator('button').getAttribute('aria-label'), /Revoke Read/);
+  assert.equal(await access.locator('[data-ai-permission-state]').textContent(), 'Granted');
   assert.equal(await h.page.locator('#ai-api-key').inputValue(), secret);
   assert.equal(await h.page.locator('[data-ai-settings-test]').isDisabled(), true);
   await access.locator('button').click();
   await idle(h);
   assert.equal(new URLSearchParams(h.posts()[1].body).get('operation'), 'revoke');
   assert.equal(h.posts()[1].headers['x-csrf-token'], 'grant-token');
-  assert.match(await access.locator('button').textContent(), /Grant Read/);
+  assert.match(await access.locator('button').getAttribute('aria-label'), /Grant Read/);
+  assert.equal(await access.locator('[data-ai-permission-state]').textContent(), 'Grant');
   const permissions = await h.page.locator('[data-ai-settings-form="access"] [name="permission"]').evaluateAll(inputs => [...new Set(inputs.map(item => item.value))]);
   assert.deepEqual(permissions, ['ai.insights.read', 'ai.insights.generate', 'ai.insights.review', 'ai.insights.approve']);
   await samePage(h);

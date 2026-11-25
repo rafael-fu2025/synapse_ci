@@ -91,14 +91,13 @@ final class InsightGenerator
                 . 'No diagnoses, treatment, causes (including dehydration/stress), outbreaks, significance, prevalence, clinical need, individual risk, stigma or targeting. '
                 . 'BMG records do not verify physical rotation, schedule compliance, compost quality or sanitation. '
                 . 'No tools, actions, arbitrary notes, invented references/programs or program prose. '
-                . 'Return only a JSON object with exactly these keys: schema_version (string "1"), '
-                . $evidenceRule . 'summary (nonempty string, at most 600 characters), '
-                . 'interpretation (nonempty string, at most 1000 characters), alternative_explanations '
-                . '(array of one to four nonempty strings, each at most 500 characters), program_ids '
-                . '(array of at most two distinct candidate IDs), abstained (boolean). '
-                . 'Each selected program must have an eligible_evidence_ids entry intersecting your evidence_ids. '
-                . 'Text: no numbers, HTML, URLs or control characters; official numbers are displayed separately. Explain uncertainty and limitations. '
-                . 'Use an empty program_ids array when no candidate qualifies or when abstaining. '
+                . 'Return only a JSON object with keys: schema_version ("1"), '
+                . $evidenceRule . 'summary (nonempty string, <=600 chars), '
+                . 'interpretation (nonempty string, <=1000 chars), alternative_explanations '
+                . '(1-4 nonempty strings, <=500 chars each), program_ids '
+                . '(<=2 distinct candidate IDs; [] if none qualify or abstained), abstained (boolean). '
+                . 'Each selected program must have an eligible_evidence_ids entry intersecting evidence_ids. '
+                . 'Text: no numbers, HTML, URLs or control characters; explain uncertainty and limitations. '
                 . 'Abstention requires meaningful text and alternatives. All prose is unverified; review before use.',
         ], [
             'role' => 'user',

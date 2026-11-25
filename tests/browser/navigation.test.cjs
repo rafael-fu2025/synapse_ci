@@ -176,7 +176,15 @@ async function assertShell(page) {
 }
 
 async function clickRoute(page, route) {
-  await page.locator(`.sidebar-nav a.nav-link[href="${origin + route}"], .sidebar-nav a.nav-link[href="${route}"]`).click();
+  const linkSelector = `a.nav-link[href="${origin + route}"], a.nav-link[href="${route}"]`;
+  const link = page.locator('.sidebar-nav').locator(linkSelector);
+  const submenu = page.locator('.sidebar-nav .nav-item.has-submenu').filter({ has: page.locator(linkSelector) });
+  const toggle = submenu.locator(':scope > button.nav-link[aria-expanded="false"]');
+  if (await toggle.count()) {
+    await toggle.first().click();
+    await submenu.locator(':scope > button.nav-link[aria-expanded="true"]').waitFor();
+  }
+  await link.click();
   await settled(page, route);
 }
 
@@ -474,8 +482,9 @@ for (const mismatch of ['scope', 'sidebar link signature']) {
 test('actual fixtures use same-document Back/Forward and retain sidebar scroll', { timeout: 30_000 }, async t => {
   const { page, documents } = await pageFor(t, '/admin/carousel');
   await clickRoute(page, '/clinic/appointments');
-  const sidebarTop = await page.locator('.sidebar-nav').evaluate(nav => { nav.scrollTop = 180; return nav.scrollTop; });
   await clickRoute(page, '/guidance/appointments');
+  const sidebarTop = await page.locator('.sidebar-nav').evaluate(nav => { nav.scrollTop = 180; return nav.scrollTop; });
+  assert.ok(sidebarTop > 0);
   await traverse(page, 'back', '/clinic/appointments');
   await traverse(page, 'forward', '/guidance/appointments');
   await assertShell(page);

@@ -117,18 +117,18 @@ final class DashboardStatusContractTest extends TestCase
 
     public function testEncounterAndSessionSeriesUseScopedTenantAndBoundedDayRanges(): void
     {
-        foreach (['ClinicController' => 'dailyEncounters', 'GuidanceController' => 'dailySessions'] as $controller => $variable) {
+        foreach (['ClinicController' => 'dailyEncounters', 'GuidanceController' => 'series'] as $controller => $variable) {
             $source = file_get_contents(__DIR__ . '/../../app/Controllers/' . $controller . '.php');
             $this->assertNotFalse($source);
-            $start = strpos($source, '$ranges = ');
-            $end = strpos($source, 'return view(', $start === false ? 0 : $start);
+            $start = strpos($source, $controller === 'ClinicController' ? 'if ($rangeKey === \'sy\')' : 'private function sessionTrajectory(');
+            $end = strpos($source, $controller === 'ClinicController' ? 'return view(' : 'public function cases()', $start === false ? 0 : $start);
             $this->assertNotFalse($start);
             $this->assertNotFalse($end);
             $series = substr($source, $start, $end - $start);
             $this->assertStringContainsString('$' . $variable . ' = ', $series);
 
             // Manila business-day boundaries, resolved once through the clock.
-            $this->assertStringContainsString('SchedulingClock::businessDayRanges(7)', $series);
+            $this->assertStringContainsString('SchedulingClock::businessDayRanges($dayCount)', $series);
             $this->assertStringContainsString('SchedulingClock::businessDayIndex(', $series);
 
             // A range predicate keeps the index usable; a DATE() comparison cannot.
@@ -136,9 +136,9 @@ final class DashboardStatusContractTest extends TestCase
             $this->assertStringNotContainsString('DATE(created_at)', $series);
 
             if ($controller === 'ClinicController') {
-                $this->assertStringContainsString("->where('tenant_id', \$tenantId)", $series);
-                $this->assertStringContainsString("->where('started_at >=', \$ranges[", $series);
-                $this->assertStringContainsString("->where('started_at <', \$ranges[", $series);
+                $this->assertStringContainsString("->where('e.tenant_id', \$tenantId)", $series);
+                $this->assertStringContainsString("\$timeCol . ' >= ' . \$db->escape(\$ranges[", $series);
+                $this->assertStringContainsString("\$timeCol . ' < ' . \$db->escape(\$ranges[", $series);
             } else {
                 // The session series inherits the tenant scope from the case builder it clones.
                 $this->assertStringContainsString("->where('counselling_cases.tenant_id', \$tenantId)", $source);
@@ -153,7 +153,7 @@ final class DashboardStatusContractTest extends TestCase
             } else {
                 // The session series reuses the prepared case builder it clones.
                 $this->assertSame(0, substr_count($series, '->table('));
-                $this->assertSame(1, substr_count($series, '(clone $sessions)'));
+                $this->assertSame(1, substr_count($series, '(clone $sessionsBuilder)'));
             }
         }
     }
