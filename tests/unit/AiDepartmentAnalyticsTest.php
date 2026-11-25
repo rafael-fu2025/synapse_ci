@@ -151,7 +151,7 @@ final class AiDepartmentAnalyticsTest extends CIUnitTestCase
             }
         }
         self::assertSame([], AnalysisCatalog::forUnit('unknown'));
-        self::assertCount(13, AnalysisCatalog::metrics('clinic.complaints'));
+        self::assertCount(14, AnalysisCatalog::metrics('clinic.complaints'));
         self::assertCount(5, AnalysisCatalog::metrics('guidance.themes'));
         self::assertStringNotContainsString('personal', json_encode(AnalysisCatalog::metrics('guidance.themes')));
         self::assertStringNotContainsString('crisis', json_encode(AnalysisCatalog::definitions()));

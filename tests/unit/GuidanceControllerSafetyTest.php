@@ -210,7 +210,7 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
     {
         $source = file_get_contents(APPPATH . 'Controllers/GuidanceController.php');
         // History now resolves scoped case metadata after the audited read for its oversight marker.
-        self::assertSame(4, substr_count($source, '$this->caseService->getSession($sessionId)'));
+        self::assertSame(4, substr_count($source, '$this->caseService()->getSession($sessionId)'));
         self::assertStringNotContainsString("get('user.id')", $source);
         self::assertStringNotContainsString('$this->sessionModel->find(', $source);
         self::assertStringContainsString('(new UserModel())->scoped()->find(', $source);
@@ -224,6 +224,6 @@ final class GuidanceControllerSafetyTest extends CIUnitTestCase
         self::assertStringNotContainsString('createCase(', $ticketSource);
         self::assertStringNotContainsString('openSession(', $ticketSource);
         self::assertStringNotContainsString('->find(', $ticketSource);
-        self::assertFalse((new ReflectionClass(GuidanceController::class))->getProperty('caseService')->isInitialized($this->controller));
+        self::assertNull((new ReflectionClass(GuidanceController::class))->getProperty('caseService')->getValue($this->controller));
     }
 }

@@ -47,6 +47,17 @@ final class ClinicalBackgroundTest extends CIUnitTestCase
         Services::injectMock('redirectresponse', new RedirectResponse(config('App')));
         $controller = (new ReflectionClass($class))->newInstanceWithoutConstructor();
         $controller->initController($request, $response, new NullLogger());
+        if ($controller instanceof GuidanceController) {
+            (new ReflectionClass($controller))->getProperty('actorResolver')->setValue(
+                $controller,
+                static fn (?string $permission = null): array => [
+                    'id' => 42,
+                    'tenant_id' => 1,
+                    'role' => 'counsellor',
+                    'permissions' => ['guidance.cases.write'],
+                ]
+            );
+        }
         return $controller;
     }
 
@@ -58,7 +69,7 @@ final class ClinicalBackgroundTest extends CIUnitTestCase
     private function success(object $controller): ResponseInterface
     {
         return $controller instanceof GuidanceController
-            ? $this->invoke($controller, 'mutate', static fn (int $actor): array => ['/guidance/cases/42', 'Saved.'])
+            ? $this->invoke($controller, 'mutate', static fn (array $actor): array => ['/guidance/cases/42', 'Saved.'])
             : $this->invoke($controller, 'inventoryFormResponse', true, 'Saved.', '/clinic/patients/42', 200);
     }
 
@@ -147,7 +158,7 @@ final class ClinicalBackgroundTest extends CIUnitTestCase
     {
         $guidance = file_get_contents(APPPATH . 'Views/guidance/cases/view.php');
         preg_match_all('~<form\b.*?</form>~s', $guidance, $forms);
-        self::assertCount(8, $forms[0]);
+        self::assertCount(12, $forms[0]);
         foreach ($forms[0] as $form) {
             self::assertStringContainsString('data-background-submit', $form);
             self::assertStringContainsString('csrf_field()', $form);
@@ -157,11 +168,13 @@ final class ClinicalBackgroundTest extends CIUnitTestCase
         self::assertSame(2, substr_count($guidance, 'formaction='));
         $chart = file_get_contents(APPPATH . 'Views/clinic/patients/chart.php');
         preg_match_all('~<form\b.*?</form>~s', $chart, $forms);
-        self::assertCount(2, $forms[0]);
+        self::assertCount(3, $forms[0]);
         self::assertStringNotContainsString('data-background-submit', $forms[0][0]);
         self::assertStringContainsString('/start-direct/', $forms[0][0]);
-        self::assertStringContainsString('data-background-submit', $forms[0][1]);
-        self::assertStringContainsString(". '/health'", $forms[0][1]);
+        self::assertStringNotContainsString('data-background-submit', $forms[0][1]);
+        self::assertStringContainsString('data-chart-page-size', $forms[0][1]);
+        self::assertStringContainsString('data-background-submit', $forms[0][2]);
+        self::assertStringContainsString(". '/health'", $forms[0][2]);
         $controller = file_get_contents(APPPATH . 'Controllers/GuidanceController.php');
         self::assertStringNotContainsString('withInput()', $controller);
         self::assertStringContainsString("getDecryptedSessionNote((int) \$activeSession['id'])", $controller);

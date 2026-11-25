@@ -93,11 +93,11 @@ final class GuidanceAccessPolicy
             throw new RuntimeException('Guidance authority locking requires an active transaction.', 503);
         }
 
-        $tenants = $this->table('tenants');
-        $users = $this->table('users');
-        $people = $this->table('people');
-        $rolePermissions = $this->table('role_permissions');
-        $permissionsTable = $this->table('permissions');
+        $tenants = $this->tableName('tenants');
+        $users = $this->tableName('users');
+        $people = $this->tableName('people');
+        $rolePermissions = $this->tableName('role_permissions');
+        $permissionsTable = $this->tableName('permissions');
         $tenant = $this->first("SELECT * FROM {$tenants} WHERE id = ? AND is_active = 1 AND deleted_at IS NULL",
             [$tenantId], $lock);
         $user = $this->first("SELECT * FROM {$users} WHERE id = ? AND tenant_id = ? AND status = 'active' AND deleted_at IS NULL",
@@ -195,7 +195,7 @@ final class GuidanceAccessPolicy
         if ((int) ($case['counsellor_user_id'] ?? 0) !== (int) ($actor['id'] ?? 0)
             && !in_array('guidance.cases.read_any', $perms, true)
             && !$this->hasAcceptedConsultationAccess((int) ($actor['tenant_id'] ?? 0), (int) ($case['id'] ?? 0), (int) ($actor['id'] ?? 0))) {
-            throw new DomainException('Case access forbidden.', 403);
+            throw new DomainException('This case is assigned to another counselor.', 403);
         }
     }
 
@@ -260,7 +260,7 @@ final class GuidanceAccessPolicy
         $actorId = (int) ($actor['id'] ?? 0);
         if ($counsellorId !== $actorId) {
             $tenantId = (int) ($actor['tenant_id'] ?? 0);
-            $supTable = $this->table('guidance_supervision_assignments');
+            $supTable = $this->tableName('guidance_supervision_assignments');
             $supervision = ($counsellorId > 0 && $this->db->tableExists('guidance_supervision_assignments')) ? $this->first(
                 "SELECT * FROM {$supTable} WHERE tenant_id = ? AND associate_user_id = ? AND supervisor_user_id = ? AND status = 'active'",
                 [$tenantId, $counsellorId, $actorId],
@@ -283,7 +283,7 @@ final class GuidanceAccessPolicy
     public function canFinalizeDirectly(int $userId, ?int $tenantId = null): bool
     {
         $tenantId ??= CurrentTenant::id();
-        $usersTable = $this->table('users');
+        $usersTable = $this->tableName('users');
         $userRow = $this->first("SELECT role FROM {$usersTable} WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL", [$userId, $tenantId], false);
         if (($userRow['role'] ?? '') === 'guidance_intern') {
             return false;
@@ -291,7 +291,7 @@ final class GuidanceAccessPolicy
         if (!$this->db->tableExists('guidance_practitioner_profiles')) {
             return false;
         }
-        $table = $this->table('guidance_practitioner_profiles');
+        $table = $this->tableName('guidance_practitioner_profiles');
         $profile = $this->first(
             "SELECT * FROM {$table} WHERE user_id = ? AND tenant_id = ? AND is_active = 1",
             [$userId, $tenantId],
@@ -326,7 +326,7 @@ final class GuidanceAccessPolicy
     public function assertEligibilityForService(int $userId, string $serviceCapability, ?int $tenantId = null): void
     {
         $tenantId ??= CurrentTenant::id();
-        $table = $this->table('guidance_practitioner_profiles');
+        $table = $this->tableName('guidance_practitioner_profiles');
         $profile = $this->first(
             "SELECT * FROM {$table} WHERE user_id = ? AND tenant_id = ? AND is_active = 1",
             [$userId, $tenantId],
@@ -364,7 +364,7 @@ final class GuidanceAccessPolicy
         $tenantId ??= (int) $actor['tenant_id'];
         $actorId = (int) $actor['id'];
 
-        $pTable = $this->table('guidance_practitioner_profiles');
+        $pTable = $this->tableName('guidance_practitioner_profiles');
         $authorProfile = $this->first(
             "SELECT * FROM {$pTable} WHERE user_id = ? AND tenant_id = ?",
             [$authorUserId, $tenantId],
@@ -396,7 +396,7 @@ final class GuidanceAccessPolicy
                 throw new DomainException('Co-signing actor must have active supervisor or licensed counselor standing.', 403);
             }
 
-            $supTable = $this->table('guidance_supervision_assignments');
+            $supTable = $this->tableName('guidance_supervision_assignments');
             $supervision = $this->first(
                 "SELECT * FROM {$supTable} WHERE tenant_id = ? AND associate_user_id = ? AND supervisor_user_id = ? AND status = 'active'",
                 [$tenantId, $authorUserId, $actorId],
@@ -487,7 +487,7 @@ final class GuidanceAccessPolicy
         return $this->db->query($sql, $params)->getRowArray();
     }
 
-    private function table(string $name): string
+    private function tableName(string $name): string
     {
         return $this->db->protectIdentifiers($this->db->prefixTable($name));
     }

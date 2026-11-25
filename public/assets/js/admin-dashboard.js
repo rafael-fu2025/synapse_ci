@@ -692,7 +692,7 @@
       });
     });
 
-    if (cfg.canReadAudit) {
+    if (cfg.hasLedger) {
       var ledgerBody = document.querySelector('[data-ledger-rows]');
       if (ledgerBody && !ledgerBody.dataset.filterBound) {
         ledgerBody.dataset.filterBound = 'true';

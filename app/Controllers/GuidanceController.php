@@ -175,11 +175,11 @@ final class GuidanceController extends BaseController
 
                     $selectCols = 'qe.id, qe.ticket_code, qe.status, qe.priority, qe.called_at, qe.started_at, p.first_name, p.last_name, p.mis_id';
                     if ($db->tableExists('student_profiles')) {
-                        $qPreview->join('student_profiles sp', 'sp.person_id = p.id', 'left');
+                        $qPreview->join('student_profiles sp', 'sp.person_id = p.id AND sp.tenant_id = p.tenant_id', 'left');
                         $selectCols .= ', sp.program, sp.year_level';
                     }
                     if ($db->tableExists('employee_profiles')) {
-                        $qPreview->join('employee_profiles ep', 'ep.person_id = p.id', 'left');
+                        $qPreview->join('employee_profiles ep', 'ep.person_id = p.id AND ep.tenant_id = p.tenant_id', 'left');
                         $selectCols .= ', ep.department AS employee_dept';
                     }
                     if (!$hasOversight) {

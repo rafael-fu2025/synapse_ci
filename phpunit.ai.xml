@@ -31,6 +31,7 @@
             <file>tests/unit/AiModelDiscoveryTest.php</file>
             <file>tests/unit/AiModelSettingsHttpTest.php</file>
             <file>tests/unit/AiOperatorTest.php</file>
+            <file>tests/unit/AiPanelPaginationTest.php</file>
             <file>tests/unit/AiPipelineProvenanceTest.php</file>
             <file>tests/unit/AiRecoveryAttemptsTest.php</file>
             <file>tests/unit/AiSettingsHttpTest.php</file>
