@@ -100,6 +100,40 @@ final class ProfileSettingsController extends BaseController
         }
     }
 
+    /** Serve a tenant-scoped uploaded person photo to authorized clinical/guidance/self callers. */
+    public function personPhoto(int $personId)
+    {
+        $actor = (new AuthenticatedUser())->current();
+        if ($actor === null) {
+            return $this->response->setStatusCode(401)->setHeader('Cache-Control', 'private, no-store')->setBody('Photo unavailable.');
+        }
+        $tenantId = (int) ($actor['tenant_id'] ?? 0);
+        if ($tenantId <= 0 || $personId <= 0) {
+            return $this->response->setStatusCode(403)->setHeader('Cache-Control', 'private, no-store')->setBody('Photo unavailable.');
+        }
+        $role = (string) ($actor['role'] ?? '');
+        $allowedRoles = ['superadmin', 'clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern', 'guidance_admin', 'guidance_supervisor', 'counsellor', 'guidance_intern'];
+        if ((int) ($actor['person_id'] ?? 0) !== $personId && !in_array($role, $allowedRoles, true)) {
+            return $this->response->setStatusCode(403)->setHeader('Cache-Control', 'private, no-store')->setBody('Photo unavailable.');
+        }
+        $person = Database::connect()->table('people')
+            ->where('id', $personId)->where('tenant_id', $tenantId)->where('deleted_at', null)
+            ->get()->getRowArray();
+        if ($person === null) {
+            return $this->response->setStatusCode(404)->setHeader('Cache-Control', 'private, no-store')->setBody('Photo unavailable.');
+        }
+        $path = $this->photos->path($tenantId, $personId);
+        $bytes = is_file($path) ? @file_get_contents($path) : false;
+        $type = 'image/webp';
+        if ($bytes === false) {
+            $bytes = ProfileAvatar::svg($person);
+            $type = 'image/svg+xml';
+        }
+        return $this->response->setHeader('Content-Type', $type)
+            ->setHeader('Cache-Control', 'private, no-store')->setHeader('X-Content-Type-Options', 'nosniff')
+            ->setHeader('Cross-Origin-Resource-Policy', 'same-origin')->setBody($bytes);
+    }
+
     public function updateEmergencyContact()
     {
         try {

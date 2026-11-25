@@ -43,6 +43,7 @@ $chartData = [
     'series' => $seriesVals,
     'status' => [$activeUnits, $maintenanceUnits, $offlineUnits],
 ];
+$shiftNow = \App\Services\Scheduling\SchedulingClock::now();
 ?>
 <section class="cdc-dashboard ce-workspace bmg-workspace bmg-workstation bmg-dashboard"
          data-bmg-dashboard
@@ -57,10 +58,17 @@ $chartData = [
       <span class="cdc-shift-meta"><?= esc(ucwords(str_replace('_', ' ', $userRole))) ?></span>
     </div>
     <div class="cdc-shift-right">
-      <span class="cdc-shift-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> <?= esc(\App\Services\Scheduling\SchedulingClock::now()->format('D, M j, Y')) ?> · Manila</span>
+      <span class="cdc-shift-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> <?= esc($shiftNow->format('D, M j, Y')) ?></span>
+      <span class="cdc-shift-clock cdc-mono" data-live-clock data-clock-tz="Asia/Manila" title="Philippine Standard Time (Asia/Manila)">
+        <i class="bi bi-clock" aria-hidden="true"></i>
+        <time data-live-clock-time datetime="<?= esc($shiftNow->format(\DateTimeInterface::ATOM), 'attr') ?>"><?= esc($shiftNow->format('g:i:s A')) ?></time>
+        <span class="cdc-shift-clock-tz">PHT</span>
+      </span>
       <span class="ce-tag ce-tag-upper">Recorded state</span>
     </div>
   </div>
+
+  <?= view('partials/intern_supervision_banner', ['user' => $user ?? []]) ?>
 
   <div class="ce-notice bmg-dashboard-notice">
     <div class="ce-notice-body">

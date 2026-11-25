@@ -1,4 +1,4 @@
-﻿/* ===========================================================
+/* ===========================================================
    App-specific styles for NiceAdmin
    This file contains CSS for app pages:
    - File Manager (apps-file-manager.html)
@@ -3880,7 +3880,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted-color);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
 }
 
 .ticket-title {

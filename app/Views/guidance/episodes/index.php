@@ -289,7 +289,7 @@ $perPage = (int) $pagination['per_page'];
 
             <div class="syn-person-lookup" data-person-lookup x-show="!selected">
               <div data-person-lookup-anchor>
-                <input type="text" class="form-control" x-model="query" @input.debounce.300ms="search()" autocomplete="off" placeholder="Search by name or MIS / Student ID...">
+                <input id="episodeClientSearch" type="text" class="form-control" x-model="query" @input.debounce.300ms="search()" autocomplete="off" placeholder="Search by name or MIS / Student ID...">
               </div>
               <div class="syn-person-lookup-menu"
                    data-person-lookup-menu

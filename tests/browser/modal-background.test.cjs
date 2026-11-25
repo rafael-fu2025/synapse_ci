@@ -70,7 +70,7 @@ before(async () => {
       res.setHeader('Content-Type', 'text/html'); res.end(markup(url.pathname.split('/')[2], url.searchParams.has('fallback'))); return;
     }
     if (url.pathname === '/carousel.js') {
-      const source = fs.readFileSync(path.join(root, 'app/Views/admin/carousel/_form_scripts.php'), 'utf8').split('<script>')[1].split('</script>')[0].replace(/<\?= !empty\(\$slide\['id'\]\) \? 'true' : 'false' \?>/, 'false');
+      const source = fs.readFileSync(path.join(root, 'public/assets/js/carousel-form.js'), 'utf8');
       res.setHeader('Content-Type', 'text/javascript'); res.end(source); return;
     }
     if (!url.pathname.startsWith('/assets/')) { res.setHeader('Content-Type', 'text/html'); res.end('<h1>Server result</h1>'); return; }

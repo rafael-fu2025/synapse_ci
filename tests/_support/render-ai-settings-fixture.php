@@ -6,6 +6,26 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
+if (!defined('FCPATH')) {
+    define('FCPATH', dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR);
+}
+function view(string $name, array $data = []): string
+{
+    $base = realpath(dirname(__DIR__, 2) . '/app/Views');
+    $file = $base !== false ? realpath($base . '/' . ltrim($name, '/') . '.php') : false;
+    if ($base === false || $file === false || !str_starts_with($file, $base . DIRECTORY_SEPARATOR)) {
+        throw new RuntimeException('Unknown fixture partial: ' . $name);
+    }
+    extract($data, EXTR_SKIP);
+    ob_start();
+    try {
+        require $file;
+        return (string) ob_get_clean();
+    } catch (Throwable $e) {
+        ob_end_clean();
+        throw $e;
+    }
+}
 require dirname(__DIR__, 2) . '/vendor/codeigniter4/framework/system/Common.php';
 set_error_handler(static function (int $severity, string $message, string $file, int $line): never {
     throw new ErrorException($message, 0, $severity, $file, $line);

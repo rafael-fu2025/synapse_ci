@@ -2,6 +2,7 @@
 <?= $this->section('content') ?>
 <?php
 $formatRole = static fn(array $member): string => !empty($member['role']) ? ucwords(str_replace('_', ' ', (string) $member['role'])) : '';
+$memberPhotos = is_array($memberPhotos ?? null) ? $memberPhotos : [];
 $initial = $history + [
     'after_mode' => $afterMode,
     'browsing_history' => $browsingHistory,
@@ -10,6 +11,7 @@ $initial = $history + [
         'id' => (int) $member['id'],
         'name' => $member['name'],
         'role' => $formatRole($member),
+        'photo_url' => $memberPhotos[(int) $member['id']] ?? null,
     ], $members),
 ];
 $initialJson = json_encode($initial, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
@@ -19,11 +21,19 @@ $currentUser = session('user') ?? [];
 $actorTenantId = (int) ($actor['tenant_id'] ?? $currentUser['tenant_id'] ?? 0);
 $actorPersonId = (int) ($actor['person_id'] ?? $currentUser['person_id'] ?? 0);
 $actorHasPhoto = $actorTenantId > 0 && $actorPersonId > 0 && (new \App\Services\ProfilePhotoService())->exists($actorTenantId, $actorPersonId);
-$memberAvatar = static function (array $member) use ($actor, $actorHasPhoto): string {
-    if ($actorHasPhoto && (int) ($member['id'] ?? 0) === (int) ($actor['id'] ?? 0)) {
+$memberAvatar = static function (array $member) use ($actor, $actorHasPhoto, $memberPhotos): string {
+    $memberId = (int) ($member['id'] ?? 0);
+    if ($memberId > 0 && isset($memberPhotos[$memberId])) {
+        return $memberPhotos[$memberId];
+    }
+    if ($actorHasPhoto && $memberId === (int) ($actor['id'] ?? 0)) {
         return site_url('account/photo');
     }
     return \App\Services\ProfileAvatar::dataUri($member);
+};
+$memberAvatarHtml = static function (int $userId, string $initials, string $name = '') use ($memberPhotos, $actor, $actorHasPhoto): string {
+    $url = $memberPhotos[$userId] ?? (($actorHasPhoto && $userId === (int) ($actor['id'] ?? 0)) ? site_url('account/photo') : null);
+    return \App\Services\ProfileAvatar::contentHtml($url, $initials, $name !== '' ? ['name' => $name] : ['avatar_initials' => $initials]);
 };
 $initialsOf = static function (string $person): string {
     $parts = preg_split('/\s+/', trim($person)) ?: [];
@@ -70,7 +80,7 @@ foreach (array_reverse($history['messages'] ?? []) as $msg) {
             <summary class="tws-roster-pill" aria-label="Workstation members (<?= count($members) ?>)">
               <span class="tws-avatar-stack" aria-hidden="true">
                 <?php foreach ($visibleMembers as $member): ?>
-                  <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>"><?= esc($initialsOf($member['name'])) ?></span>
+                  <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>"><?= $memberAvatarHtml((int) ($member['id'] ?? 0), $initialsOf($member['name']), (string) $member['name']) ?></span>
                 <?php endforeach; ?>
               </span>
               <span class="tws-count"><?= count($members) ?> members</span>
@@ -81,9 +91,9 @@ foreach (array_reverse($history['messages'] ?? []) as $msg) {
               <ul class="list-unstyled teams-member-list">
                 <?php foreach ($members as $member): ?>
                   <li>
-                    <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= esc($initialsOf($member['name'])) ?></span>
+                    <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= $memberAvatarHtml((int) ($member['id'] ?? 0), $initialsOf($member['name']), (string) $member['name']) ?></span>
                     <span class="tws-member-name"><?= esc($member['name']) ?></span>
-                    <small><?= esc(ucwords(str_replace('_', ' ', $member['role']))) ?></small>
+                    <small><?= esc(ucwords(str_replace('_', ' ', (string) ($member['role'] ?? '')))) ?></small>
                   </li>
                 <?php endforeach; ?>
               </ul>
@@ -165,7 +175,7 @@ foreach (array_reverse($history['messages'] ?? []) as $msg) {
                          alt=""
                          width="30"
                          height="30"
-                         onerror="this.onerror=null;this.src='<?= esc(\App\Services\ProfileAvatar::dataUri($member), 'attr') ?>'">
+                         data-avatar-fallback="<?= esc(\App\Services\ProfileAvatar::dataUri($member), 'attr') ?>">
                     <span class="tws-chat-member-copy">
                       <span class="tws-chat-member-name"><?= esc($member['name']) ?></span>
                       <?php if ($roleText !== ''): ?>
@@ -203,7 +213,7 @@ foreach (array_reverse($history['messages'] ?? []) as $msg) {
           ?>
             <article id="chat-message-<?= (int) $message['id'] ?>" tabindex="-1" class="team-chat-message <?= $isOwn ? 'is-own' : '' ?><?= ($targetMessageId ?? null) === $message['id'] ? ' is-targeted' : '' ?>">
               <?php if (!$isOwn): ?>
-                <span class="tws-msg-avatar is-<?= esc($avatarTone($message['sender_user_id'] ?? $message['sender_name'])) ?>" aria-hidden="true"><?= esc($initialsOf($message['sender_name'])) ?></span>
+                <span class="tws-msg-avatar is-<?= esc($avatarTone($message['sender_user_id'] ?? $message['sender_name'])) ?>" aria-hidden="true"><?= $memberAvatarHtml((int) ($message['sender_user_id'] ?? 0), $initialsOf($message['sender_name']), (string) $message['sender_name']) ?></span>
               <?php endif; ?>
               <div class="team-chat-bubble">
                 <div class="team-chat-message-header"><strong><?= esc($message['sender_name']) ?></strong><time><?= esc($stamp($message['created_at'])) ?></time></div>

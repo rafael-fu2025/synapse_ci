@@ -28,6 +28,15 @@ final class ProviderAvailabilityModel extends TenantModel
     protected $createdField = 'created_at';
     protected $updatedField = 'updated_at';
 
+    public static function snapshotToken(array $row): string
+    {
+        $values = [];
+        foreach (['id', 'tenant_id', 'unit', 'staff_assignment_id', 'day_of_week', 'start_time', 'end_time', 'slot_duration_minutes', 'is_active', 'updated_at'] as $key) {
+            $values[$key] = (string) ($row[$key] ?? '');
+        }
+        return hash('sha256', json_encode($values, JSON_THROW_ON_ERROR));
+    }
+
     /**
      * Get active templates for a department staff assignment, not a user account.
      *

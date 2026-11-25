@@ -36,6 +36,8 @@ final class TeamsController extends BaseController
             if (!in_array($mode, ['board', 'list'], true)) { throw new RuntimeException('Invalid task view.', 422); }
             $filters += ['mine' => '', 'q' => '', 'status' => '', 'priority' => '', 'archived' => ''];
             $data['memberNames'] = array_column($data['members'], 'name', 'id');
+            $assigneeIds = array_values(array_filter(array_column($data['tasks'], 'assignee_user_id')));
+            $data['memberPhotos'] = (new \App\Services\TeamAccess())->memberPhotos($unit, $data['actor'], $assigneeIds);
             foreach ($data['tasks'] as &$task) {
                 $task['canEdit'] = $service->canEdit($task, $data['actor']);
             }
@@ -75,10 +77,15 @@ final class TeamsController extends BaseController
                 && (bool) ($scope['can_manage'] ?? false)
                 && in_array($unit, $scope['units'] ?? [], true);
 
+            $extraIds = array_merge(
+                $task['assignee_user_id'] ? [(int) $task['assignee_user_id']] : [],
+                array_column($task['comments'] ?? [], 'actor_user_id')
+            );
             return view('teams/show', $context + $this->shared($unit) + [
                 'task' => $task, 'title' => 'Team task #' . $id,
                 'canArchive' => $canArchive,
                 'memberNames' => array_column($context['members'], 'name', 'id'),
+                'memberPhotos' => (new \App\Services\TeamAccess())->memberPhotos($unit, $context['actor'], $extraIds),
                 'cancelUrl' => site_url($unit . '/teams'), 'formModalPage' => true,
             ]);
         });
@@ -183,6 +190,37 @@ final class TeamsController extends BaseController
 
             return $this->success('Team task restored from archive.', $unit, $id);
         });
+    }
+
+    /** Serve a unit-member avatar photo scoped to the active tenant and team unit. */
+    public function memberPhoto(string $unit, int $userId)
+    {
+        $this->response->setHeader('Cache-Control', 'no-store, private');
+        try {
+            $access = new \App\Services\TeamAccess();
+            $context = $access->context($unit);
+            $target = $access->memberPhotoTarget($unit, $context['actor'], $userId);
+            if ($target === null) {
+                return $this->response->setStatusCode(404)->setBody('Photo unavailable.');
+            }
+            $photos = new \App\Services\ProfilePhotoService();
+            $bytes = $target['person_id'] > 0
+                ? @file_get_contents($photos->path($target['tenant_id'], $target['person_id']))
+                : false;
+            $type = 'image/webp';
+            if ($bytes === false) {
+                $bytes = \App\Services\ProfileAvatar::svg($target['person']);
+                $type = 'image/svg+xml';
+            }
+            return $this->response->setHeader('Content-Type', $type)
+                ->setHeader('Cache-Control', 'private, no-store')
+                ->setHeader('X-Content-Type-Options', 'nosniff')
+                ->setHeader('Cross-Origin-Resource-Policy', 'same-origin')
+                ->setBody($bytes);
+        } catch (Throwable $e) {
+            $status = $e instanceof RuntimeException && in_array($e->getCode(), [401, 403, 404, 422], true) ? $e->getCode() : 403;
+            return $this->response->setStatusCode($status)->setBody('Photo unavailable.');
+        }
     }
 
     private function shared(string $unit): array

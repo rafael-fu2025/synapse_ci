@@ -138,14 +138,17 @@ describe('QueueTicketCard', () => {
     expect(stroke.props).toEqual(expect.objectContaining({ x: 1, y: 1, width: '99%', height: '99%' }));
   });
 
-  it('keeps the maroon and violet gradients and no outline in light mode', () => {
+  it('uses the same maroon gradient and pill color for clinic and guidance with no outline in light mode', () => {
     render(<QueueTicketCard ticket={ticket} />);
     const gradient = () => renderer!.root.findAll(node => Array.isArray(node.props.colors) && node.props.colors.length === 2)[0];
+    const pillLabel = () => renderer!.root.findAllByType(Text).find(node => node.props.children === 'Live waiting ticket')!;
     expect(gradient().props.colors).toEqual(['#520000', '#800000']);
+    expect(StyleSheet.flatten(pillLabel().props.style).color).toBe('#800000');
     expect(outlineHosts()).toHaveLength(0);
 
     act(() => { renderer!.update(<QueueTicketCard ticket={{ ...ticket, unit: 'guidance' }} />); });
-    expect(gradient().props.colors).toEqual(['#4f3974', '#7356a2']);
+    expect(gradient().props.colors).toEqual(['#520000', '#800000']);
+    expect(StyleSheet.flatten(pillLabel().props.style).color).toBe('#800000');
     expect(outlineHosts()).toHaveLength(0);
   });
 

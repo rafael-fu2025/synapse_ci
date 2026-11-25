@@ -21,6 +21,18 @@ $avatarTone = static function (int|string $seed): string {
     return $tones[abs(crc32((string) $seed)) % count($tones)];
 };
 $assigneeName = $task['assignee_user_id'] ? $name((int) $task['assignee_user_id']) : 'Unassigned';
+$memberPhotos = is_array($memberPhotos ?? null) ? $memberPhotos : [];
+$memberAvatarHtml = static function (?int $userId, string $initials, string $person = '') use ($memberPhotos): string {
+    $url = $userId ? ($memberPhotos[$userId] ?? null) : null;
+    if ($url !== null && $url !== '') {
+        return \App\Services\ProfileAvatar::contentHtml(
+            $url,
+            $initials,
+            $person !== '' ? ['name' => $person] : ['avatar_initials' => $initials]
+        );
+    }
+    return esc($initials);
+};
 $creatorName = $name((int) $task['created_by_user_id']);
 $checkTotal = is_array($task['checklist']) ? count($task['checklist']) : 0;
 $checkDone = $checkTotal > 0 ? count(array_filter($task['checklist'], static fn(array $item): bool => !empty($item['done']))) : 0;
@@ -73,7 +85,7 @@ $detailUrl = $baseUrl . '/' . (int) $task['id'];
           <dt>Assigned to</dt>
           <dd>
             <span class="tws-rail-person">
-              <span class="tws-avatar tws-avatar--sm is-<?= esc($task['assignee_user_id'] ? $avatarTone($task['assignee_user_id']) : 'slate') ?>" aria-hidden="true"><?= esc($task['assignee_user_id'] ? $initialsOf($assigneeName) : '—') ?></span>
+              <span class="tws-avatar tws-avatar--sm is-<?= esc($task['assignee_user_id'] ? $avatarTone($task['assignee_user_id']) : 'slate') ?>" aria-hidden="true"><?= $task['assignee_user_id'] ? $memberAvatarHtml((int) $task['assignee_user_id'], $initialsOf($assigneeName), (string) $assigneeName) : '—' ?></span>
               <span><?= esc($assigneeName) ?></span>
             </span>
           </dd>
@@ -144,7 +156,7 @@ $detailUrl = $baseUrl . '/' . (int) $task['id'];
               $author = $name((int) $comment['actor_user_id']);
           ?>
             <article class="teams-comment">
-              <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($comment['actor_user_id'])) ?>" aria-hidden="true"><?= esc($initialsOf($author)) ?></span>
+              <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($comment['actor_user_id'])) ?>" aria-hidden="true"><?= $memberAvatarHtml((int) $comment['actor_user_id'], $initialsOf($author), (string) $author) ?></span>
               <div class="tws-comment-body">
                 <div class="tws-comment-head"><strong><?= esc($author) ?></strong><time><?= esc($time($comment['created_at'])) ?></time></div>
                 <p class="teams-preserve mb-0"><?= esc($comment['body']) ?></p>

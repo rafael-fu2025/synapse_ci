@@ -23,6 +23,18 @@ $initialsOf = static function (string $name): string {
     return $letters !== '' ? $letters : 'TM';
 };
 $visibleMembers = array_slice($members, 0, 4);
+$memberPhotos = is_array($memberPhotos ?? null) ? $memberPhotos : [];
+$memberAvatarHtml = static function (?int $userId, string $initials, string $name = '') use ($memberPhotos): string {
+    $url = $userId ? ($memberPhotos[$userId] ?? null) : null;
+    if ($url !== null && $url !== '') {
+        return \App\Services\ProfileAvatar::contentHtml(
+            $url,
+            $initials,
+            $name !== '' ? ['name' => $name] : ['avatar_initials' => $initials]
+        );
+    }
+    return esc($initials);
+};
 
 $upcomingItems = [];
 $seenUpcoming = [];
@@ -56,7 +68,7 @@ foreach ($days as $dayKey => $dayData) {
             <summary class="tws-roster-pill" aria-label="Workstation members (<?= count($members) ?>)">
               <span class="tws-avatar-stack" aria-hidden="true">
                 <?php foreach ($visibleMembers as $member): ?>
-                  <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>"><?= esc($initialsOf($member['name'])) ?></span>
+                  <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>"><?= $memberAvatarHtml(isset($member['id']) ? (int) $member['id'] : null, $initialsOf($member['name']), (string) $member['name']) ?></span>
                 <?php endforeach; ?>
               </span>
               <span class="tws-count"><?= count($members) ?> members</span>
@@ -67,7 +79,7 @@ foreach ($days as $dayKey => $dayData) {
               <ul class="list-unstyled teams-member-list">
                 <?php foreach ($members as $member): ?>
                   <li>
-                    <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= esc($initialsOf($member['name'])) ?></span>
+                    <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= $memberAvatarHtml(isset($member['id']) ? (int) $member['id'] : null, $initialsOf($member['name']), (string) $member['name']) ?></span>
                     <span class="tws-member-name"><?= esc($member['name']) ?></span>
                     <small><?= esc(ucwords(str_replace('_', ' ', $member['role']))) ?></small>
                   </li>

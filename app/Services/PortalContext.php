@@ -69,8 +69,8 @@ final class PortalContext
     {
         return match ($role) {
             'clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern' => self::PORTAL_CLINIC,
-            'guidance_admin', 'guidance_supervisor', 'counsellor' => self::PORTAL_GUIDANCE,
-            'bmg_admin', 'facilities_op' => self::PORTAL_BMG,
+            'guidance_admin', 'guidance_supervisor', 'counsellor', 'guidance_intern' => self::PORTAL_GUIDANCE,
+            'bmg_admin', 'facilities_op', 'bmg_intern' => self::PORTAL_BMG,
             default => self::PORTAL_MAIN,
         };
     }
@@ -156,11 +156,13 @@ final class PortalContext
                 'guidance_admin',
                 'guidance_supervisor',
                 'counsellor',
+                'guidance_intern',
             ],
             self::PORTAL_BMG => [
                 'superadmin',
                 'bmg_admin',
                 'facilities_op',
+                'bmg_intern',
             ],
             // Main portal allows everyone (students, employees, and staff using self-service)
             default => [
@@ -172,8 +174,10 @@ final class PortalContext
                 'guidance_admin',
                 'guidance_supervisor',
                 'counsellor',
+                'guidance_intern',
                 'bmg_admin',
                 'facilities_op',
+                'bmg_intern',
                 'audit_reader',
                 'report_viewer',
                 'student',

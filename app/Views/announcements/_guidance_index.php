@@ -34,13 +34,17 @@ $statusTabs = [
 ];
 $filteredCount = (int) ($pagination['filtered'] ?? $pagination['total'] ?? count($announcements));
 $totalCount = (int) ($pagination['total'] ?? $filteredCount);
+$activeReadAnnouncementId = isset($readHistory['announcement']['id']) ? (int) $readHistory['announcement']['id'] : 0;
+$closeReadHistoryQuery = $activeFilterQuery + ((int) ($pagination['page'] ?? 1) > 1 ? ['page' => (int) $pagination['page']] : []);
+$closeReadHistoryUrl = $baseUrl . ($closeReadHistoryQuery !== [] ? '?' . http_build_query($closeReadHistoryQuery) : '');
 ?>
 <section class="guidance-ui ga-workspace"
          data-refresh-owner="<?= esc($refreshOwner, 'attr') ?>"
          data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
          data-live-filters
          data-filter-url="<?= esc($baseUrl, 'attr') ?>"
-         data-filter-key="announcements-<?= esc($unit, 'attr') ?>">
+         data-filter-key="announcements-<?= esc($unit, 'attr') ?>"
+         data-filter-page-params="reads read_page">
   <div class="ga-sheet">
     <header class="ga-band ga-intro">
       <h2 class="ga-intro-title">Announcement management</h2>
@@ -102,7 +106,7 @@ $totalCount = (int) ($pagination['total'] ?? $filteredCount);
       </form>
 
       <div class="ga-filter-feedback">
-        <p class="ga-filter-status" data-filter-status role="status" aria-live="polite"></p>
+        <p class="visually-hidden" data-filter-status role="status" aria-live="polite"></p>
         <div class="ga-filter-error" data-filter-error role="alert" hidden>
           <span data-filter-error-text></span>
           <button class="btn btn-outline-danger btn-sm" type="button" data-filter-retry>Retry</button>
@@ -195,7 +199,9 @@ $totalCount = (int) ($pagination['total'] ?? $filteredCount);
                       <?php else: ?>
                         <form action="<?= esc($url . '/restore') ?>" method="POST" data-archive-async="restore" data-archive-version-step="1" data-archive-undo-url="<?= esc($url . '/archive') ?>" data-archive-undo-label="Re-archive" data-confirm="Restore this announcement as a draft? It will remain hidden until reviewed and published." data-confirm-title="Restore announcement" data-confirm-label="Restore as draft" data-confirm-tone="primary"><?= csrf_field() ?><input type="hidden" name="version" value="<?= (int) $notice['version'] ?>"><button class="btn btn-outline-primary btn-sm" type="submit">Restore</button></form>
                       <?php endif; ?>
-                      <?php if ($notice['published_at'] !== null): ?><a class="btn btn-outline-secondary btn-sm" href="<?= esc($baseUrl . '?' . http_build_query($activeFilterQuery + ['reads' => $notice['id'], 'page' => $pagination['page']])) ?>">Read history</a><?php endif; ?>
+                      <?php if ($notice['published_at'] !== null):
+                        $isActiveReads = $activeReadAnnouncementId === (int) $notice['id'];
+                      ?><a class="btn btn-outline-secondary btn-sm<?= $isActiveReads ? ' is-active' : '' ?>" href="<?= esc($baseUrl . '?' . http_build_query($activeFilterQuery + ['reads' => $notice['id'], 'page' => $pagination['page']])) ?>" data-filter-link data-filter-scroll="#ga-read-history"<?= $isActiveReads ? ' aria-current="true"' : '' ?>>Read history</a><?php endif; ?>
                     </div>
                   </td>
                 </tr>
@@ -215,27 +221,38 @@ $totalCount = (int) ($pagination['total'] ?? $filteredCount);
         ], ['saveData' => false]) ?>
       </div>
     </div>
-    <div data-refresh-region="announcements.read-history" data-filter-region="read-history">
-      <?php if (isset($readHistory)): ?>
-        <section class="ga-read-history" aria-labelledby="ga-read-title">
-          <header class="ga-band">
-            <h3 id="ga-read-title" class="ga-results-title">Read history</h3>
-            <p class="ga-read-announcement"><?= esc($readHistory['announcement']['title']) ?></p>
-            <p class="ga-intro-desc">A read marker is not acknowledgement or proof of comprehension.</p>
+    <div class="ga-read-history-slot" data-refresh-region="announcements.read-history" data-filter-region="read-history">
+      <?php if (isset($readHistory)):
+        $readTotal = (int) ($readHistory['pagination']['total'] ?? count($readHistory['reads']));
+      ?>
+        <a class="ga-read-backdrop" href="<?= esc($closeReadHistoryUrl, 'attr') ?>" data-filter-link data-filter-close-overlay aria-label="Close read history" tabindex="-1"></a>
+        <section class="ga-read-history ga-read-drawer" id="ga-read-history" role="dialog" aria-modal="true" aria-labelledby="ga-read-title" aria-describedby="ga-read-desc" data-filter-overlay>
+          <header class="ga-read-drawer-header">
+            <div class="ga-read-drawer-title-wrap">
+              <h3 id="ga-read-title" class="ga-read-drawer-title" tabindex="-1">Read history</h3>
+              <span class="ga-read-count-tag" aria-label="<?= number_format($readTotal) ?> <?= $readTotal === 1 ? 'reader' : 'readers' ?>"><?= number_format($readTotal) ?></span>
+            </div>
+            <a class="btn-close ga-read-close" href="<?= esc($closeReadHistoryUrl, 'attr') ?>" data-filter-link data-filter-close-overlay aria-label="Close read history"></a>
           </header>
-          <div class="ga-table-wrap">
-            <table class="ga-table ga-read-table" role="table">
-              <caption class="visually-hidden">People who marked this announcement as read</caption>
-              <thead role="rowgroup"><tr role="row"><th scope="col">Person</th><th scope="col">Marked read at (Asia/Manila)</th></tr></thead>
-              <tbody role="rowgroup">
-                <?php foreach ($readHistory['reads'] as $read): ?>
-                  <tr role="row"><td role="cell"><?= esc($read['first_name'] . ' ' . $read['last_name']) ?></td><td role="cell"><span class="ga-cell-label" aria-hidden="true">Marked read · Asia/Manila</span><span class="ga-timestamp"><?= esc($announcementDate($read['read_at'])) ?></span></td></tr>
-                <?php endforeach; ?>
-                <?php if ($readHistory['reads'] === []): ?><tr role="row"><td colspan="2" class="ga-empty-cell" role="cell">No read markers yet.</td></tr><?php endif; ?>
-              </tbody>
-            </table>
+          <div class="ga-read-drawer-meta">
+            <p class="ga-read-announcement"><?= esc($readHistory['announcement']['title']) ?></p>
+            <p id="ga-read-desc" class="ga-read-drawer-desc">A read marker is not acknowledgement or proof of comprehension.</p>
           </div>
-          <div class="ga-pagination-band">
+          <div class="ga-read-drawer-body">
+            <div class="ga-table-wrap">
+              <table class="ga-table ga-read-table" role="table">
+                <caption class="visually-hidden">People who marked this announcement as read</caption>
+                <thead role="rowgroup"><tr role="row"><th scope="col">Person</th><th scope="col">Marked read at (Asia/Manila)</th></tr></thead>
+                <tbody role="rowgroup">
+                  <?php foreach ($readHistory['reads'] as $read): ?>
+                    <tr role="row"><td role="cell"><?= esc($read['first_name'] . ' ' . $read['last_name']) ?></td><td role="cell"><span class="ga-cell-label" aria-hidden="true">Marked read · Asia/Manila</span><span class="ga-timestamp"><?= esc($announcementDate($read['read_at'])) ?></span></td></tr>
+                  <?php endforeach; ?>
+                  <?php if ($readHistory['reads'] === []): ?><tr role="row"><td colspan="2" class="ga-empty-cell" role="cell">No read markers yet.</td></tr><?php endif; ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <footer class="ga-pagination-band ga-read-drawer-footer">
             <?= view('partials/table_pagination', [
                 'pagination' => $readHistory['pagination'],
                 'baseUrl' => $baseUrl,
@@ -244,7 +261,7 @@ $totalCount = (int) ($pagination['total'] ?? $filteredCount);
                 'paginationLabel' => 'Read history pages',
                 'paginationExtraQuery' => $activeFilterQuery + ['reads' => $readHistory['announcement']['id'], 'page' => $pagination['page']],
             ], ['saveData' => false]) ?>
-          </div>
+          </footer>
         </section>
       <?php endif; ?>
     </div>

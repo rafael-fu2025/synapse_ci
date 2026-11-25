@@ -15,8 +15,10 @@ use App\Services\Clinic\EncounterService;
 use App\Services\Clinic\InventoryService;
 use App\Services\Clinic\IsolationTrackingService;
 use App\Services\Clinic\PatientHistoryService;
+use App\Services\AuthenticatedUser;
 use App\Services\CurrentTenant;
 use App\Services\DashboardCache;
+use App\Services\Referrals\ReferralService;
 use App\Services\Reporting\ClinicMedicalCertificateLatex;
 use App\Services\Reporting\ClinicReportInsights;
 use App\Services\Reporting\ClinicSummaryReportLatex;
@@ -124,7 +126,7 @@ final class ClinicController extends BaseController
                 ->join('people p', 'p.id = e.person_id AND p.tenant_id = e.tenant_id')
                 ->join('users u', 'u.id = e.attending_user_id AND u.tenant_id = e.tenant_id', 'left')
                 ->where('e.tenant_id', $tenantId)->where('e.deleted_at', null)
-                ->select('e.id, e.chief_complaint, e.status, e.started_at, ' . $timeCol . ' AS visited_at, p.first_name, p.last_name, p.mis_id, p.kind, u.username as attending_name', false)
+                ->select('e.id, e.person_id, e.chief_complaint, e.status, e.started_at, ' . $timeCol . ' AS visited_at, p.first_name, p.last_name, p.mis_id, p.kind, u.username as attending_name', false)
                 ->orderBy($timeCol, 'DESC', false)->orderBy('e.id', 'DESC')->limit(6)->get()->getResultArray();
 
             $openEncountersCount = (int) $db->table('clinic_encounters')
@@ -463,6 +465,22 @@ final class ClinicController extends BaseController
         $isSuperadmin = ($sessionUser['role'] ?? '') === 'superadmin';
         $canSeal = $isSuperadmin || in_array('clinic.encounters.seal', $perms, true);
         $canAddendum = $isSuperadmin || in_array('clinic.encounters.addendum', $perms, true);
+        $canCreateReferral = $isSuperadmin || in_array('referrals.create', $perms, true);
+
+        $referralService = new ReferralService();
+        $guidanceReferralReasons = $referralService->reasonOptions('guidance');
+        $linkedGuidanceReferral = null;
+        $db = Database::connect();
+        if ($db->tableExists('referrals')) {
+            $linkedGuidanceReferral = $db->table('referrals')
+                ->select('id, referral_code, status, priority, reason_code, created_at')
+                ->where('tenant_id', CurrentTenant::id())
+                ->where('source_encounter_id', $id)
+                ->where('target_module', 'guidance')
+                ->orderBy('id', 'DESC')
+                ->get()
+                ->getRowArray() ?: null;
+        }
 
         return view('clinic/encounters/stepper', [
             'title'              => 'Visit: ' . $encounterPackage['patient']['last_name'],
@@ -478,6 +496,9 @@ final class ClinicController extends BaseController
             'canDispense'        => $canDispense,
             'canSeal'            => $canSeal,
             'canAddendum'        => $canAddendum,
+            'canCreateReferral'  => $canCreateReferral,
+            'guidanceReferralReasons' => $guidanceReferralReasons,
+            'linkedGuidanceReferral'  => $linkedGuidanceReferral,
             'breadcrumbs'        => [
                 ['label' => 'Clinic', 'url' => site_url('/clinic/encounters')],
                 ['label' => 'Encounter #' . $id, 'url' => ''],
@@ -577,9 +598,84 @@ final class ClinicController extends BaseController
     {
         try {
             $actorId = $this->authorizeEncounter(write: true, seal: true);
-            $this->encounterService->completeEncounter($id, $this->inventoryPostString('disposition'),
-                pendingDraft: $this->encounterDraftFields(), recordedByUserId: $actorId);
-            return $this->inventoryFormResponse(true, 'Visit completed and sealed successfully.', '/clinic/encounters', 200, [],
+            $disposition = $this->inventoryPostString('disposition');
+
+            $pendingReferral = null;
+            $referralService = null;
+            $referralActor = null;
+            $db = Database::connect();
+
+            if ($disposition === 'referred_to_guidance' && $db->tableExists('referrals')) {
+                $existingReferral = $db->table('referrals')
+                    ->select('id, referral_code')
+                    ->where('tenant_id', CurrentTenant::id())
+                    ->where('source_encounter_id', $id)
+                    ->where('target_module', 'guidance')
+                    ->get()
+                    ->getRowArray();
+
+                if ($existingReferral === null) {
+                    $referralService = new ReferralService();
+                    $currentUser = (new AuthenticatedUser())->current() ?? [];
+                    $referralActor = $referralService->authorize($currentUser, 'referrals.create', 'clinic');
+
+                    $rawReason = $this->request->getPost('referral_reason_code');
+                    $rawSummary = $this->request->getPost('referral_summary');
+                    $explicitReferralFields = ($rawReason !== null || $rawSummary !== null);
+
+                    if ($explicitReferralFields) {
+                        $reasonCode = trim($this->inventoryPostString('referral_reason_code'));
+                        if ($reasonCode === '' || !array_key_exists($reasonCode, $referralService->reasonOptions('guidance'))) {
+                            throw new \InvalidArgumentException('Choose a reason for the Guidance referral.', 422);
+                        }
+                        $priority = trim($this->inventoryPostString('referral_priority'));
+                        if ($priority === '') {
+                            $priority = 'routine';
+                        }
+                        if (!in_array($priority, ['routine', 'urgent', 'crisis'], true)) {
+                            throw new \InvalidArgumentException('Choose a valid referral priority.', 422);
+                        }
+                        $summary = trim($this->inventoryPostString('referral_summary'));
+                        if ($summary === '' || mb_strlen($summary) > 2000) {
+                            throw new \InvalidArgumentException('Enter a brief handoff summary (up to 2,000 characters) for Guidance.', 422);
+                        }
+                    } else {
+                        $reasonCode = 'other';
+                        $priority = 'routine';
+                        $notes = trim($this->inventoryPostString('disposition_notes'));
+                        $summary = $notes !== ''
+                            ? mb_substr($notes, 0, 2000)
+                            : ('Referred to Guidance & Counseling from Clinic encounter #' . $id);
+                    }
+
+                    $pendingReferral = [
+                        'workstation'        => 'clinic',
+                        'issuer_user_id'     => (int) $referralActor['id'],
+                        'reason_code'        => $reasonCode,
+                        'priority'           => $priority,
+                        'reason_description' => $summary,
+                    ];
+                }
+            }
+
+            $completed = $this->encounterService->completeEncounter(
+                $id,
+                $disposition,
+                pendingDraft: $this->encounterDraftFields(),
+                recordedByUserId: $actorId
+            );
+
+            $message = 'Visit completed and sealed successfully.';
+            if ($pendingReferral !== null && $referralService !== null && $referralActor !== null) {
+                $createdReferral = $referralService->createReferral($pendingReferral + [
+                    'patient_person_id'   => (int) $completed['patient']['id'],
+                    'source_encounter_id' => $id,
+                    'request_key'         => hash('sha256', 'clinic-encounter-referral:' . CurrentTenant::id() . ':' . $id),
+                ], $referralActor);
+                $message = 'Visit completed and Guidance referral ' . $createdReferral['referral_code'] . ' submitted.';
+            }
+
+            return $this->inventoryFormResponse(true, $message, '/clinic/encounters', 200, [],
                 $this->navigationRefresh('/clinic/encounters', 'clinic.encounters'));
         } catch (\Throwable $e) {
             return $this->inventoryFailure($e, '/clinic/encounters/' . $id);

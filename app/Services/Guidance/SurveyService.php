@@ -157,7 +157,7 @@ final class SurveyService
         });
     }
 
-    public function available(array $query = []): array
+    public function available(array $query = [], ?int $sliceOffset = null, ?int $sliceLimit = null): array
     {
         $actor = EngagementAccess::actor();
         $filters = PortalContent::filters($query, ['all', 'available', 'submitted', 'closed']);
@@ -188,6 +188,21 @@ final class SurveyService
         $externalSelect = self::hasExternalUrlColumn($db) ? ',s.external_url' : ',NULL AS external_url';
         $builder->select('s.id,s.title,s.description,s.starts_at,s.ends_at,s.published_at,s.status' . $externalSelect)
             ->select($submitted . ' AS submitted', false)->select('CASE WHEN ' . $open . ' THEN 0 ELSE 1 END AS closed', false);
+        if ($sliceOffset !== null && $sliceLimit !== null) {
+            $filtered = (clone $builder)->countAllResults();
+            $items = $sliceLimit <= 0
+                ? []
+                : $builder->orderBy('s.id', 'DESC')->limit($sliceLimit, max(0, $sliceOffset))->get()->getResultArray();
+            $pagination = [
+                'page'     => 1,
+                'per_page' => $filters['per_page'],
+                'total'    => $filtered,
+                'filtered' => $filtered,
+                'pages'    => max(1, (int) ceil($filtered / $filters['per_page'])),
+            ];
+            return ['items' => $items, 'pagination' => $pagination, 'filters' => $filters,
+                'counts' => $counts, 'hasProfile' => true, 'nowUtc' => $now];
+        }
         return PortalContent::page($builder, $filters, 's.id') + ['counts' => $counts, 'hasProfile' => true, 'nowUtc' => $now];
     }
 

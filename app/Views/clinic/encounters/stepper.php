@@ -67,8 +67,13 @@ $initialVitalsJson = (string) json_encode([
   <div class="ce-patient-card clinic-patient-header">
     <div class="ce-patient-top">
       <div class="ce-patient-identity">
+        <?php
+          $ceTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+          $cePhotoUrl = $ceTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($ceTenantId, (int) ($patient['id'] ?? 0)) : null;
+          $ceInitials = strtoupper(substr((string) $patient['first_name'], 0, 1) . substr((string) $patient['last_name'], 0, 1));
+        ?>
         <div class="ce-avatar" aria-hidden="true">
-          <?= esc(strtoupper(substr((string) $patient['first_name'], 0, 1) . substr((string) $patient['last_name'], 0, 1))) ?>
+          <?= \App\Services\ProfileAvatar::contentHtml($cePhotoUrl, $ceInitials, $patient) ?>
         </div>
         <div style="min-width: 0;">
           <div class="ce-patient-heading">
@@ -593,6 +598,53 @@ $initialVitalsJson = (string) json_encode([
               </div>
             </div>
 
+            <?php
+            $isGuidanceDisposition = ($enc['disposition'] ?? '') === 'referred_to_guidance';
+            $guidanceReferralReasons = $guidanceReferralReasons ?? (new \App\Services\Referrals\ReferralService())->reasonOptions('guidance');
+            ?>
+            <div class="mb-4" data-guidance-referral-panel<?= $isGuidanceDisposition ? '' : ' hidden' ?>>
+              <?php if (!empty($linkedGuidanceReferral)): ?>
+                <div class="ce-notice ce-notice-sky">
+                  <div class="ce-notice-body">
+                    <i class="bi bi-send-check ce-notice-icon" aria-hidden="true"></i>
+                    <div>
+                      Guidance referral <strong><?= esc($linkedGuidanceReferral['referral_code']) ?></strong> is already linked to this encounter. Sealing this visit will not create a duplicate referral.
+                    </div>
+                  </div>
+                </div>
+              <?php elseif (!empty($canCreateReferral)): ?>
+                <div class="p-3 border rounded bg-body-tertiary" data-guidance-referral-fields>
+                  <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                    <h3 class="h6 mb-0"><i class="bi bi-send me-1" aria-hidden="true"></i> Guidance Referral Handoff</h3>
+                  </div>
+                  <p class="small text-muted mb-3">Completing this encounter submits a referral to Guidance &rarr; Clinic-Guidance Referrals. Only this brief handoff summary is shared—not the patient's full medical chart.</p>
+                  <div class="row g-3">
+                    <div class="col-md-7">
+                      <label for="referral_reason_code" class="form-label">Reason for guidance support</label>
+                      <select name="referral_reason_code" id="referral_reason_code" class="form-select" required<?= $isGuidanceDisposition ? '' : ' disabled' ?>>
+                        <option value="">Choose a reason</option>
+                        <?php foreach ($guidanceReferralReasons as $code => $label): ?>
+                          <option value="<?= esc($code, 'attr') ?>"><?= esc($label) ?></option>
+                        <?php endforeach; ?>
+                      </select>
+                    </div>
+                    <div class="col-md-5">
+                      <label for="referral_priority" class="form-label">Priority</label>
+                      <select name="referral_priority" id="referral_priority" class="form-select" required<?= $isGuidanceDisposition ? '' : ' disabled' ?>>
+                        <option value="routine">Routine</option>
+                        <option value="urgent">Urgent</option>
+                        <option value="crisis">Crisis</option>
+                      </select>
+                    </div>
+                    <div class="col-12">
+                      <label for="referral_summary" class="form-label">Brief handoff summary</label>
+                      <textarea name="referral_summary" id="referral_summary" rows="3" class="form-control" maxlength="2000" required<?= $isGuidanceDisposition ? '' : ' disabled' ?> placeholder="State the concern and support requested for Guidance (do not paste raw medical chart notes)..."></textarea>
+                    </div>
+                  </div>
+                </div>
+              <?php endif; ?>
+            </div>
+
             <?php if (!empty($canSeal)): ?>
               <div class="ce-notice ce-notice-emerald">
                 <div class="ce-notice-body">
@@ -637,5 +689,5 @@ $initialVitalsJson = (string) json_encode([
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
-<script src="<?= base_url('assets/js/encounter-stepper.js') ?>"></script>
+<script src="<?= base_url('assets/js/encounter-stepper.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/encounter-stepper.js') ?: '1' ?>"></script>
 <?= $this->endSection() ?>

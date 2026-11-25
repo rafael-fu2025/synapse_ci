@@ -31,7 +31,7 @@
   --iso-slate: #334155;
   --iso-violet: #6d28d9;
   --iso-zinc: #52525b;
-  --iso-mono: var(--mono-font, "Courier New", Courier, monospace);
+  --iso-mono: var(--mono-font, var(--default-font));
   color: var(--iso-fg-secondary);
   min-width: 0;
 }
@@ -78,15 +78,44 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Condition & Status Dot Tokens */
-.iso-cond-dot,
-.iso-dot {
+/* Condition Swatch & Status Icon Tokens */
+.iso-cond-dot {
   display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--iso-zinc);
+}
+
+.iso-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--iso-zinc);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.iso-dot::before {
+  content: var(--status-icon-muted, "\f2e5");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.9em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .iso-cond-dot[data-tone="crimson"] { background: var(--iso-crimson); }
@@ -102,8 +131,10 @@
   background: #f87171;
 }
 
-.iso-dot--cleared { background: var(--iso-emerald); }
-.iso-dot--hospitalized { background: var(--iso-amber); }
+.iso-dot--cleared { color: var(--iso-emerald); }
+.iso-dot--cleared::before { content: var(--status-icon-shield-ok, "\f531"); }
+.iso-dot--hospitalized { color: var(--iso-amber); }
+.iso-dot--hospitalized::before { content: var(--status-icon-hospital, "\f773"); }
 
 /* ==========================================================================
    Solid Opaque Button System
@@ -525,9 +556,11 @@ html body section.iso-workspace[data-iso-workspace] .iso-reset-btn {
 }
 
 .iso-kpi-status[data-tone="active"] { color: var(--iso-crimson); }
-.iso-kpi-status[data-tone="active"] .iso-dot { background: var(--iso-crimson); }
+.iso-kpi-status[data-tone="active"] .iso-dot { color: var(--iso-crimson); }
+.iso-kpi-status[data-tone="active"] .iso-dot::before { content: var(--status-icon-danger, "\f33a"); }
 .iso-kpi-status[data-tone="cleared"] { color: var(--iso-emerald); }
-.iso-kpi-status[data-tone="cleared"] .iso-dot { background: var(--iso-emerald); }
+.iso-kpi-status[data-tone="cleared"] .iso-dot { color: var(--iso-emerald); }
+.iso-kpi-status[data-tone="cleared"] .iso-dot::before { content: var(--status-icon-shield-ok, "\f531"); }
 
 .iso-kpi-bar {
   width: 100%;
@@ -1078,11 +1111,14 @@ html body section.iso-workspace[data-iso-workspace] a.iso-patient-link:hover {
 }
 
 .iso-status-text[data-tone="active"] { color: var(--iso-crimson); }
-.iso-status-text[data-tone="active"] .iso-dot { background: var(--iso-crimson); }
+.iso-status-text[data-tone="active"] .iso-dot { color: var(--iso-crimson); }
+.iso-status-text[data-tone="active"] .iso-dot::before { content: var(--status-icon-danger, "\f33a"); }
 .iso-status-text[data-tone="hospitalized"] { color: var(--iso-amber-text); }
-.iso-status-text[data-tone="hospitalized"] .iso-dot { background: var(--iso-amber); }
+.iso-status-text[data-tone="hospitalized"] .iso-dot { color: var(--iso-amber); }
+.iso-status-text[data-tone="hospitalized"] .iso-dot::before { content: var(--status-icon-hospital, "\f773"); }
 .iso-status-text[data-tone="cleared"] { color: var(--iso-emerald); }
-.iso-status-text[data-tone="cleared"] .iso-dot { background: var(--iso-emerald); }
+.iso-status-text[data-tone="cleared"] .iso-dot { color: var(--iso-emerald); }
+.iso-status-text[data-tone="cleared"] .iso-dot::before { content: var(--status-icon-shield-ok, "\f531"); }
 
 .iso-cell-notes {
   max-width: 22rem;

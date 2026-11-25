@@ -111,9 +111,7 @@ $toVal = ($filters['to'] ?? '') !== '' ? (string) $filters['to'] : (string) ($da
   </div>
 
   <!-- Live Status & Error Feedback -->
-  <div class="ce-live-meta">
-    <p class="ce-filter-status" data-filter-status role="status" aria-live="polite">Showing clinic encounters.</p>
-  </div>
+  <p class="visually-hidden" data-filter-status role="status" aria-live="polite">Showing clinic encounters.</p>
 
   <div class="alert ce-notice ce-notice-crimson" data-banner-dismiss="off" data-filter-error role="alert" hidden>
     <div class="ce-notice-body">

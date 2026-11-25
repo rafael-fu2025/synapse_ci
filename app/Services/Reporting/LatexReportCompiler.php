@@ -69,8 +69,12 @@ class LatexReportCompiler
             if (@file_put_contents($directory . '/report.tex', $source) !== strlen($source)) {
                 throw new RuntimeException();
             }
-            foreach (['public/assets/img/brand/FoundationU.png' => 'university-seal.png',
-                'public/synapse-black.png' => 'synapse-black.png'] as $path => $filename) {
+            foreach ([
+                'public/assets/img/brand/FoundationU.png' => 'university-seal.png',
+                'public/assets/img/brand/guidance-center.png' => 'guidance-logo.png',
+                'public/assets/img/brand/health-services.png' => 'clinic-logo.png',
+                'public/synapse-black.png' => 'synapse-black.png',
+            ] as $path => $filename) {
                 $asset = defined('ROOTPATH') ? ROOTPATH . $path : '';
                 if ($asset !== '' && is_file($asset)) {
                     if (filesize($asset) > self::MAX_LOG || !@copy($asset, $directory . '/' . $filename)) {

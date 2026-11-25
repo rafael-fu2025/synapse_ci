@@ -160,6 +160,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
 
     // Same-origin, self-owned avatar reads also work on an authorized workstation host.
     $routes->get('account/photo', 'ProfileSettingsController::photo');
+    $routes->get('people/(:num)/photo', 'ProfileSettingsController::personPhoto/$1');
 
     // Student & Employee Personal Health Portal
     $routes->get('portal/queue', 'PortalQueueController::index');
@@ -182,6 +183,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     foreach (['clinic', 'guidance', 'facilities'] as $unit) {
         $routes->group($unit . '/teams', ['filter' => 'portal_access:' . ($unit === 'facilities' ? 'bmg' : $unit)], static function (RouteCollection $routes) use ($unit): void {
             $routes->get('', 'TeamsController::index/' . $unit);
+            $routes->get('members/(:num)/photo', 'TeamsController::memberPhoto/' . $unit . '/$1');
             $routes->get('chat', 'TeamChatController::index/' . $unit);
             $routes->get('chat/history', 'TeamChatController::history/' . $unit);
             $routes->get('chat/tasks', 'TeamChatController::tasks/' . $unit);
@@ -285,6 +287,17 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('', 'EmployeeAccessController::index');
         $routes->get('(:num)/edit', 'EmployeeAccessController::edit/$1');
         $routes->post('(:num)/update', 'EmployeeAccessController::update/$1');
+    });
+
+    // Student Intern Placements & Supervision (unit-scoped inside StudentInternService)
+    $routes->group('admin/interns', ['filter' => 'auth:interns.manage'], static function (RouteCollection $routes): void {
+        $routes->get('', 'StudentInternController::index');
+        $routes->get('create', 'StudentInternController::create');
+        $routes->get('students', 'StudentInternController::searchStudents');
+        $routes->post('store', 'StudentInternController::store');
+        $routes->get('(:num)/edit', 'StudentInternController::edit/$1');
+        $routes->post('(:num)/update', 'StudentInternController::update/$1');
+        $routes->post('(:num)/revoke', 'StudentInternController::revoke/$1');
     });
 
     // Audit Trail & Cryptographic Chain
@@ -431,6 +444,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
 
         // Multiple Intelligence (Counselor Console)
         $routes->get('guidance/assessments/mi', 'GuidanceMultipleIntelligenceController::index');
+        $routes->get('guidance/assessments/mi/students/search', 'GuidanceMultipleIntelligenceController::searchStudents');
         $routes->post('guidance/assessments/mi/assign', 'GuidanceMultipleIntelligenceController::assign');
         $routes->get('guidance/assessments/mi/results/(:num)', 'GuidanceMultipleIntelligenceController::counselorResults/$1');
         $routes->get('guidance/assessments/mi/results/(:num)/pdf', 'GuidanceMultipleIntelligenceController::counselorPdf/$1');
@@ -440,6 +454,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('guidance/evaluations/moderate', 'GuidanceEvaluationController::moderate');
         $routes->post('guidance/evaluations/moderate/(:num)', 'GuidanceEvaluationController::moderateAction/$1');
         $routes->get('guidance/evaluations/aggregate-pdf', 'GuidanceEvaluationController::aggregatePdf');
+        $routes->post('guidance/evaluations/issue', 'GuidanceEvaluationController::issueToken');
     });
 
     // Employee Guidance Portal Referrals
@@ -569,6 +584,7 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
             $routes->post('store', 'AppointmentController::store/' . $unit, ['filter' => 'appointment_csrf']);
             $routes->get('availability', 'AppointmentController::availability/' . $unit);
             $routes->post('availability', 'AppointmentController::availabilityStore/' . $unit, ['filter' => 'appointment_csrf']);
+            $routes->post('availability/remove', 'AppointmentController::availabilityRemove/' . $unit, ['filter' => 'appointment_csrf']);
             $routes->post('availability/template', 'AppointmentController::availabilityTemplateStore/' . $unit, ['filter' => 'appointment_csrf']);
             $routes->post('availability/enroll', 'AppointmentController::availabilityEnroll/' . $unit, ['filter' => 'appointment_csrf']);
             $routes->post('availability/exceptions', 'AppointmentController::availabilityExceptionStore/' . $unit, ['filter' => 'appointment_csrf']);

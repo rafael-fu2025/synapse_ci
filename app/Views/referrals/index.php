@@ -70,7 +70,7 @@
             <a class="btn btn-outline-secondary" data-table-reset href="<?= esc($baseUrl . '?' . http_build_query(['tab' => $tab])) ?>">Reset</a>
           </div>
         </form>
-        <p data-table-status role="status" aria-live="polite" class="rw-table-status"></p>
+        <p data-table-status role="status" aria-live="polite" class="visually-hidden"></p>
         <div data-table-error class="alert alert-danger rw-table-error" role="alert" hidden>
           <span data-table-error-message></span>
           <button data-table-retry type="button" class="btn btn-outline-danger btn-sm">Retry</button>

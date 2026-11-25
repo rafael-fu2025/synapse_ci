@@ -192,4 +192,21 @@ final class ProfilePhotoServiceTest extends TestCase
         $this->expectExceptionCode(403);
         $this->photos->path(0, 42);
     }
+
+    public function testPhotoUrlsReturnNullWhenMissingAndVersionedPathWhenPresent(): void
+    {
+        $this->assertNull($this->photos->personPhotoUrl(0, 42));
+        $this->assertNull($this->photos->personPhotoUrl(17, 0));
+        $this->assertNull($this->photos->personPhotoUrl(17, 42));
+        $this->assertNull($this->photos->teamMemberPhotoUrl(17, 42, 'guidance', 9));
+
+        $this->photos->save($this->upload($this->image('png', 40, 40)), 17, 42);
+
+        $personUrl = $this->photos->personPhotoUrl(17, 42);
+        $teamUrl = $this->photos->teamMemberPhotoUrl(17, 42, 'guidance', 9);
+        $this->assertIsString($personUrl);
+        $this->assertIsString($teamUrl);
+        $this->assertMatchesRegularExpression('~people/42/photo\?v=\d+$~', $personUrl);
+        $this->assertMatchesRegularExpression('~guidance/teams/members/9/photo\?v=\d+$~', $teamUrl);
+    }
 }

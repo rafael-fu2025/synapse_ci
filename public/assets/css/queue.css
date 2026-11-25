@@ -31,7 +31,7 @@
   --q-crimson: #b91c1c;
   --q-sky: #0369a1;
   --q-slate: #475569;
-  --q-mono: var(--mono-font, "Courier New", Courier, monospace);
+  --q-mono: var(--mono-font, var(--default-font));
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) {
@@ -659,16 +659,29 @@ html body #walkinModal .btn.queue-change-person.queue-change-person[class]:focus
 }
 
 .q-priority-dot::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  content: var(--status-icon-info, "\f430");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.95em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
   flex-shrink: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .q-priority-dot--emergency {
   color: var(--q-crimson);
+}
+
+.q-priority-dot--emergency::before {
+  content: var(--status-icon-danger, "\f33a");
 }
 
 .q-priority-dot--urgent {
@@ -676,7 +689,8 @@ html body #walkinModal .btn.queue-change-person.queue-change-person[class]:focus
 }
 
 .q-priority-dot--urgent::before {
-  background: var(--q-amber);
+  content: var(--status-icon-alert, "\f332");
+  color: var(--q-amber);
 }
 
 .q-ticket-time {

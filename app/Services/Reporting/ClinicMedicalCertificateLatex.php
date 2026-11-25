@@ -26,57 +26,72 @@ final class ClinicMedicalCertificateLatex
             '__SIGNER__'     => $e((string) ($details['attending_user_name'] ?? $issuedBy)),
         ];
 
-        $template = <<<'TEX'
-\documentclass[11pt,a4paper]{article}
-\pdfminorversion=4
-\usepackage[top=20mm,bottom=20mm,left=20mm,right=20mm]{geometry}
-\usepackage[T1]{fontenc}
-\IfFileExists{t1ptm.fd}{\renewcommand{\rmdefault}{ptm}}{\renewcommand{\rmdefault}{utm}}
-\DeclareSymbolFont{operators}{T1}{\rmdefault}{m}{n}
-\SetSymbolFont{operators}{bold}{T1}{\rmdefault}{b}{n}
-\usepackage{graphicx,xcolor,tabularx}
-\definecolor{Maroon}{HTML}{800000}
-\definecolor{Ink}{HTML}{293241}
-\definecolor{Muted}{HTML}{606975}
-\color{Ink}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{6pt}
-\pdfinfo{/Title (University Clinic Medical Slip) /Author (Foundation University)}
-\begin{document}
-\begin{minipage}[c]{14mm}
-  \includegraphics[height=13mm]{university-seal.png}
-\end{minipage}
-\begin{minipage}[c]{\dimexpr\linewidth-18mm\relax}
-  {\bfseries\large\color{Maroon}FOUNDATION UNIVERSITY}\par
-  {\small\bfseries UNIVERSITY HEALTH CLINIC \textperiodcentered{} MEDICAL CONSULTATION CERTIFICATE}
-\end{minipage}
-\par\vspace{2mm}{\color{Maroon}\hrule height 0.8pt}\par\vspace{6mm}
+        $colors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'University Health Clinic',
+            '\\textbf{Document Ref:} CLINIC-ENC-__ENC_ID__',
+            '\\textbf{Issued via SYNAPSE} \\quad \\textit{Foundation University Health Clinic}',
+            'Page \\thepage'
+        );
+        $header = DocumentHeaderLatex::headerContainer(
+            'clinic',
+            'UNIVERSITY HEALTH CLINIC',
+            'Medical Consultation Certificate',
+            '\\textbf{Reference:} CLINIC-ENC-__ENC_ID__ \\quad \\textbf{Issued via:} SYNAPSE'
+        );
 
-{\bfseries Reference:} CLINIC-ENC-__ENC_ID__ \hfill {\small\color{Muted}Issued via SYNAPSE}
-\par\vspace{4mm}
+        $template = <<<TEX
+\\documentclass[10pt,a4paper]{article}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
+\\usepackage[T1]{fontenc}
+\\IfFileExists{t1ptm.fd}{\\renewcommand{\\rmdefault}{ptm}}{\\renewcommand{\\rmdefault}{utm}}
+\\DeclareSymbolFont{operators}{T1}{\\rmdefault}{m}{n}
+\\SetSymbolFont{operators}{bold}{T1}{\\rmdefault}{b}{n}
+\\usepackage{graphicx,xcolor,tabularx,fancyhdr}
+\\definecolor{Maroon}{HTML}{800000}
+\\definecolor{Ink}{HTML}{293241}
+\\definecolor{Muted}{HTML}{606975}
+{$colors}
+\\color{Ink}
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{6pt}
+\\renewcommand{\\arraystretch}{1.25}
+\\pdfinfo{/Title (University Clinic Medical Slip) /Author (Foundation University)}
+{$fancy}
+\\begin{document}
+{$header}
+
 To Whom It May Concern:
-\par
-This is to certify that \textbf{__FULL_NAME__} (University ID: \textbf{__MIS_ID__}) was seen and evaluated at the Foundation University Clinic.
+\\par
+This is to certify that \\textbf{__FULL_NAME__} (University ID: \\textbf{__MIS_ID__}) was seen and evaluated at the Foundation University Clinic.
 
-\vspace{2mm}
-\begin{tabularx}{\textwidth}{@{}l X@{}}
-\textbf{Visit Date/Time:} & __VISIT_AT__ \\
-\textbf{Chief Complaint:} & __COMPLAINT__ \\
-\textbf{Clinical Impression:} & __DIAGNOSIS__ \\
-\textbf{Disposition / Recommendation:} & __DISPOSITION__ --- __NOTES__ \\
-\end{tabularx}
+\\vspace{2mm}
+\\noindent\\begin{tabularx}{\\textwidth}{|l|X|}
+\\hline
+\\textbf{Reference No:} & CLINIC-ENC-__ENC_ID__ \\\\ \\hline
+\\textbf{Visit Date/Time:} & __VISIT_AT__ \\\\ \\hline
+\\textbf{Chief Complaint:} & __COMPLAINT__ \\\\ \\hline
+\\textbf{Clinical Impression:} & __DIAGNOSIS__ \\\\ \\hline
+\\textbf{Disposition / Recommendation:} & __DISPOSITION__ --- __NOTES__ \\\\ \\hline
+\\end{tabularx}
 
-\vspace{12mm}
-\begin{minipage}[t]{0.55\textwidth}
-\rule{60mm}{0.5pt}\\
-{\bfseries __SIGNER__}\\
-{\small University Clinic Personnel / Attending Clinician}
-\end{minipage}
-\hfill
-\begin{minipage}[t]{0.38\textwidth}
-{\small\color{Muted}This certificate reflects the clinical encounter record \#__ENC_ID__ and is intended for academic excuse or return-to-class verification.}
-\end{minipage}
-\end{document}
+\\vspace{12mm}
+\\noindent\\begin{minipage}[t]{0.55\\textwidth}
+\\rule{60mm}{0.5pt}\\\\
+{\\bfseries __SIGNER__}\\\\
+{\\small University Clinic Personnel / Attending Clinician}
+\\end{minipage}
+\\hfill
+\\begin{minipage}[t]{0.38\\textwidth}
+{\\small\\color{Muted}This certificate reflects clinical encounter record \\#__ENC_ID__ and is intended for academic excuse or return-to-class verification.}
+\\end{minipage}
+
+\\vfill
+\\begin{center}
+\\footnotesize\\textit{CONFIDENTIALITY NOTICE: This medical record is protected under RA 10173 (Data Privacy Act of 2012). Unauthorized disclosure or reproduction is strictly prohibited.}
+\\end{center}
+\\end{document}
 TEX;
 
         return strtr($template, $replacements);
@@ -97,47 +112,63 @@ TEX;
             '__SIGNER__'    => $e((string) ($clearance['cleared_by_name'] ?? $issuedBy)),
         ];
 
-        $template = <<<'TEX'
-\documentclass[11pt,a4paper]{article}
-\pdfminorversion=4
-\usepackage[top=20mm,bottom=20mm,left=20mm,right=20mm]{geometry}
-\usepackage[T1]{fontenc}
-\IfFileExists{t1ptm.fd}{\renewcommand{\rmdefault}{ptm}}{\renewcommand{\rmdefault}{utm}}
-\DeclareSymbolFont{operators}{T1}{\rmdefault}{m}{n}
-\SetSymbolFont{operators}{bold}{T1}{\rmdefault}{b}{n}
-\usepackage{graphicx,xcolor,tabularx}
-\definecolor{Maroon}{HTML}{800000}
-\definecolor{Ink}{HTML}{293241}
-\definecolor{Muted}{HTML}{606975}
-\color{Ink}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{6pt}
-\pdfinfo{/Title (Clinic Enrollment Medical Clearance) /Author (Foundation University)}
-\begin{document}
-\begin{minipage}[c]{14mm}
-  \includegraphics[height=13mm]{university-seal.png}
-\end{minipage}
-\begin{minipage}[c]{\dimexpr\linewidth-18mm\relax}
-  {\bfseries\large\color{Maroon}FOUNDATION UNIVERSITY}\par
-  {\small\bfseries UNIVERSITY HEALTH CLINIC \textperiodcentered{} ANNUAL / ENROLLMENT HEALTH CLEARANCE}
-\end{minipage}
-\par\vspace{2mm}{\color{Maroon}\hrule height 0.8pt}\par\vspace{6mm}
+        $colors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'University Health Clinic',
+            '\\textbf{Clearance Ref:} CLINIC-CLR-__CID__',
+            '\\textbf{Issued via SYNAPSE} \\quad \\textit{Foundation University Health Clinic}',
+            'Page \\thepage'
+        );
+        $header = DocumentHeaderLatex::headerContainer(
+            'clinic',
+            'UNIVERSITY HEALTH CLINIC',
+            'Annual / Enrollment Health Clearance',
+            '\\textbf{Clearance Ref:} CLINIC-CLR-__CID__ \\quad \\textbf{School Year:} __SY__ (__TERM__)'
+        );
 
-{\bfseries Clearance Ref:} CLINIC-CLR-__CID__ \hfill {\bfseries School Year:} __SY__ (__TERM__)
-\par\vspace{4mm}
-This is to certify the University Clinic health examination record of \textbf{__FULL_NAME__} (University ID: \textbf{__MIS_ID__}).
+        $template = <<<TEX
+\\documentclass[10pt,a4paper]{article}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
+\\usepackage[T1]{fontenc}
+\\IfFileExists{t1ptm.fd}{\\renewcommand{\\rmdefault}{ptm}}{\\renewcommand{\\rmdefault}{utm}}
+\\DeclareSymbolFont{operators}{T1}{\\rmdefault}{m}{n}
+\\SetSymbolFont{operators}{bold}{T1}{\\rmdefault}{b}{n}
+\\usepackage{graphicx,xcolor,tabularx,fancyhdr}
+\\definecolor{Maroon}{HTML}{800000}
+\\definecolor{Ink}{HTML}{293241}
+\\definecolor{Muted}{HTML}{606975}
+{$colors}
+\\color{Ink}
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{6pt}
+\\renewcommand{\\arraystretch}{1.25}
+\\pdfinfo{/Title (Clinic Enrollment Medical Clearance) /Author (Foundation University)}
+{$fancy}
+\\begin{document}
+{$header}
 
-\vspace{2mm}
-\begin{tabularx}{\textwidth}{@{}l X@{}}
-\textbf{Clearance Status:} & \textbf{__STATUS__} \\
-\textbf{Remarks:} & __REMARKS__ \\
-\end{tabularx}
+This is to certify the University Clinic health examination record of \\textbf{__FULL_NAME__} (University ID: \\textbf{__MIS_ID__}).
 
-\vspace{12mm}
-\rule{60mm}{0.5pt}\\
-{\bfseries __SIGNER__}\\
-{\small University Clinic Health Officer / Attending Nurse}
-\end{document}
+\\vspace{2mm}
+\\noindent\\begin{tabularx}{\\textwidth}{|l|X|}
+\\hline
+\\textbf{Clearance Ref:} & CLINIC-CLR-__CID__ \\\\ \\hline
+\\textbf{School Year / Term:} & __SY__ (__TERM__) \\\\ \\hline
+\\textbf{Clearance Status:} & \\textbf{__STATUS__} \\\\ \\hline
+\\textbf{Remarks:} & __REMARKS__ \\\\ \\hline
+\\end{tabularx}
+
+\\vspace{12mm}
+\\rule{60mm}{0.5pt}\\\\
+{\\bfseries __SIGNER__}\\\\
+{\\small University Clinic Health Officer / Attending Nurse}
+
+\\vfill
+\\begin{center}
+\\footnotesize\\textit{CONFIDENTIALITY NOTICE: This health clearance record is protected under RA 10173 (Data Privacy Act of 2012). Unauthorized disclosure or reproduction is strictly prohibited.}
+\\end{center}
+\\end{document}
 TEX;
 
         return strtr($template, $replacements);

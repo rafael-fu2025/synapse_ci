@@ -341,6 +341,7 @@ final class AppointmentService
         $this->assertAvailabilityManager($unit, $actor);
         return $this->availabilityModel->scoped()
             ->select('provider_availability.*')
+            ->select('staff.person_id AS provider_person_id')
             ->select("COALESCE(NULLIF(TRIM(CONCAT_WS(' ', provider.first_name, provider.last_name)), ''), u.username) AS provider_name", false)
             ->join('users u', 'u.id = provider_availability.provider_user_id AND u.tenant_id = provider_availability.tenant_id', 'left')
             ->join('department_staff staff', 'staff.id = provider_availability.staff_assignment_id AND staff.tenant_id = provider_availability.tenant_id AND staff.unit = provider_availability.unit', 'left')
@@ -394,6 +395,38 @@ final class AppointmentService
                 }
             }
             return $this->availabilityModel->scoped()->where('unit', $unit)->find($id);
+        });
+    }
+
+    /** Remove one recurring weekday availability window with snapshot token verification; existing bookings stay intact. */
+    public function removeAvailability(string $unit, array $data, array $actor): array
+    {
+        $this->assertAvailabilityManager($unit, $actor);
+        $this->assertSchedulingPermission($unit, $actor);
+        $providerId = $this->selectedIds([$data['staff_assignment_id'] ?? null])[0];
+        $id = filter_var($data['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($id === false) {
+            throw new \InvalidArgumentException('Choose a valid availability window.');
+        }
+
+        return $this->allocate($unit, $providerId, function (array $provider) use ($unit, $actor, $id, $data): array {
+            $this->assertAvailabilityManager($unit, $actor);
+            $this->assertSchedulingPermission($unit, $actor);
+            $row = $this->availabilityModel->scoped()
+                ->where('unit', $unit)
+                ->where('staff_assignment_id', $provider['id'])
+                ->find($id);
+            if ($row === null || !hash_equals(ProviderAvailabilityModel::snapshotToken($row), (string) ($data['token'] ?? ''))) {
+                throw new \RuntimeException('Availability window changed. Reload before removing.', 409);
+            }
+            if (!$this->availabilityModel->scoped()->where('unit', $unit)->where('staff_assignment_id', $provider['id'])->delete($id)) {
+                throw new \RuntimeException('Unable to remove provider availability.');
+            }
+            return [
+                'id'                  => $id,
+                'staff_assignment_id' => (int) $provider['id'],
+                'day_of_week'         => (int) $row['day_of_week'],
+            ];
         });
     }
 

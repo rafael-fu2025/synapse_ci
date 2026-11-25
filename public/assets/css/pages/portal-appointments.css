@@ -166,14 +166,14 @@
 }
 
 .pa-workspace .pa-callslip-num {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--pa-heading);
 }
 
 .pa-workspace .pa-callslip-time {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.77rem;
   color: var(--pa-muted);
 }
@@ -406,7 +406,7 @@
 }
 
 .pa-workspace .pa-date {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.81rem;
   font-weight: 600;
   color: var(--pa-heading);
@@ -415,7 +415,7 @@
 }
 
 .pa-workspace .pa-time {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.75rem;
   color: var(--pa-muted);
   font-variant-numeric: tabular-nums;
@@ -451,12 +451,21 @@
 
 .pa-workspace .pa-status::before,
 .pa-detail .pa-status::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  content: var(--status-icon-muted, "\f2e5");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.9em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
   flex-shrink: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .pa-workspace .pa-status.is-requested,
@@ -464,9 +473,19 @@
   color: var(--pa-warning);
 }
 
+.pa-workspace .pa-status.is-requested::before,
+.pa-detail .pa-status.is-requested::before {
+  content: var(--status-icon-pending, "\f291");
+}
+
 .pa-workspace .pa-status.is-confirmed,
 .pa-detail .pa-status.is-confirmed {
   color: var(--pa-accent);
+}
+
+.pa-workspace .pa-status.is-confirmed::before,
+.pa-detail .pa-status.is-confirmed::before {
+  content: var(--status-icon-confirmed, "\f1e1");
 }
 
 .pa-workspace .pa-status.is-queue,
@@ -474,9 +493,19 @@
   color: var(--pa-info);
 }
 
+.pa-workspace .pa-status.is-queue::before,
+.pa-detail .pa-status.is-queue::before {
+  content: var(--status-icon-progress, "\f41f");
+}
+
 .pa-workspace .pa-status.is-completed,
 .pa-detail .pa-status.is-completed {
   color: var(--pa-success);
+}
+
+.pa-workspace .pa-status.is-completed::before,
+.pa-detail .pa-status.is-completed::before {
+  content: var(--status-icon-ok, "\f26a");
 }
 
 .pa-workspace .pa-status.is-inactive,
@@ -484,9 +513,19 @@
   color: var(--pa-muted);
 }
 
+.pa-workspace .pa-status.is-inactive::before,
+.pa-detail .pa-status.is-inactive::before {
+  content: var(--status-icon-muted, "\f2e5");
+}
+
 .pa-workspace .pa-status.is-danger,
 .pa-detail .pa-status.is-danger {
   color: var(--pa-danger);
+}
+
+.pa-workspace .pa-status.is-danger::before,
+.pa-detail .pa-status.is-danger::before {
+  content: var(--status-icon-cancelled, "\f622");
 }
 
 /* Column 5: Actions */
@@ -565,7 +604,7 @@
 }
 
 .pa-detail .pa-detail-ref {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.77rem;
   font-weight: 600;
   color: var(--pa-muted);
@@ -604,7 +643,7 @@
 
 .pa-detail .pa-detail-time {
   margin-top: 0.18rem;
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.83rem;
   font-weight: 500;
   color: var(--pa-text);
@@ -768,7 +807,7 @@
 }
 
 .pa-callslips .pa-cs-total {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--pa-muted);
@@ -811,7 +850,7 @@
 }
 
 .pa-callslips .pa-cs-tab-count {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--pa-muted);
@@ -872,14 +911,14 @@
 }
 
 .pa-callslips .pa-cs-number {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--pa-heading);
 }
 
 .pa-callslips .pa-cs-instance {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.76rem;
   color: var(--pa-muted);
 }
@@ -898,7 +937,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.38rem;
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.79rem;
   color: var(--pa-text);
   font-variant-numeric: tabular-nums;
@@ -1040,7 +1079,7 @@
 }
 
 .pa-req .pa-req-identity-id {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--pa-muted);
@@ -1170,7 +1209,7 @@
 }
 
 .pa-req .pa-req-result-copy small {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.74rem;
   color: var(--pa-muted);
 }

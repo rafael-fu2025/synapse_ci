@@ -98,6 +98,7 @@ final class ReferralController extends BaseController
             if ($personId !== null) {
                 $patient = (new PersonModel())->allowCallbacks(false)->scoped()->select('id,first_name,last_name,mis_id,kind')->find(ReferralService::positiveId($personId));
                 if (!$patient) { throw new RuntimeException('Person not found.', 404); }
+                $patient['photo_url'] = (new \App\Services\ProfilePhotoService())->personPhotoUrl((int) $actor['tenant_id'], (int) $patient['id']);
             }
             return view('referrals/create', [
                 'title' => 'Refer to ' . ucfirst($target), 'pageTitle' => 'Refer to ' . ucfirst($target),

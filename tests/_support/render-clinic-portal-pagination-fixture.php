@@ -72,14 +72,28 @@ if ($pathOnly === '/clinic/patients/88') {
         'canStartVisit' => false, 'canWriteLabs' => false, 'canWriteClearance' => false, 'canWriteHealth' => true,
         'currentSchoolYear' => '2026-2027', 'schoolYearOptions' => ['2026-2027']], ['saveData' => true]);
 } elseif ($pathOnly === '/portal/surveys') {
-    $meta = $page('page', $empty ? 0 : 61);
-    $miMeta = $page('mi_page', $empty ? 0 : 52, 'mi_per_page');
-    $items = $rows($meta, static fn ($i) => ['id' => 94000 + $i, 'title' => 'Synthetic general survey ' . $i, 'description' => 'Invented survey for pagination tests.', 'submitted' => false, 'closed' => false, 'external_url' => '', 'ends_at' => null]);
-    $mi = $rows($miMeta, static fn ($i) => ['id' => 95000 + $i, 'status' => 'assigned', 'academic_term' => 'SYN-MI-' . $i, 'academic_year' => '2026-2027', 'due_at' => null, 'draft_count' => 0]);
-    echo view('surveys/portal_index', ['baseUrl' => $origin . '/portal/surveys', 'items' => $items, 'miAssignments' => $mi, 'pagination' => $meta, 'miPagination' => $miMeta, 'miGateEnabled' => false, 'hasProfile' => true,
-        'filters' => ['q' => $query['q'] ?? '', 'status' => $query['status'] ?? 'all', 'page' => $meta['page'], 'per_page' => $meta['per_page'], 'mi_page' => $miMeta['page'], 'mi_per_page' => $miMeta['per_page']],
-        'counts' => ['all' => $meta['total'], 'available' => $meta['total'], 'submitted' => 0, 'closed' => 0],
-        'miCounts' => ['all' => $miMeta['total'], 'available' => $miMeta['total'], 'submitted' => 0, 'closed' => 0]], ['saveData' => true]);
+    $miTotal = $empty ? 0 : 52;
+    $genTotal = $empty ? 0 : 61;
+    $combinedTotal = $miTotal + $genTotal;
+    $meta = $page('page', $combinedTotal);
+    $offset = ($meta['page'] - 1) * $meta['per_page'];
+    $miLimit = $offset < $miTotal ? min($meta['per_page'], $miTotal - $offset) : 0;
+    $genLimit = $meta['per_page'] - $miLimit;
+    $genOffset = max(0, $offset - $miTotal);
+
+    $mi = [];
+    for ($i = $offset + 1; $i <= min($miTotal, $offset + $miLimit); $i++) {
+        $mi[] = ['id' => 95000 + $i, 'status' => 'assigned', 'academic_term' => 'SYN-MI-' . $i, 'academic_year' => '2026-2027', 'due_at' => null, 'draft_count' => 0];
+    }
+    $items = [];
+    for ($i = $genOffset + 1; $i <= min($genTotal, $genOffset + $genLimit); $i++) {
+        $items[] = ['id' => 94000 + $i, 'title' => 'Synthetic general survey ' . $i, 'description' => 'Invented survey for pagination tests.', 'submitted' => false, 'closed' => false, 'external_url' => '', 'ends_at' => null];
+    }
+    echo view('surveys/portal_index', [
+        'baseUrl' => $origin . '/portal/surveys', 'items' => $items, 'miAssignments' => $mi, 'pagination' => $meta, 'miGateEnabled' => false, 'hasProfile' => true,
+        'filters' => ['q' => $query['q'] ?? '', 'status' => $query['status'] ?? 'all', 'page' => $meta['page'], 'per_page' => $meta['per_page']],
+        'counts' => ['all' => $combinedTotal, 'available' => $combinedTotal, 'submitted' => 0, 'closed' => 0],
+    ], ['saveData' => true]);
 } else {
     $meta = $page('page', $empty ? 0 : 521, 'per_page', 20);
     $items = $rows($meta, static fn ($i) => ['id' => 96000 + $i, 'call_slip_number' => 'SYN-SLIP-' . $i, 'attendance_status' => 'attended', 'call_date' => '2026-11-01', 'call_time' => '09:00:00', 'purpose' => 'routine_interview']);

@@ -65,6 +65,7 @@
     searchWrap.className = 'bd-select-search-wrap';
     searchWrap.hidden = true;
     const searchInput = document.createElement('input');
+    searchInput.id = id + '-search';
     searchInput.type = 'search';
     searchInput.className = 'form-control form-control-sm bd-select-search';
     searchInput.placeholder = 'Filter options...';

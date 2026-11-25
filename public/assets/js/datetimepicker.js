@@ -172,8 +172,8 @@
         '  <div class="dtp-date-pane">' +
         '    <div class="dtp-head">' +
         '      <button type="button" class="dtp-nav" data-dtp-prev aria-label="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>' +
-        '      <select class="dtp-select dtp-month form-select" aria-label="Month"></select>' +
-        '      <select class="dtp-select dtp-year form-select" aria-label="Year"></select>' +
+        '      <select id="' + this.id + '-month" class="dtp-select dtp-month form-select" aria-label="Month"></select>' +
+        '      <select id="' + this.id + '-year" class="dtp-select dtp-year form-select" aria-label="Year"></select>' +
         '      <button type="button" class="dtp-nav" data-dtp-next aria-label="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>' +
         '    </div>' +
         '    <table class="dtp-grid" role="grid" aria-label="Calendar"><thead><tr class="dtp-weekdays" role="row"></tr></thead><tbody></tbody></table>' +

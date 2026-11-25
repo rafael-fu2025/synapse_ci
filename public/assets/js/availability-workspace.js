@@ -5,14 +5,19 @@
   let active = null;
   const committed = new WeakSet();
   function feedback(form, message) {
-    let box = form.querySelector('[data-availability-feedback]');
+    const inlineHost = form.closest('td') ? form.closest('.appt-card') : null;
+    const container = inlineHost || form;
+    let box = container.querySelector('[data-availability-feedback]');
     if (!box) {
       box = document.createElement('div');
       box.className = 'alert alert-danger';
+      if (inlineHost) box.classList.add('mx-3', 'mt-3', 'mb-0');
       box.dataset.availabilityFeedback = '';
       box.setAttribute('role', 'alert');
       box.tabIndex = -1;
-      form.prepend(box);
+      const tableWrap = inlineHost?.querySelector('[data-configured-windows]') || inlineHost?.querySelector('.appt-table-wrap');
+      if (tableWrap) tableWrap.before(box);
+      else container.prepend(box);
     }
     box.textContent = message;
     box.hidden = !message;
@@ -57,7 +62,7 @@
     try {
       const base = workspaceUrl(root);
       const action = new URL(form.getAttribute('action') || location.href, location.href);
-      const paths = ['', '/template', '/enroll', '/exceptions', '/exceptions/remove'].map(suffix => base.pathname + suffix);
+      const paths = ['', '/remove', '/template', '/enroll', '/exceptions', '/exceptions/remove'].map(suffix => base.pathname + suffix);
       const method = (form.getAttribute('method') || 'GET').toUpperCase();
       if (method !== 'POST' || action.origin !== base.origin || !paths.includes(action.pathname) || action.search || action.hash) throw new Error('The action must stay in this department’s availability workspace.');
       const body = event.submitter
@@ -119,8 +124,113 @@
   }
   document.addEventListener('synapse:before-swap', event => dispose(event.detail?.root));
   window.addEventListener('pagehide', () => dispose());
+  function weeklyState(el) {
+    let groups = [];
+    try {
+      const parsed = JSON.parse(el?.dataset?.weeklyGroups || '[]');
+      if (Array.isArray(parsed)) {
+        groups = parsed.map(item => ({
+          id: String(item.id ?? ''),
+          days: Array.isArray(item.days) ? item.days.map(Number) : []
+        }));
+      }
+    } catch (_) {
+      groups = [];
+    }
+
+    return {
+      groups,
+      dayFilter: 'all',
+      page: 1,
+      perPage: 10,
+      openIds: groups.length === 1 ? [groups[0].id] : [],
+      matchingGroupIds() {
+        if (this.dayFilter === 'all') return this.groups.map(g => g.id);
+        const day = Number(this.dayFilter);
+        return this.groups.filter(g => g.days.includes(day)).map(g => g.id);
+      },
+      totalPages() {
+        return Math.max(1, Math.ceil(this.matchingGroupIds().length / this.perPage));
+      },
+      visibleGroupIds() {
+        const ids = this.matchingGroupIds();
+        const total = Math.max(1, Math.ceil(ids.length / this.perPage));
+        const current = Math.max(1, Math.min(this.page, total));
+        const start = (current - 1) * this.perPage;
+        return ids.slice(start, start + this.perPage);
+      },
+      isGroupVisible(id) {
+        return this.visibleGroupIds().includes(String(id));
+      },
+      isDayVisible(day) {
+        return this.dayFilter === 'all' || Number(this.dayFilter) === Number(day);
+      },
+      isOpen(id) {
+        return this.openIds.includes(String(id));
+      },
+      toggle(id) {
+        const key = String(id);
+        const idx = this.openIds.indexOf(key);
+        if (idx === -1) this.openIds.push(key);
+        else this.openIds.splice(idx, 1);
+      },
+      setDay(day) {
+        this.dayFilter = String(day);
+        this.page = 1;
+        if (this.dayFilter !== 'all') {
+          this.openIds = [...this.visibleGroupIds()];
+        } else {
+          this.openIds = this.groups.length === 1 ? [this.groups[0].id] : [];
+        }
+      },
+      allExpanded() {
+        const visible = this.visibleGroupIds();
+        return visible.length > 0 && visible.every(id => this.openIds.includes(id));
+      },
+      toggleAll() {
+        if (this.allExpanded()) {
+          this.openIds = [];
+        } else {
+          this.openIds = [...this.visibleGroupIds()];
+        }
+      },
+      setPage(next) {
+        const total = this.totalPages();
+        this.page = Math.max(1, Math.min(Number(next) || 1, total));
+        if (this.dayFilter !== 'all') {
+          this.openIds = [...this.visibleGroupIds()];
+        }
+      },
+      setPerPage(size) {
+        this.perPage = Number(size) || 10;
+        this.page = 1;
+        if (this.dayFilter !== 'all') {
+          this.openIds = [...this.visibleGroupIds()];
+        }
+      },
+      pageNumbers() {
+        const total = this.totalPages();
+        if (total <= 7) return Array.from({ length: total }, (_, idx) => idx + 1);
+        const current = Math.max(1, Math.min(this.page, total));
+        let start = Math.max(1, current - 2);
+        let end = Math.min(total, start + 4);
+        if (end - start < 4) start = Math.max(1, end - 4);
+        const pages = [];
+        for (let i = start; i <= end; i++) pages.push(i);
+        return pages;
+      },
+      rangeLabel() {
+        const total = this.matchingGroupIds().length;
+        if (total === 0) return '0 matching staff';
+        const current = Math.max(1, Math.min(this.page, this.totalPages()));
+        const from = (current - 1) * this.perPage + 1;
+        const to = Math.min(total, current * this.perPage);
+        return `Showing ${from}–${to} of ${total} staff`;
+      }
+    };
+  }
   document.addEventListener('synapse:page-load', event => openSelected(event.detail?.root || document));
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => openSelected());
   else openSelected();
-  window.SynapseAvailabilityWorkspace = { openSelected };
+  window.SynapseAvailabilityWorkspace = { openSelected, weeklyState };
 })();

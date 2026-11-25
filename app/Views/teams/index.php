@@ -21,6 +21,18 @@ $initialsOf = static function (string $name): string {
 };
 
 $visibleMembers = array_slice($members, 0, 4);
+$memberPhotos = is_array($memberPhotos ?? null) ? $memberPhotos : [];
+$memberAvatarHtml = static function (?int $userId, string $initials, string $name = '') use ($memberPhotos): string {
+    $url = $userId ? ($memberPhotos[$userId] ?? null) : null;
+    if ($url !== null && $url !== '') {
+        return \App\Services\ProfileAvatar::contentHtml(
+            $url,
+            $initials,
+            $name !== '' ? ['name' => $name] : ['avatar_initials' => $initials]
+        );
+    }
+    return esc($initials);
+};
 $inProgressCount = 0;
 $overdueCount = 0;
 $doneCount = 0;
@@ -43,7 +55,7 @@ foreach ($tasks as $t) {
             <summary class="tws-roster-pill" aria-label="Workstation members (<?= count($members) ?>)">
               <span class="tws-avatar-stack" aria-hidden="true">
                 <?php foreach ($visibleMembers as $member): ?>
-                  <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>"><?= esc($initialsOf($member['name'])) ?></span>
+                  <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>"><?= $memberAvatarHtml(isset($member['id']) ? (int) $member['id'] : null, $initialsOf($member['name']), (string) $member['name']) ?></span>
                 <?php endforeach; ?>
               </span>
               <span class="tws-count"><?= count($members) ?> members</span>
@@ -54,7 +66,7 @@ foreach ($tasks as $t) {
               <ul class="list-unstyled teams-member-list">
                 <?php foreach ($members as $member): ?>
                   <li>
-                    <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= esc($initialsOf($member['name'])) ?></span>
+                    <span class="tws-avatar is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= $memberAvatarHtml(isset($member['id']) ? (int) $member['id'] : null, $initialsOf($member['name']), (string) $member['name']) ?></span>
                     <span class="tws-member-name"><?= esc($member['name']) ?></span>
                     <small><?= esc(ucwords(str_replace('_', ' ', $member['role']))) ?></small>
                   </li>
@@ -208,7 +220,7 @@ foreach ($tasks as $t) {
                       <?php endif; ?>
                       <div class="teams-task-meta tws-card-footer">
                         <span class="tws-card-assignee">
-                          <span class="tws-avatar tws-avatar--sm is-<?= esc($task['assignee_user_id'] ? $avatarTone($task['assignee_user_id']) : 'slate') ?>" aria-hidden="true"><?= esc($task['assignee_user_id'] ? $initialsOf($assigneeName) : '—') ?></span>
+                          <span class="tws-avatar tws-avatar--sm is-<?= esc($task['assignee_user_id'] ? $avatarTone($task['assignee_user_id']) : 'slate') ?>" aria-hidden="true"><?= $task['assignee_user_id'] ? $memberAvatarHtml((int) $task['assignee_user_id'], $initialsOf($assigneeName), (string) $assigneeName) : '—' ?></span>
                           <span class="tws-card-assignee-name"><?= esc($assigneeName) ?></span>
                         </span>
                         <?php if ($task['due_date']): ?>
@@ -260,7 +272,7 @@ foreach ($tasks as $t) {
                   <td role="cell">
                     <span class="tws-cell-label" aria-hidden="true">Assigned to</span>
                     <span class="tws-table-assignee">
-                      <span class="tws-avatar tws-avatar--sm is-<?= esc($task['assignee_user_id'] ? $avatarTone($task['assignee_user_id']) : 'slate') ?>" aria-hidden="true"><?= esc($task['assignee_user_id'] ? $initialsOf($assigneeName) : '—') ?></span>
+                      <span class="tws-avatar tws-avatar--sm is-<?= esc($task['assignee_user_id'] ? $avatarTone($task['assignee_user_id']) : 'slate') ?>" aria-hidden="true"><?= $task['assignee_user_id'] ? $memberAvatarHtml((int) $task['assignee_user_id'], $initialsOf($assigneeName), (string) $assigneeName) : '—' ?></span>
                       <span><?= esc($assigneeName) ?></span>
                     </span>
                   </td>

@@ -557,7 +557,7 @@
 
 .portal-profile-card .card-id {
   font-size: 0.72rem;
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   color: rgba(255, 255, 255, 0.75);
   margin-bottom: 0.85rem;
 }
@@ -681,12 +681,6 @@
   background: linear-gradient(135deg, #520000 0%, #800000 100%);
   color: #ffffff;
   box-shadow: 0 8px 18px rgba(128, 0, 0, 0.2);
-}
-
-.portal-queue-card--guidance {
-  --portal-queue-pill-color: #7356a2;
-  background: linear-gradient(135deg, #4f3974 0%, #7356a2 100%);
-  box-shadow: 0 8px 18px rgba(79, 57, 116, 0.24);
 }
 
 .portal-queue-card + .portal-queue-card {
@@ -1404,7 +1398,7 @@ html body .portal-staff-console-btn:focus-visible {
 }
 
 .syn-person-lookup-select {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.72rem;
   font-weight: 600;
   color: #800000;

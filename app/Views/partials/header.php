@@ -53,7 +53,7 @@
            data-bs-toggle="tooltip"
            data-bs-placement="bottom">
         <button type="button" class="dropdown-toggle user-trigger" data-bs-toggle="dropdown" aria-expanded="false" aria-label="User account and profile menu">
-          <img src="<?= esc($profilePhotoUrl) ?>" alt="User Avatar" class="user-avatar" data-profile-avatar onerror="this.onerror=null;this.src='<?= esc($profileDefaultAvatar, 'attr') ?>'">
+          <img src="<?= esc($profilePhotoUrl) ?>" alt="User Avatar" class="user-avatar" data-profile-avatar data-fallback-src="<?= esc($profileDefaultAvatar, 'attr') ?>">
           <div class="user-brief d-none d-md-flex text-start">
             <span class="user-name"><?= esc($userName) ?></span>
             <span class="user-role"><?= esc($roleLabel) ?></span>
@@ -62,7 +62,7 @@
 
         <div class="dropdown-menu dropdown-menu-end user-menu">
           <div class="user-menu-header">
-            <img src="<?= esc($profilePhotoUrl) ?>" alt="User" class="user-menu-avatar" data-profile-avatar onerror="this.onerror=null;this.src='<?= esc($profileDefaultAvatar, 'attr') ?>'">
+            <img src="<?= esc($profilePhotoUrl) ?>" alt="User" class="user-menu-avatar" data-profile-avatar data-fallback-src="<?= esc($profileDefaultAvatar, 'attr') ?>">
             <div class="user-menu-info">
               <div class="user-menu-name"><?= esc($currentUser['name'] ?? 'User') ?></div>
               <div class="user-menu-email"><?= esc($userEmail) ?></div>
@@ -82,28 +82,28 @@
             <?php endif; ?>
             <?php 
               $hasStaffConsoles = in_array($role, [
-                'clinic_admin', 'clinic_staff',
-                'guidance_admin', 'guidance_supervisor', 'counsellor',
-                'bmg_admin', 'facilities_op',
+                'clinic_admin', 'clinic_physician', 'clinic_staff', 'clinic_intern',
+                'guidance_admin', 'guidance_supervisor', 'counsellor', 'guidance_intern',
+                'bmg_admin', 'facilities_op', 'bmg_intern',
                 'superadmin', 'audit_reader'
               ], true);
             ?>
             <?php if ($hasStaffConsoles): ?>
               <div class="user-menu-divider" role="separator"></div>
               <div class="user-menu-section-header">Staff Consoles</div>
-              <?php if (in_array($role, ['clinic_admin', 'clinic_staff', 'superadmin'], true)): ?>
+              <?php if (in_array($role, ['clinic_admin', 'clinic_physician', 'clinic_staff', 'clinic_intern', 'superadmin'], true)): ?>
                 <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('clinic', 'clinic') ?>">
                   <span class="user-menu-icon" aria-hidden="true"><?= view('partials/unit_vector_icon', ['unit' => 'clinic', 'class' => 'unit-btn-icon']) ?></span>
                   <span>Clinic Console</span>
                 </a>
               <?php endif; ?>
-              <?php if (in_array($role, ['guidance_admin', 'guidance_supervisor', 'counsellor', 'superadmin'], true)): ?>
+              <?php if (in_array($role, ['guidance_admin', 'guidance_supervisor', 'counsellor', 'guidance_intern', 'superadmin'], true)): ?>
                 <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('guidance', 'guidance') ?>">
                   <span class="user-menu-icon" aria-hidden="true"><?= view('partials/unit_vector_icon', ['unit' => 'guidance', 'class' => 'unit-btn-icon']) ?></span>
                   <span>Guidance Console</span>
                 </a>
               <?php endif; ?>
-              <?php if (in_array($role, ['bmg_admin', 'facilities_op', 'superadmin'], true)): ?>
+              <?php if (in_array($role, ['bmg_admin', 'facilities_op', 'bmg_intern', 'superadmin'], true)): ?>
                 <a class="user-menu-item" href="<?= \App\Services\PortalContext::urlFor('bmg', 'facilities/dashboard') ?>">
                   <span class="user-menu-icon" aria-hidden="true"><i class="bi bi-recycle"></i></span>
                   <span>Facilities Console</span>

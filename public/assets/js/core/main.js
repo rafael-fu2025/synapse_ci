@@ -179,6 +179,21 @@
         const parent = this.parentElement;
         const isOpen = parent.classList.contains('open');
 
+        if (document.body.classList.contains('sidebar-collapsed') && window.matchMedia('(min-width: 992px)').matches) {
+          document.body.classList.remove('sidebar-collapsed');
+          document.body.dataset.sidebarCollapsed = 'false';
+          try {
+            localStorage.setItem('synapse-sidebar-collapsed', '0');
+          } catch (_) { /* Keep working when storage is unavailable. */ }
+
+          const siblings = parent.parentElement.querySelectorAll(':scope > .has-submenu.open');
+          siblings.forEach(function(sibling) {
+            if (sibling !== parent) closeSubmenu(sibling);
+          });
+          openSubmenu(parent);
+          return;
+        }
+
         // Close sibling submenus at the same level (accordion behavior)
         const siblings = parent.parentElement.querySelectorAll(':scope > .has-submenu.open');
         siblings.forEach(function(sibling) {

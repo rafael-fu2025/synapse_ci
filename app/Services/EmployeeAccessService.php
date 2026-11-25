@@ -35,7 +35,9 @@ final class EmployeeAccessService
      * so every granted role must be listable even when it is not offered as a choice.
      */
     public const CATALOGUE_LABELS = [
-        'student' => 'Student — personal portal only',
+        'student'         => 'Student — personal portal only',
+        'guidance_intern' => 'Guidance Intern — supervised intake, queue and co-signed form drafts',
+        'bmg_intern'      => 'Facilities (BMG) Intern — supervised batch logging and rotation monitoring',
     ];
 
     public function actor(): array

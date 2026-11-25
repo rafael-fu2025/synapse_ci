@@ -234,6 +234,11 @@ class GuidancePractitionerService
     public function canFinalizeDirectly(int $userId, ?int $tenantId = null): bool
     {
         $tenantId ??= CurrentTenant::id();
+        $userRow = $this->db->table('users')->select('role')->where('id', $userId)->where('tenant_id', $tenantId)
+            ->where('deleted_at', null)->get()->getRowArray();
+        if (($userRow['role'] ?? '') === 'guidance_intern') {
+            return false;
+        }
         $profile = $this->getPractitionerProfile($userId, $tenantId);
         if ($profile === null) {
             return false;

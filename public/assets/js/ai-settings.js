@@ -175,7 +175,17 @@
       if (reloadButton) reloadButton.disabled = busy;
       if (testButton) {
         testButton.disabled = busy || !saved || dirty || !statusKnown;
-        testButton.textContent = enabled ? 'Pause analytics and test connection' : 'Test connection';
+        const testLabel = busy && activeAction === 'test'
+          ? 'Testing connection…'
+          : (enabled ? 'Pause analytics and test connection' : 'Test connection');
+        const labelSpan = testButton.querySelector('[data-ai-settings-test-label]');
+        if (labelSpan) {
+          labelSpan.textContent = testLabel;
+        } else {
+          const spinner = testButton.querySelector('.app-loading-spinner');
+          testButton.textContent = testLabel;
+          if (spinner) testButton.prepend(spinner);
+        }
       }
       if (enableButton) enableButton.disabled = busy || !tested || dirty || !statusKnown;
       if (disableButton) disableButton.disabled = busy;
@@ -478,29 +488,50 @@
       accessReady = access.ready;
       const key = row => [row.unit, row.role, row.permission].join(':');
       const granted = new Set(access.grants.map(key));
+      const roleCounts = new Map();
       for (const item of root.querySelectorAll('[data-ai-settings-form="access"]')) {
         const row = Object.fromEntries(new FormData(item));
         const isGranted = granted.has(key(row));
+        const roleKey = `${row.unit}:${row.role}`;
+        if (isGranted) roleCounts.set(roleKey, (roleCounts.get(roleKey) || 0) + 1);
         const operation = isGranted ? 'revoke' : 'grant';
         const verb = isGranted ? 'Revoke' : 'Grant';
         const permissionLabel = item.dataset.aiPermissionLabel;
+        const roleLabel = item.dataset.aiRoleLabel;
         const sourceRestricted = item.dataset.aiSourceRestricted === 'true';
         const sourceBlocked = sourceRestricted && !isGranted;
+        const cellState = isGranted ? (sourceRestricted ? 'restricted-granted' : 'granted') : (sourceBlocked ? 'unavailable' : 'not-granted');
+        const toggleText = isGranted ? (sourceRestricted ? 'Revoke' : 'Granted') : (sourceBlocked ? 'Locked' : 'Grant');
         item.elements.namedItem('operation').value = operation;
         item.dataset.aiSourceBlocked = String(sourceBlocked);
         const button = item.querySelector('button');
-        button.textContent = `${verb} ${permissionLabel}`;
-        button.classList.toggle('btn-outline-danger', isGranted);
-        button.classList.toggle('btn-outline-primary', !isGranted);
-        button.setAttribute('aria-label', `${verb} ${permissionLabel} for ${item.dataset.aiRoleLabel} in ${item.dataset.aiUnitLabel}`);
+        if (button) {
+          button.dataset.state = cellState;
+          button.setAttribute('aria-pressed', String(isGranted));
+          button.setAttribute('aria-label', `${verb} ${permissionLabel} for ${roleLabel} in ${item.dataset.aiUnitLabel}`);
+          button.title = sourceBlocked
+            ? 'Unavailable: counsellors lack guidance.cases.read_any source access. An AI grant cannot supply it.'
+            : (isGranted
+              ? (sourceRestricted ? 'Existing grant cannot enable generation; click to revoke.' : `Click to revoke ${permissionLabel} access for ${roleLabel}`)
+              : `Click to grant ${permissionLabel} access for ${roleLabel}`);
+          const labelSpan = button.querySelector('[data-ai-permission-state]');
+          if (labelSpan) labelSpan.textContent = toggleText;
+        }
         const permissionRow = item.closest('[data-ai-permission-row]');
-        permissionRow.dataset.state = isGranted ? 'granted' : (sourceBlocked ? 'unavailable' : 'not-granted');
-        const permissionState = permissionRow.querySelector('[data-ai-permission-state]');
-        if (permissionState) permissionState.textContent = isGranted ? 'Granted' : (sourceBlocked ? 'Unavailable' : 'Not granted');
-        const sourceReason = permissionRow.querySelector('[data-ai-source-reason]');
-        if (sourceReason) sourceReason.textContent = isGranted
-          ? 'Counsellors lack guidance.cases.read_any source access. This existing grant cannot enable generation and remains revocable.'
-          : 'Unavailable: counsellors lack guidance.cases.read_any source access. An AI grant cannot supply it.';
+        if (permissionRow) permissionRow.dataset.state = cellState;
+      }
+      for (const badge of root.querySelectorAll('[data-ai-role-grant-count]')) {
+        const roleKey = badge.dataset.aiRoleGrantCount;
+        const rowEl = badge.closest('tr');
+        const total = rowEl ? rowEl.querySelectorAll('[data-ai-permission-row]').length : 4;
+        badge.textContent = `${roleCounts.get(roleKey) || 0} / ${total}`;
+      }
+      const sourceReason = root.querySelector('[data-ai-source-reason]');
+      if (sourceReason) {
+        const hasLegacy = granted.has('guidance:counsellor:ai.insights.generate');
+        sourceReason.textContent = hasLegacy
+          ? 'Counsellor -> Generate: counsellors lack guidance.cases.read_any source access. This existing grant cannot enable generation and remains revocable.'
+          : 'Counsellor -> Generate is locked because counsellors lack guidance.cases.read_any source access. An AI grant cannot supply it.';
       }
       root.querySelector('[data-ai-access-state]').textContent = accessReady
         ? 'Access storage ready. Changes apply on the next authorization check.'
@@ -683,12 +714,14 @@
           }
           const rows = validateRows(value.models);
           preview = { preview_token: value.preview_token, base_url: value.base_url, models: rows, expires, revision };
+          let previewIdx = 0;
           for (const row of rows) {
             const wrapper = document.createElement('div');
             wrapper.className = 'ai-settings-model-option';
             const label = document.createElement('label');
             label.className = 'ai-settings-model-option-label';
             const input = document.createElement('input');
+            input.id = `ai-model-preview-opt-${previewIdx++}`;
             input.type = 'checkbox';
             input.value = row.id;
             input.className = 'form-check-input';

@@ -176,8 +176,8 @@
       popup.innerHTML =
         '<div class="dp-head">' +
         '  <button type="button" class="dp-nav" data-dp-prev aria-label="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>' +
-        '  <select class="dp-select dp-month form-select" aria-label="Month"></select>' +
-        '  <select class="dp-select dp-year form-select" aria-label="Year"></select>' +
+        '  <select id="' + this.id + '-month" class="dp-select dp-month form-select" aria-label="Month"></select>' +
+        '  <select id="' + this.id + '-year" class="dp-select dp-year form-select" aria-label="Year"></select>' +
         '  <button type="button" class="dp-nav" data-dp-next aria-label="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></button>' +
         '</div>' +
         '<table class="dp-grid" role="grid" aria-label="Calendar"><thead><tr class="dp-weekdays" role="row"></tr></thead><tbody></tbody></table>' +

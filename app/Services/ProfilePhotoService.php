@@ -37,6 +37,30 @@ final class ProfilePhotoService
         return $tenantId > 0 && $personId > 0 && is_file($this->path($tenantId, $personId));
     }
 
+    public function personPhotoUrl(int $tenantId, int $personId): ?string
+    {
+        if ($tenantId <= 0 || $personId <= 0) {
+            return null;
+        }
+        $path = $this->path($tenantId, $personId);
+        if (!is_file($path)) {
+            return null;
+        }
+        return site_url('people/' . $personId . '/photo') . '?v=' . (@filemtime($path) ?: '1');
+    }
+
+    public function teamMemberPhotoUrl(int $tenantId, int $personId, string $unit, int $userId): ?string
+    {
+        if ($tenantId <= 0 || $personId <= 0 || $userId <= 0) {
+            return null;
+        }
+        $path = $this->path($tenantId, $personId);
+        if (!is_file($path)) {
+            return null;
+        }
+        return site_url($unit . '/teams/members/' . $userId . '/photo') . '?v=' . (@filemtime($path) ?: '1');
+    }
+
     public function save(UploadedFile $upload, int $tenantId, int $personId): array
     {
         if (!$upload->isValid() || $upload->hasMoved()) {

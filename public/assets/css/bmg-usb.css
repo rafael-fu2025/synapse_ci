@@ -235,7 +235,7 @@
   overflow-wrap: anywhere;
   color: var(--ce-fg);
   background: var(--ce-card);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.78rem;
   line-height: 1.6;
 }

@@ -1,5 +1,5 @@
 <div id="globalSearchDialog" class="modal fade" tabindex="-1" aria-labelledby="globalSearchTitle" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 620px;">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable gs-modal-dialog">
     <div class="modal-content border-0 shadow">
       <div class="modal-header border-bottom py-3">
         <h5 id="globalSearchTitle" class="modal-title fs-6 fw-bold text-dark d-flex align-items-center mb-0">

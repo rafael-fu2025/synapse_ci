@@ -155,9 +155,9 @@ final class ClinicPortalPaginationViewTest extends CIUnitTestCase
     {
         return [
             'title' => 'Synthetic surveys', 'baseUrl' => site_url('/portal/surveys'), 'hasProfile' => true,
-            'filters' => ['q' => 'Synthetic', 'status' => 'all', 'page' => 2, 'per_page' => 50, 'mi_page' => 2, 'mi_per_page' => 25],
-            'pagination' => $this->metadata(126, 2, 50), 'counts' => ['all' => 126, 'available' => 100, 'submitted' => 16, 'closed' => 10],
-            'miPagination' => $this->metadata(80, 2, 25), 'miCounts' => ['all' => 80, 'available' => 45, 'submitted' => 20, 'closed' => 35],
+            'filters' => ['q' => 'Synthetic', 'status' => 'all', 'page' => 2, 'per_page' => 50],
+            'pagination' => $this->metadata(206, 2, 50),
+            'counts' => ['all' => 206, 'available' => 145, 'submitted' => 36, 'closed' => 45],
             'miGateEnabled' => false,
             'miAssignments' => [
                 ['id' => 52, 'status' => 'in_progress', 'draft_count' => 3, 'academic_term' => 'First Term', 'academic_year' => '2026-2027'],
@@ -167,24 +167,19 @@ final class ClinicPortalPaginationViewTest extends CIUnitTestCase
         ];
     }
 
-    public function testSurveySectionsBothPageIndependentlyInsideLiveResultsWithFullDisplayCounts(): void
+    public function testSurveyGridUnifiesMiAndGeneralSurveysUnderSingleLivePagerAndCounts(): void
     {
         $html = view('surveys/portal_index', $this->surveyData(), ['saveData' => false]);
         $xpath = $this->xpath($html);
-        self::assertCount(1, $xpath->query('//*[@data-live-filters and @data-filter-page-params="page mi_page"]'));
-        self::assertCount(1, $xpath->query('//*[@data-filter-form]//input[@type="hidden" and @name="mi_page" and @value="2"]'));
+        self::assertCount(1, $xpath->query('//*[@data-live-filters and @data-filter-page-params="page"]'));
         self::assertCount(1, $xpath->query('//*[@data-filter-form]//input[@name="page" and @value="2"]'));
+        self::assertCount(0, $xpath->query('//*[@data-filter-form]//input[@name="mi_page"]'));
+        self::assertCount(0, $xpath->query('//*[@data-filter-form]//select[@name="mi_per_page"]'));
         self::assertCount(1, $xpath->query('//*[@data-filter-form]//select[@name="per_page"]/option[@value="50" and @selected]'));
-        self::assertCount(1, $xpath->query('//*[@data-filter-form]//select[@name="mi_per_page"]/option[@value="25" and @selected]'));
-        self::assertCount(3, $xpath->query('//*[@data-filter-form]//select[@name="mi_per_page"]/option'));
-        self::assertCount(1, $xpath->query('//*[@data-filter-region="results"]//*[@data-mi-assignment-section]//nav[@aria-label="MI assignment pages"]'));
-        self::assertCount(1, $xpath->query('//*[@data-filter-region="results"]//*[@data-general-survey-section]//nav[@aria-label="General survey pages"]'));
-        self::assertCount(2, $xpath->query('//*[@data-mi-assignment-section]//article'));
-        self::assertCount(1, $xpath->query('//*[@data-general-survey-section]//article'));
-        self::assertStringContainsString('MI assignments', $html);
-        self::assertStringContainsString('General surveys', $html);
-        self::assertStringContainsString('Showing 26–50 of 80', $html);
-        self::assertStringContainsString('Showing 51–100 of 126', $html);
+        self::assertCount(1, $xpath->query('//*[@data-filter-region="results"]//*[@data-unified-survey-grid]'));
+        self::assertCount(3, $xpath->query('//*[@data-unified-survey-grid]//article'));
+        self::assertCount(1, $xpath->query('//*[@data-filter-region="results"]//nav[@aria-label="Survey pages"]'));
+        self::assertStringContainsString('Showing 51–100 of 206', $html);
         foreach (['all' => '206', 'available' => '145', 'submitted' => '36', 'closed' => '45'] as $state => $count) {
             $tabs = $xpath->query('//*[@class="pe-tabs"]//a');
             foreach ($tabs as $tab) {
@@ -192,50 +187,45 @@ final class ClinicPortalPaginationViewTest extends CIUnitTestCase
                 if ($query['status'] !== $state) continue;
                 self::assertSame($count, trim($xpath->query('.//span', $tab)->item(0)->textContent));
                 self::assertSame('1', $query['page']);
-                self::assertSame('1', $query['mi_page']);
                 self::assertSame('50', $query['per_page']);
-                self::assertSame('25', $query['mi_per_page']);
+                self::assertArrayNotHasKey('mi_page', $query);
             }
         }
-        foreach (['MI assignment pages', 'General survey pages'] as $label) {
-            $links = $xpath->query('//nav[@aria-label="' . $label . '"]//a');
-            self::assertGreaterThan(0, $links->length);
-            foreach ($links as $link) {
-                self::assertTrue($link->hasAttribute('data-filter-link'));
-                parse_str((string) parse_url($link->getAttribute('href'), PHP_URL_QUERY), $query);
-                self::assertSame('Synthetic', $query['q']);
-                self::assertSame('all', $query['status']);
-                self::assertSame('50', $query['per_page']);
-                self::assertSame('25', $query['mi_per_page']);
-                if ($label === 'MI assignment pages') {
-                    self::assertSame('2', $query['page']);
-                    self::assertSame($link->getAttribute('data-table-page'), $query['mi_page']);
-                } else {
-                    self::assertSame('2', $query['mi_page']);
-                }
-            }
+        $links = $xpath->query('//nav[@aria-label="Survey pages"]//a');
+        self::assertGreaterThan(0, $links->length);
+        $pagesSeen = [];
+        foreach ($links as $link) {
+            self::assertTrue($link->hasAttribute('data-filter-link'));
+            parse_str((string) parse_url($link->getAttribute('href'), PHP_URL_QUERY), $query);
+            self::assertSame('Synthetic', $query['q']);
+            self::assertSame('all', $query['status']);
+            self::assertSame('50', $query['per_page']);
+            self::assertArrayNotHasKey('mi_page', $query);
+            self::assertArrayNotHasKey('mi_per_page', $query);
+            $pagesSeen[] = (int) $query['page'];
         }
-        self::assertCount(1, $xpath->query('//*[@data-mi-assignment-section]//a[contains(@href,"/portal/assessments/mi/52")]'));
-        self::assertCount(1, $xpath->query('//*[@data-mi-assignment-section]//a[contains(@href,"/portal/assessments/mi/results/700") and not(contains(@href,"/pdf"))]'));
+        self::assertContains(1, $pagesSeen);
+        self::assertContains(5, $pagesSeen);
+        self::assertCount(1, $xpath->query('//*[@data-unified-survey-grid]//a[contains(@href,"/portal/assessments/mi/52")]'));
+        self::assertCount(1, $xpath->query('//*[@data-unified-survey-grid]//a[contains(@href,"/portal/assessments/mi/results/700") and not(contains(@href,"/pdf"))]'));
+        self::assertCount(1, $xpath->query('//*[@data-unified-survey-grid]//a[contains(@href,"/portal/surveys/900")]'));
     }
 
-    public function testSurveyEmptyPagesKeepBothFootersAndDoNotChangeRequestedSizes(): void
+    public function testSurveyEmptyPageRendersSingleUnifiedFooterAndEmptyState(): void
     {
         $data = $this->surveyData();
         $data['items'] = [];
         $data['miAssignments'] = [];
-        $data['pagination'] = $this->metadata(126, 1, 100, 0);
-        $data['miPagination'] = $this->metadata(80, 1, 50, 0);
+        $data['pagination'] = $this->metadata(206, 1, 100, 0);
         $data['filters']['status'] = 'closed';
         $html = view('surveys/portal_index', $data, ['saveData' => false]);
         $xpath = $this->xpath($html);
-        self::assertCount(2, $xpath->query('//*[@data-filter-region="results"]//nav[contains(@aria-label,"pages")]'));
+        self::assertCount(0, $xpath->query('//*[@data-unified-survey-grid]'));
+        self::assertCount(1, $xpath->query('//*[@data-filter-region="results"]//nav[contains(@aria-label,"pages")]'));
         self::assertCount(0, $xpath->query('//nav[contains(@aria-label,"pages")]//a'));
-        self::assertCount(1, $xpath->query('//*[@data-mi-assignment-section]//*[@data-per-page="50"]'));
-        self::assertCount(1, $xpath->query('//*[@data-general-survey-section]//*[@data-per-page="100"]'));
-        self::assertStringContainsString('No MI assignments match', $html);
+        self::assertCount(1, $xpath->query('//*[@data-per-page="100"]'));
         self::assertStringContainsString('No closed surveys', $html);
-        self::assertSame(2, substr_count($html, 'Showing 0–0 of 0'));
+        self::assertSame(1, substr_count($html, 'Showing 0–0 of 0'));
     }
 
     public function testCallSlipViewKeepsBeyondFiveHundredTotalsAndMetadataAndSizeOnLinks(): void

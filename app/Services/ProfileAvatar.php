@@ -42,4 +42,15 @@ final class ProfileAvatar
     {
         return 'data:image/svg+xml;base64,' . base64_encode(self::svg($identity));
     }
+
+    /** Render an uploaded photo inside an existing avatar slot, or plain initials when none exists. */
+    public static function contentHtml(?string $photoUrl, string $initials, array $fallbackIdentity = []): string
+    {
+        if ($photoUrl !== null && $photoUrl !== '') {
+            $fallback = self::dataUri($fallbackIdentity !== [] ? $fallbackIdentity : ['avatar_initials' => $initials]);
+            return '<img class="syn-avatar-img" src="' . htmlspecialchars($photoUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                . '" alt="" loading="lazy" data-avatar-fallback="' . htmlspecialchars($fallback, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '">';
+        }
+        return htmlspecialchars($initials, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
 }

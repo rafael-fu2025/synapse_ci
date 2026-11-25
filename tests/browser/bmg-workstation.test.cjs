@@ -777,3 +777,20 @@ for (const theme of ['light', 'dark']) for (const width of [320, 375, 768, 1024,
     assert.equal(await page.locator('.page-actions').getByRole('link', { name: 'Add drum', exact: true }).isVisible(), true);
   });
 }
+
+test('Dashboard clock: displays Asia/Manila time with seconds and ticks without overflow', { timeout: 60000 }, async t => {
+  const { page } = await open(t, { start: fixture.dashboardPath, width: 320, theme: 'light' });
+  await expectDashboard(page);
+  const timeEl = page.locator('[data-live-clock] [data-live-clock-time]');
+  assert.equal(await timeEl.count(), 1);
+  const initial = (await timeEl.textContent()).trim();
+  assert.match(initial, /^\d{1,2}:\d{2}:\d{2}\s+(AM|PM)$/);
+  await page.waitForFunction(prev => {
+    const el = document.querySelector('[data-live-clock] [data-live-clock-time]');
+    return el && el.textContent.trim() !== prev;
+  }, initial, { timeout: 3500 });
+  const ticked = (await timeEl.textContent()).trim();
+  assert.match(ticked, /^\d{1,2}:\d{2}:\d{2}\s+(AM|PM)$/);
+  assert.notEqual(ticked, initial);
+  await noDashboardOverflow(page);
+});

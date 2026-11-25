@@ -160,7 +160,7 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
               <button type="button" class="btn" :class="aiMergeMode === 'append' ? 'btn-primary' : 'btn-outline-secondary'" role="radio" :aria-checked="aiMergeMode === 'append'" @click="aiMergeMode = 'append'" :disabled="aiBusy">Append (up to 20 total)</button>
             </div>
             <label class="form-check form-check-inline m-0">
-              <input class="form-check-input" type="checkbox" x-model="aiFillMeta" :disabled="aiBusy">
+              <input id="surveyAiFillMeta" class="form-check-input" type="checkbox" x-model="aiFillMeta" :disabled="aiBusy">
               <span class="form-check-label">Fill blank title &amp; description</span>
             </label>
           </div>
@@ -240,9 +240,9 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
       <p class="small" role="status" x-show="bankBusy">Loading bank questions…</p>
       <p class="alert alert-danger small" role="alert" x-show="bankError" x-text="bankError"></p>
       <p class="text-muted small" x-show="!bankBusy && !bankError && bankItems.length === 0">No matching active questions. Adjust the filters or add an entry from the Question Bank page.</p>
-      <label class="form-check" x-show="bankItems.length > 0"><input class="form-check-input" type="checkbox" :checked="bankPageSelected()" x-effect="$el.indeterminate = bankPagePartlySelected()" @change="toggleBankPage($event.target.checked); $event.target.checked = bankPageSelected()" :disabled="bankBusy"><span class="form-check-label">Select this page</span></label>
+      <label class="form-check" x-show="bankItems.length > 0"><input id="surveyBankSelectPage" class="form-check-input" type="checkbox" :checked="bankPageSelected()" x-effect="$el.indeterminate = bankPagePartlySelected()" @change="toggleBankPage($event.target.checked); $event.target.checked = bankPageSelected()" :disabled="bankBusy"><span class="form-check-label">Select this page</span></label>
       <template x-for="item in bankItems" :key="item.id"><article class="border-bottom py-3">
-        <label class="form-check"><input class="form-check-input" type="checkbox" :checked="isBankSelected(item)" :disabled="!isBankSelected(item) && bankSelected.length >= 20" @change="toggleBankSelection(item, $event.target.checked); $event.target.checked = isBankSelected(item)"><span class="form-check-label"><span class="visually-hidden">Select question: </span><strong x-text="item.question.label"></strong></span></label><small class="text-muted" x-text="item.category + ' · ' + item.audience + ' · revision ' + item.revision + ' · ' + item.question.type"></small>
+        <label class="form-check"><input :id="'surveyBankItem-' + item.id" class="form-check-input" type="checkbox" :checked="isBankSelected(item)" :disabled="!isBankSelected(item) && bankSelected.length >= 20" @change="toggleBankSelection(item, $event.target.checked); $event.target.checked = isBankSelected(item)"><span class="form-check-label"><span class="visually-hidden">Select question: </span><strong x-text="item.question.label"></strong></span></label><small class="text-muted" x-text="item.category + ' · ' + item.audience + ' · revision ' + item.revision + ' · ' + item.question.type"></small>
         <ul class="small mt-2" x-show="item.question.options.length"><template x-for="(option, index) in item.question.options" :key="index"><li x-text="option"></li></template></ul>
         <p class="small text-muted mt-2" x-show="item.review_note" x-text="item.review_note"></p>
         <button class="btn btn-outline-primary btn-sm mt-2" type="button" @click="addBankQuestion(item)" :disabled="questions.length >= 20">Add copy</button>
@@ -270,11 +270,11 @@ $aiEndpoint = is_string($aiPrefillUrl ?? null) && $aiPrefillUrl !== '' ? $aiPref
           </div>
         </template>
         <input type="hidden" :name="'questions[' + index + '][required]'" :value="question.required ? '1' : '0'">
-        <label class="form-check mb-2"><input class="form-check-input" type="checkbox" x-model="question.required" @change="detach(question)"><span class="form-check-label">Required</span></label>
+        <label class="form-check mb-2"><input :id="'surveyQuestionRequired-' + index" class="form-check-input" type="checkbox" x-model="question.required" @change="detach(question)"><span class="form-check-label">Required</span></label>
         <template x-if="['single','multiple'].includes(question.type)">
           <div class="mb-2">
             <input type="hidden" :name="'questions[' + index + '][allow_other]'" :value="question.allow_other ? '1' : '0'">
-            <label class="form-check"><input class="form-check-input" type="checkbox" x-model="question.allow_other" @change="detach(question)"><span class="form-check-label">Allow &ldquo;Other (please specify)&rdquo; custom answer</span></label>
+            <label class="form-check"><input :id="'surveyQuestionAllowOther-' + index" class="form-check-input" type="checkbox" x-model="question.allow_other" @change="detach(question)"><span class="form-check-label">Allow &ldquo;Other (please specify)&rdquo; custom answer</span></label>
           </div>
         </template>
         <template x-for="(option, optionIndex) in question.options" :key="optionIndex">

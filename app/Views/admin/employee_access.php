@@ -42,7 +42,7 @@
         </div>
       </form>
 
-      <p data-table-status role="status" aria-live="polite" class="adm-status-live"></p>
+      <p data-table-status role="status" aria-live="polite" class="visually-hidden"></p>
       <div data-table-error class="alert alert-danger mt-2 mb-0" role="alert" hidden>
         <span data-table-error-message></span>
         <button data-table-retry type="button" class="btn btn-outline-danger btn-sm ms-2">Retry</button>

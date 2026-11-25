@@ -34,7 +34,7 @@
   --inv-crimson-hover: #991b1b;
   --inv-slate: #475569;
   --inv-zinc: #64748b;
-  --inv-mono: var(--mono-font, "Courier New", Courier, monospace);
+  --inv-mono: var(--mono-font, var(--default-font));
   color: var(--inv-fg-secondary);
   min-width: 0;
 }
@@ -262,12 +262,33 @@ html body :is(
    Inline Status Dot & Indicator System (Zero translucent chips / zero pills)
    ========================================================================== */
 .inv-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--inv-zinc);
+  line-height: 1;
   flex-shrink: 0;
-  background: var(--inv-zinc);
+}
+
+.inv-dot::before {
+  content: var(--status-icon-muted, "\f2e5");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.88em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .inv-status-inline {
@@ -281,29 +302,35 @@ html body :is(
 }
 
 .inv-status-inline--active { color: var(--inv-emerald); }
-.inv-status-inline--active .inv-dot { background: var(--inv-emerald); }
+.inv-status-inline--active .inv-dot { color: var(--inv-emerald); }
+.inv-status-inline--active .inv-dot::before { content: var(--status-icon-ok, "\f26a"); }
 
 .inv-status-inline--archived { color: var(--inv-muted-fg); }
-.inv-status-inline--archived .inv-dot { background: var(--inv-zinc); }
+.inv-status-inline--archived .inv-dot { color: var(--inv-zinc); }
+.inv-status-inline--archived .inv-dot::before { content: var(--status-icon-archived, "\f10c"); }
 
 .inv-status-inline--warn { color: var(--inv-amber-text); }
-.inv-status-inline--warn .inv-dot { background: var(--inv-amber); }
+.inv-status-inline--warn .inv-dot { color: var(--inv-amber); }
+.inv-status-inline--warn .inv-dot::before { content: var(--status-icon-alert, "\f332"); }
 
 .inv-status-inline--danger { color: var(--inv-crimson); }
-.inv-status-inline--danger .inv-dot { background: var(--inv-crimson); }
+.inv-status-inline--danger .inv-dot { color: var(--inv-crimson); }
+.inv-status-inline--danger .inv-dot::before { content: var(--status-icon-danger, "\f33a"); }
 
 .inv-status-inline--quarantined { color: var(--inv-slate); }
-.inv-status-inline--quarantined .inv-dot { background: var(--inv-slate); }
+.inv-status-inline--quarantined .inv-dot { color: var(--inv-slate); }
+.inv-status-inline--quarantined .inv-dot::before { content: var(--status-icon-quarantine, "\f537"); }
 
 .inv-status-inline--brand { color: var(--inv-brand); }
-.inv-status-inline--brand .inv-dot { background: var(--inv-brand); }
+.inv-status-inline--brand .inv-dot { color: var(--inv-brand); }
+.inv-status-inline--brand .inv-dot::before { content: var(--status-icon-info, "\f430"); }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .inv-status-inline--brand {
   color: #f87171;
 }
 
 :is(html[data-theme="dark"], html:not([data-theme="light"]) body.dark-mode) .inv-status-inline--brand .inv-dot {
-  background: #f87171;
+  color: #f87171;
 }
 
 /* ==========================================================================

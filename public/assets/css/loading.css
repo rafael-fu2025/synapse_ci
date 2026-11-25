@@ -122,7 +122,7 @@
 }
 
 .report-download-panel[data-state="complete"] .report-download-message {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.77rem;
   color: var(--heading-color, #111827);
   background: #f9fafb;

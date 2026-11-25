@@ -45,7 +45,7 @@ $patientFilters = ($filters ?? []) + ['q' => $searchQuery ?? '', 'kind' => 'all'
       </div>
     </form>
   </div>
-  <p data-table-status role="status" aria-live="polite" class="cp-live-status"></p>
+  <p data-table-status role="status" aria-live="polite" class="visually-hidden"></p>
   <div data-table-error class="cp-alert-error" role="alert" hidden>
     <span data-table-error-message></span>
     <button data-table-retry type="button" class="btn btn-outline-danger btn-sm">Retry</button>

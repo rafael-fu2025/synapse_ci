@@ -92,8 +92,8 @@ $unitLabel = ['clinic' => 'Clinic', 'guidance' => 'Guidance', 'facilities' => 'B
           <input type="hidden" name="checklist" value="<?= esc($checklistJson, 'attr') ?>" :value="JSON.stringify(items)">
           <template x-for="(item, index) in items" :key="index">
             <div class="tws-checklist-row">
-              <input type="checkbox" class="form-check-input flex-shrink-0" x-model="item.done" :aria-label="'Complete checklist item ' + (index + 1)">
-              <input type="text" class="form-control" x-model="item.text" required maxlength="160" :aria-label="'Checklist item ' + (index + 1)">
+              <input :id="'teamChecklistDone-' + index" type="checkbox" class="form-check-input flex-shrink-0" x-model="item.done" :aria-label="'Complete checklist item ' + (index + 1)">
+              <input :id="'teamChecklistText-' + index" type="text" class="form-control" x-model="item.text" required maxlength="160" :aria-label="'Checklist item ' + (index + 1)">
               <button type="button" class="btn btn-outline-danger btn-sm" @click="items.splice(index, 1)" :aria-label="'Remove checklist item ' + (index + 1)"><i class="bi bi-trash" aria-hidden="true"></i></button>
             </div>
           </template>

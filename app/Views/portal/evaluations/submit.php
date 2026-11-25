@@ -8,8 +8,9 @@
 
 <?= $this->section('content') ?>
 <?php
-$tokenState = $tokenState ?? 'not_found';
+$tokenState = $tokenState ?? 'empty';
 $rawToken = $rawToken ?? '';
+$submittedToken = $submittedToken ?? '';
 $formCode = $formCode ?? 'F-OGC-GPS-PEF-008-00';
 $isPsychosocial = (bool) ($isPsychosocial ?? true);
 $dimensions = $dimensions ?? [];
@@ -63,25 +64,31 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
             <span class="pe-eval-state-indicator is-expired">Token Expired</span>
             <h3 class="pe-eval-token-title">Evaluation Token Expired</h3>
             <p class="pe-eval-token-desc">This one-time evaluation token has passed its expiration date.</p>
+          <?php elseif ($tokenState === 'not_found'): ?>
+            <span class="pe-eval-state-indicator is-invalid">Invalid Token</span>
+            <h3 class="pe-eval-token-title">Evaluation Token Not Recognized</h3>
+            <p class="pe-eval-token-desc">The token you entered does not match an active evaluation issued by Guidance. Check for typos or paste the full evaluation link from your counselor.</p>
           <?php else: ?>
-            <span class="pe-eval-state-indicator is-missing">Token Required</span>
-            <h3 class="pe-eval-token-title">Invalid Evaluation Token</h3>
-            <p class="pe-eval-token-desc">Enter your one-time evaluation redemption token below, or open the evaluation link issued after your guidance session.</p>
+            <span class="pe-eval-state-indicator is-ready">Ready to Redeem</span>
+            <h3 class="pe-eval-token-title">Enter Your Evaluation Token</h3>
+            <p class="pe-eval-token-desc">Paste the one-time evaluation token or link given to you after your Guidance psychosocial support or counseling session to open the anonymous feedback form.</p>
           <?php endif; ?>
 
-          <form method="GET" action="<?= esc(site_url('/portal/evaluations/redeem'), 'attr') ?>" class="pe-eval-redeem-form">
+          <form method="GET" action="<?= esc(site_url('/portal/evaluations/redeem'), 'attr') ?>" class="pe-eval-redeem-form" id="eval-redeem-form">
             <label for="eval-redeem-token-input" class="pe-eval-label">One-Time Evaluation Token</label>
             <div class="pe-eval-redeem-row">
               <input id="eval-redeem-token-input"
                      type="text"
                      name="token"
                      class="form-control pe-eval-input"
-                     maxlength="128"
-                     placeholder="Paste your one-time evaluation token code…"
+                     maxlength="512"
+                     value="<?= esc($submittedToken, 'attr') ?>"
+                     placeholder="Paste your one-time evaluation token or link…"
                      autocomplete="off">
               <button type="submit" class="btn btn-primary pe-eval-btn">Redeem Token</button>
               <a href="<?= esc(site_url('/portal'), 'attr') ?>" class="btn btn-outline-secondary pe-eval-btn">Return to Personal Portal</a>
             </div>
+            <div id="eval-redeem-error" class="alert alert-danger py-2 px-3 small mt-2 d-none" role="alert"></div>
           </form>
         </div>
       </section>
@@ -224,6 +231,58 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>
+<?php if ($tokenState !== 'valid'): ?>
+<script>
+(() => {
+  'use strict';
+  const redeemForm = document.getElementById('eval-redeem-form');
+  if (!redeemForm) return;
+  const input = document.getElementById('eval-redeem-token-input');
+  const errEl = document.getElementById('eval-redeem-error');
+  const baseRedeemUrl = <?= json_encode(site_url('/portal/evaluations/redeem'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+  function extractToken(raw) {
+    const trimmed = String(raw || '').trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed) || trimmed.includes('portal/evaluations/redeem')) {
+      try {
+        const parsed = new URL(trimmed, window.location.origin);
+        const qTok = parsed.searchParams.get('token');
+        if (qTok && qTok.trim()) return qTok.trim();
+        const match = parsed.pathname.match(/portal\/evaluations\/redeem\/([^/]+)/);
+        if (match && match[1]) return decodeURIComponent(match[1]).trim();
+      } catch (_) {
+        // Fall back to raw value
+      }
+    }
+    return trimmed;
+  }
+
+  redeemForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (errEl) {
+      errEl.classList.add('d-none');
+      errEl.textContent = '';
+    }
+    const token = extractToken(input ? input.value : '');
+    if (!token) {
+      if (errEl) {
+        errEl.textContent = 'Please paste your one-time evaluation token or link before redeeming.';
+        errEl.classList.remove('d-none');
+      }
+      input?.focus();
+      return;
+    }
+    const targetUrl = `${baseRedeemUrl.replace(/\/+$/, '')}/${encodeURIComponent(token)}`;
+    if (window.SynapsePortalWorkspace?.isActive?.()) {
+      void window.SynapsePortalWorkspace.navigate(targetUrl, { bypassDirtyCheck: true });
+    } else {
+      window.location.assign(targetUrl);
+    }
+  });
+})();
+</script>
+<?php endif; ?>
 <?php if ($tokenState === 'valid'): ?>
 <script>
 (() => {

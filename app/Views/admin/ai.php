@@ -24,20 +24,28 @@ $aiRoles = [
     'bmg' => ['bmg_admin' => 'BMG admin', 'facilities_op' => 'Facilities operator', 'superadmin' => 'Superadmin'],
 ];
 $aiPermissions = [
-    'ai.insights.read' => ['label' => 'Read', 'title' => 'Read insights', 'description' => 'View approved aggregate insight results.'],
-    'ai.insights.generate' => ['label' => 'Generate', 'title' => 'Generate insights', 'description' => 'Request a new aggregate analysis.'],
-    'ai.insights.review' => ['label' => 'Review', 'title' => 'Review insights', 'description' => 'Review generated insight drafts.'],
-    'ai.insights.approve' => ['label' => 'Approve', 'title' => 'Approve insights', 'description' => 'Approve reviewed insights for use.'],
+    'ai.insights.read' => ['label' => 'Read', 'title' => 'Read insights', 'short_description' => 'View approved results', 'description' => 'View approved aggregate insight results.'],
+    'ai.insights.generate' => ['label' => 'Generate', 'title' => 'Generate insights', 'short_description' => 'Run new analysis', 'description' => 'Request a new aggregate analysis.'],
+    'ai.insights.review' => ['label' => 'Review', 'title' => 'Review insights', 'short_description' => 'Inspect drafts', 'description' => 'Review generated insight drafts.'],
+    'ai.insights.approve' => ['label' => 'Approve', 'title' => 'Approve insights', 'short_description' => 'Publish for use', 'description' => 'Approve reviewed insights for use.'],
 ];
 $aiGranted = [];
 $unitGrantCounts = array_fill_keys(array_keys($aiUnits), 0);
+$roleGrantCounts = [];
 foreach ($access['grants'] ?? [] as $grant) {
-    $key = ($grant['unit'] ?? '') . ':' . ($grant['role'] ?? '') . ':' . ($grant['permission'] ?? '');
+    $unitKey = (string) ($grant['unit'] ?? '');
+    $roleKey = (string) ($grant['role'] ?? '');
+    $permKey = (string) ($grant['permission'] ?? '');
+    $key = $unitKey . ':' . $roleKey . ':' . $permKey;
     $aiGranted[$key] = true;
-    if (isset($unitGrantCounts[$grant['unit'] ?? ''])) {
-        ++$unitGrantCounts[$grant['unit']];
+    if (isset($unitGrantCounts[$unitKey])) {
+        ++$unitGrantCounts[$unitKey];
+    }
+    if ($unitKey !== '' && $roleKey !== '') {
+        $roleGrantCounts[$unitKey . ':' . $roleKey] = ($roleGrantCounts[$unitKey . ':' . $roleKey] ?? 0) + 1;
     }
 }
+$hasCounsellorLegacyGrant = isset($aiGranted['guidance:counsellor:ai.insights.generate']);
 ?>
 <section class="ai-settings-page" data-ai-settings
   data-status-url="<?= esc(site_url('admin/ai/status'), 'attr') ?>"
@@ -322,62 +330,109 @@ foreach ($access['grants'] ?? [] as $grant) {
       </div>
       <div class="card-body">
         <p class="small text-muted ai-settings-section-lead">Grant each role only the AI actions it needs. These grants never provide source-data authority.</p>
-        <div class="accordion ai-settings-access-accordion" id="ai-access-accordion">
-          <?php $index = 0; foreach ($aiUnits as $unit => $unitLabel): ++$index; ?>
-            <div class="accordion-item">
-              <h3 class="accordion-header" id="ai-access-heading-<?= esc($unit, 'attr') ?>">
-                <button class="accordion-button<?= $index === 1 ? '' : ' collapsed' ?>" type="button" data-bs-toggle="collapse" data-bs-target="#ai-access-<?= esc($unit, 'attr') ?>" aria-expanded="<?= $index === 1 ? 'true' : 'false' ?>" aria-controls="ai-access-<?= esc($unit, 'attr') ?>">
-                  <span><?= esc($unitLabel) ?></span>
-                  <span class="ai-settings-unit-count" data-ai-unit-grant-count="<?= esc($unit, 'attr') ?>"><?= esc((string) $unitGrantCounts[$unit]) ?> active</span>
-                </button>
-              </h3>
-              <div id="ai-access-<?= esc($unit, 'attr') ?>" class="accordion-collapse collapse<?= $index === 1 ? ' show' : '' ?>" aria-labelledby="ai-access-heading-<?= esc($unit, 'attr') ?>" data-bs-parent="#ai-access-accordion">
-                <div class="accordion-body">
-                  <div class="ai-settings-role-grid">
-                    <?php foreach ($aiRoles[$unit] as $role => $roleLabel): ?>
-                      <fieldset class="ai-settings-role-fieldset" data-ai-access-role="<?= esc($role, 'attr') ?>">
-                        <legend><?= esc($roleLabel) ?></legend>
-                        <div class="ai-settings-permission-list">
-                          <?php foreach ($aiPermissions as $permission => $permissionMeta):
-                              $permissionName = substr($permission, strrpos($permission, '.') + 1);
-                              $granted = isset($aiGranted[$unit . ':' . $role . ':' . $permission]);
-                              $verb = $granted ? 'Revoke' : 'Grant';
-                              $sourceRestricted = $role === 'counsellor' && $permission === 'ai.insights.generate';
-                              $sourceBlocked = $sourceRestricted && !$granted;
-                              $rowId = 'ai-access-' . $unit . '-' . $role . '-' . $permissionName;
-                          ?>
-                            <div class="ai-settings-permission-row" data-ai-permission-row data-state="<?= $granted ? 'granted' : ($sourceBlocked ? 'unavailable' : 'not-granted') ?>">
-                              <div class="ai-settings-permission-copy">
-                                <span class="ai-settings-permission-title" id="<?= esc($rowId, 'attr') ?>-label"><?= esc($permissionMeta['title']) ?></span>
-                                <span class="ai-settings-permission-description"><?= esc($permissionMeta['description']) ?></span>
-                                <span class="ai-settings-permission-state" id="<?= esc($rowId, 'attr') ?>-state" data-ai-permission-state><?= $granted ? 'Granted' : ($sourceBlocked ? 'Unavailable' : 'Not granted') ?></span>
-                                <?php if ($sourceRestricted): ?>
-                                  <span class="ai-settings-source-reason" id="<?= esc($rowId, 'attr') ?>-source" data-ai-source-reason><?= $granted
-                                      ? 'Counsellors lack guidance.cases.read_any source access. This existing grant cannot enable generation and remains revocable.'
-                                      : 'Unavailable: counsellors lack guidance.cases.read_any source access. An AI grant cannot supply it.' ?></span>
-                                <?php endif; ?>
-                              </div>
-                              <form method="post" action="<?= esc(site_url('admin/ai/access'), 'attr') ?>" data-ai-settings-form="access" data-navigation-dirty="false"
-                                data-ai-unit-label="<?= esc($unitLabel, 'attr') ?>" data-ai-role-label="<?= esc($roleLabel, 'attr') ?>"
-                                data-ai-permission-label="<?= esc($permissionMeta['label'], 'attr') ?>" data-ai-source-restricted="<?= $sourceRestricted ? 'true' : 'false' ?>"
-                                data-ai-source-blocked="<?= $sourceBlocked ? 'true' : 'false' ?>">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="operation" value="<?= $granted ? 'revoke' : 'grant' ?>">
-                                <input type="hidden" name="unit" value="<?= esc($unit, 'attr') ?>">
-                                <input type="hidden" name="role" value="<?= esc($role, 'attr') ?>">
-                                <input type="hidden" name="permission" value="<?= esc($permission, 'attr') ?>">
-                                <button class="btn <?= $granted ? 'btn-outline-danger' : 'btn-outline-primary' ?> btn-sm" type="submit"
-                                  <?= !$accessReady || $sourceBlocked ? 'disabled ' : '' ?>aria-label="<?= $verb ?> <?= esc($permissionMeta['label'], 'attr') ?> for <?= esc($roleLabel, 'attr') ?> in <?= esc($unitLabel, 'attr') ?>"
-                                  aria-describedby="<?= esc($rowId, 'attr') ?>-state<?= $sourceRestricted ? ' ' . esc($rowId, 'attr') . '-source' : '' ?>"><?= $verb ?> <?= esc($permissionMeta['label']) ?></button>
-                              </form>
-                            </div>
-                          <?php endforeach; ?>
-                        </div>
-                      </fieldset>
+
+        <div class="ai-access-tabs" role="tablist" aria-label="Departments">
+          <?php $tabIndex = 0; foreach ($aiUnits as $unit => $unitLabel): ++$tabIndex; ?>
+            <button class="ai-access-tab<?= $tabIndex === 1 ? ' active' : '' ?>"
+              type="button"
+              role="tab"
+              id="ai-access-tab-<?= esc($unit, 'attr') ?>"
+              data-bs-toggle="tab"
+              data-bs-target="#ai-access-pane-<?= esc($unit, 'attr') ?>"
+              aria-controls="ai-access-pane-<?= esc($unit, 'attr') ?>"
+              aria-selected="<?= $tabIndex === 1 ? 'true' : 'false' ?>">
+              <?php if ($unit === 'clinic' || $unit === 'guidance'): ?>
+                <?= view('partials/unit_vector_icon', ['unit' => $unit, 'class' => 'ai-access-tab-icon']) ?>
+              <?php else: ?>
+                <i class="bi bi-building-gear" aria-hidden="true"></i>
+              <?php endif; ?>
+              <span><?= esc($unitLabel) ?></span>
+              <span class="ai-access-tab-count" data-ai-unit-grant-count="<?= esc($unit, 'attr') ?>"><?= esc((string) $unitGrantCounts[$unit]) ?> active</span>
+            </button>
+          <?php endforeach; ?>
+        </div>
+
+        <div class="tab-content ai-access-tab-content">
+          <?php $paneIndex = 0; foreach ($aiUnits as $unit => $unitLabel): ++$paneIndex; ?>
+            <div class="tab-pane fade<?= $paneIndex === 1 ? ' show active' : '' ?>"
+              id="ai-access-pane-<?= esc($unit, 'attr') ?>"
+              role="tabpanel"
+              aria-labelledby="ai-access-tab-<?= esc($unit, 'attr') ?>"
+              tabindex="0">
+              <div class="ai-access-matrix-wrap">
+                <table class="ai-access-matrix">
+                  <thead>
+                    <tr>
+                      <th scope="col">Role</th>
+                      <?php foreach ($aiPermissions as $permissionMeta): ?>
+                        <th scope="col" title="<?= esc($permissionMeta['description'], 'attr') ?>">
+                          <span class="ai-access-col-title"><?= esc($permissionMeta['label']) ?></span>
+                          <span class="ai-access-col-desc"><?= esc($permissionMeta['short_description']) ?></span>
+                        </th>
+                      <?php endforeach; ?>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <?php foreach ($aiRoles[$unit] as $role => $roleLabel):
+                        $roleGrantedCount = (int) ($roleGrantCounts[$unit . ':' . $role] ?? 0);
+                        $permTotal = count($aiPermissions);
+                    ?>
+                      <tr data-ai-access-role="<?= esc($role, 'attr') ?>" data-ai-access-unit="<?= esc($unit, 'attr') ?>">
+                        <th scope="row" class="ai-access-role-cell">
+                          <span class="ai-access-role-name"><?= esc($roleLabel) ?></span>
+                          <span class="ai-access-role-count" data-ai-role-grant-count="<?= esc($unit . ':' . $role, 'attr') ?>"><?= esc((string) $roleGrantedCount) ?> / <?= esc((string) $permTotal) ?></span>
+                        </th>
+                        <?php foreach ($aiPermissions as $permission => $permissionMeta):
+                            $granted = isset($aiGranted[$unit . ':' . $role . ':' . $permission]);
+                            $verb = $granted ? 'Revoke' : 'Grant';
+                            $sourceRestricted = $role === 'counsellor' && $permission === 'ai.insights.generate';
+                            $sourceBlocked = $sourceRestricted && !$granted;
+                            $cellState = $granted ? ($sourceRestricted ? 'restricted-granted' : 'granted') : ($sourceBlocked ? 'unavailable' : 'not-granted');
+                            $toggleText = $granted ? ($sourceRestricted ? 'Revoke' : 'Granted') : ($sourceBlocked ? 'Locked' : 'Grant');
+                            $buttonTitle = $sourceBlocked
+                                ? 'Unavailable: counsellors lack guidance.cases.read_any source access. An AI grant cannot supply it.'
+                                : ($granted
+                                    ? ($sourceRestricted
+                                        ? 'Existing grant cannot enable generation; click to revoke.'
+                                        : 'Click to revoke ' . $permissionMeta['label'] . ' access for ' . $roleLabel)
+                                    : 'Click to grant ' . $permissionMeta['label'] . ' access for ' . $roleLabel);
+                        ?>
+                          <td class="ai-access-cell" data-ai-permission-row data-label="<?= esc($permissionMeta['label'], 'attr') ?>" data-state="<?= esc($cellState, 'attr') ?>">
+                            <form method="post" action="<?= esc(site_url('admin/ai/access'), 'attr') ?>" data-ai-settings-form="access" data-navigation-dirty="false"
+                              data-ai-unit-label="<?= esc($unitLabel, 'attr') ?>" data-ai-role-label="<?= esc($roleLabel, 'attr') ?>"
+                              data-ai-permission-label="<?= esc($permissionMeta['label'], 'attr') ?>" data-ai-source-restricted="<?= $sourceRestricted ? 'true' : 'false' ?>"
+                              data-ai-source-blocked="<?= $sourceBlocked ? 'true' : 'false' ?>">
+                              <?= csrf_field() ?>
+                              <input type="hidden" name="operation" value="<?= $granted ? 'revoke' : 'grant' ?>">
+                              <input type="hidden" name="unit" value="<?= esc($unit, 'attr') ?>">
+                              <input type="hidden" name="role" value="<?= esc($role, 'attr') ?>">
+                              <input type="hidden" name="permission" value="<?= esc($permission, 'attr') ?>">
+                              <button class="ai-access-toggle" type="submit"
+                                data-state="<?= esc($cellState, 'attr') ?>"
+                                aria-pressed="<?= $granted ? 'true' : 'false' ?>"
+                                <?= !$accessReady || $sourceBlocked ? 'disabled ' : '' ?>
+                                title="<?= esc($buttonTitle, 'attr') ?>"
+                                aria-label="<?= esc($verb . ' ' . $permissionMeta['label'] . ' for ' . $roleLabel . ' in ' . $unitLabel, 'attr') ?>"
+                                <?= $sourceRestricted ? 'aria-describedby="ai-access-guidance-source-note"' : '' ?>>
+                                <span class="ai-access-toggle-icon" aria-hidden="true"></span>
+                                <span class="ai-access-toggle-label" data-ai-permission-state><?= esc($toggleText) ?></span>
+                              </button>
+                            </form>
+                          </td>
+                        <?php endforeach; ?>
+                      </tr>
                     <?php endforeach; ?>
-                  </div>
-                </div>
+                  </tbody>
+                </table>
               </div>
+              <?php if ($unit === 'guidance'): ?>
+                <p class="ai-access-footnote" id="ai-access-guidance-source-note">
+                  <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                  <span data-ai-source-reason><?= $hasCounsellorLegacyGrant
+                      ? 'Counsellor -> Generate: counsellors lack guidance.cases.read_any source access. This existing grant cannot enable generation and remains revocable.'
+                      : 'Counsellor -> Generate is locked because counsellors lack guidance.cases.read_any source access. An AI grant cannot supply it.' ?></span>
+                </p>
+              <?php endif; ?>
             </div>
           <?php endforeach; ?>
         </div>
@@ -399,7 +454,7 @@ foreach ($access['grants'] ?? [] as $grant) {
             <p class="small">Tests the saved endpoint, key, model, and options with one fixed harmless message. Your provider may charge for it.</p>
             <form method="post" action="<?= esc(site_url('admin/ai/test'), 'attr') ?>" data-ai-settings-form="test" data-navigation-dirty="false">
               <?= csrf_field() ?><input type="hidden" name="version" value="<?= esc($s['version'], 'attr') ?>">
-              <button class="btn btn-outline-primary" type="submit" data-ai-settings-test<?= !$s['saved'] ? ' disabled' : '' ?>><?= $s['enabled'] ? 'Pause analytics and test connection' : 'Test connection' ?></button>
+              <button class="btn btn-outline-primary" type="submit" data-ai-settings-test<?= !$s['saved'] ? ' disabled' : '' ?>><span data-ai-settings-test-label><?= $s['enabled'] ? 'Pause analytics and test connection' : 'Test connection' ?></span></button>
               <p class="form-text mb-0">Testing pauses analytics before the probe. It stays paused until you enable it again.</p>
             </form>
           </div>
@@ -428,5 +483,5 @@ foreach ($access['grants'] ?? [] as $grant) {
     </section>
   </div>
 </section>
-<script src="<?= esc(base_url('assets/js/ai-settings.js'), 'attr') ?>"></script>
+<script src="<?= esc(base_url('assets/js/ai-settings.js') . '?v=' . ((defined('FCPATH') ? @filemtime(FCPATH . 'assets/js/ai-settings.js') : false) ?: 1), 'attr') ?>"></script>
 <?= $this->endSection() ?>

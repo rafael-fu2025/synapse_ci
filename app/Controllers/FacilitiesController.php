@@ -212,6 +212,7 @@ final class FacilitiesController extends BaseController
         $permissions = $actor['permissions'] ?? [];
         return [
             'canManage' => in_array('facilities.manage', $permissions, true),
+            'canCancelBatch' => in_array('facilities.manage', $permissions, true) && (($actor['role'] ?? '') !== 'bmg_intern'),
             'canConfigure' => in_array('facilities.configure', $permissions, true) && in_array('facilities.manage', $permissions, true),
             'canUsb' => array_diff(['facilities.read', 'facilities.manage', 'facilities.configure'], $permissions) === [],
                         'canHardware' => in_array('facilities.hardware.manage', $permissions, true),

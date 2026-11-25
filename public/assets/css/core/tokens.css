@@ -18,8 +18,34 @@
   --default-font: "Nunito Sans", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --heading-font: "Poppins", sans-serif;
   --nav-font: "Nunito Sans", sans-serif;
-  --mono-font: "Courier New", Courier, monospace;
-  --bs-font-monospace: var(--mono-font);
+  --mono-font: var(--default-font);
+  --bs-font-monospace: var(--default-font);
+
+  /* Semantic Status Icon Glyphs (Bootstrap Icons v1.11.3) */
+  --status-icon-font: "bootstrap-icons";
+  --status-icon-ok: "\f26a";          /* bi-check-circle-fill */
+  --status-icon-pending: "\f291";     /* bi-clock-fill */
+  --status-icon-progress: "\f41f";    /* bi-hourglass-split */
+  --status-icon-info: "\f430";        /* bi-info-circle-fill */
+  --status-icon-alert: "\f332";       /* bi-exclamation-circle-fill */
+  --status-icon-danger: "\f33a";      /* bi-exclamation-triangle-fill */
+  --status-icon-muted: "\f2e5";       /* bi-dash-circle-fill */
+  --status-icon-cancelled: "\f622";   /* bi-x-circle-fill */
+  --status-icon-archived: "\f10c";    /* bi-archive-fill */
+  --status-icon-locked: "\f47a";      /* bi-lock-fill */
+  --status-icon-scheduled: "\f1e7";   /* bi-calendar-event-fill */
+  --status-icon-confirmed: "\f1e1";   /* bi-calendar-check-fill */
+  --status-icon-published: "\f483";   /* bi-megaphone-fill */
+  --status-icon-draft: "\f4ca";       /* bi-pencil-square */
+  --status-icon-hospital: "\f773";    /* bi-hospital-fill */
+  --status-icon-shield-ok: "\f531";   /* bi-shield-fill-check */
+  --status-icon-shield-warn: "\f532"; /* bi-shield-fill-exclamation */
+  --status-icon-quarantine: "\f537";  /* bi-shield-lock-fill */
+  --status-icon-sent: "\f6b9";        /* bi-send-fill */
+  --status-icon-ack: "\f4d5";         /* bi-person-check-fill */
+  --status-icon-blocked: "\f566";     /* bi-slash-circle-fill */
+  --status-icon-todo: "\f28a";        /* bi-circle */
+  --status-icon-play: "\f4f2";        /* bi-play-circle-fill */
 
   /* Brand: action fills stay maroon in both themes. */
   --fu-maroon: #800000;

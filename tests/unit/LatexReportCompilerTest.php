@@ -31,6 +31,8 @@ final class LatexReportCompilerTest extends CIUnitTestCase
         FakeLatexReportCompiler::$inputs = [];
         FakeLatexReportCompiler::$files = [];
         FakeLatexReportCompiler::$sealHash = false;
+        FakeLatexReportCompiler::$guidanceHash = false;
+        FakeLatexReportCompiler::$clinicHash = false;
         FakeLatexReportCompiler::$logoHash = false;
     }
 
@@ -63,6 +65,16 @@ final class LatexReportCompilerTest extends CIUnitTestCase
         if (is_file($seal)) {
             $expectedFiles[] = 'university-seal.png';
             self::assertSame(hash_file('sha256', $seal), FakeLatexReportCompiler::$sealHash);
+        }
+        $guidance = ROOTPATH . 'public/assets/img/brand/guidance-center.png';
+        if (is_file($guidance)) {
+            $expectedFiles[] = 'guidance-logo.png';
+            self::assertSame(hash_file('sha256', $guidance), FakeLatexReportCompiler::$guidanceHash);
+        }
+        $clinic = ROOTPATH . 'public/assets/img/brand/health-services.png';
+        if (is_file($clinic)) {
+            $expectedFiles[] = 'clinic-logo.png';
+            self::assertSame(hash_file('sha256', $clinic), FakeLatexReportCompiler::$clinicHash);
         }
         $logo = ROOTPATH . 'public/synapse-black.png';
         if (is_file($logo)) {
@@ -291,6 +303,8 @@ final class FakeLatexReportCompiler extends LatexReportCompiler
     public static array $inputs = [];
     public static array $files = [];
     public static string|false $sealHash = false;
+    public static string|false $guidanceHash = false;
+    public static string|false $clinicHash = false;
     public static string|false $logoHash = false;
 
     protected static function startProcess(array $command, string $directory, array $environment): mixed
@@ -302,6 +316,10 @@ final class FakeLatexReportCompiler extends LatexReportCompiler
         self::$files[] = array_values(array_diff(scandir($directory), ['.', '..']));
         self::$sealHash = is_file($directory . '/university-seal.png')
             ? hash_file('sha256', $directory . '/university-seal.png') : false;
+        self::$guidanceHash = is_file($directory . '/guidance-logo.png')
+            ? hash_file('sha256', $directory . '/guidance-logo.png') : false;
+        self::$clinicHash = is_file($directory . '/clinic-logo.png')
+            ? hash_file('sha256', $directory . '/clinic-logo.png') : false;
         self::$logoHash = is_file($directory . '/synapse-black.png')
             ? hash_file('sha256', $directory . '/synapse-black.png') : false;
         return parent::startProcess([PHP_BINARY, '-r', self::$script], $directory, $environment);

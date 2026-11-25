@@ -125,9 +125,16 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('September 1, 2025', $latex);
         $this->assertStringContainsString('2025-09-01', $latex);
 
-        // Header / OGC branding
+        // Header / OGC branding & framed dual-logo container without duplicated Canonical Code
         $this->assertStringContainsString('FOUNDATION UNIVERSITY', $latex);
         $this->assertStringContainsString('OFFICE OF THE GUIDANCE CENTER', $latex);
+        $this->assertStringContainsString('\\pdfminorversion=4', $latex);
+        $this->assertStringContainsString('\\setlength{\\parindent}{0pt}', $latex);
+        $this->assertStringContainsString('\\fcolorbox{HeaderBorder}{HeaderBg}', $latex);
+        $this->assertStringContainsString('university-seal.png', $latex);
+        $this->assertStringContainsString('guidance-logo.png', $latex);
+        $this->assertStringContainsString('\\fancyhead[R]{\\small \\textbf{Form Code:} F-OGC-GPS-PIF-008-00}', $latex);
+        $this->assertStringNotContainsString('Canonical Code:', $latex);
 
         // Student Demographics & Academic Profile (Escaped)
         $this->assertStringContainsString('Juan Dela Cruz \\& Maria Clara', $latex);

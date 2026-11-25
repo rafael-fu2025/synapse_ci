@@ -1,5 +1,10 @@
 <?php require __DIR__ . '/_dates.php'; ?>
 <?= $this->extend('layouts/app') ?>
+<?= $this->section('page_actions') ?>
+<a href="<?= esc(site_url('/portal/announcements'), 'attr') ?>" class="portal-back-btn">
+  <i class="bi bi-arrow-left" aria-hidden="true"></i>Back to Announcements
+</a>
+<?= $this->endSection() ?>
 <?= $this->section('content') ?>
 <?php $unread = $announcement['read_at'] === null; ?>
 <section class="portal-engagement pe-announcement-detail"

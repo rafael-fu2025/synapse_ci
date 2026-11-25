@@ -131,26 +131,29 @@ test('full-chart print link loads complete histories without page limits', async
   await popup.close();
 });
 
-test('portal survey pagers stay independent and never generate page size 26', async t => {
+test('portal survey unified grid pages across MI and general surveys cleanly', async t => {
   const { page } = await open(t, '/portal/surveys', 390, 'dark');
-  assert.equal(await page.locator('[data-general-survey-section] .pe-content-card').count(), 25);
-  assert.equal(await page.locator('[data-mi-assignment-section] .pe-content-card').count(), 25);
-  await page.getByRole('navigation', { name: 'General survey pages', exact: true }).getByRole('link', { name: 'Next', exact: true }).click();
-  await page.waitForURL(url => url.searchParams.get('page') === '2');
+  const grid = page.locator('[data-unified-survey-grid]');
+  assert.equal(await grid.locator('.pe-content-card').count(), 25);
+  assert.equal(await page.getByText('Showing 1–25 of 113', { exact: true }).count(), 1);
+  const pager = page.getByRole('navigation', { name: 'Survey pages', exact: true });
+  await pager.getByRole('link', { name: 'Page 3', exact: true }).click();
+  await page.waitForURL(url => url.searchParams.get('page') === '3');
   assert.equal(new URL(page.url()).searchParams.get('per_page'), '25');
-  assert.equal(await page.locator('[data-general-survey-section]').getByText('Synthetic general survey 26', { exact: true }).count(), 1);
-  await image(page, 'portal-general-surveys-page2');
-  await page.getByRole('navigation', { name: 'MI assignment pages', exact: true }).getByRole('link', { name: 'Last', exact: true }).click();
-  await page.waitForURL(url => url.searchParams.get('mi_page') === '3');
-  assert.equal(new URL(page.url()).searchParams.get('page'), '2');
-  assert.equal(new URL(page.url()).searchParams.get('mi_per_page'), '25');
-  assert.equal(await page.locator('[data-mi-assignment-section] .pe-content-card').count(), 2);
-  assert.equal(await page.locator('[data-general-survey-section] .pe-content-card').count(), 25);
-  await image(page, 'portal-mi-last-independent');
+  assert.equal(await grid.locator('.pe-content-card').count(), 25);
+  assert.equal(await grid.locator('.sv-mi-card').count(), 2);
+  assert.equal(await grid.getByText('Synthetic general survey 23', { exact: true }).count(), 1);
+  await image(page, 'portal-surveys-unified-page3');
+  await pager.getByRole('link', { name: 'Last', exact: true }).click();
+  await page.waitForURL(url => url.searchParams.get('page') === '5');
+  await page.locator('[data-page="5"]').waitFor();
+  assert.equal(await grid.locator('.pe-content-card').count(), 13);
+  assert.equal(await page.getByText('Showing 101–113 of 113', { exact: true }).count(), 1);
+  await image(page, 'portal-surveys-unified-last');
   await page.goBack();
-  await page.waitForURL(url => url.searchParams.get('page') === '2' && url.searchParams.get('mi_page') === '1');
-  await page.locator('[data-mi-assignment-section] [data-table-pagination][data-page="1"]').waitFor();
-  assert.equal(await page.locator('[data-mi-assignment-section] .pe-content-card').count(), 25);
+  await page.waitForURL(url => url.searchParams.get('page') === '3');
+  await page.locator('[data-page="3"]').waitFor();
+  assert.equal(await grid.locator('.pe-content-card').count(), 25);
   await image(page, 'portal-surveys-back');
 });
 

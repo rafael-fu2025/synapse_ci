@@ -58,11 +58,18 @@
       return Array.from(container.querySelectorAll('template')).every(template => safeContent(template.content));
     }
     function announce(container) {
-      const table = container.querySelector('[data-department-staff], [data-configured-windows]');
-      const count = table ? Array.from(table.tBodies[0]?.rows || []).filter(row => !row.querySelector('td[colspan]')).length
-        : container.querySelectorAll('.av-exception-row').length;
-      const label = table?.matches('[data-department-staff]') ? 'staff members' : table ? 'weekly windows' : 'exceptions';
-      return `Showing ${count.toLocaleString()} matching ${label}.`;
+      const rosterTable = container.querySelector('[data-department-staff]');
+      if (rosterTable) {
+        const count = Array.from(rosterTable.tBodies[0]?.rows || []).filter(row => !row.querySelector('td[colspan]')).length;
+        return `Showing ${count.toLocaleString()} matching staff members.`;
+      }
+      const weeklyList = container.querySelector('[data-configured-windows]');
+      if (weeklyList) {
+        const count = weeklyList.querySelectorAll('[data-window-row]').length;
+        return `Showing ${count.toLocaleString()} matching weekly windows.`;
+      }
+      const count = container.querySelectorAll('.av-exception-row').length;
+      return `Showing ${count.toLocaleString()} matching exceptions.`;
     }
     async function load(manual = false, historyMode = 'replace', destination = null) {
       invalidate();

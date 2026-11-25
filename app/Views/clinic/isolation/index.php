@@ -217,6 +217,7 @@ if (!empty($canArchive) || ($filters['status'] ?? '') === 'archived') {
               <div class="iso-search-wrap" data-person-lookup-anchor>
                 <i class="bi bi-search iso-search-icon" aria-hidden="true"></i>
                 <input type="text"
+                       id="isoPatientSearch"
                        class="form-control form-control-sm iso-search-input"
                        x-model="searchTerm"
                        @input.debounce.300ms="lookupPatient()"
