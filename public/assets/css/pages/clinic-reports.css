@@ -29,7 +29,7 @@
   --cr-rose: #b91c1c;
   --cr-grid: #eceef2;
   --cr-axis: #d4d4d8;
-  --cr-mono: var(--mono-font, "Courier New", Courier, monospace);
+  --cr-mono: var(--mono-font, var(--default-font));
   color: var(--cr-fg-secondary);
   min-width: 0;
 }
@@ -1054,16 +1054,41 @@ html body section.cr-workspace[data-cr-workspace] .table.cr-data-table > thead >
 }
 
 .cr-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: currentColor;
+  line-height: 1;
   flex-shrink: 0;
 }
 
+.cr-dot::before {
+  content: var(--status-icon-muted, "\f2e5");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.9em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .cr-status-line[data-tone="cleared"] { color: var(--cr-emerald); }
+.cr-status-line[data-tone="cleared"] .cr-dot::before { content: var(--status-icon-shield-ok, "\f531"); }
 .cr-status-line[data-tone="pending"] { color: var(--cr-amber-text); }
+.cr-status-line[data-tone="pending"] .cr-dot::before { content: var(--status-icon-pending, "\f291"); }
 .cr-status-line[data-tone="hold"] { color: var(--cr-rose); }
+.cr-status-line[data-tone="hold"] .cr-dot::before { content: var(--status-icon-shield-warn, "\f532"); }
 
 .cr-clearance-num {
   font-family: var(--cr-mono);

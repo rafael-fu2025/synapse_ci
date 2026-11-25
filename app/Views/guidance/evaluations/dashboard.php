@@ -2,6 +2,9 @@
 
 <?= $this->section('page_actions') ?>
 <div class="ce-page-actions">
+  <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#issueEvalTokenModal">
+    <i class="bi bi-ticket-perforated" aria-hidden="true"></i>Issue Evaluation Token
+  </button>
   <?php if (!empty($canModerate)): ?>
     <a href="<?= esc(site_url('/guidance/evaluations/moderate'), 'attr') ?>" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-chat-square-text" aria-hidden="true"></i>Comment Moderation Queue
@@ -247,6 +250,12 @@ $renderAggregateCard = static function (
     ) ?>
   </div>
 </section>
+<?= view('guidance/evaluations/_issue_modal', [
+    'evalIssuePersonId'          => 0,
+    'evalIssueProviders'         => $providers ?? [],
+    'evalIssueProviderId'        => $providerUserId ?? 0,
+    'evalIssueCanSelectProvider' => !empty($canViewAnyProvider),
+]) ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('styles') ?>

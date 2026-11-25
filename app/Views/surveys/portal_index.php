@@ -1,23 +1,24 @@
 <?php
-$filters = $filters ?? ['q' => '', 'status' => 'all', 'page' => 1, 'per_page' => 25, 'mi_page' => 1, 'mi_per_page' => 25];
+$filters = $filters ?? ['q' => '', 'status' => 'all', 'page' => 1, 'per_page' => 25];
 $counts = $counts ?? array_fill_keys(['all', 'available', 'submitted', 'closed'], 0);
 $miAssignments = is_array($miAssignments ?? null) ? $miAssignments : [];
-$miCounts = array_replace(array_fill_keys(['all', 'available', 'submitted', 'closed'], 0), $miCounts ?? []);
+$items = is_array($items ?? null) ? $items : [];
 $miGateEnabled = (bool) ($miGateEnabled ?? false);
 $now = new \DateTimeImmutable($nowUtc ?? gmdate('Y-m-d H:i:s'), new \DateTimeZone('UTC'));
-$pagination = $pagination ?? ['page' => 1, 'pages' => 1, 'filtered' => count($items ?? []), 'per_page' => 25];
-$miPagination = $miPagination ?? ['page' => 1, 'pages' => 1, 'filtered' => count($miAssignments), 'total' => count($miAssignments), 'per_page' => 25];
-$generalPage = (int) $pagination['page'];
-$generalSize = (int) $pagination['per_page'];
-$miPage = (int) $miPagination['page'];
-$miSize = (int) $miPagination['per_page'];
+$pagination = $pagination ?? ['page' => 1, 'pages' => 1, 'filtered' => count($miAssignments) + count($items), 'per_page' => 25];
+$page = (int) ($pagination['page'] ?? 1);
+$perPage = (int) ($pagination['per_page'] ?? ($filters['per_page'] ?? 25));
 $tabUrl = static fn (string $state): string => $baseUrl . '?' . http_build_query([
-    'q' => $filters['q'], 'status' => $state, 'page' => 1, 'per_page' => $generalSize,
-    'mi_page' => 1, 'mi_per_page' => $miSize,
+    'q'        => (string) ($filters['q'] ?? ''),
+    'status'   => $state,
+    'page'     => 1,
+    'per_page' => $perPage,
 ]);
 $displayCounts = $counts;
-foreach ($miCounts as $state => $count) {
-    $displayCounts[$state] = (int) ($displayCounts[$state] ?? 0) + (int) $count;
+if (isset($miCounts) && is_array($miCounts)) {
+    foreach (['all', 'available', 'submitted', 'closed'] as $state) {
+        $displayCounts[$state] = (int) ($displayCounts[$state] ?? 0) + (int) ($miCounts[$state] ?? 0);
+    }
 }
 ?>
 <?= $this->extend('layouts/app') ?>
@@ -31,14 +32,14 @@ foreach ($miCounts as $state => $count) {
          data-live-filters
          data-filter-url="<?= esc($baseUrl) ?>"
          data-filter-key="portal-surveys"
-         data-filter-page-params="page mi_page"
+         data-filter-page-params="page"
          data-live-events="notifications.changed">
   <div class="sv-sheet">
 
     <!-- Band 1: Intro & Identified-Response Disclosure -->
     <div class="sv-band">
       <h2 class="sv-intro-title" id="campus-surveys-title">Your voice matters</h2>
-      <p class="sv-intro-desc">Share your perspective, track what you’ve submitted, and see when surveys close.</p>
+      <p class="sv-intro-desc">Share your perspective, complete assigned assessments, and track what you’ve submitted.</p>
 
       <?php if (!($hasProfile ?? false)): ?>
         <div class="sv-inline-notice" role="status">
@@ -60,29 +61,20 @@ foreach ($miCounts as $state => $count) {
       <?php endif; ?>
     </div>
 
-    <!-- Band 2: Search, Participation Tabs & Independent Survey Sections -->
+    <!-- Band 2: Search, Participation Tabs & Unified Survey Grid -->
     <div class="sv-band">
       <form method="get" action="<?= esc($baseUrl) ?>" class="sv-search-form" role="search" aria-label="Search surveys" data-filter-form>
         <input type="hidden" name="status" value="<?= esc($filters['status']) ?>">
-        <input type="hidden" name="page" value="<?= $generalPage ?>">
-        <input type="hidden" name="mi_page" value="<?= $miPage ?>">
+        <input type="hidden" name="page" value="<?= $page ?>">
         <div class="sv-search-field">
           <label for="survey-search" class="sv-search-label">Find a survey</label>
           <input id="survey-search" type="search" name="q" class="form-control sv-search-input" maxlength="120" placeholder="Search a title or topic" value="<?= esc($filters['q']) ?>">
         </div>
         <div class="sv-search-field">
-          <label for="surveys-per-page" class="sv-search-label">General surveys per page</label>
+          <label for="surveys-per-page" class="sv-search-label">Per page</label>
           <select name="per_page" id="surveys-per-page" class="form-select">
             <?php foreach ([25, 50, 100] as $size): ?>
-              <option value="<?= $size ?>" <?= $generalSize === $size ? 'selected' : '' ?>><?= $size ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="sv-search-field">
-          <label for="mi-per-page" class="sv-search-label">MI assignments per page</label>
-          <select name="mi_per_page" id="mi-per-page" class="form-select">
-            <?php foreach ([25, 50, 100] as $size): ?>
-              <option value="<?= $size ?>" <?= $miSize === $size ? 'selected' : '' ?>><?= $size ?></option>
+              <option value="<?= $size ?>" <?= $perPage === $size ? 'selected' : '' ?>><?= $size ?></option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -98,42 +90,26 @@ foreach ($miCounts as $state => $count) {
         <nav class="pe-tabs" aria-label="Survey participation status">
           <?php foreach (['all' => 'All surveys', 'available' => 'Available', 'submitted' => 'Submitted', 'closed' => 'Closed'] as $state => $label): ?>
             <a data-filter-link href="<?= esc($tabUrl($state)) ?>" class="pe-tab <?= $filters['status'] === $state ? 'is-active' : '' ?>" <?= $filters['status'] === $state ? 'aria-current="page"' : '' ?>>
-              <?= esc($label) ?><span class="pe-tab-count"><?= number_format($displayCounts[$state]) ?></span>
+              <?= esc($label) ?><span class="pe-tab-count"><?= number_format((int) ($displayCounts[$state] ?? 0)) ?></span>
             </a>
           <?php endforeach; ?>
         </nav>
 
-        <p class="pe-filter-note">Counts reflect your search. Submitted surveys can also appear under Closed.</p>
+        <p class="pe-filter-note">Counts reflect your search. Submitted items can also appear under Closed.</p>
 
-        <section aria-labelledby="mi-assignments-heading" class="mb-4" data-mi-assignment-section>
-          <h3 id="mi-assignments-heading" class="h5">MI assignments</h3>
-          <p class="pe-filter-note">Assigned Multiple Intelligences assessments have their own pages.</p>
-          <?php if (!$miGateEnabled && $miAssignments !== []): ?>
-            <div class="sv-inline-notice mb-3" role="status">
-              <i class="bi bi-shield-lock" aria-hidden="true"></i>
-              <div>You may open an assigned Multiple Intelligences assessment and save encrypted drafts, but final submission is paused pending Guidance, QA, and DPO sign-off.</div>
-            </div>
-          <?php endif; ?>
-          <?php if ($miAssignments !== []): ?>
-            <div class="pe-survey-grid">
+        <?php if (!$miGateEnabled && $miAssignments !== []): ?>
+          <div class="sv-inline-notice mb-3" role="status">
+            <i class="bi bi-shield-lock" aria-hidden="true"></i>
+            <div>You may open an assigned Multiple Intelligences assessment and save encrypted drafts, but final submission is paused pending Guidance, QA, and DPO sign-off.</div>
+          </div>
+        <?php endif; ?>
+
+        <?php if ($miAssignments !== [] || $items !== []): ?>
+          <div class="pe-survey-grid" data-unified-survey-grid>
+            <?php if ($miAssignments !== []): ?>
               <?= view('surveys/_mi_assignments', ['assignments' => $miAssignments, 'miGateEnabled' => $miGateEnabled], ['saveData' => false]) ?>
-            </div>
-          <?php else: ?>
-            <div class="pe-empty"><p>No MI assignments match your profile and selected filters.</p></div>
-          <?php endif; ?>
-          <?= view('partials/table_pagination', [
-              'pagination' => $miPagination, 'filters' => $filters, 'baseUrl' => $baseUrl,
-              'paginationPageParam' => 'mi_page', 'paginationPerPageParam' => 'mi_per_page',
-              'paginationExtraQuery' => ['page' => $generalPage, 'per_page' => $generalSize],
-              'paginationLabel' => 'MI assignment pages', 'paginationLiveFilters' => true,
-              'totalLabel' => 'total MI assignments',
-          ], ['saveData' => false]) ?>
-        </section>
+            <?php endif; ?>
 
-        <section aria-labelledby="general-surveys-heading" data-general-survey-section>
-          <h3 id="general-surveys-heading" class="h5">General surveys</h3>
-        <?php if ($items !== []): ?>
-          <div class="pe-survey-grid">
             <?php foreach ($items as $survey):
               $submitted = (bool) $survey['submitted'];
               $closed = (bool) ($survey['closed'] ?? false);
@@ -145,7 +121,7 @@ foreach ($miCounts as $state => $count) {
             <article class="pe-content-card pe-survey-card <?= $closed ? 'is-closed' : '' ?>" aria-labelledby="survey-title-<?= (int) $survey['id'] ?>">
               <div class="pe-card-top">
                 <span class="pe-department">
-                  <?= view('partials/unit_vector_icon', ['unit' => 'guidance']) ?>Guidance Office<?php if ($externalUrl !== ''): ?><span class="sv-external-note">External</span><?php endif; ?>
+                  <?= view('partials/unit_vector_icon', ['unit' => 'guidance']) ?>Guidance Office<span class="sv-external-note"><?= $externalUrl !== '' ? 'External Survey' : 'General Survey' ?></span>
                 </span>
                 <span class="pe-state <?= $submitted ? 'pe-state-success' : ($closed ? '' : 'pe-state-pending') ?>"><?= $submitted ? 'Submitted' : ($closed ? 'Closed' : 'Not yet answered') ?></span>
               </div>
@@ -205,12 +181,14 @@ foreach ($miCounts as $state => $count) {
         <?php endif; ?>
 
         <?= view('partials/content_pagination', [
-            'pagination' => $pagination, 'filters' => $filters, 'baseUrl' => $baseUrl,
-            'paginationPageParam' => 'page', 'paginationPerPageParam' => 'per_page',
-            'paginationExtraQuery' => ['mi_page' => $miPage, 'mi_per_page' => $miSize],
-            'paginationLabel' => 'General survey pages', 'liveFilters' => true,
+            'pagination'           => $pagination,
+            'filters'              => $filters,
+            'baseUrl'              => $baseUrl,
+            'paginationPageParam'    => 'page',
+            'paginationPerPageParam' => 'per_page',
+            'paginationLabel'      => 'Survey pages',
+            'liveFilters'          => true,
         ], ['saveData' => false]) ?>
-        </section>
       </div>
     </div>
 

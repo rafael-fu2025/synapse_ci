@@ -163,6 +163,10 @@ final class QuestionBankHttpTest extends CIUnitTestCase
         $history = $this->requestAs(2, 'GET', 'guidance/question-bank/' . $id . '?revision=1');
         $history->assertStatus(200);
         $this->assertStringContainsString('Preferred service time?', $history->getBody());
+        $this->assertStringContainsString('qb-revision-badge is-viewing', $history->getBody());
+        $this->assertStringContainsString('Viewing', $history->getBody());
+        $this->assertStringContainsString('Latest', $history->getBody());
+        $this->assertMatchesRegularExpression('/aria-current="page"[^>]*>Revision 1<\/a>/', $history->getBody());
         $this->requestAs(2, 'POST', 'guidance/question-bank/' . $id . '/archive', ['version' => 2])->assertStatus(200);
         $this->assertSame($before, $this->db->table('surveys')->get()->getResultArray());
         $this->assertSame($answers, $this->db->table('survey_responses')->get()->getResultArray());

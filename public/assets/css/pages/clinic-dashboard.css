@@ -35,7 +35,7 @@
   --cdc-sky: #0369a1;
   --cdc-slate: #475569;
   --cdc-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
-  --cdc-mono: var(--mono-font, "Courier New", Courier, monospace);
+  --cdc-mono: var(--mono-font, var(--default-font));
   color: var(--cdc-fg-secondary);
   min-width: 0;
 }
@@ -255,6 +255,33 @@ html body :is(.cdc-actions, .cdc-dashboard) .btn.btn-outline-danger.btn-outline-
   gap: 0.45rem;
 }
 
+.cdc-shift-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  padding: 0.18rem 0.55rem;
+  background: var(--cdc-subtle);
+  border: 1px solid var(--cdc-border);
+  border-radius: 0.25rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--cdc-fg);
+  white-space: nowrap;
+}
+
+.cdc-shift-clock .bi {
+  font-size: 0.78rem;
+  color: var(--cdc-muted-fg);
+}
+
+.cdc-shift-clock-tz {
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cdc-muted-fg);
+}
+
 html body .cdc-dashboard a.cdc-status-link {
   display: inline-flex;
   align-items: center;
@@ -285,16 +312,30 @@ html body .cdc-dashboard a.cdc-status-link:hover {
 }
 
 .cdc-status-link::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  content: var(--status-icon-alert, "\f332");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.88em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
   flex-shrink: 0;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .cdc-status-link--amber::before {
-  background: var(--cdc-amber);
+  content: var(--status-icon-pending, "\f291");
+  color: var(--cdc-amber);
+}
+
+.cdc-status-link--crimson::before {
+  content: var(--status-icon-danger, "\f33a");
 }
 
 .cdc-queue-feedback {
@@ -329,10 +370,6 @@ html body .cdc-dashboard a.cdc-status-link:hover {
 
 .cdc-deck-cell:last-child {
   border-right: 0;
-}
-
-.cdc-deck-cell--hero {
-  border-top: 3px solid var(--cdc-brand);
 }
 
 .cdc-deck-head {
@@ -1223,16 +1260,29 @@ html body .cdc-dashboard .table.cdc-worklist>tbody>tr:last-child>td {
 }
 
 .cdc-dot::before {
-  content: "";
-  width: 6.5px;
-  height: 6.5px;
-  border-radius: 50%;
-  background: currentColor;
+  content: var(--status-icon-muted, "\f2e5");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.88em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
   flex-shrink: 0;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .cdc-dot--emerald {
   color: var(--cdc-emerald);
+}
+
+.cdc-dot--emerald::before {
+  content: var(--status-icon-ok, "\f26a");
 }
 
 .cdc-dot--amber {
@@ -1240,19 +1290,32 @@ html body .cdc-dashboard .table.cdc-worklist>tbody>tr:last-child>td {
 }
 
 .cdc-dot--amber::before {
-  background: var(--cdc-amber);
+  content: var(--status-icon-pending, "\f291");
+  color: var(--cdc-amber);
 }
 
 .cdc-dot--crimson {
   color: var(--cdc-crimson);
 }
 
+.cdc-dot--crimson::before {
+  content: var(--status-icon-danger, "\f33a");
+}
+
 .cdc-dot--sky {
   color: var(--cdc-sky);
 }
 
+.cdc-dot--sky::before {
+  content: var(--status-icon-info, "\f430");
+}
+
 .cdc-dot--slate {
   color: var(--cdc-slate);
+}
+
+.cdc-dot--slate::before {
+  content: var(--status-icon-muted, "\f2e5");
 }
 
 /* ==========================================================================
@@ -1608,6 +1671,14 @@ html body .cdc-dashboard a.cdc-tool-link:hover i {
 .cdc-category-grid .cdc-dot {
   font-size: 0.71rem;
   gap: 0.3rem;
+}
+
+.cdc-category-grid .cdc-dot::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .cdc-category-grid .cdc-acuity-nums {

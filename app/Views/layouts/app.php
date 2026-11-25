@@ -44,36 +44,9 @@
 
 
   <!-- Offline-ready JS helpers: HTMX & Alpine.js -->
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
   <script src="<?= base_url('assets/vendor/htmx/htmx.min.js') ?>"></script>
   <script defer src="<?= base_url('assets/vendor/alpine/alpine.min.js') ?>"></script>
-
-  <style>
-
-    /* Synapse Logo Light/Night Mode visibility toggle */
-    .synapse-logo-light {
-      display: block !important;
-    }
-    .synapse-logo-dark {
-      display: none !important;
-    }
-
-    [data-theme="dark"] .synapse-logo-light {
-      display: none !important;
-    }
-    [data-theme="dark"] .synapse-logo-dark {
-      display: block !important;
-    }
-
-    [data-theme="dark"] .header-logo img {
-      filter: none !important;
-    }
-
-    html.portal-shell-hydrating #main {
-      opacity: 0 !important;
-      pointer-events: none !important;
-    }
-
-  </style>
 
   <?php
   $portalShellHref = \App\Services\PortalContext::urlFor('main', 'portal');
@@ -84,48 +57,7 @@
       && in_array('portal.appointments.read', $portalShellUser['permissions'] ?? [], true);
   ?>
   <!-- Pre-paint suppression + early shell prefetch to prevent flashing legacy single-page sub-views on reload -->
-  <script>
-    (function() {
-      var shellHref = <?= json_encode($portalShellHref, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-      var shellUrl;
-      try {
-        shellUrl = new URL(shellHref, window.location.href);
-      } catch (_) {
-        return;
-      }
-      if (shellUrl.origin !== window.location.origin) return;
-      var norm = function(p) { return p.replace(/^\/index\.php(?=\/)/, '').replace(/\/+$/, '') || '/'; };
-      var base = norm(shellUrl.pathname);
-      var cur = norm(window.location.pathname);
-      if (!cur.startsWith(base + '/')) return;
-      var sub = cur.slice(base.length + 1);
-      if (/\/pdf$/i.test(sub)) return;
-      if (/^(?:(?:announcements|surveys|referrals|assessments\/mi|evaluations|visits|call-slips)(?:\/|$)|settings$)/.test(sub)) {
-        document.documentElement.classList.add('portal-shell-hydrating');
-        window.__portalHydrationFallbackTimer = window.setTimeout(function() {
-          document.documentElement.classList.remove('portal-shell-hydrating');
-        }, 4000);
-        <?php if ($canPrefetchPortalShell): ?>
-        if (window.fetch) {
-          window.__portalShellPrefetch = {
-            href: shellUrl.href,
-            promise: window.fetch(shellUrl.href, {
-              method: 'GET',
-              credentials: 'same-origin',
-              cache: 'no-store',
-              redirect: 'follow',
-              headers: {
-                Accept: 'text/html',
-                'X-Synapse-Navigation': '1',
-                'X-Synapse-Portal-Badge-Sync': '1'
-              }
-            }).catch(function() { return null; })
-          };
-        }
-        <?php endif; ?>
-      }
-    })();
-  </script>
+  <script src="<?= base_url('assets/js/portal-shell-init.js') ?>" data-portal-shell-href="<?= esc($portalShellHref, 'attr') ?>" data-portal-shell-prefetch="<?= $canPrefetchPortalShell ? '1' : '0' ?>"></script>
 
   <template id="page-styles" data-page-style-owner="head"></template>
   <?= $this->renderSection('styles') ?>
@@ -176,7 +108,7 @@
 
   <!-- Theme-Aware Logout Confirmation Modal -->
   <div class="modal fade" id="logoutConfirmModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 420px;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable synapse-logout-dialog">
       <div class="modal-content border-0 shadow">
         <div class="modal-header border-bottom py-3">
           <h5 class="modal-title fs-6 fw-bold text-dark d-flex align-items-center mb-0" id="logoutModalLabel">
@@ -201,7 +133,7 @@
 
   <!-- Theme-Aware Confirmation Modal (shared; driven by assets/js/confirm.js) -->
   <div class="modal fade" id="synapseConfirmModal" tabindex="-1" aria-labelledby="synapseConfirmTitle" aria-describedby="synapseConfirmMessage" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 440px;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable synapse-confirm-dialog">
       <div class="modal-content border-0 shadow">
         <!-- Header: icon inherits tone; title is the single accessible name. -->
         <div class="modal-header border-bottom py-3">
@@ -251,8 +183,8 @@
   <script src="<?= base_url('assets/js/confirm.js') ?>"></script>
   <script src="<?= base_url('assets/js/care-forms.js') ?>"></script>
   <script src="<?= base_url('assets/js/person-lookup-popover.js') ?>"></script>
-  <script src="<?= base_url('assets/js/availability-workspace.js') ?>"></script>
-  <script src="<?= base_url('assets/js/availability-filters.js') ?>"></script>
+  <script src="<?= base_url('assets/js/availability-workspace.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/availability-workspace.js') ?: '1' ?>"></script>
+  <script src="<?= base_url('assets/js/availability-filters.js') ?>?v=<?= @filemtime(FCPATH . 'assets/js/availability-filters.js') ?: '1' ?>"></script>
     <script src="<?= base_url('assets/js/live-filters.js') ?>"></script>
   <?= $this->include('admin/carousel/_form_scripts') ?>
   <script src="<?= base_url('assets/js/survey-builder.js') ?>"></script>

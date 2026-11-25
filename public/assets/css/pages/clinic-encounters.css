@@ -31,7 +31,7 @@
   --ce-crimson: #b91c1c;
   --ce-sky: #0369a1;
   --ce-slate: #475569;
-  --ce-mono: var(--mono-font, "Courier New", Courier, monospace);
+  --ce-mono: var(--mono-font, var(--default-font));
   color: var(--ce-fg-secondary);
   min-width: 0;
 }
@@ -340,12 +340,21 @@ html body :is(.ce-page-actions, section.ce-workspace, section.ce-encounter) .btn
 }
 
 .ce-status-dot::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  content: var(--status-icon-muted, "\f2e5");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.88em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
   flex-shrink: 0;
-  background: currentColor;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .ce-status-amber {
@@ -353,23 +362,40 @@ html body :is(.ce-page-actions, section.ce-workspace, section.ce-encounter) .btn
 }
 
 .ce-status-amber::before {
-  background: var(--ce-amber);
+  content: var(--status-icon-pending, "\f291");
+  color: var(--ce-amber);
 }
 
 .ce-status-emerald {
   color: var(--ce-emerald);
 }
 
+.ce-status-emerald::before {
+  content: var(--status-icon-ok, "\f26a");
+}
+
 .ce-status-sky {
   color: var(--ce-sky);
+}
+
+.ce-status-sky::before {
+  content: var(--status-icon-info, "\f430");
 }
 
 .ce-status-crimson {
   color: var(--ce-crimson);
 }
 
+.ce-status-crimson::before {
+  content: var(--status-icon-danger, "\f33a");
+}
+
 .ce-status-slate {
   color: var(--ce-slate);
+}
+
+.ce-status-slate::before {
+  content: var(--status-icon-muted, "\f2e5");
 }
 
 .ce-tag {

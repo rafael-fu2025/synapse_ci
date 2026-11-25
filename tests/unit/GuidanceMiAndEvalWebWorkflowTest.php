@@ -403,6 +403,182 @@ final class GuidanceMiAndEvalWebWorkflowTest extends FreshDatabaseTestCase
         $missing->assertStatus(404);
     }
 
+    public function testStaffTokenIssuanceAndPortalRedemptionWorkflow(): void
+    {
+        $epService = new GuidanceEpisodeService(db: $this->db);
+        $episode = $epService->openEpisode(
+            (int) $this->studentUser['person_id'],
+            [
+                'primary_counselor_user_id' => (int) $this->counselorUser['id'],
+                'actor'                     => $this->counselorUser,
+            ],
+            1
+        );
+
+        // 1. Visiting redeem screen without a token renders neutral prompt (not an error)
+        $emptyRedeem = $this->withSession($this->sessionFor($this->studentUser))
+            ->get('portal/evaluations/redeem');
+        $emptyRedeem->assertStatus(200);
+        $emptyRedeem->assertSee('Enter Your Evaluation Token');
+        $emptyRedeem->assertDontSee('Evaluation Token Not Recognized');
+
+        // 2. Submitting an unrecognized token reports invalid state and preserves the typed value
+        $badCode = 'invalid-sample-' . $this->suffix;
+        $badRedeem = $this->withSession($this->sessionFor($this->studentUser))
+            ->get('portal/evaluations/redeem?token=' . urlencode($badCode));
+        $badRedeem->assertStatus(200);
+        $badRedeem->assertSee('Evaluation Token Not Recognized');
+        $badRedeem->assertSee($badCode);
+
+        // 3. Students are forbidden from issuing evaluation tokens (403)
+        $forbidden = $this->postAs($this->studentUser, 'guidance/evaluations/issue', [
+            'person_id'       => (int) $this->studentUser['person_id'],
+            'episode_id'      => (int) $episode['id'],
+            'evaluation_type' => GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
+        ], true);
+        $this->assertSame(403, $forbidden->response()->getStatusCode());
+
+        // 4. Episode page renders the staff "Issue Evaluation Token" button
+        $epPage = $this->withSession($this->sessionFor($this->counselorUser))
+            ->get('guidance/episodes/' . (int) $episode['id']);
+        $epPage->assertStatus(200);
+        $epPage->assertSee('Issue Evaluation Token');
+
+        // 5. Counselor issues a one-time token for the student + episode (201)
+        $issued = $this->postAs($this->counselorUser, 'guidance/evaluations/issue', [
+            'person_id'       => (int) $this->studentUser['person_id'],
+            'episode_id'      => (int) $episode['id'],
+            'evaluation_type' => GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
+        ], true);
+        $issued->assertStatus(201);
+        $issuedJson = json_decode((string) $issued->getJSON(), true);
+        $this->assertTrue((bool) ($issuedJson['success'] ?? false));
+        $rawToken = (string) ($issuedJson['raw_token'] ?? '');
+        $redeemUrl = (string) ($issuedJson['redeem_url'] ?? '');
+        $this->assertNotEmpty($rawToken);
+        $this->assertStringContainsString('/portal/evaluations/redeem/' . $rawToken, $redeemUrl);
+        $this->assertSame(GuidanceServiceEvaluationService::FORM_CODE_PSYCHOSOCIAL, $issuedJson['form_code'] ?? null);
+
+        // 6. Duplicate issuance for the same student + episode + type returns 409
+        $dup = $this->postAs($this->counselorUser, 'guidance/evaluations/issue', [
+            'person_id'       => (int) $this->studentUser['person_id'],
+            'episode_id'      => (int) $episode['id'],
+            'evaluation_type' => GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
+        ], true);
+        $this->assertSame(409, $dup->response()->getStatusCode());
+
+        // 7. Student can redeem via segment route OR by pasting the full link into ?token=...
+        $directPage = $this->withSession($this->sessionFor($this->studentUser))
+            ->get('portal/evaluations/redeem/' . urlencode($rawToken));
+        $directPage->assertStatus(200);
+        $directPage->assertSee('Submit Pseudonymous Evaluation');
+
+        $pastedUrlPage = $this->withSession($this->sessionFor($this->studentUser))
+            ->get('portal/evaluations/redeem?token=' . urlencode($redeemUrl));
+        $pastedUrlPage->assertStatus(200);
+        $pastedUrlPage->assertSee('Submit Pseudonymous Evaluation');
+
+        // 8. Submitting consumes the token and subsequent visits report it already redeemed
+        $submitted = $this->postAs($this->studentUser, 'portal/evaluations/submit', [
+            'raw_token'                => $rawToken,
+            'visit_type'               => 'walk_in',
+            'rating_welcoming'         => 5,
+            'rating_empathy'           => 5,
+            'rating_clarity'           => 4,
+            'rating_helpfulness'       => 5,
+            'rating_environment'       => 5,
+            'future_visit_willingness' => '1',
+            'qualitative_comments'     => '',
+        ], true);
+        $submitted->assertStatus(201);
+
+        $usedPage = $this->withSession($this->sessionFor($this->studentUser))
+            ->get('portal/evaluations/redeem/' . urlencode($rawToken));
+        $usedPage->assertStatus(200);
+        $usedPage->assertSee('Evaluation Token Already Redeemed');
+    }
+
+    public function testMiStudentSearchEndpointSupportsMultiTokenFullDirectoryAndAuthorization(): void
+    {
+        $zoe = $this->createUserFixture('zoe', 'student');
+        $zeke = $this->createUserFixture('zeke', 'student');
+
+        $this->db->table('people')->where('id', (int) $zoe['person_id'])->update([
+            'last_name' => 'Zebra_' . $this->suffix,
+        ]);
+        $this->db->table('student_profiles')->where('person_id', (int) $zoe['person_id'])->update([
+            'program'    => 'BSBA',
+            'year_level' => '2',
+        ]);
+
+        $this->db->table('people')->where('id', (int) $zeke['person_id'])->update([
+            'last_name' => 'Zulu_' . $this->suffix,
+        ]);
+        $this->db->table('student_profiles')->where('person_id', (int) $zeke['person_id'])->update([
+            'program'    => 'BSIT',
+            'year_level' => '4',
+        ]);
+
+        // Assign active MI survey only to Zoe so has_active differs between Zoe and Zeke.
+        $assignResp = $this->postAs($this->counselorUser, 'guidance/assessments/mi/assign', [
+            'person_id' => (int) $zoe['person_id'],
+        ], true);
+        $assignResp->assertStatus(201);
+
+        // 1. Students are forbidden from calling the counselor student search endpoint (403)
+        $forbidden = $this->withSession($this->sessionFor($this->studentUser))
+            ->withHeaders(['Accept' => 'application/json'])
+            ->get('guidance/assessments/mi/students/search?q=Zoe');
+        $this->assertSame(403, $forbidden->response()->getStatusCode());
+
+        // 2. Counselor searches "First Last" (reverse of display order "Last, First")
+        $byFullName = $this->withSession($this->sessionFor($this->counselorUser))
+            ->withHeaders(['Accept' => 'application/json'])
+            ->get('guidance/assessments/mi/students/search?q=' . urlencode('Zoe Zebra_' . $this->suffix));
+        $byFullName->assertStatus(200);
+        $byFullNameJson = json_decode((string) $byFullName->getJSON(), true);
+        $this->assertTrue((bool) ($byFullNameJson['success'] ?? false));
+        $this->assertSame(1, (int) ($byFullNameJson['total_matches'] ?? 0));
+        $this->assertSame((int) $zoe['person_id'], (int) ($byFullNameJson['results'][0]['id'] ?? 0));
+        $this->assertTrue((bool) ($byFullNameJson['results'][0]['has_active'] ?? false));
+        $this->assertSame('BSBA', $byFullNameJson['results'][0]['program'] ?? null);
+
+        // 3. Counselor searches "First Last Program Y4" multi-token query
+        $byProgramAndYear = $this->withSession($this->sessionFor($this->counselorUser))
+            ->withHeaders(['Accept' => 'application/json'])
+            ->get('guidance/assessments/mi/students/search?q=' . urlencode('Zeke Zulu_' . $this->suffix . ' BSIT Y4'));
+        $byProgramAndYear->assertStatus(200);
+        $byProgramJson = json_decode((string) $byProgramAndYear->getJSON(), true);
+        $this->assertSame(1, (int) ($byProgramJson['total_matches'] ?? 0));
+        $this->assertSame((int) $zeke['person_id'], (int) ($byProgramJson['results'][0]['id'] ?? 0));
+        $this->assertFalse((bool) ($byProgramJson['results'][0]['has_active'] ?? true));
+
+        // 4. Counselor searches by exact MIS ID
+        $zekeRow = $this->db->table('people')->select('mis_id')->where('id', (int) $zeke['person_id'])->get()->getRowArray();
+        $byMisId = $this->withSession($this->sessionFor($this->counselorUser))
+            ->withHeaders(['Accept' => 'application/json'])
+            ->get('guidance/assessments/mi/students/search?q=' . urlencode((string) ($zekeRow['mis_id'] ?? '')));
+        $byMisId->assertStatus(200);
+        $byMisJson = json_decode((string) $byMisId->getJSON(), true);
+        $this->assertSame(1, (int) ($byMisJson['total_matches'] ?? 0));
+        $this->assertSame((int) $zeke['person_id'], (int) ($byMisJson['results'][0]['id'] ?? 0));
+
+        // 5. Empty result set for unmatched query
+        $noMatch = $this->withSession($this->sessionFor($this->counselorUser))
+            ->withHeaders(['Accept' => 'application/json'])
+            ->get('guidance/assessments/mi/students/search?q=' . urlencode('NoSuchStudent_' . $this->suffix));
+        $noMatch->assertStatus(200);
+        $noMatchJson = json_decode((string) $noMatch->getJSON(), true);
+        $this->assertSame(0, (int) ($noMatchJson['total_matches'] ?? -1));
+        $this->assertSame([], $noMatchJson['results'] ?? null);
+
+        // 6. Query > 150 chars is rejected with 422
+        $tooLong = $this->withSession($this->sessionFor($this->counselorUser))
+            ->withHeaders(['Accept' => 'application/json'])
+            ->get('guidance/assessments/mi/students/search?q=' . str_repeat('a', 151));
+        $this->assertSame(422, $tooLong->response()->getStatusCode());
+    }
+
     private function enableGate(string $gateKey): void
     {
         $svc = new GuidanceActivationGateService(db: $this->db);

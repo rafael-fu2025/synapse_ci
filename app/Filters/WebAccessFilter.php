@@ -59,6 +59,13 @@ final class WebAccessFilter implements FilterInterface
                 $this->permit('portal.appointments.create');
             }
             if (str_starts_with($path, 'admin/audit')) $this->permit('audit.read');
+            if ($path === 'admin/interns' || str_starts_with($path, 'admin/interns/')) {
+                if (!PortalContext::isRolePermitted($actor['role'], 'main')
+                    || !in_array($actor['role'], ['superadmin', 'clinic_admin', 'guidance_admin', 'bmg_admin'], true)) {
+                    throw new RuntimeException('Student intern management is not permitted.', 403);
+                }
+                $this->permit('interns.manage');
+            }
             if ($path === 'admin/archive' || str_starts_with($path, 'admin/archive/')) {
                 if (!PortalContext::isRolePermitted($actor['role'], 'main')) {
                     throw new RuntimeException('Archive access forbidden.', 403);
@@ -158,10 +165,20 @@ final class WebAccessFilter implements FilterInterface
         return $row;
     }
 
+    private function assertNotInternSelfRecord(int $subjectPersonId): void
+    {
+        if (in_array($this->actor['role'] ?? '', ['clinic_intern', 'guidance_intern', 'bmg_intern'], true)
+            && !empty($this->actor['person_id'])
+            && $subjectPersonId === (int) $this->actor['person_id']) {
+            throw new RuntimeException('Student interns cannot access or modify their own clinical or guidance records on staff workstations. Use My Health Portal instead.', 403);
+        }
+    }
+
     private function caseAccess(int $id, bool $write = false): array
     {
         $case = $this->record('counselling_cases', $id, true);
         $this->record('people', (int) $case['person_id'], true);
+        $this->assertNotInternSelfRecord((int) $case['person_id']);
         if (!$write) {
             // Use the same authoritative rule as the cumulative record's workspace links.
             // Consultation/oversight reads never grant mutation authority or skip service audits.
@@ -180,13 +197,16 @@ final class WebAccessFilter implements FilterInterface
         $row = $this->record('queue_entries', $id);
         if ($row['unit'] !== $unit) throw new RuntimeException('Queue ticket not found.', 404);
         $this->record('people', (int) $row['person_id'], true);
+        $this->assertNotInternSelfRecord((int) $row['person_id']);
         return $row;
     }
 
     private function records(string $path, RequestInterface $request, bool $write): void
     {
         if (!$write && preg_match('~^guidance/(?:clients/(\d+)|students/(\d+)/cumulative)$~D', $path, $m)) {
-            $this->record('people', (int) ($m[1] !== '' ? $m[1] : $m[2]), true);
+            $personId = (int) ($m[1] !== '' ? $m[1] : $m[2]);
+            $this->record('people', $personId, true);
+            $this->assertNotInternSelfRecord($personId);
         }
         if (!$write && str_contains($path, '/start-for-ticket/')) return;
         if (preg_match('~^(clinic|guidance)/queue/(?:call|start|complete|skip|recall|no-show)/(\d+)$~', $path, $m)) $this->ticket((int) $m[2], $m[1]);
@@ -210,13 +230,18 @@ final class WebAccessFilter implements FilterInterface
                 if ($case !== null) $this->caseAccess((int) $case['id'], $write);
             }
         }
-        if (preg_match('~^clinic/(?:patients|encounters/start-direct)/(\d+)(?:/(?:health|labs|clearances))?$~', $path, $m)) $this->record('people', (int) $m[1], true);
+        if (preg_match('~^clinic/(?:patients|encounters/start-direct)/(\d+)(?:/(?:health|labs|clearances))?$~', $path, $m)) {
+            $this->record('people', (int) $m[1], true);
+            $this->assertNotInternSelfRecord((int) $m[1]);
+        }
         if (preg_match('~^clinic/encounters/(\d+)/(archive|restore)$~', $path, $m)) {
             $encounter = $this->record('clinic_encounters', (int) $m[1], false);
             $this->record('people', (int) $encounter['person_id'], false);
+            $this->assertNotInternSelfRecord((int) $encounter['person_id']);
         } elseif (preg_match('~^clinic/encounters/(\d+)(?:/|$)~', $path, $m)) {
             $encounter = $this->record('clinic_encounters', (int) $m[1], true);
             $this->record('people', (int) $encounter['person_id'], true);
+            $this->assertNotInternSelfRecord((int) $encounter['person_id']);
             if ($write && !str_ends_with($path, '/addendum') && $encounter['status'] !== 'in_progress') {
                 throw new RuntimeException('Encounter is no longer open.', 409);
             }
@@ -249,6 +274,7 @@ final class WebAccessFilter implements FilterInterface
                 throw new RuntimeException('A valid person ID is required.', 422);
             }
             $this->record('people', (int) $person, true);
+            $this->assertNotInternSelfRecord((int) $person);
         }
     }
 

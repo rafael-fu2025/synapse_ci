@@ -97,11 +97,9 @@ $matchingCount = (int) $pagination['filtered'];
     </form>
   </div>
 
-  <div class="ce-live-meta">
-    <p class="ce-filter-status" data-filter-status role="status" aria-live="polite">
-      <?= $matchingCount ?> matching call slip<?= $matchingCount === 1 ? '' : 's' ?> · <?= $currentStatus === '' ? 'All attendance statuses' : esc(ucfirst($currentStatus)) ?>.
-    </p>
-  </div>
+  <p class="visually-hidden" data-filter-status role="status" aria-live="polite">
+    <?= $matchingCount ?> matching call slip<?= $matchingCount === 1 ? '' : 's' ?> · <?= $currentStatus === '' ? 'All attendance statuses' : esc(ucfirst($currentStatus)) ?>.
+  </p>
   <div class="alert ce-notice ce-notice-crimson" data-banner-dismiss="off" data-filter-error role="alert" hidden>
     <div class="ce-notice-body">
       <i class="bi bi-exclamation-octagon ce-notice-icon" aria-hidden="true"></i>

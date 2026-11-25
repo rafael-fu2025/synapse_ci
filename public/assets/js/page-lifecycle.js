@@ -66,6 +66,52 @@
       ] };
       editors.set(element, new window.Quill(element, options));
     });
+    const clockHosts = [];
+    each(root, '[data-live-clock]', host => clockHosts.push(host));
+    if (clockHosts.length) {
+      const formatters = new Map();
+      const formatterFor = tz => {
+        const key = tz || 'Asia/Manila';
+        if (formatters.has(key)) return formatters.get(key);
+        let fmt;
+        try {
+          fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: key, hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
+          });
+        } catch (_) {
+          fmt = new Intl.DateTimeFormat('en-US', {
+            hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true,
+          });
+        }
+        formatters.set(key, fmt);
+        return fmt;
+      };
+      const updateClocks = () => {
+        const now = new Date();
+        const iso = now.toISOString();
+        for (const host of clockHosts) {
+          if (!host.isConnected) continue;
+          const timeEl = host.querySelector('[data-live-clock-time]') || host;
+          timeEl.textContent = formatterFor(host.dataset.clockTz).format(now);
+          if (timeEl.tagName === 'TIME') timeEl.dateTime = iso;
+        }
+      };
+      updateClocks();
+      let timeoutId = null;
+      let intervalId = null;
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        updateClocks();
+        intervalId = setInterval(updateClocks, 1000);
+      }, Math.max(50, 1000 - (Date.now() % 1000)));
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) updateClocks();
+      }, { signal: events.signal });
+      events.signal.addEventListener('abort', () => {
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        if (intervalId !== null) clearInterval(intervalId);
+      }, { once: true });
+    }
     window.BalaySelect?.init(root);
     window.BalayDatepicker?.init(root);
     window.BalayDateTimePicker?.init(root);
@@ -103,6 +149,14 @@
   });
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
+    if (!document.querySelector('.modal.show')) {
+      const readClose = document.querySelector('#ga-read-history .ga-read-close');
+      if (readClose) {
+        event.preventDefault();
+        readClose.click();
+        return;
+      }
+    }
     document.querySelectorAll('details.tws-roster-details[open]').forEach(details => {
       details.open = false;
       details.querySelector('summary')?.focus();

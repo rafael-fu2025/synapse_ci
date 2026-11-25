@@ -87,9 +87,13 @@ final class AuthService
         // Staff-only hosts skip the student namespace; on shared hosts, uniquely synced employees
         // authenticate directly against the employee endpoint first.
         $misLookupId = $this->resolveMisLookupId($id, $localUser);
-        $namespaces = $allowStudentMis
-            ? ($this->shouldPreferEmployeeNamespace($misLookupId) ? ['employee', 'student'] : ['student', 'employee'])
-            : ['employee'];
+        if ($allowStudentMis) {
+            $namespaces = $this->shouldPreferEmployeeNamespace($misLookupId) ? ['employee', 'student'] : ['student', 'employee'];
+        } else {
+            // Staff hosts only allow student MIS authentication for students with an active,
+            // in-window internship placement in that exact workstation unit.
+            $namespaces = $this->isActiveInternForCurrentHost($localUser, $misLookupId) ? ['student'] : ['employee'];
+        }
 
         foreach ($namespaces as $namespace) {
             ['matched' => $matched, 'identity' => $identity] = $namespace === 'student'
@@ -144,6 +148,56 @@ final class AuthService
         $kinds = array_values(array_unique(array_column($rows, 'kind')));
 
         return $kinds === ['employee'];
+    }
+
+    /**
+     * True only when the identifier resolves to a student with an active, in-window internship
+     * placement for the active staff portal host. Ensures non-intern students still skip studentLogin() on staff hosts.
+     */
+    private function isActiveInternForCurrentHost(?array $localUser, string $misLookupId): bool
+    {
+        $hostPortal = PortalContext::hostPortal();
+        if ($hostPortal === null || !in_array($hostPortal, [PortalContext::PORTAL_CLINIC, PortalContext::PORTAL_GUIDANCE, PortalContext::PORTAL_BMG], true)) {
+            return false;
+        }
+
+        $db = \Config\Database::connect();
+        if (!$db->tableExists('student_intern_placements')) {
+            return false;
+        }
+
+        $tenantId = CurrentTenant::id();
+        $userId = null;
+        if ($localUser !== null && !empty($localUser['id']) && !empty($localUser['person_id'])) {
+            $person = $this->personModel->scoped($tenantId)->where('id', (int) $localUser['person_id'])->first();
+            if ($person !== null && ($person['kind'] ?? null) === 'student') {
+                $userId = (int) $localUser['id'];
+            }
+        } else {
+            $studentPerson = $this->personModel->scoped($tenantId)
+                ->where('kind', 'student')
+                ->where('mis_id', $misLookupId)
+                ->first();
+            if ($studentPerson !== null) {
+                $userRow = $this->userModel->scoped($tenantId)
+                    ->where('person_id', (int) $studentPerson['id'])
+                    ->where('status', 'active')
+                    ->first();
+                if ($userRow !== null) {
+                    $userId = (int) $userRow['id'];
+                }
+            }
+        }
+
+        if ($userId === null) {
+            return false;
+        }
+
+        $internService = new StudentInternService($db);
+        $internService->reconcileForUser($userId, $tenantId);
+        $placement = $internService->activePlacementForUser($userId, $tenantId);
+
+        return $placement !== null && ($placement['unit'] ?? null) === $hostPortal;
     }
 
     /** @return array{matched: bool, identity: ?array<string, mixed>} */

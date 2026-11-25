@@ -20,7 +20,7 @@ final class PatientLookupController extends BaseController
         $allowed = $role === 'superadmin'
             || (in_array($role, ['clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern'], true)
                 && in_array('clinic.patients.read', $permissions, true))
-            || (in_array($role, ['guidance_admin', 'guidance_supervisor', 'counsellor'], true)
+            || (in_array($role, ['guidance_admin', 'guidance_supervisor', 'counsellor', 'guidance_intern'], true)
                 && (in_array('guidance.cases.create', $permissions, true)
                     || in_array('guidance.cases.read', $permissions, true)));
         if (!$allowed) {
@@ -34,6 +34,10 @@ final class PatientLookupController extends BaseController
 
         $results = (new PersonModel())->allowCallbacks(false)->scoped((int) $actor['tenant_id'])
             ->select('id, mis_id, kind, first_name, middle_name, last_name');
+        if (in_array($role, ['clinic_intern', 'guidance_intern'], true) && !empty($actor['person_id'])) {
+            // Interns must never look up or pull themselves into a workstation chart.
+            $results->where('id !=', (int) $actor['person_id']);
+        }
         $tokens = preg_split('/[\s,]+/u', trim($query), -1, PREG_SPLIT_NO_EMPTY);
         if ($tokens !== [] && $tokens !== false) {
             foreach ($tokens as $token) {
@@ -43,6 +47,12 @@ final class PatientLookupController extends BaseController
             LikePattern::applyGroup($results->builder(), ['first_name', 'last_name', 'mis_id'], trim($query));
         }
         $results = $results->orderBy('last_name', 'ASC')->orderBy('first_name', 'ASC')->findAll(10);
+        $tenantId = (int) ($actor['tenant_id'] ?? 0);
+        $photos = $tenantId > 0 ? new \App\Services\ProfilePhotoService() : null;
+        foreach ($results as &$row) {
+            $row['photo_url'] = $photos?->personPhotoUrl($tenantId, (int) ($row['id'] ?? 0));
+        }
+        unset($row);
 
         return $this->response->setJSON(['results' => $results]);
     }

@@ -51,7 +51,10 @@
 
       <div x-show.important="selectedPerson" style="display: none;" class="rw-selected-person">
         <div class="rw-selected-person-info">
-          <span class="rw-avatar" aria-hidden="true" x-text="selectedPerson ? ((selectedPerson.first_name || '')[0] || '') + ((selectedPerson.last_name || '')[0] || '') : ''"></span>
+          <span class="rw-avatar" aria-hidden="true">
+            <template x-if="selectedPerson && selectedPerson.photo_url"><img class="syn-avatar-img" :src="selectedPerson.photo_url" alt=""></template>
+            <span x-show="!selectedPerson || !selectedPerson.photo_url" x-text="selectedPerson ? ((selectedPerson.first_name || '')[0] || '') + ((selectedPerson.last_name || '')[0] || '') : ''"></span>
+          </span>
           <div>
             <strong class="d-block" x-text="selectedPerson ? (selectedPerson.last_name + ', ' + selectedPerson.first_name) : ''"></strong>
             <small class="text-muted" x-text="selectedPerson ? ('MIS ID: ' + selectedPerson.mis_id) : ''"></small>

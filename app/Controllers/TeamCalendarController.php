@@ -44,6 +44,7 @@ final class TeamCalendarController extends BaseController
             return view('teams/calendar', $data + $this->shared($unit) + [
                 'days' => $days, 'status' => $filters['status'] ?? 'scheduled',
                 'today' => (new DateTimeImmutable('now', $zone))->format('Y-m-d'),
+                'memberPhotos' => (new \App\Services\TeamAccess())->memberPhotos($unit, $data['actor']),
                 'title' => ucfirst($unit) . ' Team Calendar',
             ]);
         });
@@ -60,6 +61,7 @@ final class TeamCalendarController extends BaseController
             }
             return view('teams/event_form', $context + $this->shared($unit) + [
                 'event' => null, 'startsValue' => $date . 'T09:00', 'endsValue' => $date . 'T10:00',
+                'memberPhotos' => (new \App\Services\TeamAccess())->memberPhotos($unit, $context['actor']),
                 'title' => 'New team event', 'formAction' => site_url($unit . '/teams/calendar/events/store'),
                 'cancelUrl' => site_url($unit . '/teams/calendar'), 'formModalPage' => true,
             ]);
@@ -78,11 +80,16 @@ final class TeamCalendarController extends BaseController
                 && (bool) ($scope['can_manage'] ?? false)
                 && in_array($unit, $scope['units'] ?? [], true);
 
+            $extraIds = array_merge(
+                [(int) ($event['created_by_user_id'] ?? 0)],
+                array_column($event['participants'] ?? [], 'id')
+            );
             return view('teams/event_show', $context + $this->shared($unit) + [
                 'event' => $event, 'title' => 'Team event #' . $id,
                 'canArchive' => $canArchive,
                 'startLocal' => $this->local($event['starts_at']), 'endLocal' => $this->local($event['ends_at']),
                 'memberNames' => array_column($context['members'], 'name', 'id'),
+                'memberPhotos' => (new \App\Services\TeamAccess())->memberPhotos($unit, $context['actor'], $extraIds),
                 'cancelUrl' => site_url($unit . '/teams/calendar'), 'formModalPage' => true,
             ]);
         });
@@ -99,6 +106,7 @@ final class TeamCalendarController extends BaseController
             return view('teams/event_form', $context + $this->shared($unit) + [
                 'event' => $event, 'startsValue' => $this->local($event['starts_at'])->format('Y-m-d\TH:i'),
                 'endsValue' => $this->local($event['ends_at'])->format('Y-m-d\TH:i'),
+                'memberPhotos' => (new \App\Services\TeamAccess())->memberPhotos($unit, $context['actor']),
                 'title' => 'Edit team event #' . $id, 'formAction' => site_url($unit . '/teams/calendar/events/' . $id . '/update'),
                 'cancelUrl' => site_url($unit . '/teams/calendar'), 'formModalPage' => true,
             ]);

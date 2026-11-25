@@ -74,7 +74,12 @@ $kindMeta = [
   <div class="ce-patient-card">
     <div class="ce-patient-top">
       <div class="ce-patient-identity">
-        <div class="ce-avatar" aria-hidden="true"><?= esc($initials !== '' ? $initials : 'EP') ?></div>
+        <?php
+          $epTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+          $epPhotoUrl = $epTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($epTenantId, (int) ($person['id'] ?? $personId ?? 0)) : null;
+          $epInitials = $initials !== '' ? $initials : 'EP';
+        ?>
+        <div class="ce-avatar" aria-hidden="true"><?= \App\Services\ProfileAvatar::contentHtml($epPhotoUrl, $epInitials, is_array($person ?? null) ? $person : ['name' => $clientName]) ?></div>
         <div style="min-width: 0;">
           <div class="ce-patient-heading">
             <span class="ce-tag ce-mono fw-bold">Care Episode EP-<?= str_pad((string) $epId, 5, '0', STR_PAD_LEFT) ?></span>
@@ -159,6 +164,11 @@ $kindMeta = [
           <a href="<?= site_url('guidance/cases/' . $caseId) ?>" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-folder2-open" aria-hidden="true"></i> Open Case Workspace (#<?= $caseId ?>)
           </a>
+        <?php endif; ?>
+        <?php if ($personId > 0): ?>
+          <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#issueEvalTokenModal">
+            <i class="bi bi-ticket-perforated" aria-hidden="true"></i> Issue Evaluation Token
+          </button>
         <?php endif; ?>
       </div>
     </div>
@@ -348,4 +358,12 @@ $kindMeta = [
     </div>
   <?php endif; ?>
 </section>
+<?php if ($personId > 0): ?>
+  <?= view('guidance/evaluations/_issue_modal', [
+      'evalIssuePersonId'    => $personId,
+      'evalIssuePersonLabel' => $clientName . (!empty($person['mis_id']) ? ' (' . (string) $person['mis_id'] . ')' : ''),
+      'evalIssueEpisodeId'   => $epId,
+      'evalIssueDefaultType' => \App\Services\Guidance\GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
+  ]) ?>
+<?php endif; ?>
 <?= $this->endSection() ?>

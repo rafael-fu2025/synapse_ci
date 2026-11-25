@@ -87,6 +87,7 @@ final class PermissionsAndRolesSeeder extends Seeder
 
             // Governance
             ['code' => 'rbac.manage', 'name' => 'Manage users and role assignments', 'module' => 'admin'],
+            ['code' => 'interns.manage', 'name' => 'Manage student intern placements and supervision', 'module' => 'admin'],
             ['code' => 'audit.read', 'name' => 'View and verify immutable audit chain', 'module' => 'admin'],
             ['code' => 'mis.sync', 'name' => 'Trigger manual MIS directory synchronization', 'module' => 'admin'],
             ['code' => 'archive.read', 'name' => 'View scoped archive center, retention policies, and legal holds', 'module' => 'admin'],
@@ -137,7 +138,7 @@ final class PermissionsAndRolesSeeder extends Seeder
                 'clinic.clearances.read', 'clinic.clearances.write',
                 'clinic.reports.export',
                 'referrals.create', 'referrals.read', 'referrals.acknowledge', 'referrals.review', 'referrals.close',
-                'reports.read', 'reports.export', 'rbac.manage', 'mis.sync',
+                'reports.read', 'reports.export', 'rbac.manage', 'interns.manage', 'mis.sync',
                 'archive.read', 'archive.manage',
             ],
 
@@ -193,7 +194,7 @@ final class PermissionsAndRolesSeeder extends Seeder
                 'guidance.appointments.manage', 'guidance.intake.manage', 'guidance.clinical.author', 'guidance.clinical.cosign',
                 'clinic.patients.read',
                 'referrals.create', 'referrals.read', 'referrals.acknowledge', 'referrals.review', 'referrals.close',
-                'reports.read', 'reports.export', 'rbac.manage', 'mis.sync',
+                'reports.read', 'reports.export', 'rbac.manage', 'interns.manage', 'mis.sync',
                 'archive.read', 'archive.manage', 'archive.legal_hold.manage',
             ],
 
@@ -232,8 +233,22 @@ final class PermissionsAndRolesSeeder extends Seeder
 
             'bmg_admin' => [
                 'facilities.read', 'facilities.manage', 'facilities.configure',
-                'reports.read', 'reports.export',
+                'reports.read', 'reports.export', 'interns.manage',
                 'archive.read', 'archive.manage',
+            ],
+
+            'bmg_intern' => [
+                'facilities.read', 'facilities.manage',
+            ],
+
+            'guidance_intern' => [
+                'guidance.queue.read', 'guidance.queue.manage',
+                'guidance.intake.process',
+                'guidance.cases.read',
+                'guidance.psychosocial.author', 'guidance.clinical.author',
+                'guidance.schedule.read',
+                'clinic.patients.read',
+                'referrals.read',
             ],
 
             'facilities_op' => [

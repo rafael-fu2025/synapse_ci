@@ -100,7 +100,7 @@ final class GuidanceController extends BaseController
             // 6. Recent cases
             $recentCases = (clone $cases)
                 ->join('users', 'users.id = counselling_cases.counsellor_user_id AND users.tenant_id = counselling_cases.tenant_id')
-                ->select('counselling_cases.id, counselling_cases.case_number, counselling_cases.category, counselling_cases.status, counselling_cases.opened_at')
+                ->select('counselling_cases.id, counselling_cases.person_id, counselling_cases.case_number, counselling_cases.category, counselling_cases.status, counselling_cases.opened_at')
                 ->select('people.first_name, people.last_name, people.mis_id, users.username as counsellor_name')
                 ->orderBy('counselling_cases.opened_at', 'DESC')->limit(6)->get()->getResultArray();
 
@@ -290,7 +290,21 @@ final class GuidanceController extends BaseController
             ->where('people.deleted_at', null);
 
         if (!$hasOversight) {
-            $cases->where('counselling_cases.counsellor_user_id', $actorId);
+            $userRow = $db->table('users')->select('role, person_id')->where('id', $actorId)->where('tenant_id', $tenantId)->get()->getRowArray();
+            if (($userRow['role'] ?? '') === 'guidance_intern') {
+                if (!empty($userRow['person_id'])) {
+                    $cases->where('counselling_cases.person_id !=', (int) $userRow['person_id']);
+                }
+                $placement = (new \App\Services\StudentInternService($db))->activePlacementForUser($actorId, $tenantId);
+                $supId = (int) ($placement['supervisor_user_id'] ?? 0);
+                if ($supId > 0) {
+                    $cases->whereIn('counselling_cases.counsellor_user_id', [$actorId, $supId]);
+                } else {
+                    $cases->where('counselling_cases.counsellor_user_id', $actorId);
+                }
+            } else {
+                $cases->where('counselling_cases.counsellor_user_id', $actorId);
+            }
         }
 
         return $cases;
@@ -405,12 +419,29 @@ final class GuidanceController extends BaseController
                 );
             }
 
-            $this->caseModel->groupStart()
-                ->where('counselling_cases.counsellor_user_id', $actorId);
-            if ($consultCaseIds !== []) {
-                $this->caseModel->orWhereIn('counselling_cases.id', array_map('intval', $consultCaseIds));
+            if (($actor['role'] ?? '') === 'guidance_intern') {
+                if (!empty($actor['person_id'])) {
+                    $this->caseModel->where('counselling_cases.person_id !=', (int) $actor['person_id']);
+                }
+                $placement = (new \App\Services\StudentInternService($db))->activePlacementForUser($actorId, $tenantId);
+                $supervisorId = (int) ($placement['supervisor_user_id'] ?? 0);
+                $this->caseModel->groupStart()
+                    ->where('counselling_cases.counsellor_user_id', $actorId);
+                if ($supervisorId > 0) {
+                    $this->caseModel->orWhere('counselling_cases.counsellor_user_id', $supervisorId);
+                }
+                if ($consultCaseIds !== []) {
+                    $this->caseModel->orWhereIn('counselling_cases.id', array_map('intval', $consultCaseIds));
+                }
+                $this->caseModel->groupEnd();
+            } else {
+                $this->caseModel->groupStart()
+                    ->where('counselling_cases.counsellor_user_id', $actorId);
+                if ($consultCaseIds !== []) {
+                    $this->caseModel->orWhereIn('counselling_cases.id', array_map('intval', $consultCaseIds));
+                }
+                $this->caseModel->groupEnd();
             }
-            $this->caseModel->groupEnd();
         }
         $canViewArchived = ($actor['role'] ?? '') === 'superadmin'
             || in_array('archive.read', $actor['permissions'] ?? [], true)

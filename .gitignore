@@ -264,6 +264,7 @@ __pycache__/
 !/tests/unit/AiPanelPaginationTest.php
 !/tests/unit/ResourceHistoryPaginationTest.php
 !/tests/unit/ResourceHistoryPaginationViewTest.php
+!/tests/unit/StudentInternPolicyTest.php
 !/tests/_support/
 /tests/_support/*
 !/tests/_support/api-token-race-worker.php
@@ -312,6 +313,7 @@ __pycache__/
 !/tests/feature/
 /tests/feature/*
 !/tests/feature/TeamApiHttpTest.php
+!/tests/feature/StudentInternGovernanceTest.php
 !/tests/browser/
 /tests/browser/*
 !/tests/browser/package.json

@@ -17,6 +17,18 @@ $avatarTone = static function (int|string $seed): string {
     return $tones[abs(crc32((string) $seed)) % count($tones)];
 };
 $organizerName = $memberNames[$event['created_by_user_id']] ?? 'Former member';
+$memberPhotos = is_array($memberPhotos ?? null) ? $memberPhotos : [];
+$memberAvatarHtml = static function (?int $userId, string $initials, string $name = '') use ($memberPhotos): string {
+    $url = $userId ? ($memberPhotos[$userId] ?? null) : null;
+    if ($url !== null && $url !== '') {
+        return \App\Services\ProfileAvatar::contentHtml(
+            $url,
+            $initials,
+            $name !== '' ? ['name' => $name] : ['avatar_initials' => $initials]
+        );
+    }
+    return esc($initials);
+};
 ?>
 <div class="tws-detail">
   <div class="tws-inspector-grid">
@@ -31,7 +43,7 @@ $organizerName = $memberNames[$event['created_by_user_id']] ?? 'Former member';
           <dt>Organizer</dt>
           <dd>
             <span class="tws-rail-person">
-              <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($event['created_by_user_id'])) ?>" aria-hidden="true"><?= esc($initialsOf($organizerName)) ?></span>
+              <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($event['created_by_user_id'])) ?>" aria-hidden="true"><?= $memberAvatarHtml((int) $event['created_by_user_id'], $initialsOf($organizerName), (string) $organizerName) ?></span>
               <span><?= esc($organizerName) ?></span>
             </span>
           </dd>
@@ -84,7 +96,7 @@ $organizerName = $memberNames[$event['created_by_user_id']] ?? 'Former member';
           <ul class="tws-participant-list">
             <?php foreach ($event['participants'] as $member): ?>
               <li>
-                <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= esc($initialsOf($member['name'])) ?></span>
+                <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($member['id'] ?? $member['name'])) ?>" aria-hidden="true"><?= $memberAvatarHtml(isset($member['id']) ? (int) $member['id'] : null, $initialsOf($member['name']), (string) $member['name']) ?></span>
                 <span><?= esc($member['name']) ?></span>
               </li>
             <?php endforeach; ?>

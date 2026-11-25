@@ -16,6 +16,18 @@ $avatarTone = static function (int|string $seed): string {
     $tones = ['maroon', 'emerald', 'sky', 'amber', 'slate'];
     return $tones[abs(crc32((string) $seed)) % count($tones)];
 };
+$memberPhotos = is_array($memberPhotos ?? null) ? $memberPhotos : [];
+$memberAvatarHtml = static function (?int $userId, string $initials, string $name = '') use ($memberPhotos): string {
+    $url = $userId ? ($memberPhotos[$userId] ?? null) : null;
+    if ($url !== null && $url !== '') {
+        return \App\Services\ProfileAvatar::contentHtml(
+            $url,
+            $initials,
+            $name !== '' ? ['name' => $name] : ['avatar_initials' => $initials]
+        );
+    }
+    return esc($initials);
+};
 ?>
 <div class="tws-editor">
   <div class="tws-editor-intro">
@@ -85,7 +97,7 @@ $avatarTone = static function (int|string $seed): string {
         <?php foreach ($members as $member): ?>
           <label class="tws-participant-card form-check" for="eventMember<?= $member['id'] ?>">
             <input class="form-check-input" type="checkbox" name="participant_ids[]" id="eventMember<?= $member['id'] ?>" value="<?= $member['id'] ?>" <?= in_array($member['id'], $event['participant_ids'] ?? [], true) ? 'checked' : '' ?>>
-            <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($member['id'])) ?>" aria-hidden="true"><?= esc($initialsOf($member['name'])) ?></span>
+            <span class="tws-avatar tws-avatar--sm is-<?= esc($avatarTone($member['id'])) ?>" aria-hidden="true"><?= $memberAvatarHtml((int) $member['id'], $initialsOf($member['name']), (string) $member['name']) ?></span>
             <span class="tws-participant-card-meta">
               <span class="tws-participant-card-name"><?= esc($member['name']) ?></span>
               <small class="text-muted"><?= esc(ucwords(str_replace('_', ' ', $member['role']))) ?></small>

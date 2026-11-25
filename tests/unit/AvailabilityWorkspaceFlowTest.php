@@ -192,6 +192,7 @@ final class AvailabilityWorkspaceFlowTest extends FreshDatabaseTestCase
                     fn () => $this->service->departmentStaff($unit, $actor),
                     fn () => $this->service->enrollDepartmentStaff($unit, [$actor['person_id']], $actor),
                     fn () => $this->service->saveAvailability($unit, $this->weekly($id), $actor),
+                    fn () => $this->service->removeAvailability($unit, ['id' => 1, 'staff_assignment_id' => $id, 'token' => 'bad'], $actor),
                     fn () => $this->service->applyDepartmentTemplate($unit, $this->template([$id]), $actor),
                     fn () => $this->service->getAvailabilityExceptions($unit, $actor),
                     fn () => $this->service->saveAvailabilityException($unit, $this->exception($id), $actor),
@@ -352,5 +353,66 @@ final class AvailabilityWorkspaceFlowTest extends FreshDatabaseTestCase
         self::assertCount(1, $rows);
         self::assertSame($id, (int) $rows[0]['staff_assignment_id']);
         self::assertSame(2, (int) $rows[0]['day_of_week']);
+    }
+
+    public function testManagerCanRemoveWeeklyWindowWithSnapshotValidationAndPreservesAppointments(): void
+    {
+        $id = $this->enroll();
+        $other = $this->enroll('guidance');
+        $actor = $this->login($this->managers['clinic']);
+
+        $sunday = $this->service->saveAvailability('clinic', $this->weekly($id, 0), $actor);
+        $monday = $this->service->saveAvailability('clinic', $this->weekly($id, 1), $actor);
+        self::assertCount(2, $this->service->getAvailability('clinic', $actor));
+
+        $sundayDate = SchedulingClock::now()->modify('next sunday')->format('Y-m-d');
+        $request = $this->service->requestAppointment('clinic', [
+            'person_id'      => $actor['person_id'],
+            'date'           => $sundayDate,
+            'preferred_time' => '08:00',
+            'type'           => 'routine',
+        ], $actor);
+        $this->service->confirmAppointment('clinic', (int) $request['id'], [
+            'staff_assignment_id' => $id,
+            'starts_at'           => $sundayDate . ' 08:00:00',
+            'ends_at'             => $sundayDate . ' 08:30:00',
+            'version'             => $request['version'],
+        ], $actor);
+        $appointmentsBefore = $this->rows('appointments');
+
+        // Stale/wrong token and opposite-unit removal are rejected
+        $this->reject(fn () => $this->service->removeAvailability('clinic', [
+            'id' => $sunday['id'], 'staff_assignment_id' => $id, 'token' => 'stale-token',
+        ], $actor), \RuntimeException::class, 409);
+        $this->reject(fn () => $this->service->removeAvailability('clinic', [
+            'id' => $sunday['id'], 'staff_assignment_id' => $other, 'token' => ProviderAvailabilityModel::snapshotToken($sunday),
+        ], $actor));
+
+        // Controller POST removes Sunday via valid snapshot token, preserves Monday + bookings, and keeps query context
+        $response = $this->controller(post: [
+            'id'                  => (string) $sunday['id'],
+            'staff_assignment_id' => (string) $id,
+            'token'               => ProviderAvailabilityModel::snapshotToken($sunday),
+            'return_q'            => 'Synthetic',
+            'return_provider'     => (string) $id,
+            'return_day'          => '1',
+            'return_section'      => 'weekly',
+        ])->availabilityRemove('clinic');
+
+        self::assertSame(200, $response->getStatusCode(), $response->getBody());
+        $body = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($body['success']);
+        parse_str((string) parse_url($body['redirect'], PHP_URL_QUERY), $query);
+        self::assertSame(['q' => 'Synthetic', 'provider' => (string) $id, 'day' => '1', 'section' => 'weekly'], $query);
+
+        $remaining = $this->service->getAvailability('clinic', $actor);
+        self::assertCount(1, $remaining);
+        self::assertSame((int) $monday['id'], (int) $remaining[0]['id']);
+        self::assertSame($appointmentsBefore, $this->rows('appointments'));
+
+        // Re-submitting the already-removed snapshot returns 409
+        $this->reject(fn () => $this->service->removeAvailability('clinic', [
+            'id' => $sunday['id'], 'staff_assignment_id' => $id, 'token' => ProviderAvailabilityModel::snapshotToken($sunday),
+        ], $actor), \RuntimeException::class, 409);
     }
 }

@@ -80,7 +80,11 @@ $affiliationText = !empty($studentProfile)
   <div class="cp-hero" data-refresh-region="profile">
     <div class="cp-hero-top">
       <div class="cp-hero-identity">
-        <div class="cp-avatar" aria-hidden="true"><?= esc($initials) ?></div>
+        <?php
+          $crTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+          $crPhotoUrl = $crTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($crTenantId, (int) ($person['id'] ?? 0)) : null;
+        ?>
+        <div class="cp-avatar" aria-hidden="true"><?= \App\Services\ProfileAvatar::contentHtml($crPhotoUrl, $initials, is_array($person ?? null) ? $person : ['avatar_initials' => $initials]) ?></div>
         <div class="cp-hero-copy">
           <div class="cp-hero-eyebrow">
             Guidance Client · <?= esc(ucfirst((string) ($person['kind'] ?? 'member'))) ?> · <?= esc($affiliationText) ?>

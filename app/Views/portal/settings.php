@@ -37,7 +37,9 @@ $email = ($person['email'] ?? '') !== '' ? (string) $person['email'] : (string) 
                 <figcaption class="ps-avatar-label">Current</figcaption>
               </figure>
               <figure class="ps-avatar-figure ps-avatar-preview-figure">
-                <img alt="Selected picture preview (not saved)" width="96" height="96" class="ps-avatar-img ps-avatar-img-preview" data-profile-photo-preview hidden>
+                <span class="ps-avatar-preview-frame">
+                  <img alt="Selected picture preview (not saved)" width="96" height="96" class="ps-avatar-img ps-avatar-img-preview" data-profile-photo-preview hidden>
+                </span>
                 <figcaption class="ps-avatar-label ps-avatar-label-new">New preview</figcaption>
               </figure>
             </div>
@@ -53,6 +55,32 @@ $email = ($person['email'] ?? '') !== '' ? (string) $person['email'] : (string) 
               </details>
 
               <p class="small text-muted" id="profilePhotoFeedback" data-profile-photo-feedback role="status" aria-live="polite">Your saved picture changes only after a successful upload.</p>
+            </div>
+          </div>
+
+          <div class="ps-adjuster" data-profile-photo-adjuster hidden>
+            <div class="ps-adjuster-head">
+              <div>
+                <h3 class="ps-adjuster-title">Adjust profile photo</h3>
+                <p class="ps-adjuster-hint">Drag or use arrow keys to reposition; zoom to frame your 1:1 avatar.</p>
+              </div>
+              <button class="btn btn-outline-secondary btn-sm ps-adjuster-reset" type="button" data-profile-photo-adjust-reset>Reset</button>
+            </div>
+            <div class="ps-adjuster-body">
+              <div class="ps-adjuster-stage" tabindex="0" role="group" aria-label="Profile picture crop area. Drag or use arrow keys to reposition." data-profile-photo-stage>
+                <img class="ps-adjuster-img" alt="" draggable="false" data-profile-photo-stage-img>
+                <div class="ps-adjuster-mask" aria-hidden="true"></div>
+                <div class="ps-adjuster-grid" aria-hidden="true"></div>
+              </div>
+              <div class="ps-adjuster-controls">
+                <div class="ps-zoom-row">
+                  <button class="btn btn-outline-secondary btn-sm ps-zoom-btn" type="button" data-profile-photo-zoom-out aria-label="Zoom out"><i class="bi bi-dash-lg" aria-hidden="true"></i></button>
+                  <label class="visually-hidden" for="profilePhotoZoom">Zoom profile picture</label>
+                  <input id="profilePhotoZoom" class="ps-zoom-range" type="range" min="1" max="3" step="0.01" value="1" data-profile-photo-zoom>
+                  <button class="btn btn-outline-secondary btn-sm ps-zoom-btn" type="button" data-profile-photo-zoom-in aria-label="Zoom in"><i class="bi bi-plus-lg" aria-hidden="true"></i></button>
+                  <span class="ps-zoom-value" data-profile-photo-zoom-value aria-live="off">100%</span>
+                </div>
+              </div>
             </div>
           </div>
         </form>

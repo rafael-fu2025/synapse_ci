@@ -436,15 +436,31 @@ LATEX;
 LATEX;
         }
 
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            '\\textbf{Form Code:} ' . $escFormCode,
+            '\\textbf{Verification Code:} ' . $escVerificationCode,
+            'Page \\thepage'
+        );
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            'MULTIPLE INTELLIGENCES REPORT (Walter McKenzie 1999)',
+            '\\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025'
+        );
+
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=16mm,top=18mm,bottom=20mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=16mm,top=20mm,bottom=20mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
 \\usepackage{xcolor}
 \\usepackage{tikz}
 \\usepackage{tabularx}
 \\usepackage{array}
 \\usepackage{graphicx}
+\\usepackage{fancyhdr}
 
 \\definecolor{fuprimary}{RGB}{15, 34, 64}
 \\definecolor{fusecondary}{RGB}{30, 75, 125}
@@ -452,32 +468,14 @@ LATEX;
 \\definecolor{barbg}{RGB}{235, 240, 245}
 \\definecolor{boxbg}{RGB}{248, 249, 251}
 \\definecolor{boxborder}{RGB}{205, 212, 222}
+{$headerColors}
 
-\\pagestyle{plain}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 
 \\begin{document}
 {$watermark}
-% Header branding
-\\noindent
-\\begin{minipage}[c]{0.15\\textwidth}
-\\IfFileExists{university-seal.png}{%
-  \\includegraphics[width=1.8cm,height=1.8cm,keepaspectratio]{university-seal.png}%
-}{%
-  \\vspace{1.8cm}%
-}
-\\end{minipage}%
-\\begin{minipage}[c]{0.85\\textwidth}
-\\begin{center}
-{\\Large\\textbf{FOUNDATION UNIVERSITY}}\\par\\vspace{0.15em}
-{\\large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.25em}
-{\\large\\textbf{MULTIPLE INTELLIGENCES REPORT (Walter McKenzie 1999)}}\\par\\vspace{0.25em}
-{\\footnotesize\\textbf{Form Code:} {$escFormCode} \\quad \\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025}
-\\end{center}
-\\end{minipage}
-
-\\vspace{0.4em}
-\\hrule
-\\vspace{0.8em}
+{$headerContainer}
 
 % Student demographics
 \\noindent\\fcolorbox{boxborder}{boxbg}{%

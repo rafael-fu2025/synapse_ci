@@ -236,7 +236,7 @@
 }
 
 .pe-surveys .sv-mi-progress-head strong {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.75rem;
   color: var(--sv-heading);
 }
@@ -397,7 +397,7 @@
   padding: 0;
   border-radius: 0;
   background: transparent;
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--sv-muted);
@@ -861,7 +861,7 @@
 .sv-question-num {
   display: inline-block;
   margin-right: 0.35rem;
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.83rem;
   font-weight: 600;
   color: var(--sv-muted);
@@ -1117,7 +1117,7 @@
 }
 
 .sv-rating-text {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.84rem;
   font-weight: 600;
   color: var(--sv-heading);
@@ -1281,7 +1281,7 @@
 }
 
 .mi-survey .mi-progress-value {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 1.02rem;
   font-weight: 600;
   line-height: 1.25;
@@ -1349,7 +1349,7 @@
 }
 
 .mi-survey .mi-tab-range {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.72rem;
   color: var(--sv-muted);
   font-variant-numeric: tabular-nums;
@@ -1434,7 +1434,7 @@
 }
 
 .mi-survey .mi-section-progress {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--sv-muted);
@@ -1479,7 +1479,7 @@
   display: inline-block;
   min-width: 1.65rem;
   margin-right: 0.25rem;
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--sv-muted);
@@ -1527,7 +1527,7 @@
 }
 
 .mi-survey .mi-likert-val {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.86rem;
   font-weight: 600;
   line-height: 1.15;
@@ -1758,7 +1758,7 @@
 }
 
 .mi-results .mi-attestation-hash {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.74rem;
   color: var(--sv-muted);
   background: transparent;
@@ -1848,7 +1848,7 @@
 }
 
 .mi-results .mi-score-num {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--sv-heading);
@@ -1856,7 +1856,7 @@
 }
 
 .mi-results .mi-score-pct {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.75rem;
   color: var(--sv-muted);
   font-variant-numeric: tabular-nums;
@@ -2120,7 +2120,7 @@
 }
 
 .pe-eval .pe-eval-meta code {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.78rem;
   color: var(--sv-heading);
   background: transparent;
@@ -2164,7 +2164,7 @@
 }
 
 .pe-eval .pe-eval-privacy code {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.76rem;
   color: var(--sv-heading);
   background: transparent;
@@ -2187,23 +2187,55 @@
 }
 
 .pe-eval .pe-eval-state-indicator::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  content: var(--status-icon-info, "\f430");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.92em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
+  flex-shrink: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .pe-eval .pe-eval-state-indicator.is-redeemed {
   color: var(--sv-success);
 }
 
+.pe-eval .pe-eval-state-indicator.is-redeemed::before {
+  content: var(--status-icon-ok, "\f26a");
+}
+
 .pe-eval .pe-eval-state-indicator.is-expired {
   color: var(--sv-warning);
 }
 
+.pe-eval .pe-eval-state-indicator.is-expired::before {
+  content: var(--status-icon-pending, "\f291");
+}
+
+.pe-eval .pe-eval-state-indicator.is-invalid,
 .pe-eval .pe-eval-state-indicator.is-missing {
+  color: var(--sv-danger, #b91c1c);
+}
+
+.pe-eval .pe-eval-state-indicator.is-invalid::before,
+.pe-eval .pe-eval-state-indicator.is-missing::before {
+  content: var(--status-icon-danger, "\f33a");
+}
+
+.pe-eval .pe-eval-state-indicator.is-ready {
   color: var(--sv-accent);
+}
+
+.pe-eval .pe-eval-state-indicator.is-ready::before {
+  content: var(--status-icon-info, "\f430");
 }
 
 .pe-eval .pe-eval-token-title {
@@ -2427,7 +2459,7 @@
   display: inline-block;
   min-width: 1.35rem;
   margin-right: 0.2rem;
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--sv-muted);
@@ -2475,7 +2507,7 @@
 }
 
 .pe-eval .pe-eval-likert-val {
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.88rem;
   font-weight: 600;
   line-height: 1.15;

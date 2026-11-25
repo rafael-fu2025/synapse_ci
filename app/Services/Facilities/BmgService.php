@@ -90,6 +90,9 @@ final class BmgService
     public function cancelBatch(int $batchId, string $reason): array
     {
         $actor = $this->actor('facilities.manage');
+        if (($actor['role'] ?? '') === 'bmg_intern') {
+            throw new RuntimeException('Facilities interns cannot void or cancel batches. Request a Facilities Operator or BMG Admin.', 403);
+        }
         $reason = $this->notes($reason);
         if ($reason === null) {
             throw new InvalidArgumentException('A cancellation reason is required.');

@@ -270,6 +270,27 @@ final class AppointmentController extends BaseController
         }
     }
 
+    public function availabilityRemove(string $unit)
+    {
+        $redirect = $this->availabilityReturnPath($unit);
+        try {
+            $this->appointmentService->removeAvailability($unit, [
+                'id'                  => $this->postString('id'),
+                'staff_assignment_id' => $this->postString('staff_assignment_id'),
+                'token'               => $this->postString('token'),
+            ], $this->actor());
+            return $this->respondToForm(
+                'Weekly availability window removed. Existing appointments were preserved; review any affected reservations separately.',
+                true,
+                $redirect,
+                422,
+                $this->availabilityRefresh($unit, $redirect)
+            );
+        } catch (\Exception $e) {
+            return $this->respondToForm($e->getMessage(), false, $redirect, $this->status($e));
+        }
+    }
+
     public function availabilityExceptionStore(string $unit)
     {
         return $this->changeAvailabilityException($unit, false);

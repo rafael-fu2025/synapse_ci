@@ -26,11 +26,13 @@ final class TeamChatController extends BaseController
                 $history = $service->history($unit, ['after' => $history['last_read_id']]);
                 $afterMode = true;
             }
+            $senderIds = array_column($history['messages'] ?? [], 'sender_user_id');
             return view('teams/chat', $context + [
                 'title' => ucfirst($unit) . ' Team Chat', 'unit' => $unit,
                 'teamsUrl' => site_url($unit . '/teams'), 'baseUrl' => site_url($unit . '/teams/chat'),
                 'history' => $history, 'afterMode' => $afterMode, 'browsingHistory' => $before !== null || $target !== null,
-                                'targetMessageId' => $target !== null ? (int) $target : null,
+                'memberPhotos' => (new \App\Services\TeamAccess())->memberPhotos($unit, $context['actor'], $senderIds),
+                'targetMessageId' => $target !== null ? (int) $target : null,
             ]);
         });
     }

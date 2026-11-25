@@ -49,23 +49,57 @@
 }
 
 .teams-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--muted-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-color);
+  line-height: 1;
   flex-shrink: 0;
 }
 
+.teams-status-dot::before {
+  content: var(--status-icon-todo, "\f28a");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.88em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .teams-status-dot.is-in_progress {
-  background: var(--fu-maroon-accent);
+  color: var(--fu-maroon-accent);
+}
+
+.teams-status-dot.is-in_progress::before {
+  content: var(--status-icon-play, "\f4f2");
 }
 
 .teams-status-dot.is-blocked {
-  background: var(--warning-color);
+  color: var(--warning-color);
+}
+
+.teams-status-dot.is-blocked::before {
+  content: var(--status-icon-blocked, "\f566");
 }
 
 .teams-status-dot.is-done {
-  background: var(--success-color);
+  color: var(--success-color);
+}
+
+.teams-status-dot.is-done::before {
+  content: var(--status-icon-ok, "\f26a");
 }
 
 .teams-count {
@@ -1091,7 +1125,7 @@ details[open] .team-chat-members-chevron {
 }
 
 .tws-workspace .tws-count {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .74rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -1331,7 +1365,7 @@ details[open] .team-chat-members-chevron {
   padding: .12rem .42rem;
   border-radius: 999px;
   background: var(--tws-well) !important;
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .68rem;
   font-weight: 600;
   color: var(--tws-heading) !important;
@@ -1384,7 +1418,7 @@ details[open] .team-chat-members-chevron {
   border: 1px solid var(--tws-border);
   border-radius: 999px;
   background: var(--tws-subtle);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .7rem;
   color: var(--tws-muted);
 }
@@ -1617,7 +1651,7 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
   border-radius: 4px;
   background: var(--tws-subtle);
   color: var(--tws-heading);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .68rem;
 }
 
@@ -1665,7 +1699,7 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
   border: 1px solid var(--tws-border);
   border-radius: 999px;
   background: var(--tws-surface);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .69rem;
   font-weight: 600;
   color: var(--tws-muted);
@@ -1789,7 +1823,7 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
 }
 
 .tws-workspace .tws-card-checklist-count {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
 }
 
 .tws-workspace .tws-card-checklist-count.is-complete {
@@ -1857,7 +1891,7 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
   padding: .14rem .45rem;
   border-radius: 6px;
   background: var(--tws-well);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .68rem;
   font-weight: 600;
   color: var(--tws-muted);
@@ -1895,7 +1929,7 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
 
 /* Priority, Status & ID Pills (Figma Badge/Priority & Badge/Status) */
 :is(.tws-workspace, .tws-detail) .tws-task-id {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .7rem;
   font-weight: 500;
   color: var(--tws-muted);
@@ -1908,7 +1942,7 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
   border-radius: 6px;
   background: var(--tws-well);
   border: 1px solid var(--tws-border);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .68rem;
   font-weight: 700;
   letter-spacing: .04em;
@@ -1956,12 +1990,21 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
 }
 
 :is(.tws-workspace, .tws-detail) .tws-status::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  content: var(--status-icon-todo, "\f28a");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.9em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
   flex-shrink: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 :is(.tws-workspace, .tws-detail) .tws-status.is-in_progress,
@@ -1971,10 +2014,22 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
   color: var(--tws-accent);
 }
 
+:is(.tws-workspace, .tws-detail) .tws-status.is-in_progress::before {
+  content: var(--status-icon-play, "\f4f2");
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status.is-scheduled::before {
+  content: var(--status-icon-scheduled, "\f1e7");
+}
+
 :is(.tws-workspace, .tws-detail) .tws-status.is-blocked {
   background: var(--tws-warning-soft);
   border-color: var(--tws-warning-border);
   color: var(--tws-warning);
+}
+
+:is(.tws-workspace, .tws-detail) .tws-status.is-blocked::before {
+  content: var(--status-icon-blocked, "\f566");
 }
 
 :is(.tws-workspace, .tws-detail) .tws-status.is-done {
@@ -1983,28 +2038,40 @@ html body .tws-workspace .tws-action-cell .btn.btn-outline-primary.btn-outline-p
   color: var(--tws-success);
 }
 
+:is(.tws-workspace, .tws-detail) .tws-status.is-done::before {
+  content: var(--status-icon-ok, "\f26a");
+}
+
 :is(.tws-workspace, .tws-detail) .tws-status.is-cancelled {
   background: var(--tws-danger-soft);
   border-color: var(--tws-danger-border);
   color: var(--tws-danger);
 }
 
+:is(.tws-workspace, .tws-detail) .tws-status.is-cancelled::before {
+  content: var(--status-icon-cancelled, "\f622");
+}
+
 .tws-workspace .teams-status-dot {
-  width: 7px;
-  height: 7px;
-  background: var(--tws-muted);
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: var(--tws-muted);
 }
 
 .tws-workspace .teams-status-dot.is-in_progress {
-  background: var(--tws-accent);
+  background: transparent;
+  color: var(--tws-accent);
 }
 
 .tws-workspace .teams-status-dot.is-blocked {
-  background: var(--tws-warning);
+  background: transparent;
+  color: var(--tws-warning);
 }
 
 .tws-workspace .teams-status-dot.is-done {
-  background: var(--tws-success);
+  background: transparent;
+  color: var(--tws-success);
 }
 
 .tws-workspace .teams-column[data-task-drop-target] {
@@ -2147,7 +2214,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 .tws-workspace .tws-inline-check {
   display: inline-flex;
   align-items: center;
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .69rem;
   color: var(--tws-muted);
 }
@@ -2179,7 +2246,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 }
 
 :is(.tws-workspace, .tws-detail) .tws-date {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .74rem;
   font-variant-numeric: tabular-nums;
 }
@@ -2383,7 +2450,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 }
 
 :is(.tws-editor, .tws-detail) .tws-checklist-summary {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .72rem;
   font-weight: 600;
   color: var(--tws-muted);
@@ -2731,7 +2798,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 }
 
 .tws-detail .tws-comment-head time {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .68rem;
   color: var(--tws-muted);
 }
@@ -2761,7 +2828,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 
 .tws-detail .teams-activity small {
   color: var(--tws-muted);
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .69rem;
 }
 
@@ -2918,7 +2985,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
   border-radius: 999px;
   background: var(--tws-brand);
   color: #ffffff;
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .68rem;
   font-weight: 700;
   flex-shrink: 0;
@@ -3001,7 +3068,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 }
 
 .tws-workspace .tws-chat-ref-id {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .71rem;
   font-weight: 700;
   color: var(--tws-accent);
@@ -3287,7 +3354,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 }
 
 .tws-workspace .team-chat-message-header time {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .67rem;
   color: var(--tws-muted);
 }
@@ -3325,7 +3392,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
 }
 
 .tws-workspace .tws-chat-task-id {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .74rem;
   font-weight: 700;
   color: var(--tws-accent);
@@ -3496,7 +3563,7 @@ html body .tws-workspace .tws-table.table>tbody>tr>td {
   display: inline-flex;
   align-items: center;
   gap: .65rem;
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .68rem;
 }
 
@@ -3758,13 +3825,13 @@ html body .tws-workspace .team-chat-task-chip.btn.btn-outline-secondary:hover {
 }
 
 .tws-workspace .tws-upcoming-meta {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .66rem;
   color: var(--tws-muted);
 }
 
 .tws-workspace .tws-calendar-summary {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .71rem;
   line-height: 1.7;
 }
@@ -3840,7 +3907,7 @@ html body .tws-workspace .team-chat-task-chip.btn.btn-outline-secondary:hover {
 }
 
 .tws-workspace .team-calendar-day-heading {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: .74rem;
 }
 

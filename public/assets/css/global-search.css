@@ -192,7 +192,7 @@
   border: 1px solid var(--gs-kbd-border);
   background: var(--gs-kbd-bg);
   color: var(--gs-heading);
-  font-family: var(--mono-font, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-size: 0.68rem;
   font-weight: 600;
   line-height: 1.25;
@@ -230,4 +230,8 @@
   .app-shell .header-left { gap: 2px; }
   .app-shell .header-logo { width: 24px; }
   .app-shell .header-logo img { height: 28px !important; }
+}
+
+#globalSearchDialog .gs-modal-dialog {
+  max-width: 620px;
 }

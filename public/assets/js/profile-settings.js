@@ -19,10 +19,20 @@
       const feedback = form.querySelector('[data-profile-photo-feedback]');
       const contactFeedback = contact.querySelector('[data-emergency-contact-feedback]');
       const clearButton = panel.querySelector('[data-profile-photo-clear]');
+      const adjuster = form.querySelector('[data-profile-photo-adjuster]');
+      const stage = form.querySelector('[data-profile-photo-stage]');
+      const stageImg = form.querySelector('[data-profile-photo-stage-img]');
+      const zoomInput = form.querySelector('[data-profile-photo-zoom]');
+      const zoomOut = form.querySelector('[data-profile-photo-zoom-out]');
+      const zoomIn = form.querySelector('[data-profile-photo-zoom-in]');
+      const zoomValue = form.querySelector('[data-profile-photo-zoom-value]');
+      const adjustReset = form.querySelector('[data-profile-photo-adjust-reset]');
       const fields = contactNames.map(name => contact.elements.namedItem(name));
       const events = new AbortController();
       let baseline = fields.map(field => field.defaultValue);
       let url = null, version = 0, pending = null, stopped = false, suspended = false, cleanTimer = null;
+      let crop = { image: null, width: 0, height: 0, zoom: 1, offsetX: 0, offsetY: 0, adjusted: false };
+      let drag = null;
       const photoDirty = () => Boolean(input.files?.length);
       const contactDirty = () => fields.some((field, index) => field.value !== baseline[index]);
       const active = () => !stopped && !suspended && panel.isConnected;
@@ -43,10 +53,65 @@
           if (active()) { callbacks.forEach(run => run()); markClean(); }
         }, 0);
       }
+      const stageSize = () => (stage?.clientWidth > 0 ? stage.clientWidth : 220);
+      function clampCrop() {
+        if (!crop.image) return;
+        const size = stageSize();
+        const baseScale = Math.max(size / crop.width, size / crop.height);
+        crop.zoom = Math.max(1, Math.min(3, crop.zoom));
+        const scale = baseScale * crop.zoom;
+        const maxX = Math.max(0, (crop.width * scale - size) / 2);
+        const maxY = Math.max(0, (crop.height * scale - size) / 2);
+        crop.offsetX = Math.max(-maxX, Math.min(maxX, crop.offsetX));
+        crop.offsetY = Math.max(-maxY, Math.min(maxY, crop.offsetY));
+      }
+      function renderCrop() {
+        if (!crop.image) return;
+        clampCrop();
+        const size = stageSize();
+        const baseScale = Math.max(size / crop.width, size / crop.height);
+        const w = crop.width * baseScale;
+        const h = crop.height * baseScale;
+        if (stageImg) {
+          stageImg.style.width = `${w}px`;
+          stageImg.style.height = `${h}px`;
+          stageImg.style.transform = `translate(-50%, -50%) translate(${crop.offsetX}px, ${crop.offsetY}px) scale(${crop.zoom})`;
+        }
+        const previewFrameSize = preview.parentElement?.clientWidth || 84;
+        const ratio = previewFrameSize / size;
+        preview.classList.add('is-framed');
+        preview.style.width = `${w * ratio}px`;
+        preview.style.height = `${h * ratio}px`;
+        preview.style.transform = `translate(-50%, -50%) translate(${crop.offsetX * ratio}px, ${crop.offsetY * ratio}px) scale(${crop.zoom})`;
+        if (zoomInput) zoomInput.value = crop.zoom.toFixed(2);
+        if (zoomValue) zoomValue.textContent = `${Math.round(crop.zoom * 100)}%`;
+        if (zoomOut) zoomOut.disabled = crop.zoom <= 1.001;
+        if (zoomIn) zoomIn.disabled = crop.zoom >= 2.999;
+        if (adjustReset) adjustReset.disabled = !crop.adjusted;
+      }
+      function resetCrop() {
+        crop.zoom = 1;
+        crop.offsetX = 0;
+        crop.offsetY = 0;
+        crop.adjusted = false;
+        renderCrop();
+      }
       function clearPreview() {
         ++version;
+        drag = null;
+        stage?.classList.remove('is-dragging');
+        crop = { image: null, width: 0, height: 0, zoom: 1, offsetX: 0, offsetY: 0, adjusted: false };
         if (url) URL.revokeObjectURL(url);
-        url = null; preview.hidden = true; preview.removeAttribute('src');
+        url = null;
+        preview.hidden = true;
+        preview.removeAttribute('src');
+        preview.classList.remove('is-framed');
+        preview.style.width = preview.style.height = preview.style.transform = '';
+        if (stageImg) {
+          stageImg.removeAttribute('src');
+          stageImg.style.width = stageImg.style.height = stageImg.style.transform = '';
+        }
+        if (adjuster) adjuster.hidden = true;
       }
       function photoMessage(message, error = false) {
         feedback.textContent = message;
@@ -90,12 +155,87 @@
           if (image.naturalWidth > 10000 || image.naturalHeight > 10000 || image.naturalWidth * image.naturalHeight > 20000000) {
             reject('Choose a picture of at most 20 megapixels and 10,000 pixels per side.'); return;
           }
+          crop = { image, width: image.naturalWidth, height: image.naturalHeight, zoom: 1, offsetX: 0, offsetY: 0, adjusted: false };
           preview.src = url; preview.hidden = false;
-          if (announce) photoMessage(`${(file.size / (1024 * 1024)).toFixed(2)} MB selected. Preview only—upload to save the compressed picture.`);
+          if (adjuster && stageImg) {
+            stageImg.src = url;
+            adjuster.hidden = false;
+            renderCrop();
+          }
+          if (announce) photoMessage(`${(file.size / (1024 * 1024)).toFixed(2)} MB selected. Adjust framing if needed—upload to save the compressed 1:1 picture.`);
         };
         image.onerror = () => { if (token === version && active()) reject('This picture could not be read. Choose another JPEG, PNG, or WebP file.'); };
         image.src = url;
       }
+      if (stage) {
+        stage.addEventListener('pointerdown', event => {
+          if (!crop.image || event.button !== 0 || adjuster?.hidden) return;
+          drag = { id: event.pointerId, startX: event.clientX, startY: event.clientY, baseX: crop.offsetX, baseY: crop.offsetY };
+          stage.classList.add('is-dragging');
+          stage.setPointerCapture?.(event.pointerId);
+          event.preventDefault();
+        }, { signal: events.signal });
+        stage.addEventListener('pointermove', event => {
+          if (!drag || drag.id !== event.pointerId) return;
+          const dx = event.clientX - drag.startX;
+          const dy = event.clientY - drag.startY;
+          if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) crop.adjusted = true;
+          crop.offsetX = drag.baseX + dx;
+          crop.offsetY = drag.baseY + dy;
+          renderCrop();
+        }, { signal: events.signal });
+        const endDrag = event => {
+          if (!drag || (event.pointerId !== undefined && drag.id !== event.pointerId)) return;
+          drag = null;
+          stage.classList.remove('is-dragging');
+        };
+        stage.addEventListener('pointerup', endDrag, { signal: events.signal });
+        stage.addEventListener('pointercancel', endDrag, { signal: events.signal });
+        stage.addEventListener('wheel', event => {
+          if (!crop.image || adjuster?.hidden) return;
+          event.preventDefault();
+          crop.zoom = Math.max(1, Math.min(3, crop.zoom + (event.deltaY < 0 ? 0.1 : -0.1)));
+          crop.adjusted = true;
+          renderCrop();
+        }, { passive: false, signal: events.signal });
+        stage.addEventListener('keydown', event => {
+          if (!crop.image || adjuster?.hidden) return;
+          const step = event.shiftKey ? 2 : 10;
+          if (event.key === 'ArrowLeft') { crop.offsetX -= step; crop.adjusted = true; }
+          else if (event.key === 'ArrowRight') { crop.offsetX += step; crop.adjusted = true; }
+          else if (event.key === 'ArrowUp') { crop.offsetY -= step; crop.adjusted = true; }
+          else if (event.key === 'ArrowDown') { crop.offsetY += step; crop.adjusted = true; }
+          else if (event.key === '+' || event.key === '=') { crop.zoom = Math.min(3, crop.zoom + 0.1); crop.adjusted = true; }
+          else if (event.key === '-') { crop.zoom = Math.max(1, crop.zoom - 0.1); crop.adjusted = true; }
+          else return;
+          event.preventDefault();
+          renderCrop();
+        }, { signal: events.signal });
+      }
+      zoomInput?.addEventListener('input', () => {
+        if (!crop.image) return;
+        crop.zoom = Number(zoomInput.value) || 1;
+        crop.adjusted = true;
+        renderCrop();
+      }, { signal: events.signal });
+      zoomOut?.addEventListener('click', () => {
+        if (!crop.image) return;
+        crop.zoom = Math.max(1, crop.zoom - 0.2);
+        crop.adjusted = true;
+        renderCrop();
+      }, { signal: events.signal });
+      zoomIn?.addEventListener('click', () => {
+        if (!crop.image) return;
+        crop.zoom = Math.min(3, crop.zoom + 0.2);
+        crop.adjusted = true;
+        renderCrop();
+      }, { signal: events.signal });
+      adjustReset?.addEventListener('click', () => {
+        if (crop.image) resetCrop();
+      }, { signal: events.signal });
+      window.addEventListener('resize', () => {
+        if (crop.image && adjuster && !adjuster.hidden) renderCrop();
+      }, { signal: events.signal });
       input.addEventListener('change', () => { previewSelection(); afterSharedListener(); }, { signal: events.signal });
       form.addEventListener('reset', event => {
         afterSharedListener(() => { if (!event.defaultPrevented) previewSelection(); });
@@ -158,6 +298,9 @@
         const submitted = fields.map(field => field.value);
         const selected = input.files?.[0];
         const selectionVersion = version;
+        const cropSnapshot = (!editingContact && !deleting && crop.image && (crop.width !== crop.height || crop.adjusted))
+          ? { image: crop.image, width: crop.width, height: crop.height, zoom: crop.zoom, offsetX: crop.offsetX, offsetY: crop.offsetY, stage: stageSize() }
+          : null;
         const controls = [...panel.querySelectorAll('input, button, select, textarea')].map(control => [control, control.disabled]);
         const job = { owner, controller: new AbortController(), finish: () => {} };
         pending = job;
@@ -178,10 +321,35 @@
           finishLoading(); owner.removeAttribute('aria-busy');
           controls.forEach(([control, disabled]) => { control.disabled = disabled; });
           remove.querySelector('button[type="submit"]').disabled = remove.hidden;
+          if (crop.image) renderCrop();
           if (pending === job) pending = null;
         };
         const current = () => active() && pending === job && !job.controller.signal.aborted;
         try {
+          if (cropSnapshot) {
+            const baseScale = Math.max(cropSnapshot.stage / cropSnapshot.width, cropSnapshot.stage / cropSnapshot.height);
+            const scale = baseScale * cropSnapshot.zoom;
+            const srcSize = Math.min(cropSnapshot.width, cropSnapshot.height, cropSnapshot.stage / scale);
+            const srcX = Math.max(0, Math.min(cropSnapshot.width - srcSize, ((cropSnapshot.width * scale - cropSnapshot.stage) / 2 - cropSnapshot.offsetX) / scale));
+            const srcY = Math.max(0, Math.min(cropSnapshot.height - srcSize, ((cropSnapshot.height * scale - cropSnapshot.stage) / 2 - cropSnapshot.offsetY) / scale));
+            const outSize = Math.max(1, Math.min(1024, Math.round(srcSize)));
+            const canvas = document.createElement('canvas');
+            canvas.width = outSize;
+            canvas.height = outSize;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(cropSnapshot.image, srcX, srcY, srcSize, srcSize, 0, 0, outSize, outSize);
+              const encode = type => new Promise(resolve => canvas.toBlob(resolve, type, 0.92));
+              let blob = await encode('image/webp');
+              if (!blob || !['image/webp', 'image/png', 'image/jpeg'].includes(blob.type)) blob = await encode('image/png');
+              if (!current()) return;
+              if (blob && blob.size > 0 && blob.size <= 10 * 1024 * 1024) {
+                const ext = blob.type === 'image/webp' ? 'webp' : 'png';
+                const base = (selected?.name || 'profile').replace(/\.[^.]+$/, '');
+                data.set('photo', blob, `${base}.${ext}`);
+              }
+            }
+          }
           const response = await fetch(action.href, { method: 'POST', body: data, credentials: 'same-origin', redirect: 'error', signal: job.controller.signal,
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...window.SynapseCsrf?.headers() } });
           if (!current()) return;
@@ -223,7 +391,11 @@
               image.onerror = () => { image.onerror = null; image.src = fallback; };
               image.src = photo;
             }
-            photoMessage(typeof payload.message === 'string' ? payload.message.slice(0, 1500) : 'Profile picture updated.');
+            const savedMessage = typeof payload.message === 'string' ? payload.message.slice(0, 1500) : (deleting ? 'Profile picture removed.' : 'Profile picture updated.');
+            photoMessage(savedMessage);
+            if (typeof window.SynapseToast?.show === 'function') {
+              window.SynapseToast.show(savedMessage, { type: 'success', key: 'profile-photo' });
+            }
             window.SynapseNavigation?.markSaved(remove);
           }
           markClean();

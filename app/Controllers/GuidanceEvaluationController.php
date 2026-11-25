@@ -83,9 +83,10 @@ final class GuidanceEvaluationController extends BaseController
         }
 
         $tenantId = (int) $actor['tenant_id'];
-        $rawToken = trim($token !== '' ? $token : (string) ($this->request->getGet('token') ?? ''));
+        $candidate = $token !== '' ? rawurldecode($token) : (string) ($this->request->getGet('token') ?? '');
+        $rawToken = $this->extractRawToken($candidate);
 
-        $tokenState = 'not_found';
+        $tokenState = $rawToken === '' ? 'empty' : 'not_found';
         $evaluationType = GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL;
         $formCode = GuidanceServiceEvaluationService::FORM_CODE_PSYCHOSOCIAL;
 
@@ -120,6 +121,7 @@ final class GuidanceEvaluationController extends BaseController
             'pageTitle'        => $isPsychosocial ? 'Psychosocial Support Evaluation Form' : 'Counseling Evaluation Form',
             'tokenState'       => $tokenState,
             'rawToken'         => $tokenState === 'valid' ? $rawToken : '',
+            'submittedToken'   => $tokenState !== 'valid' ? $rawToken : '',
             'evaluationType'   => $evaluationType,
             'formCode'         => $formCode,
             'isPsychosocial'   => $isPsychosocial,
@@ -440,6 +442,164 @@ final class GuidanceEvaluationController extends BaseController
         } catch (Throwable $e) {
             return $this->handleFailure($e, site_url('/guidance/evaluations/dashboard'));
         }
+    }
+
+    /**
+     * Guidance Staff Console: issue a one-time pseudonymous evaluation token and redemption URL.
+     */
+    public function issueToken()
+    {
+        $actor = $this->resolveGuidanceActor('guidance.evaluations.view_aggregates');
+        if (!is_array($actor)) {
+            return $actor;
+        }
+
+        $tenantId = (int) $actor['tenant_id'];
+
+        try {
+            $input = $this->requestInput();
+            $personId = (int) ($input['person_id'] ?? 0);
+            if ($personId <= 0) {
+                throw new InvalidArgumentException('Please select a valid student or employee before issuing an evaluation token.', 422);
+            }
+
+            $db = Database::connect();
+            $person = $db->table('people')
+                ->select('id')
+                ->where('tenant_id', $tenantId)
+                ->where('id', $personId)
+                ->where('deleted_at', null)
+                ->get()
+                ->getRowArray();
+            if ($person === null) {
+                throw new InvalidArgumentException('Student or employee record was not found.', 404);
+            }
+
+            $episodeId = (int) ($input['episode_id'] ?? 0);
+            if ($episodeId > 0) {
+                $episode = $db->table('guidance_episodes')
+                    ->select('id, person_id')
+                    ->where('tenant_id', $tenantId)
+                    ->where('id', $episodeId)
+                    ->where('deleted_at', null)
+                    ->get()
+                    ->getRowArray();
+                if ($episode === null) {
+                    throw new InvalidArgumentException('Selected guidance episode was not found.', 404);
+                }
+                if ((int) ($episode['person_id'] ?? 0) !== $personId) {
+                    throw new InvalidArgumentException('Selected guidance episode does not belong to this client.', 422);
+                }
+            }
+
+            $sessionId = (int) ($input['session_id'] ?? 0);
+            if ($sessionId > 0) {
+                $sessionRow = $db->table('guidance_sessions gs')
+                    ->select('gs.id, cc.person_id')
+                    ->join('counselling_cases cc', 'cc.id = gs.case_id', 'inner')
+                    ->where('cc.tenant_id', $tenantId)
+                    ->where('gs.id', $sessionId)
+                    ->where('cc.deleted_at', null)
+                    ->get()
+                    ->getRowArray();
+                if ($sessionRow === null) {
+                    throw new InvalidArgumentException('Selected counseling session was not found.', 404);
+                }
+                if ((int) ($sessionRow['person_id'] ?? 0) !== $personId) {
+                    throw new InvalidArgumentException('Selected counseling session does not belong to this client.', 422);
+                }
+            }
+
+            $providerUserId = (int) $actor['id'];
+            $requestedProviderId = (int) ($input['provider_user_id'] ?? 0);
+            if ($this->canViewAnyProvider($actor) && $requestedProviderId > 0) {
+                $providerRow = $db->table('users')
+                    ->select('id')
+                    ->where('tenant_id', $tenantId)
+                    ->where('id', $requestedProviderId)
+                    ->where('status', 'active')
+                    ->where('deleted_at', null)
+                    ->whereIn('role', ['counsellor', 'guidance_supervisor', 'guidance_admin', 'superadmin'])
+                    ->get()
+                    ->getRowArray();
+                if ($providerRow === null) {
+                    throw new InvalidArgumentException('Selected guidance provider was not found.', 404);
+                }
+                $providerUserId = $requestedProviderId;
+            }
+
+            $evaluationType = $this->evaluationService->resolveEvaluationType(
+                (string) ($input['evaluation_type'] ?? GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL)
+            );
+
+            $context = [];
+            if ($episodeId > 0) {
+                $context['episode_id'] = $episodeId;
+            }
+            if ($sessionId > 0) {
+                $context['session_id'] = $sessionId;
+            }
+
+            $issued = $this->evaluationService->issueEvaluationToken(
+                $personId,
+                $evaluationType,
+                $providerUserId,
+                $context,
+                $tenantId,
+                $actor
+            );
+
+            $rawToken = (string) ($issued['raw_token'] ?? '');
+            $redeemUrl = PortalContext::urlFor(
+                PortalContext::PORTAL_MAIN,
+                'portal/evaluations/redeem/' . rawurlencode($rawToken)
+            );
+            $message = 'One-time evaluation token issued. Share the link or token code with the client.';
+
+            if ($this->wantsJson()) {
+                return $this->response->setStatusCode(201)
+                    ->setHeader('Cache-Control', 'private, no-store')
+                    ->setJSON([
+                        'success'         => true,
+                        'message'         => $message,
+                        'raw_token'       => $rawToken,
+                        'redeem_url'      => $redeemUrl,
+                        'form_code'       => (string) ($issued['form_code'] ?? ''),
+                        'evaluation_type' => (string) ($issued['evaluation_type'] ?? $evaluationType),
+                        'expires_at'      => (string) ($issued['expires_at'] ?? ''),
+                        'csrf'            => ['name' => csrf_token(), 'hash' => csrf_hash()],
+                    ]);
+            }
+
+            return redirect()->to(site_url('/guidance/evaluations/dashboard'))
+                ->with('success', $message);
+        } catch (Throwable $e) {
+            return $this->handleFailure($e, site_url('/guidance/evaluations/dashboard'));
+        }
+    }
+
+    private function extractRawToken(string $input): string
+    {
+        $trimmed = trim($input);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        if (preg_match('~^https?://|^/~i', $trimmed) || str_contains($trimmed, 'portal/evaluations/redeem')) {
+            $query = (string) parse_url($trimmed, PHP_URL_QUERY);
+            if ($query !== '') {
+                parse_str($query, $qs);
+                if (!empty($qs['token']) && is_string($qs['token'])) {
+                    return trim($qs['token']);
+                }
+            }
+            $path = trim((string) parse_url($trimmed, PHP_URL_PATH), '/');
+            if (preg_match('~(?:^|/)portal/evaluations/redeem/([^/]+)$~', $path, $m)) {
+                return trim(rawurldecode($m[1]));
+            }
+        }
+
+        return $trimmed;
     }
 
     /** @return array<string, string> */

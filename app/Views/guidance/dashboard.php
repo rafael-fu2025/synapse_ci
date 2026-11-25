@@ -91,6 +91,9 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
         return '';
     }
 };
+$shiftNow = method_exists(\App\Services\Scheduling\SchedulingClock::class, 'now')
+    ? \App\Services\Scheduling\SchedulingClock::now()
+    : new \DateTimeImmutable('now', $manilaTz);
 ?>
 <div class="page-dashboard nd-dashboard cdc-dashboard guidance-ui"
      data-queue-dashboard="guidance"
@@ -105,7 +108,7 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
       <span class="cdc-shift-sep" aria-hidden="true">|</span>
       <span class="cdc-shift-meta"><?= esc(ucwords(str_replace('_', ' ', $userRole))) ?></span>
       <span class="cdc-shift-sep d-none d-sm-inline" aria-hidden="true">·</span>
-      <span class="cdc-shift-meta cdc-mono"><?= date('D, M j, Y') ?><?= $schoolYear !== '' ? ' · SY ' . esc($schoolYear) : '' ?></span>
+      <span class="cdc-shift-meta cdc-mono"><?= esc($shiftNow->format('D, M j, Y')) ?><?= $schoolYear !== '' ? ' · SY ' . esc($schoolYear) : '' ?></span>
     </div>
 
     <div class="cdc-shift-right">
@@ -124,11 +127,15 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
           <span class="cdc-mono"><?= $pendingReferrals ?></span> Clinic Referrals
         </a>
       <?php endif; ?>
-      <?php if ($catCrisis === 0 && $pendingIntakes === 0 && $pendingReferrals === 0): ?>
-        <span class="cdc-shift-meta">AES-256-GCM encrypted case vault active</span>
-      <?php endif; ?>
+      <span class="cdc-shift-clock cdc-mono" data-live-clock data-clock-tz="Asia/Manila" title="Philippine Standard Time (Asia/Manila)">
+        <i class="bi bi-clock" aria-hidden="true"></i>
+        <time data-live-clock-time datetime="<?= esc($shiftNow->format(\DateTimeInterface::ATOM), 'attr') ?>"><?= esc($shiftNow->format('g:i:s A')) ?></time>
+        <span class="cdc-shift-clock-tz">PHT</span>
+      </span>
     </div>
   </div>
+
+  <?= view('partials/intern_supervision_banner', ['user' => $user ?? []]) ?>
 
   <p class="cdc-queue-feedback" data-queue-feedback role="status" hidden></p>
 
@@ -457,11 +464,13 @@ $formatManilaTime = static function (?string $ts) use ($manilaTz, $utcTz): strin
                     $initials = strtoupper(substr((string) ($rc['first_name'] ?? ''), 0, 1) . substr((string) ($rc['last_name'] ?? ''), 0, 1));
                     $catLabel = ucfirst((string) ($rc['category'] ?? 'General'));
                     $openedStr = $formatManilaTime($rc['opened_at'] ?? null);
+                    $rcTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+                    $rcPhotoUrl = $rcTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($rcTenantId, (int) ($rc['person_id'] ?? 0)) : null;
                   ?>
                   <tr>
                     <td data-label="Client & Case #">
                       <div class="cdc-pt-cell">
-                        <span class="cdc-initials <?= $isActive ? 'cdc-initials--active' : '' ?>" aria-hidden="true"><?= esc($initials) ?></span>
+                        <span class="cdc-initials <?= $isActive ? 'cdc-initials--active' : '' ?>" aria-hidden="true"><?= \App\Services\ProfileAvatar::contentHtml($rcPhotoUrl, $initials, $rc) ?></span>
                         <div style="min-width: 0;">
                           <span class="cdc-pt-name"><?= esc($rc['last_name'] . ', ' . $rc['first_name']) ?></span>
                           <span class="cdc-pt-sub cdc-mono"><?= esc($rc['case_number']) ?> · <?= esc($rc['mis_id']) ?></span>

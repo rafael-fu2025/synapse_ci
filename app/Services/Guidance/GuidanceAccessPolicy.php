@@ -107,6 +107,21 @@ final class GuidanceAccessPolicy
             throw new DomainException('An active same-tenant guidance account is required.', 403);
         }
 
+        if (($user['role'] ?? '') === 'guidance_intern' && $this->db->tableExists('student_intern_placements')) {
+            if (!$lock) {
+                (new \App\Services\StudentInternService($this->db))->reconcileForUser((int) $user['id'], $tenantId);
+                $user = $this->first("SELECT * FROM {$users} WHERE id = ? AND tenant_id = ? AND status = 'active' AND deleted_at IS NULL",
+                    [$id, $tenantId], false);
+                if ($user === null || ($user['role'] ?? '') !== 'guidance_intern') {
+                    throw new DomainException('Active Guidance intern placement required.', 403);
+                }
+            }
+            $placement = (new \App\Services\StudentInternService($this->db))->activePlacementForUser((int) $user['id'], $tenantId);
+            if ($placement === null || ($placement['unit'] ?? '') !== 'guidance') {
+                throw new DomainException('Active Guidance intern placement required.', 403);
+            }
+        }
+
         $person = null;
         if (($user['person_id'] ?? null) !== null) {
             $person = $this->first("SELECT * FROM {$people} WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL",
@@ -165,6 +180,17 @@ final class GuidanceAccessPolicy
     public function assertCanReadCase(array $case, array $actor): void
     {
         $this->assertCaseTenant($case, $actor);
+        if (($actor['role'] ?? '') === 'guidance_intern') {
+            $actorPersonId = (int) ($actor['person_id'] ?? 0);
+            if ($actorPersonId > 0 && (int) ($case['person_id'] ?? 0) === $actorPersonId) {
+                throw new DomainException('Student interns cannot access their own guidance records on staff workstations.', 403);
+            }
+            $placement = (new \App\Services\StudentInternService($this->db))->activePlacementForUser((int) ($actor['id'] ?? 0), (int) ($actor['tenant_id'] ?? 0));
+            $supervisorId = (int) ($placement['supervisor_user_id'] ?? 0);
+            if ($supervisorId > 0 && (int) ($case['counsellor_user_id'] ?? 0) === $supervisorId) {
+                return;
+            }
+        }
         $perms = $actor['permissions'] ?? [];
         if ((int) ($case['counsellor_user_id'] ?? 0) !== (int) ($actor['id'] ?? 0)
             && !in_array('guidance.cases.read_any', $perms, true)
@@ -257,6 +283,11 @@ final class GuidanceAccessPolicy
     public function canFinalizeDirectly(int $userId, ?int $tenantId = null): bool
     {
         $tenantId ??= CurrentTenant::id();
+        $usersTable = $this->table('users');
+        $userRow = $this->first("SELECT role FROM {$usersTable} WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL", [$userId, $tenantId], false);
+        if (($userRow['role'] ?? '') === 'guidance_intern') {
+            return false;
+        }
         if (!$this->db->tableExists('guidance_practitioner_profiles')) {
             return false;
         }

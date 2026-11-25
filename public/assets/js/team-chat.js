@@ -144,6 +144,7 @@
               taskResults.append(node('p', 'small text-muted mt-2 mb-0', 'Showing up to 40 active tasks. Search to narrow the list.'));
               data.tasks.forEach(task => {
                 const label = node('label', 'team-chat-task-option'), checkbox = document.createElement('input');
+                checkbox.id = `team-chat-task-opt-${task.id}`;
                 checkbox.type = 'checkbox'; checkbox.checked = selectedTasks.has(task.id); checkbox.disabled = !editable();
                 checkbox.addEventListener('change', () => {
                   if (!editable()) return;
@@ -178,6 +179,7 @@
     const maximum = () => ids().at(-1) || 0;
     const warn = message => { error.textContent = message; error.hidden = !message; };
     const memberRoles = new Map((initial.members || []).filter(m => m && m.role).map(m => [Number(m.id), String(m.role)]));
+    const memberPhotos = new Map((initial.members || []).filter(m => m && m.photo_url).map(m => [Number(m.id), String(m.photo_url)]));
     const initialsOf = name => {
       const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
       const letters = parts.slice(0, 2).map(part => part.charAt(0).toUpperCase()).join('');
@@ -269,8 +271,22 @@
         if (editable()) { replyTo = message; renderReferences(); body.focus(); }
       });
       if (!isOwn) {
-        const avatar = node('span', `tws-msg-avatar is-${avatarTone(message.sender_user_id || message.sender_name)}`, initialsOf(message.sender_name));
+        const senderId = Number(message.sender_user_id);
+        const fallbackText = initialsOf(message.sender_name);
+        const avatar = node('span', `tws-msg-avatar is-${avatarTone(senderId || message.sender_name)}`);
         avatar.setAttribute('aria-hidden', 'true');
+        const photoUrl = memberPhotos.get(senderId);
+        if (photoUrl) {
+          const img = document.createElement('img');
+          img.className = 'syn-avatar-img';
+          img.src = photoUrl;
+          img.alt = '';
+          img.loading = 'lazy';
+          img.addEventListener('error', () => { avatar.textContent = fallbackText; }, { once: true });
+          avatar.append(img);
+        } else {
+          avatar.textContent = fallbackText;
+        }
         article.append(avatar);
       }
       article.append(bubble, reply);

@@ -8,11 +8,12 @@
 
     <!-- 1. Client Selection (Student or Employee) -->
     <div class="mb-4">
-      <label class="form-label fw-semibold">1. Client Identification (Student or Employee)</label>
+      <label for="newCaseClientSearch" class="form-label fw-semibold">1. Client Identification (Student or Employee)</label>
       <div class="syn-person-lookup" data-person-lookup x-show="!selectedPerson">
         <div class="input-group" data-person-lookup-anchor>
           <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
           <input type="text"
+                 id="newCaseClientSearch"
                  class="form-control"
                  placeholder="Search Student or Employee ID / Name..." maxlength="150" autocomplete="off"
                  x-model="searchTerm"

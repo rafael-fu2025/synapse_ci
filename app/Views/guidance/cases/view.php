@@ -11,6 +11,11 @@
   <a href="<?= esc(site_url('/guidance/students/' . (int) $case['person_id'] . '/cumulative')) ?>" class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-person-lines-fill" aria-hidden="true"></i> Cumulative Record
   </a>
+  <?php if (!empty($referralActor['role']) && (in_array($referralActor['role'], ['counsellor', 'guidance_supervisor', 'guidance_admin', 'superadmin'], true) || in_array('guidance.evaluations.view_aggregates', $referralActor['permissions'] ?? [], true))): ?>
+    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#issueEvalTokenModal">
+      <i class="bi bi-ticket-perforated" aria-hidden="true"></i> Issue Service Evaluation
+    </button>
+  <?php endif; ?>
   <?php if (($referralActor['role'] ?? '') === 'superadmin' || in_array('referrals.create', $referralActor['permissions'] ?? [], true)): ?>
     <a href="<?= esc(site_url('/guidance/referrals/create?' . http_build_query(['person_id' => $case['person_id']]))) ?>"
        class="btn btn-outline-primary btn-sm"
@@ -957,6 +962,13 @@ $statusDotClass = match ($caseStatus) {
     </div>
   </div>
 </section>
+<?= view('guidance/evaluations/_issue_modal', [
+    'evalIssuePersonId'    => (int) $case['person_id'],
+    'evalIssuePersonLabel' => trim(($patient['last_name'] ?? '') . ', ' . ($patient['first_name'] ?? '')) . (!empty($patient['mis_id']) ? ' (' . (string) $patient['mis_id'] . ')' : ''),
+    'evalIssueEpisodeId'   => (int) ($episode['id'] ?? 0),
+    'evalIssueDefaultType' => \App\Services\Guidance\GuidanceServiceEvaluationService::TYPE_COUNSELING,
+    'evalIssueSessions'    => $sessions,
+]) ?>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

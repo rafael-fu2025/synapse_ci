@@ -15,7 +15,7 @@ $csrfToken   = csrf_hash();
 ?>
 
 <div class="adm-modal carousel-modal">
-  <form action="<?= $formUrl ?>" method="POST" enctype="multipart/form-data" id="slideForm" data-image-base-url="<?= esc(base_url('/'), 'attr') ?>">
+  <form action="<?= $formUrl ?>" method="POST" enctype="multipart/form-data" id="slideForm" data-image-base-url="<?= esc(base_url('/'), 'attr') ?>" data-edit-form="<?= $isEdit ? '1' : '0' ?>">
     <?= csrf_field() ?>
 
     <div class="adm-field">

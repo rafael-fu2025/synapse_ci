@@ -115,7 +115,8 @@ final class AvailabilityWorkspaceContextTest extends CIUnitTestCase
         foreach (['getAvailabilityExceptions', 'departmentStaff'] as $method) {
             $this->assertStringContainsString($method . '($unit, $this->actor())', $availability);
         }
-        foreach (['availabilityStore' => 'saveAvailability', 'availabilityTemplateStore' => 'applyDepartmentTemplate',
+        foreach (['availabilityStore' => 'saveAvailability', 'availabilityRemove' => 'removeAvailability',
+            'availabilityTemplateStore' => 'applyDepartmentTemplate',
             'availabilityEnroll' => 'enrollDepartmentStaff', 'changeAvailabilityException' => 'saveAvailabilityException'] as $method => $service) {
             $body = $this->methodSource($source, $method);
             $this->assertStringContainsString('$redirect = $this->availabilityReturnPath($unit);', $body);

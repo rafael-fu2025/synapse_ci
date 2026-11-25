@@ -4,11 +4,13 @@
 $clinic = $unit === 'clinic';
 $options = $clinic ? $encounters : $cases;
 $initials = strtoupper(mb_substr((string) ($patient['first_name'] ?? ''), 0, 1) . mb_substr((string) ($patient['last_name'] ?? ''), 0, 1));
+$handoffTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+$handoffPhotoUrl = $handoffTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($handoffTenantId, (int) ($patient['id'] ?? 0)) : null;
 ?>
 <div class="rw-modal-form">
   <div class="rw-modal-intro rw-handoff-banner">
     <div class="rw-selected-person-info">
-      <span class="rw-avatar" aria-hidden="true"><?= esc($initials) ?></span>
+      <span class="rw-avatar" aria-hidden="true"><?= \App\Services\ProfileAvatar::contentHtml($handoffPhotoUrl, $initials, $patient) ?></span>
       <div>
         <div class="rw-handoff-name-row">
           <strong><?= esc($patient['last_name'] . ', ' . $patient['first_name']) ?></strong>

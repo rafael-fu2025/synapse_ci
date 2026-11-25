@@ -38,22 +38,37 @@ $revisionQuery = isset($historyPagination) ? [
       </div>
       <ul class="qb-revision-list">
         <?php foreach ($revisions as $revision): ?>
-          <li class="qb-revision-row <?= (int) $revision['revision'] === (int) $selected['revision'] ? 'is-selected' : '' ?>">
-            <a href="<?= esc($baseUrl . '/' . (int) $entry['id'] . '?' . http_build_query(['revision' => (int) $revision['revision']] + $revisionQuery, '', '&', PHP_QUERY_RFC3986), 'attr') ?>"<?= (int) $revision['revision'] === (int) $selected['revision'] ? ' aria-current="page"' : '' ?>>Revision <?= (int) $revision['revision'] ?></a>
+          <?php
+          $revNum = (int) $revision['revision'];
+          $isSelected = $revNum === (int) $selected['revision'];
+          $isLatest = isset($entry['current_revision']) && $revNum === (int) $entry['current_revision'];
+          ?>
+          <li class="qb-revision-row <?= $isSelected ? 'is-selected' : '' ?>">
+            <div class="qb-revision-lead">
+              <a href="<?= esc($baseUrl . '/' . (int) $entry['id'] . '?' . http_build_query(['revision' => $revNum] + $revisionQuery, '', '&', PHP_QUERY_RFC3986), 'attr') ?>"<?= $isSelected ? ' aria-current="page" tabindex="-1"' : '' ?>>Revision <?= $revNum ?></a>
+              <?php if ($isSelected): ?>
+                <span class="qb-revision-badge is-viewing">Viewing</span>
+              <?php endif; ?>
+              <?php if ($isLatest): ?>
+                <span class="qb-revision-badge">Latest</span>
+              <?php endif; ?>
+            </div>
             <span class="qb-revision-time"><?= esc($revision['created_at']) ?> UTC</span>
           </li>
         <?php endforeach; ?>
       </ul>
       <?php if (isset($historyPagination)): ?>
-        <?= view('partials/table_pagination', [
-            'pagination' => $historyPagination,
-            'baseUrl' => $baseUrl . '/' . (int) $entry['id'],
-            'paginationPageParam' => 'history_page',
-            'paginationPerPageParam' => 'per_page',
-            'paginationExtraQuery' => ['revision' => (int) $selected['revision']],
-            'paginationLabel' => 'Question revision history pages',
-            'paginationNavigation' => true,
-        ], ['saveData' => false]) ?>
+        <div class="qb-pagination-band">
+          <?= view('partials/table_pagination', [
+              'pagination' => $historyPagination,
+              'baseUrl' => $baseUrl . '/' . (int) $entry['id'],
+              'paginationPageParam' => 'history_page',
+              'paginationPerPageParam' => 'per_page',
+              'paginationExtraQuery' => ['revision' => (int) $selected['revision']],
+              'paginationLabel' => 'Question revision history pages',
+              'paginationNavigation' => true,
+          ], ['saveData' => false]) ?>
+        </div>
       <?php endif; ?>
     </section>
   </div>

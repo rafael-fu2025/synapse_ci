@@ -65,12 +65,13 @@
       clearTimeout(timer); timer = null; ++sequence;
       pending?.abort(); pending = null;
       finishLoading?.(); finishLoading = null;
+      for (const region of currentRegions.values()) region.classList.remove('is-closing');
       root.removeAttribute('aria-busy');
     }
     function paused(message = 'Unsaved edits are kept. Submit the filters to review before replacing them.') { status.textContent = message; }
     function hasDrafts() { return Array.from(dirty).some(item => item.isConnected && root.contains(item)); }
     function editorOpen() {
-      if (document.querySelector('#appFormModal.show') || root.querySelector('.modal.show, [role="dialog"][aria-modal="true"]')) return true;
+      if (document.querySelector('#appFormModal.show') || root.querySelector('.modal.show, [role="dialog"][aria-modal="true"]:not([data-filter-overlay])')) return true;
       const active = document.activeElement;
       return Array.from(currentRegions.values()).some(region => region.contains(active))
         && Boolean(active?.isContentEditable || (active?.form && active.form.method.toLowerCase() !== 'get' && active.matches('input, textarea, select')));
@@ -121,7 +122,7 @@
       } finally { syncing = false; observed = filterUrl().href; }
     }
     // `silent` is a background refresh: it never interrupts or discards user work and reports no errors except lost access.
-    async function load(url = filterUrl(), manual = false, mode = 'replace', link = false, restoreText = false, silent = false) {
+    async function load(url = filterUrl(), manual = false, mode = 'replace', link = false, restoreText = false, silent = false, scrollSelector = null, closeRegion = null) {
       if (root.querySelector('[data-team-board][aria-busy="true"], [data-task-dragging]')) return;
       if (silent && (pending || timer !== null || composing || asking || syncing || editorOpen() || hasDrafts()
           || root.querySelector('form[aria-busy="true"]'))) return;
@@ -147,11 +148,31 @@
       let timedOut = false;
       const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
       let denied = false;
+      let closeAnim = null;
       if (!silent) {
         errorBox.hidden = true;
         root.setAttribute('aria-busy', 'true');
         status.textContent = 'Updating results…';
-        finishLoading = window.SynapseLoading?.begin(primaryRegion, { label: 'Updating results…', skeleton: true }) || null;
+        finishLoading = closeRegion ? null : (window.SynapseLoading?.begin(primaryRegion, { label: 'Updating results…', skeleton: true }) || null);
+        const overlay = closeRegion?.querySelector('[data-filter-overlay]');
+        if (overlay) {
+          closeRegion.classList.add('is-closing');
+          if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+            closeAnim = new Promise(resolve => {
+              let done = false;
+              const onEnd = event => { if (event.target === overlay) finish(); };
+              const timerId = setTimeout(finish, 260);
+              function finish() {
+                if (done) return;
+                done = true;
+                clearTimeout(timerId);
+                overlay.removeEventListener('animationend', onEnd);
+                resolve();
+              }
+              overlay.addEventListener('animationend', onEnd);
+            });
+          }
+        }
       }
       try {
         const response = await fetch(url.href, { method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
@@ -196,6 +217,11 @@
             if (!window.SynapseNavigation.updateHistory(canonical.href, mode, regional)) throw new Error('Another navigation interrupted filtering. Please retry.');
           } else history[mode === 'push' ? 'pushState' : 'replaceState'](history.state, '', canonical.href);
         }
+        if (root.hasAttribute('data-refresh-url')) root.dataset.refreshUrl = canonical.href;
+        if (closeAnim) {
+          await closeAnim;
+          if (token !== sequence || controller.signal.aborted || !root.isConnected) return;
+        }
         finishLoading?.(); finishLoading = null;
         for (const [name, region] of currentRegions) {
           window.SynapsePageLifecycle?.destroy(region);
@@ -207,6 +233,7 @@
           };
           if (window.Alpine?.mutateDom) window.Alpine.mutateDom(replace); else replace();
         }
+        closeRegion?.classList.remove('is-closing');
         dirty.clear();
         for (const [anchor, href] of contextLinks) anchor.href = href;
         // Ordinary reads preserve typed text; Reset and history restore it only on success.
@@ -218,6 +245,21 @@
         window.SynapseCsrf?.fromResponse(response);
         for (const region of currentRegions.values()) { window.SynapsePageLifecycle?.init(region); window.htmx?.process(region); }
         status.textContent = incoming.querySelector('[data-filter-status]')?.textContent.trim() || 'Results updated.';
+        if (scrollSelector) {
+          let scrollTarget = null;
+          try { scrollTarget = root.querySelector(scrollSelector); } catch (_) {}
+          if (scrollTarget) {
+            if (getComputedStyle(scrollTarget).position !== 'fixed') {
+              const rect = scrollTarget.getBoundingClientRect();
+              const headerOffset = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-height')) || 64;
+              if (rect.top < headerOffset || rect.top > window.innerHeight * 0.75) {
+                const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+                scrollTarget.scrollIntoView({ behavior, block: 'start' });
+              }
+            }
+            scrollTarget.querySelector('[tabindex="-1"]')?.focus({ preventScroll: true });
+          }
+        }
         document.dispatchEvent(new CustomEvent('synapse:filter-updated', { detail: { root } }));
         return true;
       } catch (error) {
@@ -228,7 +270,10 @@
         status.textContent = 'Filters were not applied. Previous results and edits are still displayed.';
       } finally {
         clearTimeout(timeout);
-        if (token === sequence) { finishLoading?.(); finishLoading = null; pending = null; root.removeAttribute('aria-busy'); }
+        if (token === sequence) {
+          closeRegion?.classList.remove('is-closing');
+          finishLoading?.(); finishLoading = null; pending = null; root.removeAttribute('aria-busy');
+        }
       }
     }
     function changed(event) {
@@ -262,7 +307,10 @@
       if (!validUrl(url)) return;
       event.preventDefault();
       if (target.matches('[data-filter-reset]')) void load(url, false, 'push', true, true);
-      else void load(linkUrl(url), false, 'push', true);
+      else {
+        const closeRegion = target.hasAttribute('data-filter-close-overlay') ? target.closest('[data-filter-region]') : null;
+        void load(linkUrl(url), false, 'push', true, false, false, target.dataset.filterScroll || null, closeRegion);
+      }
     }, options);
     for (const type of ['input', 'change']) root.addEventListener(type, event => {
       const owner = event.target.form;

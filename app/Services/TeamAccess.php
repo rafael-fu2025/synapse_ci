@@ -96,6 +96,75 @@ final class TeamAccess
         return $members;
     }
 
+    /** @return array<int,string> Map of user_id => team-scoped photo URL for members with an uploaded photo. */
+    public function memberPhotos(string $unit, array $actor, array $extraUserIds = []): array
+    {
+        $tenantId = self::positiveId($actor['tenant_id'] ?? null);
+        if ($tenantId === null || !$this->db->fieldExists('person_id', 'users')) {
+            return [];
+        }
+        $ids = [];
+        foreach ($this->members($unit, $actor) as $member) {
+            if (($uid = self::positiveId($member['id'] ?? null)) !== null) {
+                $ids[$uid] = true;
+            }
+        }
+        foreach ($extraUserIds as $raw) {
+            if (($uid = self::positiveId($raw)) !== null) {
+                $ids[$uid] = true;
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+        $photos = new ProfilePhotoService();
+        $map = [];
+        $rows = $this->db->table('users')
+            ->select('id, person_id')
+            ->where('tenant_id', $tenantId)
+            ->where('deleted_at', null)
+            ->where('person_id IS NOT NULL', null, false)
+            ->whereIn('id', array_keys($ids))
+            ->get()->getResultArray();
+        foreach ($rows as $row) {
+            $url = $photos->teamMemberPhotoUrl($tenantId, (int) ($row['person_id'] ?? 0), $unit, (int) $row['id']);
+            if ($url !== null) {
+                $map[(int) $row['id']] = $url;
+            }
+        }
+        return $map;
+    }
+
+    /** @return array{tenant_id:int,person_id:int,person:array<string,mixed>}|null */
+    public function memberPhotoTarget(string $unit, array $actor, int $userId): ?array
+    {
+        $roles = self::rolesFor($unit);
+        $tenantId = self::positiveId($actor['tenant_id'] ?? null);
+        if ($tenantId === null || $userId <= 0 || !$this->db->fieldExists('person_id', 'users')) {
+            return null;
+        }
+        $builder = $this->db->table('users u')
+            ->select('u.id, u.username, u.person_id')
+            ->where('u.tenant_id', $tenantId)
+            ->where('u.id', $userId)
+            ->where('u.deleted_at', null)
+            ->whereIn('u.role', $roles);
+        if ($this->db->tableExists('people')
+            && array_diff(['id', 'tenant_id', 'first_name', 'last_name', 'deleted_at'], $this->db->getFieldNames('people')) === []) {
+            $builder->select('p.first_name, p.last_name')
+                ->join('people p', 'p.id = u.person_id AND p.tenant_id = u.tenant_id AND p.deleted_at IS NULL', 'left');
+        }
+        $row = $builder->get()->getRowArray();
+        if ($row === null) {
+            return null;
+        }
+        return [
+            'tenant_id' => $tenantId,
+            'person_id' => (int) ($row['person_id'] ?? 0),
+            'person' => $row,
+        ];
+    }
+
     /** @return list<string> */
     public static function rolesFor(string $unit): array
     {

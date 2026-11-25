@@ -152,36 +152,41 @@ final class GuidanceFormLatex
 
         // Build dynamic content based on internal key
         $body = self::renderBody($key, $formData);
+        $metaLine = "\\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity}"
+            . ($instanceNum !== '' ? " \\quad \\textbf{Instance:} {$instanceNum}" : '');
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            "\\textbf{Form Code:} {$code}",
+            $verificationLine,
+            'Page \\thepage\\ of 1'
+        );
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            $title,
+            $metaLine
+        );
 
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=18mm,top=20mm,bottom=22mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
-\\pagestyle{fancy}
-\\fancyhf{}
-\\renewcommand{\\headrulewidth}{0.4pt}
-\\renewcommand{\\footrulewidth}{0.4pt}
-\\fancyhead[L]{\\small\\textbf{Foundation University} --- Office of the Guidance Center}
-\\fancyhead[R]{\\small\\textbf{Form Code:} {$code}}
-\\fancyfoot[L]{\\footnotesize {$verificationLine}}
-\\fancyfoot[R]{\\footnotesize Page \\thepage\\ of 1}
+{$headerColors}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 {$watermark}
 
 \\begin{document}
 
-\\begin{center}
-{\\Large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.2em}
-{\\large\\textbf{{$title}}}\\par\\vspace{0.3em}
-{\\footnotesize\\textbf{Form Code:} {$code} \\quad \\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity} \\quad \\textbf{Instance:} {$instanceNum}}
-\\end{center}
-\\vspace{0.5em}
-\\hrule
-\\vspace{0.8em}
+{$headerContainer}
 
 {$attestationBanner}
 
@@ -334,36 +339,41 @@ LATEX;
                 . "\\end{mdframed}\\par\\vspace{0.8em}\n";
         }
 
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            '\\textbf{Form Code:} F-OGC-GAP-006-00',
+            $verificationLine,
+            'Page \\thepage\\ of 1'
+        );
+        $metaLine = '\\textbf{In-Doc Code:} F-OGC-GRE-GAP-006-00 \\quad \\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025'
+            . ($num !== '' ? " \\quad \\textbf{Appt No:} {$num}" : '');
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            'GUIDANCE APPOINTMENT FORM',
+            $metaLine
+        );
+
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=18mm,top=20mm,bottom=22mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
-\\pagestyle{fancy}
-\\fancyhf{}
-\\renewcommand{\\headrulewidth}{0.4pt}
-\\renewcommand{\\footrulewidth}{0.4pt}
-\\fancyhead[L]{\\small\\textbf{Foundation University} --- Office of the Guidance Center}
-\\fancyhead[R]{\\small\\textbf{Form Code:} F-OGC-GAP-006-00 (In-Doc: F-OGC-GRE-GAP-006-00)}
-\\fancyfoot[L]{\\footnotesize {$verificationLine}}
-\\fancyfoot[R]{\\footnotesize Page \\thepage\\ of 1}
+{$headerColors}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 {$watermark}
 
 \\begin{document}
 
-\\begin{center}
-{\\normalsize\\textbf{FOUNDATION UNIVERSITY}}\\par\\vspace{0.2em}
-{\\Large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.2em}
-{\\large\\textbf{GUIDANCE APPOINTMENT FORM}}\\par\\vspace{0.3em}
-{\\footnotesize\\textbf{Canonical Code:} F-OGC-GAP-006-00 \\quad \\textbf{In-Doc Code:} F-OGC-GRE-GAP-006-00 \\quad \\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025}
-\\end{center}
-\\vspace{0.5em}
-\\hrule
-\\vspace{0.8em}
+{$headerContainer}
 
 {$attestationBanner}
 
@@ -471,14 +481,19 @@ LATEX;
             );
         }
 
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
+\\pdfminorversion=4
 \\usepackage[margin=8mm,top=8mm,bottom=8mm,left=8mm,right=8mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
+{$headerColors}
 \\pagestyle{empty}
 \\setlength{\\parindent}{0pt}
 {$watermark}
@@ -486,16 +501,19 @@ LATEX;
 \\begin{document}
 
 \\noindent
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[1]}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{6mm}
+\\begin{minipage}[t][125mm][t]{6mm}
+\\vspace{0pt}
 \\centering
-\\vbox to 132mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
+\\vbox to 125mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[2]}
 \\end{minipage}
 
@@ -506,16 +524,19 @@ LATEX;
 \\vspace{2mm}
 
 \\noindent
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[3]}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{6mm}
+\\begin{minipage}[t][125mm][t]{6mm}
+\\vspace{0pt}
 \\centering
-\\vbox to 132mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
+\\vbox to 125mm{\\cleaders\\vbox to 4mm{\\vss\\rule{0.5pt}{2mm}\\vss}\\vfill}
 \\end{minipage}%
 \\hfill%
-\\begin{minipage}[t][132mm][t]{93mm}
+\\begin{minipage}[t][125mm][t]{93mm}
+\\vspace{0pt}
 {$quads[4]}
 \\end{minipage}
 
@@ -542,14 +563,16 @@ LATEX;
         string $verificationLine,
         string $attestationLine
     ): string {
+        $quadHeader = DocumentHeaderLatex::compactQuadrantHeader(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            'GUIDANCE APPOINTMENT FORM',
+            '\\textbf{F-OGC-GAP-006-00} (\\textbf{In-Doc:} F-OGC-GRE-GAP-006-00) \\enspace \\textbf{Rev:} 00 \\enspace \\textbf{Eff:} 2025-09-01'
+        );
+
         return <<<LATEX
 \\begin{mdframed}[linewidth=0.5pt,innerleftmargin=2mm,innerrightmargin=2mm,innertopmargin=2mm,innerbottommargin=2mm]
-{\\centering
-{\\bfseries\\scriptsize FOUNDATION UNIVERSITY}\\par
-{\\bfseries\\tiny OFFICE OF THE GUIDANCE CENTER}\\par
-{\\bfseries\\footnotesize GUIDANCE APPOINTMENT FORM}\\par
-{\\tiny\\textbf{Canonical Code:} F-OGC-GAP-006-00 \\quad \\textbf{In-Doc:} F-OGC-GRE-GAP-006-00 \\quad \\textbf{Rev:} 00 \\quad \\textbf{Eff:} 2025-09-01}\\par
-}\\vspace{1mm}\\hrule\\vspace{0.8mm}
+{$quadHeader}
 {\\raggedleft\\tiny\\textit{{$copyLabel}}}\\par\\vspace{0.5mm}
 \\begin{tabularx}{\\linewidth}{|l|X|l|X|}
 \\hline
@@ -709,35 +732,40 @@ LATEX;
                 . "\\end{minipage}}\\par\\vspace{0.8em}\n";
         }
 
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            '\\textbf{Form Code:} F-OGC-GSP-CSP-007-00',
+            $verificationLine,
+            'Page \\thepage\\ of 1'
+        );
+        $metaLine = '\\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025'
+            . ($num !== '' ? " \\quad \\textbf{Call Slip No:} {$num}" : '');
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            'GUIDANCE CALL SLIP',
+            $metaLine
+        );
+
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=18mm,top=20mm,bottom=22mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
-\\pagestyle{fancy}
-\\fancyhf{}
-\\renewcommand{\\headrulewidth}{0.4pt}
-\\renewcommand{\\footrulewidth}{0.4pt}
-\\fancyhead[L]{\\small\\textbf{Foundation University} --- Office of the Guidance Center}
-\\fancyhead[R]{\\small\\textbf{Form Code:} F-OGC-GSP-CSP-007-00}
-\\fancyfoot[L]{\\footnotesize {$verificationLine}}
-\\fancyfoot[R]{\\footnotesize Page \\thepage\\ of 1}
+{$headerColors}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 {$watermark}
 
 \\begin{document}
 
-\\begin{center}
-{\\normalsize\\textbf{FOUNDATION UNIVERSITY}}\\par\\vspace{0.2em}
-{\\Large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.2em}
-{\\large\\textbf{GUIDANCE CALL SLIP}}\\par\\vspace{0.3em}
-{\\footnotesize\\textbf{Canonical Code:} F-OGC-GSP-CSP-007-00 \\quad \\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025}
-\\end{center}
-\\vspace{0.5em}
-\\hrule
-\\vspace{0.8em}
+{$headerContainer}
 
 {$attestationBanner}
 
@@ -854,13 +882,18 @@ LATEX;
             );
         }
 
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
+\\pdfminorversion=4
 \\usepackage[margin=8mm,top=8mm,bottom=8mm,left=8mm,right=8mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{array}
 \\usepackage{tabularx}
+{$headerColors}
 \\pagestyle{empty}
 \\setlength{\\parindent}{0pt}
 \\setlength{\\fboxsep}{2mm}
@@ -934,14 +967,16 @@ LATEX;
         string $verificationLine,
         string $attestationLine
     ): string {
+        $quadHeader = DocumentHeaderLatex::compactQuadrantHeader(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            'GUIDANCE CALL SLIP',
+            '\\textbf{F-OGC-GSP-CSP-007-00} \\enspace \\textbf{Rev:} 00 \\enspace \\textbf{Eff:} 2025-09-01'
+        );
+
         return <<<LATEX
 \\noindent\\fbox{\\begin{minipage}[t]{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}
-{\\centering
-{\\bfseries\\scriptsize FOUNDATION UNIVERSITY}\\par
-{\\bfseries\\tiny OFFICE OF THE GUIDANCE CENTER}\\par
-{\\bfseries\\footnotesize GUIDANCE CALL SLIP}\\par
-{\\tiny\\textbf{Canonical Code:} F-OGC-GSP-CSP-007-00 \\quad \\textbf{Rev:} 00 \\quad \\textbf{Eff:} 2025-09-01}\\par
-}\\vspace{1mm}\\hrule\\vspace{0.8mm}
+{$quadHeader}
 {\\raggedleft\\tiny\\textit{{$copyLabel}}}\\par
 {\\tiny\\textit{Please excuse student to report to the Guidance Center:}}\\par\\vspace{0.5mm}
 \\begin{tabularx}{\\linewidth}{|l|X|l|X|}
@@ -1064,37 +1099,41 @@ LATEX;
 
         $attestationBanner = self::renderAttestationBanner($authorAttestation, $cosignerAttestation, $verificationCode, $isDraft);
         $attestationStamp = self::renderAttestationStamp($authorAttestation, $cosignerAttestation, $verificationCode, $isDraft);
+        $metaLine = "\\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity}"
+            . ($instanceNum !== '' ? " \\quad \\textbf{Instance:} {$instanceNum}" : '');
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            "\\textbf{Form Code:} {$code}",
+            $verificationLine,
+            'Page \\thepage'
+        );
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            $title,
+            $metaLine
+        );
 
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=18mm,top=20mm,bottom=22mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
-\\pagestyle{fancy}
-\\fancyhf{}
-\\renewcommand{\\headrulewidth}{0.4pt}
-\\renewcommand{\\footrulewidth}{0.4pt}
-\\fancyhead[L]{\\small\\textbf{Foundation University} --- Office of the Guidance Center}
-\\fancyhead[R]{\\small\\textbf{Form Code:} {$code}}
-\\fancyfoot[L]{\\footnotesize {$verificationLine}}
-\\fancyfoot[R]{\\footnotesize Page \\thepage}
+{$headerColors}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 {$watermark}
 
 \\begin{document}
 
-\\begin{center}
-{\\normalsize\\textbf{FOUNDATION UNIVERSITY}}\\par\\vspace{0.2em}
-{\\Large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.2em}
-{\\large\\textbf{{$title}}}\\par\\vspace{0.3em}
-{\\footnotesize\\textbf{Canonical Code:} {$code} \\quad \\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity} \\quad \\textbf{Instance:} {$instanceNum}}
-\\end{center}
-\\vspace{0.5em}
-\\hrule
-\\vspace{0.8em}
+{$headerContainer}
 
 {$attestationBanner}
 
@@ -1232,37 +1271,41 @@ LATEX;
 
         $attestationBanner = self::renderAttestationBanner($authorAttestation, $cosignerAttestation, $verificationCode, $isDraft);
         $attestationStamp = self::renderAttestationStamp($authorAttestation, $cosignerAttestation, $verificationCode, $isDraft);
+        $metaLine = "\\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity}"
+            . ($instanceNum !== '' ? " \\quad \\textbf{Instance:} {$instanceNum}" : '');
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            "\\textbf{Form Code:} {$code}",
+            $verificationLine,
+            'Page \\thepage'
+        );
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            $title,
+            $metaLine
+        );
 
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=18mm,top=20mm,bottom=22mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
-\\pagestyle{fancy}
-\\fancyhf{}
-\\renewcommand{\\headrulewidth}{0.4pt}
-\\renewcommand{\\footrulewidth}{0.4pt}
-\\fancyhead[L]{\\small\\textbf{Foundation University} --- Office of the Guidance Center}
-\\fancyhead[R]{\\small\\textbf{Form Code:} {$code}}
-\\fancyfoot[L]{\\footnotesize {$verificationLine}}
-\\fancyfoot[R]{\\footnotesize Page \\thepage}
+{$headerColors}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 {$watermark}
 
 \\begin{document}
 
-\\begin{center}
-{\\normalsize\\textbf{FOUNDATION UNIVERSITY}}\\par\\vspace{0.2em}
-{\\Large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.2em}
-{\\large\\textbf{{$title}}}\\par\\vspace{0.3em}
-{\\footnotesize\\textbf{Canonical Code:} {$code} \\quad \\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity} \\quad \\textbf{Instance:} {$instanceNum}}
-\\end{center}
-\\vspace{0.5em}
-\\hrule
-\\vspace{0.8em}
+{$headerContainer}
 
 {$attestationBanner}
 
@@ -1385,38 +1428,42 @@ LATEX;
 
         $attestationBanner = self::renderAttestationBanner($authorAttestation, $cosignerAttestation, $verificationCode, $isDraft);
         $attestationStamp = self::renderAttestationStamp($authorAttestation, $cosignerAttestation, $verificationCode, $isDraft);
+        $metaLine = "\\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity}"
+            . ($instanceNum !== '' ? " \\quad \\textbf{Instance:} {$instanceNum}" : '');
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            "\\textbf{Form Code:} {$code}",
+            $verificationLine,
+            'Page \\thepage'
+        );
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            $title,
+            $metaLine,
+            '{\\footnotesize\\textit{(Counseling Contact Form)}}'
+        );
 
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=18mm,top=20mm,bottom=22mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
+\\usepackage{graphicx}
 \\usepackage{xcolor}
 \\usepackage{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
-\\pagestyle{fancy}
-\\fancyhf{}
-\\renewcommand{\\headrulewidth}{0.4pt}
-\\renewcommand{\\footrulewidth}{0.4pt}
-\\fancyhead[L]{\\small\\textbf{Foundation University} --- Office of the Guidance Center}
-\\fancyhead[R]{\\small\\textbf{Form Code:} {$code}}
-\\fancyfoot[L]{\\footnotesize {$verificationLine}}
-\\fancyfoot[R]{\\footnotesize Page \\thepage}
+{$headerColors}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 {$watermark}
 
 \\begin{document}
 
-\\begin{center}
-{\\normalsize\\textbf{FOUNDATION UNIVERSITY}}\\par\\vspace{0.2em}
-{\\Large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.2em}
-{\\large\\textbf{{$title}}}\\par\\vspace{0.1em}
-{\\footnotesize\\textit{(Counseling Contact Form)}}\\\\
-{\\footnotesize\\textbf{Canonical Code:} {$code} \\quad \\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity} \\quad \\textbf{Instance:} {$instanceNum}}
-\\end{center}
-\\vspace{0.5em}
-\\hrule
-\\vspace{0.8em}
+{$headerContainer}
 
 {$attestationBanner}
 
@@ -2080,34 +2127,44 @@ LATEX;
             ? "\\noindent\\fcolorbox{boxborder}{warnbg}{\\parbox{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}{\\footnotesize\\textbf{ATTENTION:} Unfinalized draft preview record. Provisional Draft.}}\\vspace{0.5em}\n"
             : '';
 
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Office of the Guidance Center',
+            "\\textbf{Form Code:} {$code}",
+            "\\textbf{Verification Code:} {$verificationCode}",
+            'Page \\thepage'
+        );
+        $headerContainer = DocumentHeaderLatex::headerContainer(
+            'guidance',
+            'OFFICE OF THE GUIDANCE CENTER',
+            $title,
+            "\\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity}"
+        );
+
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
-\\usepackage[margin=16mm,top=18mm,bottom=18mm]{geometry}
+\\pdfminorversion=4
+\\usepackage[margin=16mm,top=20mm,bottom=20mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
 \\usepackage{xcolor}
 \\usepackage{tikz}
 \\usepackage{tabularx}
 \\usepackage{array}
 \\usepackage{graphicx}
+\\usepackage{fancyhdr}
 
 \\definecolor{boxbg}{RGB}{248, 249, 251}
 \\definecolor{warnbg}{RGB}{254, 246, 235}
 \\definecolor{boxborder}{RGB}{200, 208, 218}
+{$headerColors}
 
-\\pagestyle{plain}
+\\setlength{\\parindent}{0pt}
+{$fancy}
 
 \\begin{document}
 {$watermark}
 % Canonical Metadata: {$defaultCode} | {$defaultTitle} | {$evaluationTypeKey}
-\\begin{center}
-{\\normalsize\\textbf{FOUNDATION UNIVERSITY}}\\par\\vspace{0.15em}
-{\\Large\\textbf{OFFICE OF THE GUIDANCE CENTER}}\\par\\vspace{0.2em}
-{\\large\\textbf{{$title}}}\\par\\vspace{0.25em}
-{\\footnotesize\\textbf{Canonical Code:} {$code} \\quad \\textbf{Rev:} {$rev} \\quad \\textbf{Effectivity Date:} {$effectivity}}
-\\end{center}
-\\vspace{0.3em}
-\\hrule
-\\vspace{0.6em}
+{$headerContainer}
 
 {$draftNotice}
 

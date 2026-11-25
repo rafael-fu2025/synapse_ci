@@ -94,6 +94,10 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('OFFICE OF THE GUIDANCE CENTER', $latex);
         $this->assertStringContainsString('FOUNDATION UNIVERSITY', $latex);
         $this->assertStringContainsString('GUIDANCE APPOINTMENT FORM', $latex);
+        $this->assertStringContainsString('\\fcolorbox{HeaderBorder}{HeaderBg}', $latex);
+        $this->assertStringContainsString('university-seal.png', $latex);
+        $this->assertStringContainsString('guidance-logo.png', $latex);
+        $this->assertStringNotContainsString('Canonical Code:', $latex);
 
         // Details
         $this->assertStringContainsString('APP-2026-0042', $latex);

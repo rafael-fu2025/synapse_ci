@@ -143,8 +143,8 @@
         '<p class="drp-status" id="' + this.id + '-status" role="status" aria-live="polite" aria-atomic="true"></p>' +
         '<div class="drp-navigation">' +
         '<button type="button" class="drp-nav drp-control" data-drp-prev aria-label="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></button>' +
-        '<select class="drp-month form-select" data-drp-month data-no-search aria-label="Month"></select>' +
-        '<select class="drp-year form-select" data-drp-year data-no-search aria-label="Year"></select>' +
+        '<select id="' + this.id + '-month-select" class="drp-month form-select" data-drp-month data-no-search aria-label="Month"></select>' +
+        '<select id="' + this.id + '-year-select" class="drp-year form-select" data-drp-year data-no-search aria-label="Year"></select>' +
         '<button type="button" class="drp-nav drp-control" data-drp-next aria-label="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></button></div>' +
         '<div class="drp-calendars"></div>' +
         '<div class="drp-foot"><button type="button" class="drp-today drp-control" data-drp-today><i class="bi bi-crosshair2" aria-hidden="true"></i>Today</button>' +

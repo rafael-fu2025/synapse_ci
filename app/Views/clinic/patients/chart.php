@@ -105,8 +105,13 @@ $allergiesText = trim((string) ($health['allergies'] ?? ''));
     <div class="cp-hero">
       <div class="cp-hero-top">
         <div class="cp-hero-identity">
+          <?php
+            $cpTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+            $cpPhotoUrl = $cpTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($cpTenantId, (int) ($person['id'] ?? 0)) : null;
+            $cpInitials = strtoupper(substr((string) $person['first_name'], 0, 1) . substr((string) $person['last_name'], 0, 1));
+          ?>
           <div class="cp-avatar" aria-hidden="true">
-            <?= esc(strtoupper(substr((string) $person['first_name'], 0, 1) . substr((string) $person['last_name'], 0, 1))) ?>
+            <?= \App\Services\ProfileAvatar::contentHtml($cpPhotoUrl, $cpInitials, $person) ?>
           </div>
           <div class="cp-hero-copy">
             <div class="cp-hero-eyebrow">

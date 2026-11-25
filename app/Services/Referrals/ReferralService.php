@@ -76,8 +76,8 @@ final class ReferralService
     public static function ownModule(array $actor): ?string
     {
         return match ($actor['role'] ?? null) {
-            'clinic_admin', 'clinic_staff' => 'clinic',
-            'guidance_admin', 'guidance_supervisor', 'counsellor' => 'guidance',
+            'clinic_admin', 'clinic_staff', 'clinic_intern' => 'clinic',
+            'guidance_admin', 'guidance_supervisor', 'counsellor', 'guidance_intern' => 'guidance',
             'superadmin' => null,
             default => throw new RuntimeException('Referral staff role required.', 403),
         };

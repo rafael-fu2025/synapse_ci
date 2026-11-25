@@ -136,6 +136,11 @@ final class GuidanceIntakeController extends BaseController
             $user     = $this->freshActor('guidance.intake.process');
             $tenantId = (int) $user['tenant_id'];
             $person   = $this->intakeService->resolveSubject($this->postedMisId(), $tenantId);
+            if (($user['role'] ?? '') === 'guidance_intern'
+                && !empty($user['person_id'])
+                && (int) ($person['id'] ?? 0) === (int) $user['person_id']) {
+                throw new DomainException('Student interns cannot process their own intake record.', 403);
+            }
 
             return $this->response->setStatusCode(200)->setJSON([
                 'success' => true,
@@ -229,6 +234,11 @@ final class GuidanceIntakeController extends BaseController
                     ['staff_on_behalf', 'employee_teacher'],
                     'staff_on_behalf'
                 );
+                if (($actor['role'] ?? '') === 'guidance_intern'
+                    && !empty($actor['person_id'])
+                    && $subjectPersonId === (int) $actor['person_id']) {
+                    throw new DomainException('Student interns cannot process their own intake record.', 403);
+                }
 
                 if (!$keepDraft) {
                     $this->gateService->assertGateEnabled(GuidanceActivationGateService::GATE_CANONICAL_FORMS, $tenantId);

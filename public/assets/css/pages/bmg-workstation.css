@@ -56,7 +56,7 @@
 }
 
 .bmg-code {
-  font-family: var(--mono-font, "Courier New", Courier, monospace);
+  font-family: var(--mono-font, var(--default-font));
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -1102,7 +1102,7 @@
 }
 
 .bmg-dashboard .ce-status-dot::before {
-  margin-top: 0.32em;
+  margin-top: 0.2em;
 }
 
 .bmg-dashboard-panel-note {

@@ -24,11 +24,50 @@ $sidebarLink = static function (string $portal, string $path, string $label, str
     array $permissions = [], bool $exact = false) use ($role, $uri, $isActive, $canAll): string {
     if (!PortalContext::isRolePermitted($role, $portal) || !$canAll($permissions)) { return ''; }
     $active = $exact ? ($uri === $path || $uri === $path . '/dashboard') : $isActive($path);
-    return '<li class="nav-item"><a class="nav-link ' . ($active ? 'active' : '') . '" href="'
+    return '<li class="nav-item"><a class="nav-link' . ($active ? ' active' : '') . '" href="'
         . esc(PortalContext::urlFor($portal, $path)) . '"><span class="nav-icon"><i class="' . esc($icon)
         . '"></i></span><span class="nav-text">' . esc($label) . '</span>'
 
         . '</a></li>';
+};
+$sidebarSubmenuLink = static function (string $portal, string $path, string $label,
+    array $permissions = [], bool $exact = false) use ($role, $uri, $isActive, $canAll): string {
+    if (!PortalContext::isRolePermitted($role, $portal) || !$canAll($permissions)) { return ''; }
+    $active = $exact ? ($uri === $path || $uri === $path . '/dashboard') : $isActive($path);
+    return '<li><a class="nav-link' . ($active ? ' active' : '') . '" href="'
+        . esc(PortalContext::urlFor($portal, $path)) . '"><span class="nav-dot" aria-hidden="true"></span><span class="nav-text">'
+        . esc($label) . '</span></a></li>';
+};
+$sidebarGroup = static function (string $label, string $icon, array $items) use ($role, $canAll, $sidebarLink, $sidebarSubmenuLink): string {
+    $authorized = [];
+    foreach ($items as $item) {
+        if (($item['visible'] ?? true) !== true) { continue; }
+        if (!PortalContext::isRolePermitted($role, $item['portal']) || !$canAll($item['permissions'] ?? [])) { continue; }
+        $authorized[] = $item;
+    }
+    if ($authorized === []) { return ''; }
+    if (count($authorized) === 1) {
+        $only = $authorized[0];
+        return $sidebarLink($only['portal'], $only['path'], $only['label'], $only['icon'], $only['permissions'] ?? [], (bool) ($only['exact'] ?? false));
+    }
+    $renderedItems = [];
+    $isOpen = false;
+    foreach ($authorized as $item) {
+        $markup = $sidebarSubmenuLink($item['portal'], $item['path'], $item['label'], $item['permissions'] ?? [], (bool) ($item['exact'] ?? false));
+        if ($markup === '') { continue; }
+        if (str_contains($markup, 'class="nav-link active"')) { $isOpen = true; }
+        $renderedItems[] = $markup;
+    }
+    if ($renderedItems === []) { return ''; }
+    return '<li class="nav-item has-submenu' . ($isOpen ? ' open' : '') . '">'
+        . '<button type="button" class="nav-link" aria-expanded="' . ($isOpen ? 'true' : 'false') . '">'
+        . '<span class="nav-icon"><i class="' . esc($icon) . '" aria-hidden="true"></i></span>'
+        . '<span class="nav-text">' . esc($label) . '</span>'
+        . '<span class="nav-arrow" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>'
+        . '</button>'
+        . '<ul class="nav-submenu">'
+        . implode("\n", $renderedItems)
+        . '</ul></li>';
 };
 $canAiInsights = static function (string $unit) use ($currentUser): bool {
     try {
@@ -44,6 +83,7 @@ $canReportsDashboard = $canMain && in_array($role, ['superadmin', 'audit_reader'
 $canExportNavigation = $canMain && in_array($role, ['superadmin', 'audit_reader', 'report_viewer', 'clinic_admin', 'guidance_admin', 'bmg_admin'], true)
     && $canAll(['reports.read', 'reports.export']);
 $canAccessNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', 'guidance_admin'], true) && $canContent('rbac.manage');
+$canInternsNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', 'guidance_admin', 'bmg_admin'], true) && $canContent('interns.manage');
 $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', 'guidance_admin'], true) && $canContent('mis.sync');
 ?>
 <aside class="sidebar" id="app-sidebar" aria-label="Main navigation">
@@ -62,54 +102,64 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
       <ul class="nav-menu">
         <?php if (PortalContext::showsWorkstation('clinic', $role)): ?>
           <li class="nav-heading mt-2 mb-1 px-3 text-uppercase small text-muted">Clinic Workstation</li>
-          <?= $sidebarLink('clinic', 'clinic', 'Clinic Dashboard', 'ph-light ph-squares-four', ['clinic.queue.read', 'clinic.encounters.read', 'clinic.appointments.read', 'clinic.inventory.read'], true) ?>
-          <?= $sidebarLink('clinic', 'clinic/queue', 'Clinic Queue', 'ph-light ph-kanban', ['clinic.queue.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/encounters', 'Encounters & Stepper', 'ph-light ph-heartbeat', ['clinic.encounters.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/patients', 'Patients & Charts', 'ph-light ph-users', ['clinic.patients.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/appointments', 'Appointments', 'ph-light ph-calendar', ['clinic.appointments.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/inventory', 'Medicine Inventory', 'bi bi-capsule', ['clinic.inventory.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/isolation', 'Isolation & Outbreaks', 'bi bi-shield-exclamation', ['clinic.isolation.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/reports', 'Periodic & CHED Reports', 'bi bi-file-earmark-bar-graph', ['clinic.reports.export', 'reports.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/referrals', 'Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>
-          <?= $sidebarLink('clinic', 'clinic/teams', 'Clinic Teams', 'bi bi-people') ?>
-          <?php if ($canAiInsights('clinic')): ?>
-            <?= $sidebarLink('clinic', 'clinic/insights', 'Insights & Program Planning', 'bi bi-lightbulb') ?>
-          <?php endif; ?>
-          <?php if (in_array($role, ['clinic_admin', 'superadmin'], true)): ?>
-            <?= $sidebarLink('clinic', 'clinic/announcements', 'Clinic Announcements', 'bi bi-megaphone', ['clinic.announcements.manage']) ?>
-          <?php endif; ?>
+          <?= $sidebarLink('clinic', 'clinic', 'Clinic Dashboard', 'bi bi-grid-1x2', ['clinic.queue.read', 'clinic.encounters.read', 'clinic.appointments.read', 'clinic.inventory.read'], true) ?>
+          <?= $sidebarGroup('Front Desk & Intake', 'bi bi-inbox', [
+              ['portal' => 'clinic', 'path' => 'clinic/queue', 'label' => 'Clinic Queue', 'icon' => 'bi bi-clock-history', 'permissions' => ['clinic.queue.read']],
+              ['portal' => 'clinic', 'path' => 'clinic/appointments', 'label' => 'Appointments', 'icon' => 'bi bi-calendar-check', 'permissions' => ['clinic.appointments.read']],
+              ['portal' => 'clinic', 'path' => 'clinic/referrals', 'label' => 'Referrals', 'icon' => 'bi bi-arrow-left-right', 'permissions' => ['referrals.read']],
+          ]) ?>
+          <?= $sidebarGroup('Clinical Care', 'bi bi-heart-pulse', [
+              ['portal' => 'clinic', 'path' => 'clinic/patients', 'label' => 'Patients & Charts', 'icon' => 'bi bi-person-lines-fill', 'permissions' => ['clinic.patients.read']],
+              ['portal' => 'clinic', 'path' => 'clinic/encounters', 'label' => 'Encounters & Stepper', 'icon' => 'bi bi-heart-pulse', 'permissions' => ['clinic.encounters.read']],
+              ['portal' => 'clinic', 'path' => 'clinic/isolation', 'label' => 'Isolation & Outbreaks', 'icon' => 'bi bi-shield-exclamation', 'permissions' => ['clinic.isolation.read']],
+          ]) ?>
+          <?= $sidebarGroup('Inventory & Reports', 'bi bi-capsule', [
+              ['portal' => 'clinic', 'path' => 'clinic/inventory', 'label' => 'Medicine Inventory', 'icon' => 'bi bi-capsule', 'permissions' => ['clinic.inventory.read']],
+              ['portal' => 'clinic', 'path' => 'clinic/reports', 'label' => 'Periodic & CHED Reports', 'icon' => 'bi bi-file-earmark-bar-graph', 'permissions' => ['clinic.reports.export', 'reports.read']],
+          ]) ?>
+          <?= $sidebarGroup('Team & Insights', 'bi bi-people', [
+              ['portal' => 'clinic', 'path' => 'clinic/teams', 'label' => 'Clinic Teams', 'icon' => 'bi bi-people'],
+              ['portal' => 'clinic', 'path' => 'clinic/announcements', 'label' => 'Clinic Announcements', 'icon' => 'bi bi-megaphone', 'permissions' => ['clinic.announcements.manage'], 'visible' => in_array($role, ['clinic_admin', 'superadmin'], true)],
+              ['portal' => 'clinic', 'path' => 'clinic/insights', 'label' => 'Insights & Program Planning', 'icon' => 'bi bi-lightbulb', 'visible' => $canAiInsights('clinic')],
+          ]) ?>
         <?php endif; ?>
 
         <?php if (PortalContext::showsWorkstation('guidance', $role)): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Guidance Workstation</li>
-          <?= $sidebarLink('guidance', 'guidance', 'Guidance Dashboard', 'ph-light ph-squares-four', ['guidance.cases.read', 'guidance.queue.read', 'referrals.read'], true) ?>
-          <?= $sidebarLink('guidance', 'guidance/queue', 'Guidance Queue', 'ph-light ph-clock-countdown', ['guidance.queue.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/clients', 'Clients & Records', 'ph-light ph-address-book', ['guidance.cases.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/cases', 'Counseling Cases (Encrypted)', 'ph-light ph-folder-notch-open', ['guidance.cases.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/appointments', 'Appointments', 'ph-light ph-calendar-check', ['guidance.schedule.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/referrals', 'Clinic-Guidance Referrals', 'ph-light ph-arrows-left-right', ['referrals.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/intake', 'Intake & Safety Triage', 'bi bi-inbox', ['guidance.intake.process']) ?>
-          <?= $sidebarLink('guidance', 'guidance/episodes', 'Guidance Episodes', 'bi bi-journal-medical', ['guidance.cases.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/call-slips', 'Call Slips', 'bi bi-ticket-perforated', ['guidance.call_slips.issue']) ?>
-          <?= $sidebarLink('guidance', 'guidance/clinical/cosign-queue', 'Co-Sign Queue', 'bi bi-pen', ['guidance.clinical.cosign']) ?>
-          <?= $sidebarLink('guidance', 'guidance/assessments/mi', 'MI Assessments', 'bi bi-stars', ['guidance.assessments.view']) ?>
-          <?= $sidebarLink('guidance', 'guidance/evaluations/dashboard', 'Service Evaluations', 'bi bi-bar-chart-line', ['guidance.evaluations.view_aggregates']) ?>
-          <?= $sidebarLink('guidance', 'guidance/governance/practitioners', 'Practitioners & Supervision', 'bi bi-person-badge', ['guidance.cases.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/governance/gates', 'Rollout Gates', 'bi bi-shield-check', ['guidance.cases.read']) ?>
-          <?= $sidebarLink('guidance', 'guidance/teams', 'Guidance Teams', 'bi bi-people') ?>
-          <?php if ($canAiInsights('guidance')): ?>
-            <?= $sidebarLink('guidance', 'guidance/insights', 'Insights & Program Planning', 'bi bi-lightbulb') ?>
-          <?php endif; ?>
-          <?php if (in_array($role, ['guidance_admin', 'guidance_supervisor', 'superadmin'], true)): ?>
-            <?= $sidebarLink('guidance', 'guidance/announcements', 'Guidance Announcements', 'bi bi-megaphone', ['guidance.announcements.manage']) ?>
-            <?= $sidebarLink('guidance', 'guidance/surveys', 'Surveys & Responses', 'bi bi-clipboard-check', ['guidance.surveys.manage']) ?>
-            <?= $sidebarLink('guidance', 'guidance/question-bank', 'Question Bank', 'bi bi-collection', ['guidance.surveys.manage']) ?>
-          <?php endif; ?>
+          <?= $sidebarLink('guidance', 'guidance', 'Guidance Dashboard', 'bi bi-grid-1x2', ['guidance.cases.read', 'guidance.queue.read', 'referrals.read'], true) ?>
+          <?= $sidebarGroup('Front Desk & Intake', 'bi bi-inbox', [
+              ['portal' => 'guidance', 'path' => 'guidance/queue', 'label' => 'Guidance Queue', 'icon' => 'bi bi-clock-history', 'permissions' => ['guidance.queue.read']],
+              ['portal' => 'guidance', 'path' => 'guidance/appointments', 'label' => 'Appointments', 'icon' => 'bi bi-calendar-check', 'permissions' => ['guidance.schedule.read']],
+              ['portal' => 'guidance', 'path' => 'guidance/referrals', 'label' => 'Referrals', 'icon' => 'bi bi-arrow-left-right', 'permissions' => ['referrals.read']],
+              ['portal' => 'guidance', 'path' => 'guidance/intake', 'label' => 'Intake & Safety Triage', 'icon' => 'bi bi-inbox', 'permissions' => ['guidance.intake.process']],
+              ['portal' => 'guidance', 'path' => 'guidance/call-slips', 'label' => 'Call Slips', 'icon' => 'bi bi-ticket-perforated', 'permissions' => ['guidance.call_slips.issue']],
+          ]) ?>
+          <?= $sidebarGroup('Clients & Counseling', 'bi bi-folder2-open', [
+              ['portal' => 'guidance', 'path' => 'guidance/clients', 'label' => 'Clients & Records', 'icon' => 'bi bi-person-lines-fill', 'permissions' => ['guidance.cases.read']],
+              ['portal' => 'guidance', 'path' => 'guidance/cases', 'label' => 'Counseling Cases', 'icon' => 'bi bi-folder2-open', 'permissions' => ['guidance.cases.read']],
+              ['portal' => 'guidance', 'path' => 'guidance/episodes', 'label' => 'Guidance Episodes', 'icon' => 'bi bi-journal-medical', 'permissions' => ['guidance.cases.read']],
+          ]) ?>
+          <?= $sidebarGroup('Assessments & Surveys', 'bi bi-clipboard2-check', [
+              ['portal' => 'guidance', 'path' => 'guidance/assessments/mi', 'label' => 'MI Assessments', 'icon' => 'bi bi-stars', 'permissions' => ['guidance.assessments.view']],
+              ['portal' => 'guidance', 'path' => 'guidance/evaluations/dashboard', 'label' => 'Service Evaluations', 'icon' => 'bi bi-bar-chart-line', 'permissions' => ['guidance.evaluations.view_aggregates']],
+              ['portal' => 'guidance', 'path' => 'guidance/surveys', 'label' => 'Surveys & Responses', 'icon' => 'bi bi-clipboard-check', 'permissions' => ['guidance.surveys.manage'], 'visible' => in_array($role, ['guidance_admin', 'guidance_supervisor', 'superadmin'], true)],
+              ['portal' => 'guidance', 'path' => 'guidance/question-bank', 'label' => 'Question Bank', 'icon' => 'bi bi-collection', 'permissions' => ['guidance.surveys.manage'], 'visible' => in_array($role, ['guidance_admin', 'guidance_supervisor', 'superadmin'], true)],
+          ]) ?>
+          <?= $sidebarGroup('Clinical Supervision', 'bi bi-shield-check', [
+              ['portal' => 'guidance', 'path' => 'guidance/clinical/cosign-queue', 'label' => 'Co-Sign Queue', 'icon' => 'bi bi-pen', 'permissions' => ['guidance.clinical.cosign']],
+              ['portal' => 'guidance', 'path' => 'guidance/governance/practitioners', 'label' => 'Practitioners & Supervision', 'icon' => 'bi bi-person-badge', 'permissions' => ['guidance.cases.read'], 'visible' => $role !== 'guidance_intern'],
+              ['portal' => 'guidance', 'path' => 'guidance/governance/gates', 'label' => 'Rollout Gates', 'icon' => 'bi bi-shield-check', 'permissions' => ['guidance.cases.read'], 'visible' => $role !== 'guidance_intern'],
+          ]) ?>
+          <?= $sidebarGroup('Team & Insights', 'bi bi-people', [
+              ['portal' => 'guidance', 'path' => 'guidance/teams', 'label' => 'Guidance Teams', 'icon' => 'bi bi-people'],
+              ['portal' => 'guidance', 'path' => 'guidance/announcements', 'label' => 'Guidance Announcements', 'icon' => 'bi bi-megaphone', 'permissions' => ['guidance.announcements.manage'], 'visible' => in_array($role, ['guidance_admin', 'guidance_supervisor', 'superadmin'], true)],
+              ['portal' => 'guidance', 'path' => 'guidance/insights', 'label' => 'Insights & Program Planning', 'icon' => 'bi bi-lightbulb', 'visible' => $canAiInsights('guidance')],
+          ]) ?>
         <?php endif; ?>
 
         <?php if (PortalContext::showsWorkstation('bmg', $role)): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Facilities (BMG)</li>
-          <?= $sidebarLink('bmg', 'facilities/dashboard', 'Facilities Dashboard', 'ph-light ph-squares-four', ['facilities.read']) ?>
+          <?= $sidebarLink('bmg', 'facilities/dashboard', 'Facilities Dashboard', 'bi bi-grid-1x2', ['facilities.read']) ?>
           <?php if ($canContent('facilities.read')): ?>
           <li class="nav-item"><a class="nav-link <?= $isActive('facilities') && !$isActive('facilities/dashboard') && !$isActive('facilities/teams') ? 'active' : '' ?>" href="<?= esc(PortalContext::urlFor('bmg', 'facilities')) ?>"><span class="nav-icon"><i class="ph-light ph-recycle"></i></span><span class="nav-text">Drum Rotation</span></a></li>
           <?php endif; ?>
@@ -144,10 +194,10 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
         <?php if ($canAuditNavigation || $canReportsDashboard || $canExportNavigation || $canArchiveNavigation): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Governance</li>
           <?php if ($canAuditNavigation): ?>
-            <?= $sidebarLink('main', 'admin', 'Admin Dashboard', 'ph-light ph-squares-four', ['audit.read'], true) ?>
+            <?= $sidebarLink('main', 'admin', 'Admin Dashboard', 'bi bi-grid-1x2', ['audit.read'], true) ?>
             <?= $sidebarLink('main', 'admin/audit', 'Audit Chain Ledger', 'ph-light ph-fingerprint', ['audit.read']) ?>
           <?php elseif ($canReportsDashboard): ?>
-            <?= $sidebarLink('main', 'dashboard', 'Reports Dashboard', 'ph-light ph-squares-four', ['reports.read']) ?>
+            <?= $sidebarLink('main', 'dashboard', 'Reports Dashboard', 'bi bi-grid-1x2', ['reports.read']) ?>
           <?php endif; ?>
           <?php if ($canArchiveNavigation): ?>
             <?= $sidebarLink('main', 'admin/archive', 'Archive Management', 'bi bi-archive', ['archive.read']) ?>
@@ -159,10 +209,13 @@ $canMisNavigation = $canMain && in_array($role, ['superadmin', 'clinic_admin', '
 
         <?php $canAiSettings = $canMain && $role === 'superadmin'
             && (in_array('rbac.manage', $currentUser['permissions'] ?? [], true) || in_array('ai.configuration.read', $currentUser['permissions'] ?? [], true)); ?>
-        <?php if ($canAccessNavigation || $canMisNavigation || $canAiSettings): ?>
+        <?php if ($canAccessNavigation || $canInternsNavigation || $canMisNavigation || $canAiSettings): ?>
           <li class="nav-heading mt-3 mb-1 px-3 text-uppercase small text-muted">Administration</li>
           <?php if ($canAccessNavigation): ?>
             <?= $sidebarLink('main', 'admin/access', 'Employees & Access', 'bi bi-person-lock', ['rbac.manage']) ?>
+          <?php endif; ?>
+          <?php if ($canInternsNavigation): ?>
+            <?= $sidebarLink('main', 'admin/interns', 'Student Interns', 'bi bi-mortarboard', ['interns.manage']) ?>
           <?php endif; ?>
           <?php if ($canMisNavigation): ?>
             <?= $sidebarLink('main', 'admin/mis-sync', 'MIS reference synchronization', 'bi bi-arrow-repeat', ['mis.sync']) ?>

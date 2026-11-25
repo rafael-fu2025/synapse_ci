@@ -180,7 +180,13 @@ if ($fieldsToRender === [] && $schemaFields !== []) {
   <div class="ce-patient-card giw-identity">
     <div class="ce-patient-top">
       <div class="ce-patient-identity">
-        <span class="ce-avatar" aria-hidden="true"><?= esc($initials !== '' ? $initials : 'PI') ?></span>
+        <?php
+          $giwTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+          $giwPersonId = (int) ($person['id'] ?? $contextIds['person_id'] ?? 0);
+          $giwPhotoUrl = $giwTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($giwTenantId, $giwPersonId) : null;
+          $giwInitials = $initials !== '' ? $initials : 'PI';
+        ?>
+        <span class="ce-avatar" aria-hidden="true"><?= \App\Services\ProfileAvatar::contentHtml($giwPhotoUrl, $giwInitials, is_array($person ?? null) ? $person : ['name' => $clientLabel]) ?></span>
         <div class="giw-identity-copy">
           <div class="giw-form-reference">
             <span class="ce-mono"><?= esc((string) ($definition['form_code'] ?? $formKey)) ?></span>

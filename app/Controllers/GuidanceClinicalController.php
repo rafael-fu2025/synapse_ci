@@ -172,6 +172,11 @@ final class GuidanceClinicalController extends BaseController
             }
 
             $person = $personId > 0 ? $this->loadSubjectPerson($personId, $tenantId) : null;
+            if (($actor['role'] ?? '') === 'guidance_intern'
+                && !empty($actor['person_id'])
+                && $personId === (int) $actor['person_id']) {
+                throw new DomainException('Student interns cannot open clinical forms for their own record.', 403);
+            }
             $prefillData = $this->buildPrefillData($canonicalKey, $person);
 
             $practitionerProfile = $this->practitionerService->getPractitionerProfile($actorId, $tenantId);
@@ -256,6 +261,11 @@ final class GuidanceClinicalController extends BaseController
             }
 
             $personId = (int) ($instance['person_id'] ?? 0);
+            if (($actor['role'] ?? '') === 'guidance_intern'
+                && !empty($actor['person_id'])
+                && $personId === (int) $actor['person_id']) {
+                throw new DomainException('Student interns cannot access clinical forms for their own record.', 403);
+            }
             $person = $personId > 0 ? $this->loadSubjectPerson($personId, $tenantId) : null;
             $authorInfo = !empty($instance['created_by_user_id'])
                 ? $this->loadUserSummary((int) $instance['created_by_user_id'], $tenantId)
@@ -346,6 +356,11 @@ final class GuidanceClinicalController extends BaseController
                 if ($ctxVal > 0) {
                     $payload[$ctxKey] = $ctxVal;
                 }
+            }
+            if (($actor['role'] ?? '') === 'guidance_intern'
+                && !empty($actor['person_id'])
+                && (int) ($payload['person_id'] ?? 0) === (int) $actor['person_id']) {
+                throw new DomainException('Student interns cannot author clinical forms for their own record.', 403);
             }
 
             $created = $this->clinicalFormService->createClinicalDraft($canonicalKey, $payload, $tenantId, $actor);

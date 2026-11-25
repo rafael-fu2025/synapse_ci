@@ -61,7 +61,24 @@
     let medicine = root.querySelector('#step-dispense form');
     let medicineFields = medicine ? ['medicine_id', 'quantity', 'instructions'].map(name => medicine.elements.namedItem(name)) : [];
     let medicineDefaults = medicineFields.map(field => field.value);
-    let saved = snapshot(), busy = false, leaving = false, allowedTab = null, dispensed = false;
+    function syncGuidanceReferralPanel() {
+      const dispEl = root.querySelector('#disposition');
+      const refPanel = root.querySelector('[data-guidance-referral-panel]');
+      const refFieldsWrap = root.querySelector('[data-guidance-referral-fields]');
+      if (!refPanel) return;
+      const isGuidance = dispEl?.value === 'referred_to_guidance';
+      refPanel.hidden = !isGuidance;
+      if (refFieldsWrap) {
+        refFieldsWrap.querySelectorAll('input, select, textarea').forEach(control => {
+          control.disabled = !isGuidance;
+          if (control.tagName === 'SELECT') {
+            control.dispatchEvent(new Event('bd-select:sync'));
+          }
+        });
+      }
+    }
+
+    let saved = (syncGuidanceReferralPanel(), snapshot()), busy = false, leaving = false, allowedTab = null, dispensed = false;
     let autosaveTimer = null;
 
     function persistLocalBackup() {
@@ -149,8 +166,11 @@
       } catch {}
     }
     syncQualifierOptions(true);
+    syncGuidanceReferralPanel();
 
-    function snapshot() { return Object.fromEntries(fields.map(field => [field.name, field.value])); }
+    function snapshot() {
+      return Object.fromEntries(fields.filter(field => !field.disabled).map(field => [field.name, field.value]));
+    }
     function patch() {
       return Object.fromEntries(Object.entries(snapshot()).filter(([name, value]) => value !== saved[name]));
     }
@@ -243,7 +263,7 @@
         clearLocalBackup();
         forms.forEach(form => {
           const owned = fields.filter(field => field.form === form);
-          if (owned.some(field => Object.hasOwn(values, field.name)) && owned.every(field => field.value === saved[field.name])) {
+          if (owned.some(field => Object.hasOwn(values, field.name)) && owned.every(field => field.disabled || field.value === saved[field.name])) {
             window.SynapseNavigation?.markSaved(form);
           }
         });
@@ -287,7 +307,9 @@
       scheduleAutosave();
     });
     on(root, 'change', event => {
-      if (event.target.matches?.('[data-complaint-category]')) {
+      if (event.target.id === 'disposition') {
+        syncGuidanceReferralPanel();
+      } else if (event.target.matches?.('[data-complaint-category]')) {
         syncQualifierOptions(false);
       } else if (event.target.matches?.('[data-complaint-qualifier]')) {
         const catEl = root.querySelector('[data-complaint-category]');

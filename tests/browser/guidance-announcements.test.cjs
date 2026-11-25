@@ -26,9 +26,9 @@ after(async () => {
   assert.deepEqual(harness?.violations, [], 'Server must receive only allowlisted synthetic/local requests');
 });
 
-async function open(t, { path = listPath, theme = 'light', viewport = { width: 1440, height: 1000 }, statuses = [] } = {}) {
+async function open(t, { path = listPath, theme = 'light', viewport = { width: 1440, height: 1000 }, statuses = [], reducedMotion = 'reduce' } = {}) {
   const state = harness.createScenario({ theme, postStatuses: [...statuses] });
-  const context = await browser.newContext({ viewport, reducedMotion: 'reduce', serviceWorkers: 'block', timezoneId: 'Asia/Manila', colorScheme: theme });
+  const context = await browser.newContext({ viewport, reducedMotion, serviceWorkers: 'block', timezoneId: 'Asia/Manila', colorScheme: theme });
   await context.addCookies([{ name: 'synthetic_announcements', value: state.id, url: harness.origin }]);
   const violations = [], errors = [], failed = [], consoles = [];
   await context.route('**/*', route => {
@@ -155,13 +155,19 @@ test('Announcement and read-history pagers preserve independent current pages an
   assert.equal(listNext.searchParams.get('page'), '3'); assert.equal(listNext.searchParams.get('read_page'), '2'); assert.equal(listNext.searchParams.get('reads'), '42');
   const readPrevious = new URL(await readsNav.getByRole('link', { name: 'Previous', exact: true }).getAttribute('href'));
   assert.equal(readPrevious.searchParams.get('page'), '2'); assert.equal(readPrevious.searchParams.get('read_page'), '1');
-  await listNav.getByRole('link', { name: 'Next', exact: true }).click();
-  await page.waitForURL(url => url.searchParams.get('page') === '3');
-  assert.equal(await region(page, 'list').locator('[data-table-pagination]').getAttribute('data-page'), '3');
-  assert.equal(await region(page, 'read-history').locator('[data-table-pagination]').getAttribute('data-page'), '2');
-  await page.getByRole('navigation', { name: 'Read history pages', exact: true }).getByRole('link', { name: 'Previous', exact: true }).click();
+  await readsNav.getByRole('link', { name: 'Previous', exact: true }).click();
   await page.waitForURL(url => url.searchParams.get('read_page') === '1');
-  assert.equal(new URL(page.url()).searchParams.get('page'), '3');
+  assert.equal(new URL(page.url()).searchParams.get('page'), '2');
+  assert.equal(await region(page, 'list').locator('[data-table-pagination]').getAttribute('data-page'), '2');
+  assert.equal(await region(page, 'read-history').locator('[data-table-pagination]').getAttribute('data-page'), '1');
+  const updatedListNext = new URL(await listNav.getByRole('link', { name: 'Next', exact: true }).getAttribute('href'));
+  assert.equal(updatedListNext.searchParams.get('page'), '3');
+  assert.equal(updatedListNext.searchParams.get('read_page'), '1');
+  assert.equal(updatedListNext.searchParams.get('reads'), '42');
+  await page.goto(updatedListNext.href);
+  await page.waitForFunction(() => document.readyState === 'complete' && window.SynapseRefreshRegions);
+  assert.equal(await region(page, 'list').locator('[data-table-pagination]').getAttribute('data-page'), '3');
+  assert.equal(await region(page, 'read-history').locator('[data-table-pagination]').getAttribute('data-page'), '1');
   const historyHref = new URL(await rows(page).first().getByRole('link', { name: 'Read history', exact: true }).getAttribute('href'));
   assert.equal(historyHref.searchParams.get('page'), '3');
   assert.equal(historyHref.searchParams.get('reads'), '91');
@@ -183,6 +189,12 @@ for (const theme of ['light', 'dark']) {
       assert.equal((await geometry(page, '.ga-read-table tbody tr')).display, stacked ? 'grid' : 'table-row');
       const sheet = await geometry(page, '.ga-sheet');
       assert.equal(sheet.background, theme === 'dark' ? 'rgb(28, 28, 28)' : 'rgb(255, 255, 255)');
+      const drawer = await geometry(page, '.ga-read-drawer');
+      assert.ok(drawer.x >= -1 && drawer.right <= viewport.width + 1, `Drawer fits horizontally: ${JSON.stringify(drawer)}`);
+      assert.ok(Math.abs(drawer.y) <= 1);
+      await noOverflow(page);
+      await page.locator('.ga-read-close').click();
+      await page.locator('#ga-read-history').waitFor({ state: 'detached' });
       await rows(page).first().locator('.ga-preview summary').click(); await noOverflow(page);
       const preview = await geometry(page, '.ga-preview-text');
       assert.ok(preview.scrollWidth <= preview.clientWidth + 1);
@@ -456,4 +468,111 @@ for (const unit of ['guidance', 'clinic']) {
     assert.equal(state.posts.length, 0);
     await noOverflow(page);
   });
+
+  test(`${unit}: Read history opens as right slide-over drawer without shrinking list, focuses heading, and closes via close button, backdrop, and Escape`, async t => {
+    const { page, state } = await open(t, { path: `/${unit}/announcements`, theme: unit === 'clinic' ? 'dark' : 'light' });
+    const main = await page.locator('#main').elementHandle();
+    const form = await page.locator('[data-filter-form]').elementHandle();
+    const listBefore = await page.locator('[data-refresh-region="announcements.list"]').boundingBox();
+    assert.equal(await page.locator('.ga-read-history-slot').evaluate(el => getComputedStyle(el).display), 'none');
+
+    const publishedRow = rows(page).nth(1);
+    const readLink = publishedRow.getByRole('link', { name: 'Read history', exact: true });
+    await readLink.click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('reads') === '42' &&
+      !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+    assert.equal(await main.evaluate(el => el === document.querySelector('#main')), true);
+    assert.equal(await form.evaluate(el => el === document.querySelector('[data-filter-form]')), true);
+    assert.equal(await page.locator('#ga-read-history').count(), 1);
+    assert.equal(await page.locator('.ga-read-backdrop').isVisible(), true);
+    assert.equal(await page.locator('.ga-read-count-tag').textContent(), '55');
+    assert.match(await page.locator('#ga-read-history').textContent(), /Published campus notice/);
+    assert.equal(await publishedRow.getByRole('link', { name: 'Read history', exact: true }).getAttribute('aria-current'), 'true');
+    assert.equal(await publishedRow.getByRole('link', { name: 'Read history', exact: true }).evaluate(el => el.classList.contains('is-active')), true);
+    assert.equal(await page.locator('#ga-read-title').evaluate(el => document.activeElement === el), true);
+
+    const listAfter = await page.locator('[data-refresh-region="announcements.list"]').boundingBox();
+    assert.ok(Math.abs(listAfter.width - listBefore.width) <= 2, 'List width does not shrink when slide-over drawer opens');
+    const drawerState = await page.locator('#ga-read-history').evaluate(el => ({
+      position: getComputedStyle(el).position,
+      rect: el.getBoundingClientRect(),
+      viewportWidth: window.innerWidth,
+    }));
+    assert.equal(drawerState.position, 'fixed');
+    assert.ok(Math.abs((drawerState.rect.x + drawerState.rect.width) - drawerState.viewportWidth) <= 2, 'Drawer aligns to right edge');
+    assert.ok(Math.abs(drawerState.rect.y) <= 2, 'Drawer spans from top edge');
+    assert.ok(drawerState.rect.width >= 430 && drawerState.rect.width <= 445, `Expected ~440px drawer, got ${drawerState.rect.width}`);
+    await noOverflow(page);
+
+    // 1. Close via close button
+    await page.locator('.ga-read-close').click();
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has('reads') &&
+      !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+    assert.equal(await page.locator('#ga-read-history').count(), 0);
+    assert.equal(await page.locator('.ga-read-backdrop').count(), 0);
+    assert.equal(await main.evaluate(el => el === document.querySelector('#main')), true);
+
+    // 2. Reopen and close via backdrop click
+    await rows(page).nth(1).getByRole('link', { name: 'Read history', exact: true }).click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('reads') === '42' &&
+      !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+    await page.locator('.ga-read-backdrop').click({ position: { x: 100, y: 200 } });
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has('reads') &&
+      !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+    assert.equal(await page.locator('#ga-read-history').count(), 0);
+
+    // 3. Reopen and close via Escape
+    await rows(page).nth(1).getByRole('link', { name: 'Read history', exact: true }).click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('reads') === '42' &&
+      !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !new URL(location.href).searchParams.has('reads') &&
+      !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+    assert.equal(await page.locator('#ga-read-history').count(), 0);
+    assert.equal(await main.evaluate(el => el === document.querySelector('#main')), true);
+    assert.equal(state.posts.length, 0);
+  });
 }
+
+test('Read history drawer plays slide-out closing animation before unmounting', async t => {
+  const { page } = await open(t, { path: '/guidance/announcements', reducedMotion: 'no-preference' });
+  await rows(page).nth(1).getByRole('link', { name: 'Read history', exact: true }).click();
+  await page.waitForFunction(() => new URL(location.href).searchParams.get('reads') === '42' &&
+    !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+
+  await page.evaluate(() => {
+    const slot = document.querySelector('.ga-read-history-slot');
+    window.closingObserved = null;
+    const observer = new MutationObserver(() => {
+      if (slot.classList.contains('is-closing') && !window.closingObserved) {
+        const drawer = document.querySelector('#ga-read-history');
+        const backdrop = document.querySelector('.ga-read-backdrop');
+        window.closingObserved = {
+          drawerAnim: drawer ? getComputedStyle(drawer).animationName : null,
+          backdropAnim: backdrop ? getComputedStyle(backdrop).animationName : null,
+        };
+        observer.disconnect();
+      }
+    });
+    observer.observe(slot, { attributes: true, attributeFilter: ['class'] });
+  });
+
+  await page.locator('.ga-read-close').click();
+  await page.waitForFunction(() => !new URL(location.href).searchParams.has('reads') &&
+    !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+
+  const closing = await page.evaluate(() => ({
+    observed: window.closingObserved,
+    slotClosing: document.querySelector('.ga-read-history-slot').classList.contains('is-closing'),
+    drawerCount: document.querySelectorAll('#ga-read-history').length,
+  }));
+  assert.equal(closing.observed?.drawerAnim, 'gaReadDrawerOut');
+  assert.equal(closing.observed?.backdropAnim, 'gaReadBackdropOut');
+  assert.equal(closing.slotClosing, false);
+  assert.equal(closing.drawerCount, 0);
+
+  await rows(page).nth(1).getByRole('link', { name: 'Read history', exact: true }).click();
+  await page.waitForFunction(() => new URL(location.href).searchParams.get('reads') === '42' &&
+    !document.querySelector('[data-live-filters]').hasAttribute('aria-busy'));
+  assert.equal(await page.locator('#ga-read-history').isVisible(), true);
+});

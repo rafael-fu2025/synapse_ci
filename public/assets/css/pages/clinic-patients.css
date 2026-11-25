@@ -32,7 +32,7 @@
   --cp-sky: #0369a1;
   --cp-slate: #475569;
   --cp-zinc: #64748b;
-  --cp-mono: var(--mono-font, "Courier New", Courier, monospace);
+  --cp-mono: var(--mono-font, var(--default-font));
   color: var(--cp-fg-secondary);
   min-width: 0;
 }
@@ -180,12 +180,33 @@ html body :is(.cp-page-actions, .cp-workspace, .cp-chart) .btn:disabled {
    Inline Status Dot & Tag System (Zero translucent washes / zero pills)
    ========================================================================== */
 .cp-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  color: var(--cp-zinc);
+  line-height: 1;
   flex-shrink: 0;
-  background: var(--cp-zinc);
+}
+
+.cp-dot::before {
+  content: var(--status-icon-muted, "\f2e5");
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--status-icon-font, "bootstrap-icons");
+  font-size: 0.88em;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  color: currentColor;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .cp-status-inline {
@@ -199,19 +220,24 @@ html body :is(.cp-page-actions, .cp-workspace, .cp-chart) .btn:disabled {
 }
 
 .cp-status-inline--active { color: var(--cp-emerald); }
-.cp-status-inline--active .cp-dot { background: var(--cp-emerald); }
+.cp-status-inline--active .cp-dot { color: var(--cp-emerald); }
+.cp-status-inline--active .cp-dot::before { content: var(--status-icon-ok, "\f26a"); }
 
 .cp-status-inline--warn { color: var(--cp-amber-text); }
-.cp-status-inline--warn .cp-dot { background: var(--cp-amber); }
+.cp-status-inline--warn .cp-dot { color: var(--cp-amber); }
+.cp-status-inline--warn .cp-dot::before { content: var(--status-icon-pending, "\f291"); }
 
 .cp-status-inline--danger { color: var(--cp-crimson); }
-.cp-status-inline--danger .cp-dot { background: var(--cp-crimson); }
+.cp-status-inline--danger .cp-dot { color: var(--cp-crimson); }
+.cp-status-inline--danger .cp-dot::before { content: var(--status-icon-danger, "\f33a"); }
 
 .cp-status-inline--sky { color: var(--cp-sky); }
-.cp-status-inline--sky .cp-dot { background: var(--cp-sky); }
+.cp-status-inline--sky .cp-dot { color: var(--cp-sky); }
+.cp-status-inline--sky .cp-dot::before { content: var(--status-icon-info, "\f430"); }
 
 .cp-status-inline--muted { color: var(--cp-muted-fg); }
-.cp-status-inline--muted .cp-dot { background: var(--cp-zinc); }
+.cp-status-inline--muted .cp-dot { color: var(--cp-zinc); }
+.cp-status-inline--muted .cp-dot::before { content: var(--status-icon-muted, "\f2e5"); }
 
 .cp-tag {
   display: inline-flex;

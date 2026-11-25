@@ -39,15 +39,12 @@ export function ticketPresentation(ticket: QueueTicket) {
 
 export function QueueTicketCard({ ticket }: { ticket: QueueTicket }) {
   const { theme } = useTheme();
-  const guidance = ticket.unit === 'guidance';
   const view = ticketPresentation(ticket);
   const priority = ticket.priority ? ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1) : 'Normal';
-  // Same branded surface as the Home appointment card: maroon (or violet for
-  // guidance) in light mode, black in dark mode. Content is white on all three.
+  // Same branded surface as the Home appointment card: maroon for both clinic
+  // and guidance in light mode, black in dark mode. Content is white on both.
   const dark = theme.mode === 'dark';
-  const colors = dark
-    ? ['#1c1c1c', '#0f0f0f']
-    : guidance ? ['#4f3974', palette.violet600] : [palette.brand900, palette.brand700];
+  const colors = dark ? ['#1c1c1c', '#0f0f0f'] : [palette.brand900, palette.brand700];
 
   return (
     <View
@@ -58,7 +55,7 @@ export function QueueTicketCard({ ticket }: { ticket: QueueTicket }) {
         <View style={cardStyles.top}>
           <View style={cardStyles.copy}>
             <View style={[cardStyles.pill, dark ? cardStyles.pillOnDark : cardStyles.pillOnLight]}>
-            <Text style={[cardStyles.pillText, dark ? cardStyles.pillTextOnDark : guidance ? cardStyles.pillTextGuidance : cardStyles.pillTextClinic]}>
+            <Text style={[cardStyles.pillText, dark ? cardStyles.pillTextOnDark : cardStyles.pillTextClinic]}>
               Live waiting ticket
             </Text>
             </View>
@@ -138,7 +135,6 @@ const cardStyles = StyleSheet.create({
   pillOnDark: { backgroundColor: 'rgba(255,255,255,0.18)' },
   pillText: { fontSize: 9.5, fontWeight: '700', fontFamily: font.body },
   pillTextClinic: { color: palette.brand700 },
-  pillTextGuidance: { color: palette.violet600 },
   pillTextOnDark: { color: '#ffffff' },
   code: { ...type.hero, marginTop: 7, fontSize: 26, color: '#ffffff' },
   meta: { marginTop: 2, color: 'rgba(255,255,255,0.72)', fontSize: 9.5, fontFamily: font.body },

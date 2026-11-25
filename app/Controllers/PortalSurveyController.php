@@ -17,25 +17,25 @@ final class PortalSurveyController extends BaseController
     {
         try {
             $query = $this->request->getGet();
-            $miPage = \App\Libraries\TablePage::forList($query, 'mi_page', 'mi_per_page');
-            if (!in_array($miPage->perPage, [25, 50, 100], true)) {
-                throw new \InvalidArgumentException('MI per page must be 25, 50 or 100.', 422);
-            }
-            $data = (new SurveyService())->available($query);
-            $data['filters']['page'] = $data['pagination']['page'];
-            $data['filters']['per_page'] = $data['pagination']['per_page'];
-            $miAssignments = [];
+            $filters = \App\Services\PortalContent::filters($query, ['all', 'available', 'submitted', 'closed']);
+            $surveyService = new SurveyService();
+            $miService = new GuidanceMultipleIntelligenceService();
+
+            $generalSummary = $surveyService->available($query, 0, 0);
+            $genCounts = $generalSummary['counts'] ?? array_fill_keys(['all', 'available', 'submitted', 'closed'], 0);
+            $hasProfile = (bool) ($generalSummary['hasProfile'] ?? false);
+
             $miCounts = array_fill_keys(['all', 'available', 'submitted', 'closed'], 0);
-            $miPagination = $miPage->metadata(0, 0);
             $miGateEnabled = false;
+            $miUnavailable = false;
             $actor = (new AuthenticatedUser())->current();
-            if ($actor !== null && (($actor['role'] ?? '') === 'superadmin'
-                || in_array('guidance.assessments.take', $actor['permissions'] ?? [], true))) {
+            $canTakeMi = $actor !== null && (($actor['role'] ?? '') === 'superadmin'
+                || in_array('guidance.assessments.take', $actor['permissions'] ?? [], true));
+
+            if ($canTakeMi) {
                 try {
-                    $miResult = (new GuidanceMultipleIntelligenceService())->listPortalAssignmentsPage($actor, $query);
-                    $miAssignments = $miResult['assignments'];
-                    $miCounts = $miResult['counts'];
-                    $miPagination = $miResult['pagination'];
+                    $miSummary = $miService->listPortalAssignmentsPage($actor, $query, 0, 0);
+                    $miCounts = $miSummary['counts'] ?? $miCounts;
                     $miGateEnabled = (new GuidanceActivationGateService())->isGateEnabled(
                         GuidanceActivationGateService::GATE_MI_REPRODUCTION,
                         (int) $actor['tenant_id']
@@ -45,21 +45,75 @@ final class PortalSurveyController extends BaseController
                         'class' => get_class($error),
                         'code'  => $error->getCode(),
                     ]);
-                    $miAssignments = [];
-                    $data['miAssignmentsUnavailable'] = true;
+                    $miUnavailable = true;
                 }
             }
-            $data['filters']['mi_page'] = $miPagination['page'];
-            $data['filters']['mi_per_page'] = $miPagination['per_page'];
+
+            $combinedCounts = [];
+            foreach (['all', 'available', 'submitted', 'closed'] as $state) {
+                $combinedCounts[$state] = (int) ($genCounts[$state] ?? 0) + (int) ($miCounts[$state] ?? 0);
+            }
+
+            $status = $filters['status'];
+            $miFiltered = (int) ($miCounts[$status] ?? 0);
+            $genFiltered = (int) ($genCounts[$status] ?? 0);
+            $combinedFiltered = $miFiltered + $genFiltered;
+
+            $perPage = $filters['per_page'];
+            $totalPages = max(1, (int) ceil($combinedFiltered / $perPage));
+            $page = max(1, min($totalPages, $filters['page']));
+            $offset = ($page - 1) * $perPage;
+
+            $miLimit = ($offset < $miFiltered) ? min($perPage, $miFiltered - $offset) : 0;
+            $genLimit = $perPage - $miLimit;
+            $genOffset = max(0, $offset - $miFiltered);
+
+            $miAssignments = [];
+            if ($canTakeMi && !$miUnavailable && $miLimit > 0) {
+                try {
+                    $miResult = $miService->listPortalAssignmentsPage($actor, $query, $offset, $miLimit);
+                    $miAssignments = $miResult['assignments'] ?? [];
+                } catch (Throwable $error) {
+                    log_message('error', 'Portal MI slice unavailable: {class} code={code}', [
+                        'class' => get_class($error),
+                        'code'  => $error->getCode(),
+                    ]);
+                    $miAssignments = [];
+                    $miUnavailable = true;
+                }
+            }
+
+            $items = [];
+            if ($hasProfile && $genLimit > 0) {
+                $items = $surveyService->available($query, $genOffset, $genLimit)['items'] ?? [];
+            }
+
+            $filters['page'] = $page;
+            $pagination = [
+                'page'     => $page,
+                'per_page' => $perPage,
+                'total'    => $combinedCounts['all'],
+                'filtered' => $combinedFiltered,
+                'pages'    => $totalPages,
+            ];
+
             $this->response->setHeader('Cache-Control', 'private, no-store');
-            return view('surveys/portal_index', $data + [
-                'title' => 'My Surveys',
-                'baseUrl' => site_url('portal/surveys'),
+            $viewData = [
+                'title'         => 'My Surveys',
+                'baseUrl'       => site_url('portal/surveys'),
+                'items'         => $items,
                 'miAssignments' => $miAssignments,
-                'miCounts' => $miCounts,
-                'miPagination' => $miPagination,
+                'counts'        => $combinedCounts,
+                'pagination'    => $pagination,
+                'filters'       => $filters,
+                'hasProfile'    => $hasProfile,
+                'nowUtc'        => $generalSummary['nowUtc'] ?? gmdate('Y-m-d H:i:s'),
                 'miGateEnabled' => $miGateEnabled,
-            ]);
+            ];
+            if ($miUnavailable) {
+                $viewData['miAssignmentsUnavailable'] = true;
+            }
+            return view('surveys/portal_index', $viewData);
         } catch (\InvalidArgumentException $error) {
             return $this->failure(new RuntimeException($error->getMessage(), 422));
         } catch (Throwable $e) { return $this->failure($e); }

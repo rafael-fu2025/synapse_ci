@@ -71,12 +71,20 @@ final class UserModel extends TenantModel
 
         $codes = array_column($rows, 'code');
         // Staff retain employee self-service, not employee departmental/referral authority.
-        if (in_array($role, ['clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern', 'guidance_admin', 'guidance_supervisor', 'counsellor',
-            'bmg_admin', 'facilities_op', 'audit_reader', 'report_viewer'], true)) {
+        if (in_array($role, ['clinic_admin', 'clinic_staff', 'clinic_physician', 'clinic_intern',
+            'guidance_admin', 'guidance_supervisor', 'counsellor', 'guidance_intern',
+            'bmg_admin', 'facilities_op', 'bmg_intern', 'audit_reader', 'report_viewer'], true)) {
             $baseline = $db->table('role_permissions rp')->select('p.code')
                 ->join('permissions p', 'p.id = rp.permission_id')->where('rp.role', 'employee')
                 ->whereIn('p.code', ['portal.appointments.read', 'portal.appointments.create', 'portal.records.read'])->get()->getResultArray();
             $codes = array_values(array_unique(array_merge($codes, array_column($baseline, 'code'))));
+        }
+        // Student interns retain their own student self-service assessment/evaluation abilities on /portal.
+        if (in_array($role, ['clinic_intern', 'guidance_intern', 'bmg_intern'], true)) {
+            $studentSelf = $db->table('role_permissions rp')->select('p.code')
+                ->join('permissions p', 'p.id = rp.permission_id')->where('rp.role', 'student')
+                ->whereIn('p.code', ['guidance.assessments.take', 'guidance.evaluations.submit'])->get()->getResultArray();
+            $codes = array_values(array_unique(array_merge($codes, array_column($studentSelf, 'code'))));
         }
         return $codes;
     }

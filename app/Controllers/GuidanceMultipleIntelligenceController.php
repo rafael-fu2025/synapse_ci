@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Libraries\LikePattern;
 use App\Models\GuidanceMultipleIntelligenceAssignmentModel;
 use App\Models\GuidanceMultipleIntelligenceSubmissionModel;
 use App\Services\AuthenticatedUser;
@@ -101,6 +102,12 @@ final class GuidanceMultipleIntelligenceController extends BaseController
             ->get()
             ->getResultArray();
 
+        $totalStudents = (int) $db->table('people')
+            ->where('tenant_id', $tenantId)
+            ->where('kind', 'student')
+            ->where('deleted_at', null)
+            ->countAllResults();
+
         $students = $db->table('people p')
             ->select('p.id, p.mis_id, p.first_name, p.middle_name, p.last_name, sp.program, sp.year_level')
             ->join('student_profiles sp', 'sp.person_id = p.id AND sp.tenant_id = p.tenant_id', 'left')
@@ -177,6 +184,7 @@ final class GuidanceMultipleIntelligenceController extends BaseController
             'pageTitle'       => 'Multiple Intelligence (80-Item) Registry',
             'assignments'     => $assignments,
             'students'        => $students,
+            'totalStudents'   => $totalStudents,
             'programs'        => $programs,
             'yearLevels'      => $yearLevels,
             'activePersonIds' => $activePersonIds,
@@ -196,6 +204,113 @@ final class GuidanceMultipleIntelligenceController extends BaseController
                 ['label' => 'Guidance', 'url' => site_url('/guidance')],
                 ['label' => 'Multiple Intelligence', 'url' => ''],
             ],
+        ]);
+    }
+
+    /**
+     * Guidance Counselor Console: live multi-token search across all active students in the tenant.
+     */
+    public function searchStudents()
+    {
+        $actor = $this->resolveWebActor('guidance.assessments.assign', 'guidance');
+        if (!is_array($actor)) {
+            return $actor;
+        }
+
+        $q = trim((string) ($this->request->getGet('q') ?? ''));
+        if (mb_strlen($q) > 150) {
+            return $this->response->setStatusCode(422)->setJSON([
+                'success' => false,
+                'message' => 'Search query is too long.',
+            ]);
+        }
+
+        $tenantId = (int) $actor['tenant_id'];
+        $db = Database::connect();
+
+        $builder = $db->table('people p')
+            ->select('p.id, p.mis_id, p.first_name, p.middle_name, p.last_name, sp.program, sp.year_level')
+            ->join('student_profiles sp', 'sp.person_id = p.id AND sp.tenant_id = p.tenant_id', 'left')
+            ->where('p.tenant_id', $tenantId)
+            ->where('p.kind', 'student')
+            ->where('p.deleted_at', null);
+
+        if ($q !== '') {
+            $rawTokens = preg_split('/[\s,]+/u', $q, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $tokens = array_slice($rawTokens, 0, 6);
+            $searchFields = ['p.first_name', 'p.last_name', 'p.middle_name', 'p.mis_id', 'sp.program', 'sp.year_level'];
+
+            foreach ($tokens as $token) {
+                if (preg_match('/^y(\d+)$/i', $token, $yearMatch) === 1) {
+                    $builder->groupStart();
+                    LikePattern::applyGroup($builder, $searchFields, $token);
+                    $builder->orLike('sp.year_level', LikePattern::literal($yearMatch[1]), 'both', true);
+                    $builder->groupEnd();
+                } else {
+                    LikePattern::applyGroup($builder, $searchFields, $token);
+                }
+            }
+        }
+
+        $totalMatches = (int) (clone $builder)->countAllResults();
+
+        $rows = $builder
+            ->orderBy('p.last_name', 'ASC')
+            ->orderBy('p.first_name', 'ASC')
+            ->limit(50)
+            ->get()
+            ->getResultArray();
+
+        $activeLookup = [];
+        if ($rows !== []) {
+            $personIds = array_map(static fn (array $row): int => (int) $row['id'], $rows);
+            $activeRows = $db->table('guidance_mi_assignments')
+                ->select('person_id')
+                ->where('tenant_id', $tenantId)
+                ->where('deleted_at', null)
+                ->whereIn('status', ['assigned', 'in_progress'])
+                ->whereIn('person_id', $personIds)
+                ->get()
+                ->getResultArray();
+            foreach ($activeRows as $activeRow) {
+                $activeLookup[(int) $activeRow['person_id']] = true;
+            }
+        }
+
+        $results = [];
+        foreach ($rows as $stu) {
+            $stuId = (int) $stu['id'];
+            $first = trim((string) ($stu['first_name'] ?? ''));
+            $middle = trim((string) ($stu['middle_name'] ?? ''));
+            $last = trim((string) ($stu['last_name'] ?? ''));
+            $misId = trim((string) ($stu['mis_id'] ?? ''));
+            $program = trim((string) ($stu['program'] ?? ''));
+            $yearLevel = trim((string) ($stu['year_level'] ?? ''));
+
+            $name = trim($last . ', ' . $first . ($middle !== '' ? ' ' . $middle : ''));
+            $meta = trim($misId . ($program !== '' ? ' · ' . $program : '') . ($yearLevel !== '' ? ' Y' . $yearLevel : ''));
+
+            $results[] = [
+                'id'          => $stuId,
+                'name'        => $name,
+                'first_name'  => $first,
+                'middle_name' => $middle,
+                'last_name'   => $last,
+                'mis_id'      => $misId,
+                'program'     => $program,
+                'year_level'  => $yearLevel,
+                'meta'        => $meta,
+                'has_active'  => isset($activeLookup[$stuId]),
+            ];
+        }
+
+        $this->response->setHeader('Cache-Control', 'private, no-store');
+
+        return $this->response->setJSON([
+            'success'       => true,
+            'query'         => $q,
+            'total_matches' => $totalMatches,
+            'results'       => $results,
         ]);
     }
 

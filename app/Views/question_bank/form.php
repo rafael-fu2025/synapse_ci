@@ -52,11 +52,11 @@
       </div>
     </template>
     <input type="hidden" name="question[required]" :value="question.required ? '1' : '0'">
-    <label class="form-check qb-check"><input type="checkbox" class="form-check-input" x-model="question.required"><span class="form-check-label">Required by default</span></label>
+    <label class="form-check qb-check"><input id="qbQuestionRequired" type="checkbox" class="form-check-input" x-model="question.required"><span class="form-check-label">Required by default</span></label>
     <template x-if="['single','multiple'].includes(question.type)">
       <div class="qb-choice-settings">
         <input type="hidden" name="question[allow_other]" :value="question.allow_other ? '1' : '0'">
-        <label class="form-check qb-check"><input type="checkbox" class="form-check-input" x-model="question.allow_other"><span class="form-check-label">Allow &ldquo;Other (please specify)&rdquo; custom answer</span></label>
+        <label class="form-check qb-check"><input id="qbQuestionAllowOther" type="checkbox" class="form-check-input" x-model="question.allow_other"><span class="form-check-label">Allow &ldquo;Other (please specify)&rdquo; custom answer</span></label>
         <p class="qb-field-note">Use 2–10 options. Each option can contain up to 200 characters.</p>
       </div>
     </template>

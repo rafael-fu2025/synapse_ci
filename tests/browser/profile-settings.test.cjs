@@ -1003,3 +1003,57 @@ for (const operation of ['photo', 'contact', 'remove']) {
     else assert.equal(await page.locator('[data-profile-photo-remove]').isVisible(), false);
   });
 }
+
+test('non-square photo reveals inline 1:1 crop adjuster with zoom/pan/reset and uploads a square cropped image cleanly', { timeout: 30000 }, async t => {
+  const { page, state } = await pageFor(t, { hasPhoto: false });
+  const wideBuffer = Buffer.from(await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 160;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#800000';
+    ctx.fillRect(0, 0, 160, 160);
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(160, 0, 160, 160);
+    return canvas.toDataURL('image/png').split(',')[1];
+  }), 'base64');
+
+  const blob = await select(page, wideBuffer, 'wide-portrait.png');
+  const adjuster = page.locator('[data-profile-photo-adjuster]');
+  await adjuster.waitFor({ state: 'visible' });
+  await assertNoProfileModal(page);
+  assert.equal(await page.locator('[data-profile-photo-zoom-value]').textContent(), '100%');
+  assert.equal(await page.locator('[data-profile-photo-adjust-reset]').isDisabled(), true);
+  assert.equal(await page.locator('#main').evaluate(main => main.scrollWidth <= main.clientWidth + 2), true);
+
+  await page.locator('[data-profile-photo-zoom-in]').click();
+  assert.equal(await page.locator('[data-profile-photo-zoom-value]').textContent(), '120%');
+  assert.equal(await page.locator('[data-profile-photo-adjust-reset]').isEnabled(), true);
+
+  const stage = page.locator('[data-profile-photo-stage]');
+  const box = await stage.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 12, { steps: 4 });
+  await page.mouse.up();
+  const shiftedTransform = await page.locator('[data-profile-photo-stage-img]').evaluate(el => el.style.transform);
+  assert.notEqual(shiftedTransform, 'translate(-50%, -50%) translate(0px, 0px) scale(1.2)');
+
+  await page.locator('[data-profile-photo-adjust-reset]').click();
+  assert.equal(await page.locator('[data-profile-photo-zoom-value]').textContent(), '100%');
+  assert.equal(await page.locator('[data-profile-photo-adjust-reset]').isDisabled(), true);
+
+  await page.locator('[data-profile-photo-zoom]').fill('1.5');
+  await page.locator('[data-profile-photo-zoom]').dispatchEvent('input');
+  assert.equal(await page.locator('[data-profile-photo-zoom-value]').textContent(), '150%');
+
+  await save(page, 'photo');
+  assert.equal(state.posts.length, 1);
+  assert.deepEqual(state.posts[0].names.sort(), ['MAX_FILE_SIZE', 'csrf_test_name', 'photo'].sort());
+  assert.ok(state.posts[0].size > 0 && state.posts[0].size <= 10 * 1024 * 1024);
+  assert.match(state.posts[0].type, /^image\/(webp|png)$/);
+  assert.equal(await adjuster.isVisible(), false);
+  assert.match(await page.locator('#synapse-toast-container .synapse-toast-message').last().textContent(), /Profile picture updated\./);
+  assert.ok((await page.evaluate(() => window.revokedBlobs)).includes(blob));
+  await expectCleanLeave(page);
+});

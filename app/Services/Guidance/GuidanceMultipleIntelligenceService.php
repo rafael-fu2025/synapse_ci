@@ -299,8 +299,14 @@ class GuidanceMultipleIntelligenceService
     }
 
     /** Count and page MI independently without changing the legacy assignment list. */
-    public function listPortalAssignmentsPage(array $actor, array $query = []): array
+    public function listPortalAssignmentsPage(array $actor, array $query = [], ?int $sliceOffset = null, ?int $sliceLimit = null): array
     {
+        if ($sliceOffset !== null && $sliceLimit !== null) {
+            $filters = \App\Services\PortalContent::filters(array_intersect_key($query, array_flip(['q', 'status', 'per_page'])),
+                ['all', 'available', 'submitted', 'closed']);
+            $page = \App\Libraries\TablePage::forList(['page' => 1, 'per_page' => $filters['per_page']], 'page');
+            return $this->portalAssignments($actor, $page, $filters, $sliceOffset, $sliceLimit);
+        }
         $page = \App\Libraries\TablePage::forList($query, 'mi_page', 'mi_per_page');
         if (!in_array($page->perPage, [25, 50, 100], true)) {
             throw new InvalidArgumentException('MI per page must be 25, 50 or 100.', 422);
@@ -310,7 +316,7 @@ class GuidanceMultipleIntelligenceService
         return $this->portalAssignments($actor, $page, $filters);
     }
 
-    private function portalAssignments(array $actor, ?\App\Libraries\TablePage $page = null, array $filters = []): array
+    private function portalAssignments(array $actor, ?\App\Libraries\TablePage $page = null, array $filters = [], ?int $sliceOffset = null, ?int $sliceLimit = null): array
     {
         $tenantId = (int) ($actor['tenant_id'] ?? 0);
         if ($tenantId <= 0) {
@@ -360,10 +366,17 @@ class GuidanceMultipleIntelligenceService
             }
             $filter = (string) ($filters['status'] ?? 'all');
             $pagination = $page->metadata($total, $counts[$filter]);
+            if ($sliceOffset !== null && $sliceLimit !== null && $sliceLimit <= 0) {
+                return ['assignments' => [], 'counts' => $counts, 'pagination' => $pagination];
+            }
             if ($filter !== 'all') {
                 $builder->where($conditions[$filter], null, false);
             }
-            $builder->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage);
+            if ($sliceOffset !== null && $sliceLimit !== null) {
+                $builder->limit($sliceLimit, max(0, $sliceOffset));
+            } else {
+                $builder->limit($page->perPage, ($pagination['page'] - 1) * $page->perPage);
+            }
         }
         $assignments = $builder->orderBy('a.id', 'DESC')->get()->getResultArray();
         foreach ($assignments as &$row) {

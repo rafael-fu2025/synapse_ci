@@ -35,6 +35,7 @@
     </form>
   </div></div>
 </div>
+<?php if (!empty($cancelBatch)): ?>
 <div class="modal fade" id="cancelBatchModal" tabindex="-1" aria-labelledby="cancelBatchTitle" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false" data-bmg-modal>
   <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><h2 id="cancelBatchTitle" class="modal-title fs-5">Cancel batch</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
@@ -45,5 +46,6 @@
     </form>
   </div></div>
 </div>
+<?php endif; ?>
 <?php endif; ?>
 <?php endif; ?>

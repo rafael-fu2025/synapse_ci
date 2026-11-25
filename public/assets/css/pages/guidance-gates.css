@@ -47,7 +47,7 @@
 .gg-workspace .gg-summary-item { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; min-width: 0; padding: 1.15rem 1.5rem; }
 .gg-workspace .gg-summary-item + .gg-summary-item { border-left: 1px solid var(--gg-hairline); }
 .gg-workspace .gg-summary-label { font-size: 0.73rem; font-weight: 600; color: var(--gg-muted); }
-.gg-workspace .gg-summary-value { font-family: var(--mono-font, monospace); font-size: 1.25rem; font-weight: 600; line-height: 1.5; color: var(--gg-heading); }
+.gg-workspace .gg-summary-value { font-family: var(--mono-font, var(--default-font)); font-size: 1.25rem; font-weight: 600; line-height: 1.5; color: var(--gg-heading); }
 .gg-workspace .gg-summary-note { font-size: 0.71rem; line-height: 1.6; color: var(--gg-muted); }
 .gg-workspace .gg-empty { padding: 2.5rem 1.5rem; border-top: 1px solid var(--gg-border); text-align: center; color: var(--gg-muted); }
 .gg-workspace .gg-empty .gg-icon { width: 1.8rem; height: 1.8rem; margin-bottom: 0.75rem; }
@@ -59,16 +59,19 @@
 .gg-workspace .gg-gate-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem 1.5rem; }
 .gg-workspace .gg-gate-heading { min-width: 0; }
 .gg-workspace .gg-gate-title { margin: 0; font-family: var(--heading-font, sans-serif); font-size: 0.9rem; font-weight: 600; line-height: 1.6; color: var(--gg-heading); overflow-wrap: anywhere; }
-.gg-workspace .gg-gate-key { display: block; margin-top: 0.25rem; padding: 0; border: 0; background: transparent; font-family: var(--mono-font, monospace); font-size: 0.7rem; line-height: 1.6; color: var(--gg-muted); overflow-wrap: anywhere; }
+.gg-workspace .gg-gate-key { display: block; margin-top: 0.25rem; padding: 0; border: 0; background: transparent; font-family: var(--mono-font, var(--default-font)); font-size: 0.7rem; line-height: 1.6; color: var(--gg-muted); overflow-wrap: anywhere; }
 .gg-workspace .gg-gate-description { margin: 0.55rem 0 0; max-width: 80ch; font-size: 0.81rem; line-height: 1.7; color: var(--gg-muted); overflow-wrap: anywhere; }
 .gg-workspace .gg-gate-state { display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem; min-width: 0; flex: 0 0 auto; }
-.gg-workspace .gg-status { display: inline-flex; align-items: baseline; gap: 0.35rem; font-size: 0.75rem; font-weight: 600; line-height: 1.6; color: var(--gg-muted); }
-.gg-workspace .gg-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.gg-workspace .gg-status { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 600; line-height: 1.6; color: var(--gg-muted); }
+.gg-workspace .gg-status::before { content: var(--status-icon-muted, "\f2e5"); display: inline-flex; align-items: center; justify-content: center; font-family: var(--status-icon-font, "bootstrap-icons"); font-size: 0.9em; font-style: normal; font-weight: 400; font-variant: normal; text-transform: none; line-height: 1; flex-shrink: 0; color: currentColor; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 .gg-workspace .gg-status:is(.is-enabled, .is-signed) { color: var(--gg-success); }
+.gg-workspace .gg-status:is(.is-enabled, .is-signed)::before { content: var(--status-icon-ok, "\f26a"); }
 .gg-workspace .gg-status.is-gated { color: var(--gg-warning); }
-.gg-workspace .gg-progress { font-family: var(--mono-font, monospace); font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--gg-muted); }
+.gg-workspace .gg-status.is-gated::before { content: var(--status-icon-locked, "\f47a"); }
+.gg-workspace .gg-status.is-pending::before { content: var(--status-icon-pending, "\f291"); }
+.gg-workspace .gg-progress { font-family: var(--mono-font, var(--default-font)); font-size: 0.72rem; font-variant-numeric: tabular-nums; color: var(--gg-muted); }
 .gg-workspace .gg-approved { font-size: 0.71rem; line-height: 1.6; color: var(--gg-muted); }
-.gg-workspace .gg-timestamp { font-family: var(--mono-font, monospace); font-size: 0.7rem; font-variant-numeric: tabular-nums; line-height: 1.6; color: var(--gg-muted); overflow-wrap: anywhere; }
+.gg-workspace .gg-timestamp { font-family: var(--mono-font, var(--default-font)); font-size: 0.7rem; font-variant-numeric: tabular-nums; line-height: 1.6; color: var(--gg-muted); overflow-wrap: anywhere; }
 
 /* Readable evidence rows, including full-row striping when stacked. */
 .gg-workspace .gg-table-wrap { min-width: 0; width: 100%; }

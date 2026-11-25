@@ -82,7 +82,12 @@ $initials = strtoupper(
     <div class="ce-patient-card">
       <div class="ce-patient-top">
         <div class="ce-patient-identity">
-          <div class="ce-avatar" aria-hidden="true"><?= esc($initials !== '' ? $initials : 'IR') ?></div>
+          <?php
+            $irTenantId = (int) (session()->get('user')['tenant_id'] ?? 0);
+            $irPhotoUrl = $irTenantId > 0 ? (new \App\Services\ProfilePhotoService())->personPhotoUrl($irTenantId, (int) ($subjectPerson['id'] ?? 0)) : null;
+            $irInitials = $initials !== '' ? $initials : 'IR';
+          ?>
+          <div class="ce-avatar" aria-hidden="true"><?= \App\Services\ProfileAvatar::contentHtml($irPhotoUrl, $irInitials, is_array($subjectPerson ?? null) ? $subjectPerson : ['avatar_initials' => $irInitials]) ?></div>
           <div style="min-width: 0;">
             <div class="ce-patient-heading">
               <span class="ce-tag ce-mono fw-bold"><?= esc($referral['referral_number']) ?></span>

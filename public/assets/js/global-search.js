@@ -18,9 +18,13 @@
     const pages = [];
     let context = 'Personal Health';
     document.querySelectorAll('#app-sidebar .nav-menu > li').forEach(item => {
-      if (item.classList.contains('nav-heading')) context = item.textContent.trim();
-      const link = item.querySelector('a.nav-link');
-      if (link) pages.push({ link, label: link.querySelector('.nav-text')?.textContent.trim() || link.textContent.trim(), context, group: 'Pages' });
+      if (item.classList.contains('nav-heading')) {
+        context = item.textContent.trim();
+        return;
+      }
+      item.querySelectorAll('a.nav-link[href]').forEach(link => {
+        pages.push({ link, label: link.querySelector('.nav-text')?.textContent.trim() || link.textContent.trim(), context, group: 'Pages' });
+      });
     });
     const actionLinks = Array.from(document.querySelectorAll('[data-search-actions]'))
       .flatMap(source => Array.from((source.content || source).querySelectorAll('a')));

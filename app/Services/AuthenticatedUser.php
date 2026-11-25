@@ -109,6 +109,22 @@ final class AuthenticatedUser
             return null;
         }
 
+        $internPlacement = null;
+        if ($person !== null
+            && ($person['kind'] ?? null) === 'student'
+            && $db->tableExists('student_intern_placements')
+            && ($user['role'] === 'student' || in_array($user['role'], StudentInternService::INTERN_ROLES, true))) {
+            $reconciled = (new StudentInternService($db))->reconcileForUser((int) $user['id'], $tenantId);
+            $internPlacement = $reconciled['placement'];
+            if ($reconciled['changed']) {
+                $user = $db->table('users')->where('id', $id)->where('tenant_id', $tenantId)
+                    ->where('status', 'active')->where('deleted_at', null)->get()->getRowArray();
+                if ($user === null || !in_array($user['role'], PortalContext::allowedRoles(PortalContext::PORTAL_MAIN), true)) {
+                    return null;
+                }
+            }
+        }
+
         $email = $user['email'] ?? null;
         if (($email === null || $email === '') && $person !== null) {
             $email = $person['email'] ?? UniversityEmail::derive($person['first_name'] ?? null, $person['last_name'] ?? null);
@@ -129,6 +145,7 @@ final class AuthenticatedUser
             'identifier' => $person['mis_id'] ?? $user['username'],
             'role' => $user['role'],
             'is_teaching' => $isTeaching,
+            'intern_placement' => $internPlacement,
             'permissions' => (new UserModel())->getPermissionsForRole($user['role']),
             'logged_in' => true,
         ];

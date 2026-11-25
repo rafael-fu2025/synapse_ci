@@ -767,6 +767,29 @@ test('scoped loading and repeated init/submits permit one unresolved mutation wh
   await samePage(h);
 });
 
+test('test connection keeps its loading spinner and active label until the probe and status sync settle', { timeout: 20000 }, async t => {
+  const h = await open(t, saved());
+  const gate = h.hold();
+  h.respond = async entry => {
+    if (entry.method === 'POST') await gate.promise;
+    return ok(saved({ connection_tested: true }), 'Connection tested.');
+  };
+  const testButton = h.page.locator('[data-ai-settings-test]');
+  await testButton.click();
+  await until(() => h.posts().length === 1, 'Pending test connection probe');
+  assert.equal(await form(h, 'test').getAttribute('aria-busy'), 'true');
+  assert.equal(await testButton.locator('.app-loading-spinner').count(), 1);
+  assert.equal(await testButton.isDisabled(), true);
+  assert.match(await testButton.textContent(), /Testing connection/);
+  gate.resolve();
+  await idle(h);
+  assert.equal(await form(h, 'test').getAttribute('aria-busy'), null);
+  assert.equal(await testButton.locator('.app-loading-spinner').count(), 0);
+  assert.equal(await testButton.isDisabled(), false);
+  assert.match(await testButton.textContent(), /Test connection/);
+  await samePage(h);
+});
+
 for (const action of ['save', 'test']) {
   for (const failure of ['network', 'timeout']) {
     test(`${action} ${failure} makes no automatic POST replay; explicit recovery is one redacted GET`, { timeout: 20000 }, async t => {

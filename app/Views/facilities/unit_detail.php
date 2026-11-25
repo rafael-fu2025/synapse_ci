@@ -3,6 +3,7 @@
 $id = (int) $unit['id'];
 $base = '/facilities/unit/' . $id;
 $manage = !empty($canManage);
+$cancelBatch = array_key_exists('canCancelBatch', get_defined_vars()) ? !empty($canCancelBatch) : $manage;
 $configure = !empty($canConfigure);
 $gateOpen = !empty($hardwareEnabled) && !empty($hardware_enabled);
 $hardwareAllowed = $configure && !empty($canHardware) && $gateOpen;
@@ -241,7 +242,7 @@ $formatBatchTime = static function (?string $utc): string {
       <?php if ($manage && $unit['status'] === 'active'): ?><button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#startBatchModal">Start batch</button><?php endif; ?>
       <?php else: ?>
       <h3 class="h6 text-break"><?= esc($activeBatch['batch_code']) ?></h3><dl class="bmg-fact-grid small"><div class="bmg-fact"><dt>Status</dt><dd><?= esc($activeBatch['status']) ?></dd></div><div class="bmg-fact"><dt>Started (Asia/Manila)</dt><dd><?= esc($formatBatchTime($activeBatch['started_at'] ?? null)) ?></dd></div><div class="bmg-fact"><dt>Input weight</dt><dd><?= esc($activeBatch['total_input_weight_kg']) ?> kg</dd></div></dl><p class="small text-muted text-break"><strong>Creation notes:</strong> <?= nl2br(esc($activeBatch['notes'] ?? 'Not recorded')) ?></p>
-      <?php if ($manage): ?><div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#completeBatchModal">Complete batch</button><button class="btn btn-outline-danger btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#cancelBatchModal">Cancel batch</button></div><?php endif; endif; ?>
+      <?php if ($manage): ?><div class="d-flex flex-wrap gap-2"><button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#completeBatchModal">Complete batch</button><?php if ($cancelBatch): ?><button class="btn btn-outline-danger btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#cancelBatchModal">Cancel batch</button><?php endif; ?></div><?php endif; endif; ?>
     </div></section>
     <section class="card ce-card bmg-panel mb-4" id="bmg-device" aria-labelledby="bmg-device-title">
       <div class="card-header bmg-panel-heading"><h2 class="card-title" id="bmg-device-title"><i class="bi bi-cpu" aria-hidden="true"></i> Device registration</h2></div>

@@ -752,8 +752,9 @@ for (const unit of ['clinic', 'guidance']) {
     assert.deepEqual(await form.locator('#availabilityDuration option').evaluateAll(options => options.map(option => option.value)),
       ['15', '30', '45', '60']);
     assert.deepEqual(await form.locator('#availabilityActive option').evaluateAll(options => options.map(option => option.value)), ['1', '0']);
-    assert.deepEqual(await page.locator('table[data-configured-windows] tbody tr td:nth-child(-n+5)').allTextContents(),
-      ['Provider Fixture', 'Monday', '8:00 AM – 5:00 PM', '30 min', 'Active']);
+    assert.match(await page.locator('[data-configured-windows] .av-staff-summary').first().innerText(), /Provider Fixture/);
+    assert.deepEqual(await page.locator('table[data-staff-windows] tbody tr td:nth-child(-n+4)').allTextContents(),
+      ['Monday', '8:00 AM – 5:00 PM', '30 min', 'Active']);
     assert.equal(await form.locator('[data-configured-windows]').count(), 0);
     for (const [id, name] of [['availabilityProvider', 'Provider Fixture'], ['availabilityDay', 'Tuesday'],
       ['availabilityDuration', '45 minutes'], ['availabilityActive', 'Inactive']]) {
@@ -1087,7 +1088,7 @@ for (const item of cases) {
       await assertWorkspace(page);
       assert.equal(page.url(), origin + item.url);
       assert.equal(await page.locator('.av-section-nav a[aria-current="page"]').innerText(), 'Weekly schedules');
-      assert.equal(await page.locator('table[data-configured-windows]').isVisible(), true);
+      assert.equal(await page.locator('[data-configured-windows]').isVisible(), true);
       assert.equal(await page.locator('#availability-individual-modal').isVisible(), false);
       const back = page.getByRole('link', {name:'Appointments', exact:true}).filter({has:page.locator('.bi-arrow-left')});
       assert.equal(await back.getAttribute('data-app-modal-open'), null);

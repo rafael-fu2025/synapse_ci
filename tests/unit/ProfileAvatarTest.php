@@ -51,4 +51,16 @@ final class ProfileAvatarTest extends TestCase
         $this->assertSame('IW', $document->getElementsByTagName('text')->item(0)->textContent);
         $this->assertStringNotContainsString('onerror', $svg);
     }
+
+    public function testContentHtmlRendersUploadedPhotoWithEscapedFallbackOrPlainInitials(): void
+    {
+        $imgHtml = ProfileAvatar::contentHtml('/clinic/teams/members/5/photo?v=123', 'AL', ['first_name' => 'Ada', 'last_name' => 'Lovelace']);
+        $this->assertStringStartsWith('<img class="syn-avatar-img" src="/clinic/teams/members/5/photo?v=123"', $imgHtml);
+        $this->assertStringContainsString('data-avatar-fallback="data:image/svg+xml;base64,', $imgHtml);
+        $this->assertStringNotContainsString('onerror', $imgHtml);
+
+        $initialsHtml = ProfileAvatar::contentHtml(null, 'A&L', ['name' => 'Ada']);
+        $this->assertSame('A&amp;L', $initialsHtml);
+        $this->assertStringNotContainsString('<img', $initialsHtml);
+    }
 }

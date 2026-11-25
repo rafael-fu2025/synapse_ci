@@ -78,7 +78,7 @@ if ($unassignedRows !== []) {
             <h2 class="ce-card-title" id="mi-assignment-heading"><i class="bi bi-person-plus" aria-hidden="true"></i> Assign 80-Item MI Survey</h2>
           </div>
           <div class="ce-card-body">
-            <form method="POST" action="<?= esc(site_url('/guidance/assessments/mi/assign'), 'attr') ?>" autocomplete="off" class="gmi-assignment-form" data-mi-assignment-form data-background-submit>
+            <form method="POST" action="<?= esc(site_url('/guidance/assessments/mi/assign'), 'attr') ?>" autocomplete="off" class="gmi-assignment-form" data-mi-assignment-form data-background-submit data-student-search-url="<?= esc(site_url('/guidance/assessments/mi/students/search'), 'attr') ?>" data-total-students="<?= (int) ($totalStudents ?? count($students)) ?>">
               <?= csrf_field() ?>
 
               <fieldset class="gmi-form-section">
@@ -95,11 +95,12 @@ if ($unassignedRows !== []) {
                     <label for="mi-student-checklist-search" class="form-label mb-0">Select Student(s)</label>
                     <span class="ce-tag"><output id="mi-selected-count" class="ce-mono" aria-live="polite">0</output> selected</span>
                   </div>
-                  <input id="mi-student-checklist-search" type="search" class="form-control form-control-sm" placeholder="Filter by name, MIS ID, or program…" autocomplete="off">
+                  <input id="mi-student-checklist-search" type="search" class="form-control form-control-sm" placeholder="Search by name, MIS ID, or program…" autocomplete="off">
                   <div class="gmi-checklist-actions">
                     <button type="button" id="mi-select-visible-btn" class="btn btn-outline-secondary btn-sm">Select all visible</button>
                     <button type="button" id="mi-clear-selected-btn" class="btn btn-outline-secondary btn-sm">Clear</button>
                   </div>
+                  <p id="mi-student-search-status" class="gmi-meta m-0 d-none" role="status" aria-live="polite"></p>
                   <div class="gmi-student-checklist" role="group" aria-label="Students available for assignment">
                     <?php if ($students === []): ?>
                       <p class="gmi-checklist-empty">No active student records found.</p>
@@ -108,10 +109,11 @@ if ($unassignedRows !== []) {
                         <?php
                         $stuId = (int) $stu['id'];
                         $stuName = trim(($stu['last_name'] ?? '') . ', ' . ($stu['first_name'] ?? '') . (!empty($stu['middle_name']) ? ' ' . $stu['middle_name'] : ''));
+                        $stuAltName = trim(($stu['first_name'] ?? '') . ' ' . ($stu['last_name'] ?? ''));
                         $stuMeta = trim(($stu['mis_id'] ?? '') . (!empty($stu['program']) ? ' · ' . $stu['program'] : '') . (!empty($stu['year_level']) ? ' Y' . $stu['year_level'] : ''));
                         $hasActive = isset($activeLookup[$stuId]);
                         ?>
-                        <div class="form-check mi-student-check-row gmi-check-option" data-search="<?= esc(strtolower($stuName . ' ' . $stuMeta), 'attr') ?>">
+                        <div class="form-check mi-student-check-row gmi-check-option" data-person-id="<?= $stuId ?>" data-preloaded="1" data-search="<?= esc(strtolower($stuName . ' ' . $stuAltName . ' ' . $stuMeta), 'attr') ?>">
                           <input class="form-check-input mi-student-checkbox" type="checkbox" name="person_ids[]" value="<?= $stuId ?>" id="mi-stu-check-<?= $stuId ?>">
                           <label class="form-check-label" for="mi-stu-check-<?= $stuId ?>">
                             <span class="gmi-person-name"><?= esc($stuName) ?></span>
@@ -125,7 +127,7 @@ if ($unassignedRows !== []) {
                       <p id="mi-student-checklist-empty" class="gmi-checklist-empty d-none">No students match your filter.</p>
                     <?php endif; ?>
                   </div>
-                  <p class="form-text m-0">Checklist shows up to 500 student records. Multi-student batches skip existing active assignments; selecting only a student with an active assignment returns a conflict.</p>
+                  <p class="form-text m-0">Search spans all active students by name, MIS ID, or program; checked students remain selected as you search. Multi-student batches skip existing active assignments; selecting only a student with an active assignment returns a conflict.</p>
                 </div>
 
                 <div id="mi-assign-cohort-panel" class="gmi-recipient-panel d-none">
