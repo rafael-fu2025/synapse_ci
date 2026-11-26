@@ -153,6 +153,9 @@ final class PortalController extends BaseController
 
         $appointment = $this->historyService->getPortalAppointment($personId, $id);
         if ($appointment === null) {
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, 404, 'Appointment not found.');
+            }
             return $this->response->setStatusCode(404)
                 ->setHeader('Cache-Control', 'private, no-store')
                 ->setBody('Appointment not found.');
@@ -189,6 +192,9 @@ final class PortalController extends BaseController
         try {
             $page = \App\Libraries\TablePage::forList($this->request->getGet(), 'page', 'per_page', 20);
         } catch (\InvalidArgumentException $error) {
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, 422, $error->getMessage());
+            }
             return $this->response->setStatusCode(422)->setBody(esc($error->getMessage()));
         }
         $tenantId = (int) ($user['tenant_id'] ?? \App\Services\CurrentTenant::id());

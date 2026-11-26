@@ -178,7 +178,7 @@ final class GuidanceClinicalWebWorkflowTest extends FreshDatabaseTestCase
             'person_id'         => $this->studentUser['person_id'],
             'scheduled_date'    => date('Y-m-d', strtotime('+3 days')),
             'scheduled_time'    => '10:00',
-            'purpose'           => 'counseling',
+            'purpose'           => 'personal_social',
             'counselor_user_id' => $this->counselorUser['id'],
             'actor'             => $this->counselorUser,
         ], 1);
@@ -222,15 +222,21 @@ final class GuidanceClinicalWebWorkflowTest extends FreshDatabaseTestCase
         $newFormResp->assertSee('Psychosocial');
 
         $formFields = [
-            'student_name'                => 'Student ' . $this->suffix,
-            'student_id'                  => 'STU-' . strtoupper($this->suffix),
-            'course_year'                 => 'BSCS 2',
-            'interview_date'              => date('Y-m-d'),
-            'demographics'                => ['age' => '20', 'gender' => 'Prefer not to say', 'contact' => '09170000001'],
-            'presenting_concerns'         => 'Adjustment difficulties with coursework.',
-            'counselor_assessment'        => 'Alert, oriented, cooperative.',
-            'intervention_plan'           => 'Bi-weekly study coaching and check-ins.',
-            'privacy_consent_acknowledged'=> '1',
+            'client_type'                  => 'walk_in',
+            'interview_date'               => date('Y-m-d'),
+            'interview_time'               => '09:30',
+            'student_name'                 => 'Student ' . $this->suffix,
+            'student_id'                   => 'STU-' . strtoupper($this->suffix),
+            'course_year'                  => 'BSCS 2',
+            'presenting_concerns'          => 'Adjustment difficulties with coursework.',
+            'concern_severity'             => 'serious',
+            'problem_duration'             => 'Two weeks since midterms began.',
+            'perceived_cause'              => 'Heavy project workload.',
+            'coping_barriers'              => 'Irregular sleep schedule.',
+            'prior_coping_attempts'        => 'Made study checklists.',
+            'desired_help'                 => 'Time-management coaching.',
+            'hoped_changes'                => 'Consistent rest and lower stress.',
+            'privacy_consent_acknowledged' => '1',
         ];
 
         // Non-clinical superadmin and guidance_admin MUST NOT author clinical forms (fail-closed 403)
@@ -264,7 +270,7 @@ final class GuidanceClinicalWebWorkflowTest extends FreshDatabaseTestCase
         $this->assertGreaterThan(0, $instanceId);
 
         // Associate saves draft update
-        $formFields['counselor_assessment'] = 'Updated observation: responsive to intervention.';
+        $formFields['hoped_changes'] = 'Updated observation: steady sleep routine and calmer exams.';
         $saveDraftResp = $this->postAs($this->associateUser, "guidance/clinical/forms/{$instanceId}/save", [
             'fields' => $formFields,
         ], true);

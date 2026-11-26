@@ -36,7 +36,7 @@ final class OperationalReportPdfTest extends CIUnitTestCase
     private function assertPageNumbers(string $source, int $total): void
     {
         self::assertCount($total, $this->pages($source));
-        self::assertStringContainsString('Page \\thepage{} of ' . $total . '\\par', $source);
+        self::assertStringContainsString('Page \\thepage{} of ' . $total, $source);
         self::assertStringNotContainsString('TOTALPAGES', $source);
     }
 
@@ -69,10 +69,13 @@ final class OperationalReportPdfTest extends CIUnitTestCase
     public function testEveryPageUsesHeaderWithEmbeddedUniversitySeal(): void
     {
         $source = OperationalReportPdf::source($this->rows(), '2026-10-01', '2026-10-01');
-        self::assertStringContainsString('\\newsavebox{\\ReportBrand}', $source);
-        self::assertStringContainsString('\\setlength{\\ReportBrandHeight}{\\dimexpr\\ht\\ReportBrand+\\dp\\ReportBrand\\relax}', $source);
-        self::assertStringContainsString('\\includegraphics[trim=0 8.25bp 0 8.25bp,clip,height=\\ReportBrandHeight]{university-seal.png}\\hspace{3mm}', $source);
-        self::assertStringContainsString('\\textls[120]{FOUNDATION UNIVERSITY}', $source);
+        self::assertStringContainsString('\\usepackage{graphicx,xcolor,tabularx,pgfplots,microtype,fancyhdr,mdframed}', $source);
+        self::assertStringContainsString('\\fcolorbox{HeaderBorder}{HeaderBg}', $source);
+        self::assertStringContainsString('university-seal.png', $source);
+        self::assertStringContainsString('clinic-logo.png', $source);
+        self::assertStringContainsString('guidance-logo.png', $source);
+        self::assertStringContainsString('FOUNDATION UNIVERSITY', $source);
+        self::assertStringContainsString('\\pagestyle{fancy}', $source);
         self::assertSame(2, substr_count($source, '\\includegraphics'));
         foreach ($this->pages($source) as $page) {
             self::assertStringStartsWith('\\ReportHeader{', $page);
@@ -93,15 +96,13 @@ final class OperationalReportPdfTest extends CIUnitTestCase
     public function testFooterContainsOnlyBlackBrandingAndPageIndicator(): void
     {
         $source = OperationalReportPdf::source($this->rows(), '2026-10-01', '2026-10-01');
-        $footer = explode('\\let\\@evenfoot\\@oddfoot', explode('\\def\\@oddfoot', $source, 2)[1], 2)[0];
-        self::assertStringContainsString('\\rmfamily\\scriptsize\\color{black}', $footer);
-        self::assertStringContainsString('\\settoheight{\\SynapseLogoHeight}{\\textbf{SYNAPSE}}', $footer);
-        self::assertStringContainsString('\\includegraphics[trim=76bp 89bp 92bp 116bp,clip,height=\\SynapseLogoHeight]{synapse-black.png}', $footer);
-        self::assertStringContainsString('\\textbf{SYNAPSE}\\hfill Page \\thepage{} of 7\\par', $footer);
-        self::assertStringNotContainsString('\\hrule', $footer);
+        $footer = explode('\\begin{document}', explode('\\fancyfoot[L]{', $source, 2)[1], 2)[0];
+        self::assertStringNotContainsString('synapse-black.png', $source);
+        self::assertStringContainsString('Issued via SYNAPSE', $footer);
+        self::assertStringContainsString('Foundation University', $footer);
+        self::assertStringContainsString('Page \\thepage{} of 7', $footer);
         self::assertStringNotContainsString('Authorized aggregate report', $source);
         self::assertStringNotContainsString('No names, diagnoses, or person-level records.', $source);
-        self::assertStringContainsString('\\let\\@evenfoot\\@oddfoot', $source);
     }
 
     public function testDepartmentPagesContainOnlyTheirOwnMetricsAndCharts(): void

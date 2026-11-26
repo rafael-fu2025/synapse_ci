@@ -1,21 +1,24 @@
 # Team Workspace on the web
 
 ## TW-WEB-001 — Workstation membership isolates Team Workspace by tenant and unit
-- **Lifecycle:** `DRAFT`
+- **Lifecycle:** `READY`
 - **Legacy IDs:** None
-- **Changed by:** e08f383, 884b9f0
+- **Changed by:** `e08f383`, `884b9f0`, `62c790b`
 - **Requirement:** `TEAM.WEB.MEMBERSHIP`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-01`
 - **Surface:** Web Team Workspace
 - **Route/API:** GET /{clinic|guidance|facilities}/teams
-- **Actor/grants:** Active workstation member; nonmember/other-unit controls
-- **Preconditions:** Role-policy decision unresolved for physician/intern documentation; synthetic members in each unit/tenant; same IDs/content sentinels across units.
+- **Actor/grants:** Active workstation member (including `clinic_intern`, `guidance_intern`, `bmg_intern`); nonmember/other-unit controls
+- **Preconditions:** Canonical 16-role catalog reconciled; synthetic members across Clinic, Guidance, and BMG units/tenants; same IDs/content sentinels across units.
 **Steps**
-1. Open each authorized Team board with a multi-unit/current-role actor and inspect member/task scope.
-2. As nonmember or different-unit/foreign-tenant actor, request the direct Team URLs.
-- **Expected:** After role policy approval, membership comes from current active workstation roles and every board is tenant/unit isolated; nonmembers receive 403.
+1. Open each authorized Team board with department staff, interns, and multi-unit `superadmin` actors and inspect member/task scope.
+2. As student/employee nonmember or different-unit/foreign-tenant actor, request the direct Team URLs.
+- **Expected:** Membership comes from current active workstation roles (including active supervised interns) and every board is tenant/unit isolated; nonmembers and cross-unit actors receive 403.
 - **Negative/non-disclosure:** Team membership grants no clinical-record access and no cross-unit task/member sentinel appears.
 - **Cleanup:** Delete/reset Team fixtures and sign out all actors.
-- **Source:** app/Services/TeamAccess.php:14-116; app/Services/PortalContext.php:138-179
+- **Source:** app/Services/TeamAccess.php:14-116; app/Services/PortalContext.php:144-186
 - **Evidence:** Role/unit access matrix, member lists, direct-URL denials, and negative sentinel search.
 - **Verdict:** `NOT_RUN`
 
@@ -24,6 +27,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.TASK_CREATE`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-01`
 - **Surface:** Team board/list
 - **Route/API:** GET/POST /{unit}/teams/create|store
 - **Actor/grants:** Active workstation member
@@ -43,6 +49,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.TASK_VERSION`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-01`
 - **Surface:** Team board/task detail
 - **Route/API:** POST /{unit}/teams/{id}/update|move
 - **Actor/grants:** Creator, assignee, manager, ordinary member
@@ -62,6 +71,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.TASK_COMMENT`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-01`
 - **Surface:** Task detail
 - **Route/API:** POST /{unit}/teams/{id}/comments
 - **Actor/grants:** Any active workstation member
@@ -81,6 +93,9 @@
 - **Legacy IDs:** None
 - **Changed by:** e08f383
 - **Requirement:** `TEAM.API.WEB_PROJECTION_IDEMPOTENCY`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-01`
 - **Surface:** Bearer Team API mutation projected into the web Team board
 - **Route/API:** POST /api/v1/team/{unit}/tasks or /tasks/{id}/comments; GET /{unit}/teams[/tasks/{id}]
 - **Actor/grants:** Active workstation member with both an authorized bearer identity and web workstation session
@@ -100,6 +115,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.CALENDAR_VIEWS`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-02`
 - **Surface:** Team calendar
 - **Route/API:** GET /{unit}/teams/calendar
 - **Actor/grants:** Active workstation member
@@ -119,6 +137,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.EVENT_CREATE`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-02`
 - **Surface:** Team calendar event form
 - **Route/API:** POST /{unit}/teams/calendar/events/store
 - **Actor/grants:** Active workstation member
@@ -138,6 +159,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.EVENT_AUTH_VERSION`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-02`
 - **Surface:** Team calendar event
 - **Route/API:** POST /{unit}/teams/calendar/events/{id}/update|cancel
 - **Actor/grants:** Organizer, participant, manager/supervisor
@@ -157,6 +181,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.CHAT_SEND`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-03`
 - **Surface:** Department Team chat
 - **Route/API:** POST /{unit}/teams/chat/send
 - **Actor/grants:** Active workstation member
@@ -176,6 +203,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.CHAT.NONCE`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-03`
 - **Surface:** Department Team chat
 - **Route/API:** POST /{unit}/teams/chat/send
 - **Actor/grants:** Message sender
@@ -195,6 +225,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `TEAM.WEB.CHAT.MENTION`
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-03`
 - **Surface:** Team chat and notification inbox
 - **Route/API:** POST /{unit}/teams/chat/send; GET /notifications
 - **Actor/grants:** Active sender and current same-unit mentioned member
@@ -209,21 +242,24 @@
 - **Evidence:** Rendered mention, recipient-only generic notification/link, sender absence, and invalid transaction rollback.
 - **Verdict:** `NOT_RUN`
 
-## TW-WEB-012 — Chat history pagination and visible-message read cursor reconcile
+## TW-WEB-012 — Chat history pagination, auto-backread, and read cursor reconcile
 - **Lifecycle:** `READY`
 - **Legacy IDs:** None
-- **Changed by:** baseline
+- **Changed by:** `d43923d`
 - **Requirement:** `TEAM.WEB.CHAT.HISTORY_READ`
-- **Surface:** Team chat
+- **Role:** `workstation_member`
+- **Module:** Team Workspace (Web & Mobile)
+- **Use Cases:** `UC-TW-03`
+- **Surface:** Team chat (auto-backread pagination and circular scroll-to-latest button)
 - **Route/API:** GET /{unit}/teams/chat/history; POST /{unit}/teams/chat/read
 - **Actor/grants:** Active workstation member
 - **Preconditions:** At least 45 synthetic messages with own/other senders; unread cursor before page; around-message deep link; optional realtime disabled for poll fallback.
 **Steps**
-1. Open chat, load older history and an around-message link, and observe fixed 40-page/window behavior.
-2. Acknowledge only the last fully visible message, then add messages and observe unread count/reconciliation/show-latest behavior.
-- **Expected:** History is cursor-paged, around target authorized, read cursor increases monotonically only by explicit visible acknowledgement, own messages excluded from unread, and updates repair by poll/realtime hint.
+1. Open chat, scroll upward to trigger automatic backread pagination (and open an around-message link), observing fixed 40-page/window behavior and circular scroll-to-latest control visibility.
+2. Click scroll-to-latest or acknowledge the last fully visible message, then add messages and observe unread count/reconciliation.
+- **Expected:** History backreads seamlessly at the top viewport edge, jump-to-latest appears cleanly when scrolled back, read cursor increases monotonically only on visible acknowledgement, and own messages exclude from unread.
 - **Negative/non-disclosure:** Browsing older/around history does not mark unseen messages read, no public receipts appear, and foreign target IDs fail.
 - **Cleanup:** Reset messages/read cursor and realtime test state.
-- **Source:** docs/TEAMS.md:73-79; app/Services/TeamChatService.php:42-71,178-241
-- **Evidence:** History requests/window, highlighted target, cursor/unread before/after, fallback update, and foreign-target denial.
+- **Source:** docs/TEAMS.md:73-79; app/Services/TeamChatService.php:42-71,178-241; public/assets/js/team-chat.js:1-120
+- **Evidence:** Backread scroll/window captures, scroll-to-latest interaction, cursor/unread reconciliation, and foreign-target denial.
 - **Verdict:** `NOT_RUN`

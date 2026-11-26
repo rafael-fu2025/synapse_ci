@@ -29,66 +29,63 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         parent::setUp();
 
         $this->sampleInterviewData = [
-            'student_name' => 'Juan Dela Cruz & Maria Clara',
-            'student_id' => 'STU-2026-0042',
-            'course_year' => 'BS Psychology - 3rd Year (Section A_1)',
-            'interview_date' => '2026-11-20',
-            'client_type' => 'walk_in',
-            'demographics' => [
-                'age' => 20,
-                'sex' => 'Female',
-                'contact_number' => '+63 912 345 6789',
-                'civil_status' => 'Single',
-                'living_arrangement' => 'Dormitory near campus',
-                'emergency_contact' => 'Juana Dela Cruz (Mother) - 09187654321',
-            ],
-            'presenting_concerns' => 'Student reports recurring anxiety, difficulty sleeping, and academic stress regarding 50% midterm requirements.',
-            'mental_health_screening' => [
-                'Risk Level' => 'Low to Moderate',
-                'Mood' => 'Anxious & Fatigued',
-                'Suicide/Self-Harm Risk' => 'Negative / Denied',
-                'Sleep Pattern' => 'Disturbed (3-4 hrs/night)',
-            ],
-            'family_social_support' => 'Good relationship with mother & younger sister; supportive peer study group in dorm.',
-            'counselor_assessment' => 'Client exhibits adjustment difficulties and academic anxiety exacerbated by irregular sleep cycle. No evidence of severe clinical pathology.',
-            'intervention_plan' => '1. Cognitive reframing and sleep hygiene protocol.\n2. Bi-weekly supportive counseling.\n3. Referral to academic tutor if stress persists.',
+            'client_type'                  => 'walk_in',
+            'interview_date'               => '2026-11-20',
+            'interview_time'               => '09:30 AM',
+            'student_name'                 => 'Juan Dela Cruz & Maria Clara',
+            'student_id'                   => 'STU-2026-0042',
+            'course_year'                  => 'BS Psychology - 3rd Year (Section A_1)',
+            'presenting_concerns'          => 'Student reports recurring anxiety, difficulty sleeping, and academic stress regarding 50% midterm requirements.',
+            'concern_severity'             => 'serious',
+            'problem_duration'             => 'Approximately three weeks since midterm examinations began.',
+            'perceived_cause'              => 'Heavy coursework overlap and irregular rest schedule.',
+            'coping_barriers'              => 'Difficulty disconnecting from deadlines late at night.',
+            'prior_coping_attempts'        => 'Tried organizing daily checklists and talking with classmates.',
+            'desired_help'                 => 'Supportive counseling and practical stress-management strategies.',
+            'hoped_changes'                => 'Consistent sleep pattern and improved focus on academic tasks.',
+            'privacy_consent_acknowledged' => true,
         ];
 
         $this->samplePsychosocialContactData = [
-            'session_number' => 2,
-            'session_date' => '2026-11-25',
-            'modality' => 'in_person',
-            'time_started' => '10:00 AM',
-            'time_ended' => '11:00 AM',
-            'session_type' => 'follow_up',
-            'student_name' => 'Maria Clara Santos',
-            'student_id' => 'STU-2026-0042',
-            'course_year' => 'BS Psychology - 3rd Year',
-            'department' => 'College of Arts and Sciences',
-            'counselor_name' => 'Alex Mercer, RGC',
-            'client_state' => 'Client arrived on time, noticeably calmer and well-rested. Affect euthymic and communicative.',
-            'interventions_used' => 'Active listening, review of sleep diary, progressive muscle relaxation technique demonstration.',
-            'client_response' => 'Client stated sleep improved to 6 hours after applying relaxation techniques. Expressed increased confidence.',
-            'action_items' => 'Continue sleep schedule tracking; complete breathing exercises before studying.',
-            'next_session_date' => '2026-12-02',
+            'department'                   => 'College of Arts and Sciences',
+            'session_date'                 => '2026-11-25',
+            'student_name'                 => 'Maria Clara Santos',
+            'student_id'                   => 'STU-2026-0042',
+            'course_year'                  => 'BS Psychology - 3rd Year',
+            'time_started'                 => '10:00 AM',
+            'time_ended'                   => '11:00 AM',
+            'referral_source'              => 'counselor_associate_initiated',
+            'session_type'                 => 'follow_up',
+            'presenting_concerns'          => 'Student reports midterm academic workload pressure and disturbed sleep.',
+            'predisposing_factors'         => 'History of high self-expectation during major exam weeks.',
+            'precipitating_factors'        => 'Three overlapping course projects due in the same week.',
+            'perpetuating_factors'         => 'Irregular late-night study habits and skipped rest breaks.',
+            'protective_risk_factors'      => 'Strong family support and active peer study circle.',
+            'intervention_plan'            => 'Active listening, review of sleep diary, and progressive muscle relaxation coaching.',
+            'follow_up_plan'               => 'Continue sleep schedule tracking and follow up next week.',
+            'next_session_schedule'        => '2026-12-02 10:00 AM',
+            'privacy_consent_acknowledged' => true,
         ];
 
         $this->sampleCounselingContactData = [
-            'session_number' => 1,
-            'session_date' => '2026-11-22',
-            'time_start' => '02:00 PM',
-            'time_end' => '03:15 PM',
-            'session_type' => 'intake',
-            'student_name' => 'Crisostomo Ibarra',
-            'student_id' => 'STU-2026-0099',
-            'course_year' => 'BS Civil Engineering - 4th Year',
-            'department' => 'College of Engineering',
-            'counselor_name' => 'Dr. Jane Roe, RGC',
-            'concerns_discussed' => 'Career uncertainty, impending graduation anxiety, and interpersonal conflicts with thesis partner.',
-            'counseling_goals' => 'Establish career path clarity, practice conflict resolution communication skills, and manage pre-graduation anxiety.',
-            'interventions_and_responses' => 'Brief solution-focused counseling; role-playing assertiveness communication. Client actively engaged and receptive.',
-            'homework_and_commitments' => 'Conduct assertiveness dialogue with thesis peer; complete Myers-Briggs/MI assessment checklist.',
-            'next_schedule' => '2026-11-29 02:00 PM',
+            'department'                   => 'College of Engineering',
+            'session_date'                 => '2026-11-22',
+            'student_name'                 => 'Crisostomo Ibarra',
+            'student_id'                   => 'STU-2026-0099',
+            'course_year'                  => 'BS Civil Engineering - 4th Year',
+            'time_started'                 => '02:00 PM',
+            'time_ended'                   => '03:15 PM',
+            'referral_source'              => 'counselor_initiated',
+            'session_type'                 => 'intake',
+            'presenting_concerns'          => 'Career uncertainty, impending graduation anxiety, and interpersonal conflicts with thesis partner.',
+            'predisposing_factors'         => 'Perfectionism and pressure as first-generation engineering student.',
+            'precipitating_factors'        => 'Upcoming thesis final defense and thesis partner communication breakdown.',
+            'perpetuating_factors'         => 'Avoidance of assertive conversation and late-night rumination.',
+            'protective_risk_factors'      => 'Strong academic standing and supportive sibling network.',
+            'intervention_plan'            => 'Brief solution-focused counseling; role-playing assertiveness communication. Client actively engaged and receptive.',
+            'follow_up_plan'               => 'Conduct assertiveness dialogue with thesis peer and review progress next session.',
+            'next_session_schedule'        => '2026-11-29 02:00 PM',
+            'privacy_consent_acknowledged' => true,
         ];
 
         $this->authorAttestation = [
@@ -136,27 +133,35 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('\\fancyhead[R]{\\small \\textbf{Form Code:} F-OGC-GPS-PIF-008-00}', $latex);
         $this->assertStringNotContainsString('Canonical Code:', $latex);
 
-        // Student Demographics & Academic Profile (Escaped)
+        // Data Privacy Notice (RA 10173), Client Information & 8 Paper Questions
+        $this->assertStringContainsString('Data Privacy Act of 2012 (RA 10173)', $latex);
+        $this->assertStringContainsString('dpo@foundationu.com', $latex);
         $this->assertStringContainsString('Juan Dela Cruz \\& Maria Clara', $latex);
         $this->assertStringContainsString('STU-2026-0042', $latex);
         $this->assertStringContainsString('BS Psychology - 3rd Year (Section A\\_1)', $latex);
-        $this->assertStringContainsString('2026-11-20', $latex);
+        $this->assertStringContainsString('2026-11-20 09:30 AM', $latex);
         $this->assertStringContainsString('$\\boxtimes$ Walk-in', $latex);
-        $this->assertStringContainsString('Dormitory near campus', $latex);
 
-        // Presenting Concerns & Mental Health Screening
-        $this->assertStringContainsString('Presenting Concerns', $latex);
+        // Questions 1-8 matching 8.1. F-OGC-GPS-PIF-008-00
+        $this->assertStringContainsString('1. ISSUES/CONCERNS', $latex);
         $this->assertStringContainsString('50\\% midterm requirements', $latex);
-        $this->assertStringContainsString('Mental Health Screening', $latex);
-        $this->assertStringContainsString('Risk Level', $latex);
+        $this->assertStringContainsString('2. How serious are these matters for you at this time?', $latex);
+        $this->assertStringContainsString('$\\boxtimes$ Serious', $latex);
+        $this->assertStringContainsString('3. How long have these been your problem?', $latex);
+        $this->assertStringContainsString('Approximately three weeks', $latex);
+        $this->assertStringContainsString('4. What do you think originally caused these problem/s?', $latex);
+        $this->assertStringContainsString('5. What other things currently making it hard to deal with the problem/s?', $latex);
+        $this->assertStringContainsString('6. What have you already tried in order to deal with the problem/s?', $latex);
+        $this->assertStringContainsString('7. What do you think would help solve the problem/s? What type of help do you want?', $latex);
+        $this->assertStringContainsString('8. What changes are you hoping for?', $latex);
 
-        // Family & Social Support
-        $this->assertStringContainsString('Family \\& Social Support', $latex);
-        $this->assertStringContainsString('Good relationship with mother \\& younger sister', $latex);
-
-        // Counselor Assessment & Action/Intervention Plan
-        $this->assertStringContainsString('Counselor Assessment', $latex);
-        $this->assertStringContainsString('Action \\& Intervention Plan', $latex);
+        // Fabricated sections with no basis on original PIF-008 paper must never appear
+        $this->assertStringNotContainsString('Mental Health Screening', $latex);
+        $this->assertStringNotContainsString('PHQ-9', $latex);
+        $this->assertStringNotContainsString('GAD-7', $latex);
+        $this->assertStringNotContainsString('Civil Status', $latex);
+        $this->assertStringNotContainsString('Emergency Contact', $latex);
+        $this->assertStringNotContainsString('Counselor Assessment', $latex);
 
         // Attestation stamp: Author line and verification code
         $this->assertStringContainsString('Prof. Alex Mercer, RGC', $latex);
@@ -217,21 +222,37 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('September 1, 2025', $latex);
         $this->assertStringContainsString('2025-09-01', $latex);
 
-        // Session information
+        // Privacy Notice (RA 10173) & Session / Student details
+        $this->assertStringContainsString('Data Privacy Act of 2012 (RA 10173)', $latex);
+        $this->assertStringContainsString('dpo@foundationu.com', $latex);
         $this->assertStringContainsString('Maria Clara Santos', $latex);
         $this->assertStringContainsString('STU-2026-0042', $latex);
         $this->assertStringContainsString('BS Psychology - 3rd Year', $latex);
+        $this->assertStringContainsString('College of Arts and Sciences', $latex);
         $this->assertStringContainsString('2026-11-25', $latex);
         $this->assertStringContainsString('10:00 AM -- 11:00 AM', $latex);
-        $this->assertStringContainsString('$\\boxtimes$ In-Person', $latex);
+        $this->assertStringContainsString('$\\boxtimes$ Counselor Associate-initiated', $latex);
         $this->assertStringContainsString('$\\boxtimes$ Follow-up', $latex);
 
-        // Clinical sections
-        $this->assertStringContainsString('Client arrived on time, noticeably calmer', $latex);
+        // Summary of Psychosocial Support Session (5-P formulation) & Plans
+        $this->assertStringContainsString('Summary of Psychosocial Support Session', $latex);
+        $this->assertStringContainsString('Presenting Concern/s:', $latex);
+        $this->assertStringContainsString('Student reports midterm academic workload pressure', $latex);
+        $this->assertStringContainsString('Predisposing Factors:', $latex);
+        $this->assertStringContainsString('History of high self-expectation', $latex);
+        $this->assertStringContainsString('Precipitating Factors:', $latex);
+        $this->assertStringContainsString('Perpetuating Factors:', $latex);
+        $this->assertStringContainsString('Protective / Risk Factors:', $latex);
+        $this->assertStringContainsString('Plans:', $latex);
+        $this->assertStringContainsString('Intervention:', $latex);
         $this->assertStringContainsString('Active listening, review of sleep diary', $latex);
-        $this->assertStringContainsString('Client stated sleep improved to 6 hours', $latex);
+        $this->assertStringContainsString('Follow up:', $latex);
         $this->assertStringContainsString('Continue sleep schedule tracking', $latex);
-        $this->assertStringContainsString('2026-12-02', $latex);
+        $this->assertStringContainsString('2026-12-02 10:00 AM', $latex);
+
+        // Fabricated legacy PCF fields must not appear
+        $this->assertStringNotContainsString('Session Modality:', $latex);
+        $this->assertStringNotContainsString('Client State \\& Presentation', $latex);
 
         // Attestations
         $this->assertStringContainsString('Prof. Alex Mercer, RGC', $latex);
@@ -259,21 +280,38 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('September 1, 2025', $latex);
         $this->assertStringContainsString('2025-09-01', $latex);
 
-        // Session information
+        // Privacy Notice (RA 10173) & Session / Student details
+        $this->assertStringContainsString('Data Privacy Act of 2012 (RA 10173)', $latex);
+        $this->assertStringContainsString('dpo@foundationu.com', $latex);
         $this->assertStringContainsString('Crisostomo Ibarra', $latex);
         $this->assertStringContainsString('STU-2026-0099', $latex);
         $this->assertStringContainsString('BS Civil Engineering - 4th Year', $latex);
         $this->assertStringContainsString('College of Engineering', $latex);
         $this->assertStringContainsString('2026-11-22', $latex);
         $this->assertStringContainsString('02:00 PM -- 03:15 PM', $latex);
+        $this->assertStringContainsString('$\\boxtimes$ Counselor-initiated', $latex);
         $this->assertStringContainsString('$\\boxtimes$ Intake', $latex);
 
-        // Clinical content
+        // Summary of Counseling Session (5-P formulation) & Plans
+        $this->assertStringContainsString('Summary of Counseling Session', $latex);
+        $this->assertStringContainsString('Presenting Concern/s:', $latex);
         $this->assertStringContainsString('Career uncertainty, impending graduation anxiety', $latex);
-        $this->assertStringContainsString('Establish career path clarity', $latex);
+        $this->assertStringContainsString('Predisposing Factors:', $latex);
+        $this->assertStringContainsString('Perfectionism and pressure', $latex);
+        $this->assertStringContainsString('Precipitating Factors:', $latex);
+        $this->assertStringContainsString('Perpetuating Factors:', $latex);
+        $this->assertStringContainsString('Protective / Risk Factors:', $latex);
+        $this->assertStringContainsString('Plans:', $latex);
+        $this->assertStringContainsString('Intervention:', $latex);
         $this->assertStringContainsString('Brief solution-focused counseling', $latex);
+        $this->assertStringContainsString('Follow up:', $latex);
         $this->assertStringContainsString('Conduct assertiveness dialogue with thesis peer', $latex);
+        $this->assertStringContainsString('Next Session / Follow-Up', $latex);
         $this->assertStringContainsString('2026-11-29 02:00 PM', $latex);
+
+        // Fabricated legacy CCF fields must not appear
+        $this->assertStringNotContainsString('Counseling Goals', $latex);
+        $this->assertStringNotContainsString('Session Number:', $latex);
 
         // Attestations
         $this->assertStringContainsString('Prof. Alex Mercer, RGC', $latex);
@@ -581,5 +619,94 @@ final class GuidanceClinicalPdfTest extends CIUnitTestCase
         $this->assertCompiledPdf(LatexReportCompiler::compile($pifTex));
         $this->assertCompiledPdf(LatexReportCompiler::compile($pcfTex));
         $this->assertCompiledPdf(LatexReportCompiler::compile($ccfTex));
+    }
+
+    public function testPsychosocialInterviewExcludesFabricatedScreeningAndDemographics(): void
+    {
+        $snapshot = [
+            'data' => array_merge($this->sampleInterviewData, [
+                'mental_health_screening' => [
+                    'phq9_score' => 4,
+                    'gad7_score' => 3,
+                    'risk_level' => 'low',
+                ],
+                'demographics' => [
+                    'age' => 20,
+                    'civil_status' => 'Single',
+                ],
+            ]),
+            'is_draft' => false,
+        ];
+
+        $latex = GuidanceFormLatex::renderPsychosocialInterview($snapshot);
+
+        $this->assertStringNotContainsString('PHQ-9', $latex);
+        $this->assertStringNotContainsString('GAD-7', $latex);
+        $this->assertStringNotContainsString('Mental Health Screening', $latex);
+        $this->assertStringNotContainsString('Civil Status', $latex);
+    }
+
+    public function testMdframedUsesTikzBackendAndConsistentBordersAcrossClinicalForms(): void
+    {
+        $pifDraft = GuidanceFormLatex::renderPsychosocialInterview([
+            'data' => $this->sampleInterviewData,
+            'is_draft' => true,
+        ]);
+        $pcfDraft = GuidanceFormLatex::renderPsychosocialContact([
+            'data' => $this->samplePsychosocialContactData,
+            'is_draft' => true,
+        ]);
+        $ccfDraft = GuidanceFormLatex::renderCounselingContact([
+            'data' => $this->sampleCounselingContactData,
+            'is_draft' => true,
+        ]);
+
+        foreach ([$pifDraft, $pcfDraft, $ccfDraft] as $latex) {
+            $this->assertStringContainsString('\\usepackage[framemethod=tikz]{mdframed}', $latex);
+            $this->assertStringNotContainsString('roundcorner=', $latex);
+            $this->assertStringNotContainsString('linecolor=orange', $latex);
+        }
+    }
+
+    public function testGeneralReferralLatexMatchesOfficialOgcForm(): void
+    {
+        $tex = GuidanceFormLatex::render(
+            ['id' => 1, 'instance_number' => 'OGC-2026-GGR-01', 'status' => 'finalized'],
+            ['internal_key' => 'guidance_general_referral', 'form_code' => 'F-OGC-GRE-GGR-005-00', 'canonical_title' => 'Guidance General Referral Form'],
+            ['revision_number' => '01', 'effectivity_date' => '2025-09-01'],
+            [
+                'student_name'          => 'Juana Dela Cruz',
+                'student_id'            => 'STU-10023',
+                'course_year'           => 'BS Psychology - 3rd Year',
+                'referring_name'        => 'Prof. Santos',
+                'referring_designation' => 'Teacher',
+                'referring_department'  => 'College of Arts and Sciences',
+                'contact_number'        => '09171234567',
+                'referral_date'         => '2026-11-26',
+                'referral_time'         => '10:30 AM',
+                'reasons'               => ['excessive_anxiety', 'absenteeism'],
+                'reasons_narrative'     => 'Observed frequent absences and test anxiety.',
+                'remarks'               => 'Initial check-in completed by adviser.',
+                'date_received'         => '2026-11-26',
+                'responded_date'        => '2026-11-26',
+                'action_taken'          => 'Scheduled psychosocial support intake.',
+            ],
+            $this->authorAttestation,
+            'SYN-DOC-GGR-01',
+            false
+        );
+
+        $this->assertStringContainsString('F-OGC-GRE-GGR-005-00', $tex);
+        $this->assertStringContainsString('Family concerns', $tex);
+        $this->assertStringContainsString('Self-harming tendencies/behaviors', $tex);
+        $this->assertStringContainsString('$\\boxtimes$ Excessive anxiety', $tex);
+        $this->assertStringContainsString('$\\boxtimes$ Absenteeism', $tex);
+        $this->assertStringContainsString('Description of Behavior / Incident Observed:', $tex);
+        $this->assertStringContainsString('REMARKS:', $tex);
+        $this->assertStringContainsString('$\\boxtimes$ Teacher', $tex);
+        $this->assertStringContainsString('For School Counselors/Personnel use only', $tex);
+        $this->assertStringContainsString('Scheduled psychosocial support intake.', $tex);
+        $this->assertStringNotContainsString('Academic Deficiency', $tex);
+        $this->assertCompiledPdf(LatexReportCompiler::compile($tex));
     }
 }

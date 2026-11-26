@@ -5,6 +5,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.ADDENDUM.SEALED_ONLY`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-07`
 - **Surface:** Sealed encounter
 - **Route/API:** POST /clinic/encounters/{id}/addendum
 - **Actor/grants:** Actor with clinic.encounters.addendum
@@ -24,6 +27,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.LAB.POST_VISIT`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-05`, `UC-CL-07`
 - **Surface:** Patient chart and sealed encounter
 - **Route/API:** POST /clinic/patients/{personId}/labs; POST /clinic/encounters/{id}/addendum
 - **Actor/grants:** Actor with clinic.encounters.addendum
@@ -43,6 +49,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.CLEARANCE.WORKFLOW`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-11`
 - **Surface:** Patient chart and certificate
 - **Route/API:** POST /clinic/patients/{personId}/clearances; GET /clinic/clearances/{id}/certificate
 - **Actor/grants:** Actor with clinic.clearances.write/read
@@ -62,6 +71,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.ISOLATION.CREATE`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-10`
 - **Surface:** Clinic isolation tracker
 - **Route/API:** GET /clinic/isolation; POST /clinic/isolation/store
 - **Actor/grants:** Actor with clinic.isolation.write
@@ -81,6 +93,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.ISOLATION.CLEAR`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-10`
 - **Surface:** Clinic isolation tracker
 - **Route/API:** POST /clinic/isolation/{id}/clear
 - **Actor/grants:** Actor with clinic.isolation.write
@@ -100,6 +115,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.REPORT.SUMMARY`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-12`
 - **Surface:** Clinic reports
 - **Route/API:** GET /clinic/reports
 - **Actor/grants:** Actor with clinic.reports.export
@@ -117,19 +135,22 @@
 ## CL-RPT-002 — Clinic PDF report matches the on-screen summary
 - **Lifecycle:** `READY`
 - **Legacy IDs:** None
-- **Changed by:** b868a49
+- **Changed by:** b868a49, 62c790b
 - **Requirement:** `CLINIC.REPORT.PDF`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-12`
 - **Surface:** Clinic report export
 - **Route/API:** GET /clinic/reports/pdf
 - **Actor/grants:** Actor with clinic.reports.export
-- **Preconditions:** Same bounded synthetic report period as CL-RPT-001; PDF compiler available in approved test environment.
+- **Preconditions:** Same bounded synthetic report period as CL-RPT-001; PDF compiler available in approved test environment; institutional header seal/logo assets present.
 **Steps**
 1. Generate the PDF from the selected report period and record filename/content type/page count.
-2. Compare headline aggregates and period labels against the on-screen report.
-- **Expected:** A readable PDF is produced with matching period and aggregate values.
+2. Compare the unified institutional header (Foundation University Health Clinic seal, unit title, period metadata) and headline aggregates against the on-screen report.
+- **Expected:** A readable PDF renders with the shared institutional header/footer and exact matching period and aggregate values.
 - **Negative/non-disclosure:** The PDF contains no patient-level note text, foreign tenant data, formula payload, or server path/error output.
 - **Cleanup:** Delete the downloaded PDF after retaining sanitized hash/render evidence.
-- **Source:** app/Config/Routes.php:511-512; app/Services/Reporting/ClinicSummaryReportLatex.php:1-179
+- **Source:** app/Config/Routes.php:559-561; app/Services/Reporting/ClinicSummaryReportLatex.php:1-179; app/Services/Reporting/DocumentHeaderLatex.php:1-76
 - **Evidence:** Download headers/hash, rendered PDF pages, and value comparison to the web summary.
 - **Verdict:** `NOT_RUN`
 
@@ -138,6 +159,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.INVENTORY.IDEMPOTENCY`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-09`
 - **Surface:** Inventory mutations
 - **Route/API:** POST inventory receive/adjust/dispense with request key
 - **Actor/grants:** Actor with clinic.inventory.write
@@ -157,6 +181,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49, 884b9f0
 - **Requirement:** `CLINIC.INVENTORY.USABLE_PROJECTION`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-09`
 - **Surface:** Inventory detail/catalog
 - **Route/API:** POST /clinic/inventory/batches/{id}/status; GET /clinic/inventory
 - **Actor/grants:** Reader plus manager with clinic.inventory.write
@@ -176,6 +203,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.INVENTORY.REVERSAL`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-09`
 - **Surface:** Inventory operation detail
 - **Route/API:** POST /clinic/inventory/operations/{id}/reverse
 - **Actor/grants:** Clinic inventory manager/write actor; non-manager control actor
@@ -191,39 +221,67 @@
 - **Verdict:** `NOT_RUN`
 
 ## CL-RBAC-001 — Physician authority includes sealing but remains grant-driven
-- **Lifecycle:** `DRAFT`
+- **Lifecycle:** `READY`
 - **Legacy IDs:** None
-- **Changed by:** b868a49
+- **Changed by:** b868a49, 62c790b
 - **Requirement:** `CLINIC.RBAC.PHYSICIAN`
+- **Role:** `clinic_physician`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-13`
 - **Surface:** Clinic encounter/inventory
 - **Route/API:** POST encounter complete/addendum/dispense
 - **Actor/grants:** Synthetic clinic_physician with current seeded grants
-- **Preconditions:** Decision required to reconcile the 14-role code catalog with older 12-role documentation; physician fixture with open encounter and stock.
+- **Preconditions:** Canonical 16-role catalog reconciled (`PermissionsAndRolesSeeder.php`); physician fixture with open encounter and stock.
 **Steps**
 1. Sign in as clinic_physician and perform vitals/assessment, dispensation, and encounter sealing using granted actions.
 2. Remove one grant through an approved isolated role fixture and repeat the affected action.
-- **Expected:** After policy approval, physician actions follow fresh database grants, and removing a grant immediately removes the action/authorization.
+- **Expected:** Physician actions follow fresh database grants across the 16-role catalog, and removing a grant immediately removes the action/authorization.
 - **Negative/non-disclosure:** Role name alone does not bypass a missing grant, tenant scope, inventory idempotency, or sealed-state rules.
 - **Cleanup:** Restore the isolated role grants and reset encounter/inventory fixtures.
-- **Source:** app/Database/Seeds/PermissionsAndRolesSeeder.php:139-151; app/Controllers/ClinicController.php:619-645
+- **Source:** app/Database/Seeds/PermissionsAndRolesSeeder.php:145-157; app/Controllers/ClinicController.php:619-645
 - **Evidence:** Role/grant snapshot, authorized workflow, revoked-grant denial, and restored fixture record.
 - **Verdict:** `NOT_RUN`
 
 ## CL-RBAC-002 — Intern cannot seal, add addenda, or write inventory
-- **Lifecycle:** `DRAFT`
+- **Lifecycle:** `READY`
 - **Legacy IDs:** None
-- **Changed by:** b868a49
+- **Changed by:** b868a49, 62c790b
 - **Requirement:** `CLINIC.RBAC.INTERN_LIMITS`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-01`, `UC-CL-03`, `UC-CL-04`
 - **Surface:** Clinic workstation
 - **Route/API:** Representative Clinic POST routes
 - **Actor/grants:** Synthetic clinic_intern with current seeded read/create/write subset
-- **Preconditions:** Decision required to reconcile role catalog documentation; intern fixture, open encounter, sealed encounter, medicine stock.
+- **Preconditions:** Canonical 16-role catalog and `StudentInternService` reconciled; intern fixture, open encounter, sealed encounter, medicine stock.
 **Steps**
-1. As clinic_intern, record an allowed open-encounter value and inspect read-only inventory/isolation/clearance views.
+1. As clinic_intern, record an allowed open-encounter value, check the live shift clock, and inspect read-only inventory/isolation/clearance views.
 2. Attempt encounter completion, post-visit addendum, inventory receipt/dispense, isolation write, and clearance write.
-- **Expected:** After policy approval, allowed intern work succeeds while every ungranted high-authority mutation is absent or returns 403 without state change.
+- **Expected:** Allowed intern work succeeds while every ungranted high-authority mutation is absent or returns 403 without state change.
 - **Negative/non-disclosure:** No superadmin/host fallback or client-supplied permission converts the intern into a sealer/manager.
 - **Cleanup:** Reset synthetic clinical records and remove the temporary intern fixture.
-- **Source:** app/Database/Seeds/PermissionsAndRolesSeeder.php:167-175; app/Controllers/ClinicController.php:619-645
+- **Source:** app/Database/Seeds/PermissionsAndRolesSeeder.php:173-181; app/Services/StudentInternService.php:37-54
 - **Evidence:** Allowed action, hidden controls/403 responses for each denied mutation, and before/after no-change proof.
+- **Verdict:** `NOT_RUN`
+
+## CL-ANN-001 — Clinic administrator publishes and manages scoped Clinic announcements
+- **Lifecycle:** `READY`
+- **Legacy IDs:** None
+- **Changed by:** `731507c`
+- **Requirement:** `CLINIC.ANNOUNCEMENT.PUBLISH`
+- **Role:** `clinic_admin`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-14`
+- **Surface:** Clinic announcements console
+- **Route/API:** GET /clinic/announcements; POST /clinic/announcements/store|{id}/update|{id}/publish|{id}/archive|{id}/restore
+- **Actor/grants:** Active `clinic_admin` with `clinic.announcements.manage`; negative controls `clinic_staff` and `guidance_admin`
+- **Preconditions:** Clean tenant with target portal users; negative control actors lacking `clinic.announcements.manage` or in a different unit.
+**Steps**
+1. As `clinic_admin`, create a draft Clinic announcement, edit it, publish it with optimistic version, verify target portal feed visibility, then archive and restore it cleanly.
+2. Attempt the same create, publish, and cross-unit routes as `clinic_staff` (without `clinic.announcements.manage`) and `guidance_admin`.
+- **Expected:** Only `clinic_admin` (and `superadmin`) manages the Clinic announcement lifecycle; published notices become immutable until archived/restored and unauthorized actors receive 403.
+- **Negative/non-disclosure:** Draft/archived Clinic notices stay hidden from portal feeds and cross-unit managers cannot alter Clinic notices.
+- **Cleanup:** Archive/remove the disposable announcement fixture.
+- **Source:** app/Controllers/AnnouncementController.php:20-86; app/Config/Routes.php:221-232; app/Database/Seeds/PermissionsAndRolesSeeder.php:129-143
+- **Evidence:** Create/publish/archive/restore screenshots, portal visibility proof, and 403 denial matrix.
 - **Verdict:** `NOT_RUN`

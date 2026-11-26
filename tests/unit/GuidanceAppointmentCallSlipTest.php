@@ -252,7 +252,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'        => $this->studentPersonId,
             'scheduled_date'   => $today,
             'scheduled_time'   => '09:30:00',
-            'purpose'          => 'counseling',
+            'purpose'          => 'personal_social',
             'notes'            => 'Initial counseling session note',
             'queue_ticket_id'  => 42,
             'actor'            => $actor,
@@ -284,14 +284,14 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'      => $this->studentPersonId,
             'scheduled_date' => $today,
             'scheduled_time' => '11:00:00',
-            'purpose'        => 'routine_interview',
+            'purpose'        => 'academic',
             'actor'          => $actor,
         ];
 
         $apt2 = $this->appointmentService->scheduleAppointment($data2);
 
         $this->assertSame("APT-{$dateCode}-0002", $apt2['appointment_number']);
-        $this->assertSame('routine_interview', $apt2['purpose']);
+        $this->assertSame('academic', $apt2['purpose']);
         $this->assertNotSame($apt1['form_instance_id'], $apt2['form_instance_id']);
     }
 
@@ -303,7 +303,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'      => $this->studentPersonId,
             'scheduled_date' => date('Y-m-d', strtotime('+1 day')),
             'scheduled_time' => '14:00:00',
-            'purpose'        => 'follow_up',
+            'purpose'        => 'career',
             'actor'          => $actor,
         ]);
 
@@ -330,7 +330,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'      => $this->studentPersonId,
             'scheduled_date' => date('Y-m-d', strtotime('+2 days')),
             'scheduled_time' => '10:00:00',
-            'purpose'        => 'inquiry',
+            'purpose'        => 'consultation',
             'actor'          => $actor,
         ]);
         $updatedCancelled = $this->appointmentService->updateAppointmentStatus((int) $cancelledApt['id'], 'cancelled', 'Cancelled by student', 1, $actor);
@@ -342,7 +342,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'      => $this->studentPersonId,
             'scheduled_date' => date('Y-m-d', strtotime('+3 days')),
             'scheduled_time' => '11:00:00',
-            'purpose'        => 'routine_interview',
+            'purpose'        => 'academic',
             'actor'          => $actor,
         ]);
         $updatedNoShow = $this->appointmentService->updateAppointmentStatus((int) $noShowApt['id'], 'no_show', 'Student failed to appear', 1, $actor);
@@ -357,7 +357,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'      => $this->studentPersonId,
             'scheduled_date' => date('Y-m-d', strtotime('+1 day')),
             'scheduled_time' => '14:00:00',
-            'purpose'        => 'follow_up',
+            'purpose'        => 'career',
             'actor'          => $actor,
         ]);
 
@@ -375,7 +375,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'      => $this->studentPersonId,
             'scheduled_date' => date('Y-m-d'),
             'scheduled_time' => '10:00:00',
-            'purpose'        => 'counseling',
+            'purpose'        => 'personal_social',
             'actor'          => $unauthActor,
         ]);
     }
@@ -554,7 +554,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'episode_id'     => $episodeId,
             'scheduled_date' => date('Y-m-d', strtotime('+1 day')),
             'scheduled_time' => '09:00:00',
-            'purpose'        => 'counseling',
+            'purpose'        => 'personal_social',
             'actor'          => $actor,
         ]);
 
@@ -583,7 +583,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id'      => $this->studentPersonId,
             'scheduled_date' => date('Y-m-d'),
             'scheduled_time' => '15:00:00',
-            'purpose'        => 'inquiry',
+            'purpose'        => 'consultation',
             'actor'          => $actor,
         ]);
 
@@ -598,7 +598,7 @@ final class GuidanceAppointmentCallSlipTest extends FreshDatabaseTestCase
             'person_id' => $this->studentPersonId,
             'call_date' => date('Y-m-d'),
             'call_time' => '15:30:00',
-            'purpose'   => 'follow_up',
+            'purpose'   => 'testing_interpretation',
             'actor'     => $actor,
         ]);
 

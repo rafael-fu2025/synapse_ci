@@ -242,7 +242,7 @@ if ($pathOnly === '/guidance/intake') {
         'availableScopes' => ['intake' => 'Intake & Referral Processing', 'counseling' => 'Counseling Sessions & Notes', 'safety_triage' => 'Clinical Safety Triage & Escalation'],
         'canManagePractitioners' => true, 'canReassign' => true];
 } else {
-    $purposes = ['personal_counseling', 'career_counseling', 'routine_interview', 'follow_up', 'academic_counseling', 'others'];
+    $purposes = ['personal_counseling', 'career_counseling', 'academic_counseling', 'routine_interview', 'testing_interpretation', 'others'];
     $slips = $all(61, static fn (int $i): array => [
         'id' => 93300 + $i, 'call_slip_number' => 'SYN-SLIP-' . str_pad((string) $i, 3, '0', STR_PAD_LEFT),
         'form_instance_number' => 'SYN-GCS-' . $i, 'episode_id' => null, 'person_id' => 93100 + $i,

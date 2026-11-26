@@ -23,6 +23,8 @@ $counseling = $counseling ?? [];
 $psychosocialLabels = $psychosocialLabels ?? [];
 $counselingLabels = $counselingLabels ?? [];
 $visitTypeLabels = $visitTypeLabels ?? [];
+$psychosocialVisitTypeLabels = $psychosocialVisitTypeLabels ?? $visitTypeLabels;
+$counselingVisitTypeLabels = $counselingVisitTypeLabels ?? $visitTypeLabels;
 $providerUserId = (int) ($providerUserId ?? 0);
 $providerName = $providerName ?? 'Guidance Provider';
 $providers = $providers ?? [];
@@ -88,7 +90,7 @@ $renderAggregateCard = static function (
               <div>
                 <h3 class="gse-notice-title">Cohort Threshold Suppression Active</h3>
                 <p>At least <?= $minReq ?> response records are required for this provider, service, and filtered cohort.</p>
-                <p class="gse-caption">To protect student pseudonymity under RA 10173, dimension averages, willingness/recommendation rates, visit-type distribution, and qualitative comments remain suppressed.</p>
+                <p class="gse-caption">To protect student pseudonymity under RA 10173, dimension averages, willingness-to-visit-again rates, visit-type distribution, and qualitative comments remain suppressed.</p>
               </div>
             </div>
           </div>
@@ -233,7 +235,7 @@ $renderAggregateCard = static function (
         $psychosocial,
         $psychosocialLabels,
         'Willingness to Visit Again',
-        $visitTypeLabels,
+        $psychosocialVisitTypeLabels,
         $providerUserId,
         $filters
     ) ?>
@@ -243,8 +245,8 @@ $renderAggregateCard = static function (
         \App\Services\Guidance\GuidanceServiceEvaluationService::TYPE_COUNSELING,
         $counseling,
         $counselingLabels,
-        'Service Recommendation Rate',
-        $visitTypeLabels,
+        'Willingness to Visit Again',
+        $counselingVisitTypeLabels,
         $providerUserId,
         $filters
     ) ?>

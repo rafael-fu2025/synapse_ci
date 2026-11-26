@@ -5,6 +5,9 @@
 - Legacy IDs: `MB-001`
 - Changed by: `bea71cf`, `39f7339`
 - Requirement: Mobile sign-in must share the web credential/rate policy, receive opaque one-time tokens, store only refresh credential in platform keychain binding, fetch `/me` as authoritative identity/entitlements, and restore across restart without retaining password.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: React Native sign-in/splash/home.
 - Route/API: `POST /api/v1/auth/login`; `GET /api/v1/me`.
 - Actor/grants: Active student account with linked person.
@@ -27,6 +30,9 @@
 - Legacy IDs: `MB-002`
 - Changed by: `bea71cf`, `73b8a11`
 - Requirement: On expired access token, authenticated requests in one active runtime must share a single refresh, rotate credentials atomically, retry each request at most once, and avoid user prompt when successful.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Mobile API client and any personal screen.
 - Route/API: `POST /api/v1/auth/refresh` plus original resource GETs.
 - Actor/grants: Signed-in mobile user.
@@ -49,6 +55,9 @@
 - Legacy IDs: `MB-003`
 - Changed by: `bea71cf`
 - Requirement: Refresh credentials are single-use; replay, expiry, or a losing concurrent rotation must revoke every successor in the same family so no family token can serve data.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Mobile token lifecycle.
 - Route/API: `POST /api/v1/auth/refresh`; protected API GET.
 - Actor/grants: Synthetic mobile account with captured test refresh token.
@@ -71,6 +80,9 @@
 - Legacy IDs: `MB-004`
 - Changed by: `bea71cf`, `e5b7eba`
 - Requirement: Mobile home must compose the signed-in person’s appointments, queue, announcements, and other entitled summaries using account-bound queries, explicit loading/empty/error states, and no staff or foreign data.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Mobile Home tab.
 - Route/API: `GET /api/v1/me`, `/appointments`, `/queue`, `/announcements`, `/notifications` as used by the screen.
 - Actor/grants: Linked student/employee with personal entitlement.
@@ -93,6 +105,9 @@
 - Legacy IDs: `MB-005`
 - Changed by: `bea71cf`, `b868a49`, `884b9f0`
 - Requirement: Mobile self-service creates a `requested` appointment for the authenticated person using unit-specific type/date/Manila time validation, then may cancel only an own cancellable appointment with a reason; dual Guidance appointment interpretation remains unresolved.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-01`, `UC-PT-07`
 - Surface: Mobile Appointments list/detail/booking/cancel.
 - Route/API: `POST /api/v1/appointments`; `POST /api/v1/appointments/{id}/cancel`.
 - Actor/grants: Linked user with personal appointment authority.
@@ -115,6 +130,9 @@
 - Legacy IDs: `MB-006`
 - Changed by: `bea71cf`, `c91477a`
 - Requirement: Queue tab must show only today’s active personal clinic/guidance tickets from server-derived bearer identity, with consistent status/position/wait data and realtime/poll repair.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-02`, `UC-PT-07`
 - Surface: Mobile Queue tab.
 - Route/API: `GET /api/v1/queue`; mobile realtime grant.
 - Actor/grants: Linked user with own active ticket.
@@ -137,6 +155,9 @@
 - Legacy IDs: `MB-007`
 - Changed by: `bea71cf`, `b868a49`, `884b9f0`
 - Requirement: Current mobile Records must expose only the authenticated linked person’s identity/profile and minimal health summary under `portal.records.read`; encounter/treatment/inventory detail stays workstation/web-only. Legacy expectation of visit history conflicts and awaits policy decision.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Mobile Profile → Records/Health Profile.
 - Route/API: `GET /api/v1/me/health-summary`.
 - Actor/grants: Linked student/employee with `portal.records.read`; negative role without it.
@@ -159,6 +180,9 @@
 - Legacy IDs: `MB-008`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: Mobile announcement list/detail/read must use current targeted audience authority and same source/read marker as web, with bounded filters/paging and no hidden/draft/other-audience content.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-03`, `UC-PT-07`
 - Surface: Mobile Announcements.
 - Route/API: `GET /api/v1/announcements`; `GET /api/v1/announcements/{id}`; `POST /api/v1/announcements/{id}/read`.
 - Actor/grants: Linked user in a known audience.
@@ -181,6 +205,9 @@
 - Legacy IDs: `MB-009`
 - Changed by: `bea71cf`, `b868a49`
 - Requirement: Mobile surveys must list only currently available targeted forms, show server-defined questions, validate answers, create one identified response for the authenticated person, and then show submitted state consistent with web.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-03`, `UC-PT-07`
 - Surface: Mobile Surveys list/form.
 - Route/API: `GET /api/v1/surveys`; `GET /api/v1/surveys/{id}`; `POST /api/v1/surveys/{id}/submit`.
 - Actor/grants: Linked eligible user.
@@ -203,6 +230,9 @@
 - Legacy IDs: `MB-010`
 - Changed by: `bea71cf`, `c179273`
 - Requirement: Mobile notifications must display the current own inbox/history, mark one/all read on server, reconcile via push/realtime/poll, and navigate only through authorized typed targets.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Mobile notification banner/inbox.
 - Route/API: `/api/v1/notifications*` and target resource APIs.
 - Actor/grants: Signed-in user with synthetic notices.
@@ -225,6 +255,9 @@
 - Legacy IDs: `MB-011`
 - Changed by: `bea71cf`, `902fdd6`
 - Requirement: `/me` must derive staff queue unit entitlements from current permissions; mobile monitor is absent for personal-only users, returns only authorized aggregate summary for staff, and exposes no mobile queue mutation endpoint.
+- Role: `workstation_member`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-CL-02`, `UC-GD-01`
 - Surface: Mobile navigation and staff queue monitor.
 - Route/API: `GET /api/v1/me`; `GET /api/v1/staff/queue-summary`.
 - Actor/grants: Student, clinic-only staff, guidance-only staff, dual-grant/superadmin variants.
@@ -247,6 +280,9 @@
 - Legacy IDs: `MB-012`
 - Changed by: `c91477a`, `73b8a11`, `c179273`
 - Requirement: Mobile user-channel hints must invalidate mapped current-account queries, retain authoritative GET as source, fall back to focus polling, and have no effect after account/server/runtime retirement.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Open mobile queue/appointments/notifications/Team screens.
 - Route/API: `GET /api/v1/realtime/grant` plus resource APIs.
 - Actor/grants: Signed-in user; second staff/account changes source state.
@@ -269,6 +305,9 @@
 - Legacy IDs: `MB-013`
 - Changed by: `bea71cf`, `73b8a11`, `c179273`
 - Requirement: Sign-out must immediately clear local token/profile/query state, best-effort revoke push activation and exact API token family without refresh, return to sign-in, and prevent cached/private data after restart even if cleanup network calls fail.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Mobile account/settings sign-out.
 - Route/API: `POST /api/v1/auth/logout`; push revoke; local runtime/keychain/cache cleanup.
 - Actor/grants: Signed-in mobile user.
@@ -291,6 +330,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `73b8a11`, `39f7339`
 - Requirement: Personal navigation exists only when authoritative `/me` reports a live linked personal entitlement; every async request, credential, cache, draft, push scope, and navigation intent is bound to immutable runtime plus account session and discarded on entitlement/account/server change.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Entire React Native personal context.
 - Route/API: `GET /api/v1/me` and all personal endpoints.
 - Actor/grants: Linked personal user, unlinked/break-glass user, and two accounts/server profiles.

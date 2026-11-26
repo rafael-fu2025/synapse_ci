@@ -1067,24 +1067,28 @@ class GuidanceClinicalFormService
             }
         }
         $legacyNoteRead = false;
-        // If concerns_discussed is missing, check if legacy note exists to avoid duplicate data entry
-        if (empty($formData['concerns_discussed'])) {
-            $existingNote = $this->noteModel->scoped($tid)
-                ->where('session_id', $sessionId)
-                ->orderBy('id', 'DESC')
-                ->first();
+        // If presenting_concerns is missing, check if legacy note exists to avoid duplicate data entry
+        if (empty($formData['presenting_concerns'])) {
+            if (!empty($formData['concerns_discussed'])) {
+                $formData['presenting_concerns'] = (string) $formData['concerns_discussed'];
+            } else {
+                $existingNote = $this->noteModel->scoped($tid)
+                    ->where('session_id', $sessionId)
+                    ->orderBy('id', 'DESC')
+                    ->first();
 
-            if ($existingNote !== null && !empty($existingNote['notes_cipher'])) {
-                try {
-                    $formData['concerns_discussed'] = $this->encryptionService->decrypt(
-                        $existingNote['notes_cipher'],
-                        $existingNote['notes_nonce'],
-                        $existingNote['notes_tag'],
-                        (int) $existingNote['notes_key_version']
-                    );
-                    $legacyNoteRead = true;
-                } catch (\Throwable) {
-                    // Fallback to default
+                if ($existingNote !== null && !empty($existingNote['notes_cipher'])) {
+                    try {
+                        $formData['presenting_concerns'] = $this->encryptionService->decrypt(
+                            $existingNote['notes_cipher'],
+                            $existingNote['notes_nonce'],
+                            $existingNote['notes_tag'],
+                            (int) $existingNote['notes_key_version']
+                        );
+                        $legacyNoteRead = true;
+                    } catch (\Throwable) {
+                        // Fallback to default
+                    }
                 }
             }
         }
@@ -1093,15 +1097,20 @@ class GuidanceClinicalFormService
             $this->auditRead('guidance.session.note_read', 'counselling_sessions', $sessionId, $authority);
         }
 
-        // Populate contact sheet attributes
+        // Populate contact sheet attributes (aligned with 9.1. F-OGC-GCS-CCF-009-00)
+        $mappedSessionType = (string) ($formData['session_type'] ?? $session['session_type'] ?? 'individual');
+        if (in_array($mappedSessionType, ['regular', 'closure', ''], true)) {
+            $mappedSessionType = 'individual';
+        }
         $formData['session_date'] ??= date('Y-m-d', strtotime($session['started_at'] ?? 'now'));
-        $formData['session_number'] ??= (int) ($session['session_number'] ?? 1);
-        $formData['time_start'] ??= date('H:i:s', strtotime($session['started_at'] ?? 'now'));
-        $formData['time_end'] ??= date('H:i:s');
-        $formData['session_type'] ??= $session['session_type'] ?? 'regular';
-        $formData['concerns_discussed'] ??= 'Session counseling consultation.';
-        $formData['counseling_goals'] ??= 'Established counseling interventions and coping strategies.';
-        $formData['interventions_and_responses'] ??= 'Applied supportive counseling techniques; client responded well.';
+        $formData['time_started'] ??= $formData['time_start'] ?? date('H:i:s', strtotime($session['started_at'] ?? 'now'));
+        $formData['time_ended'] ??= $formData['time_end'] ?? date('H:i:s');
+        $formData['referral_source'] ??= 'counselor_initiated';
+        $formData['session_type'] = $mappedSessionType;
+        $formData['presenting_concerns'] ??= 'Session counseling consultation.';
+        $formData['intervention_plan'] ??= $formData['interventions_and_responses'] ?? 'Applied supportive counseling techniques; client responded well.';
+        $formData['privacy_consent_acknowledged'] ??= true;
+        unset($formData['session_number'], $formData['time_start'], $formData['time_end'], $formData['concerns_discussed'], $formData['counseling_goals'], $formData['interventions_and_responses'], $formData['homework_and_commitments'], $formData['next_schedule']);
 
         // Linkages
         $formData['session_id']     = $sessionId;
@@ -1313,56 +1322,51 @@ class GuidanceClinicalFormService
 
         if ($canonicalKey === self::FORM_PSYCHOSOCIAL_INTERVIEW) {
             $student = $this->studentModel->scoped($tenantId)->where('person_id', (int) $person['id'])->first();
+            $clean['client_type'] ??= 'walk_in';
+            $clean['interview_date'] ??= date('Y-m-d');
+            $clean['interview_time'] ??= date('H:i');
             $clean['student_name'] ??= $fullName !== '' ? $fullName : 'Student Name';
             $clean['student_id'] ??= $student['student_id'] ?? $person['mis_id'] ?? 'S-' . $person['id'];
             $programPart = trim((string) ($student['program'] ?? $student['course'] ?? ''));
             $yearPart = trim((string) ($student['year_level'] ?? ''));
             $combinedCourseYear = trim($programPart . ($yearPart !== '' ? ' - Year ' . $yearPart : ''));
             $clean['course_year'] ??= $combinedCourseYear !== '' ? $combinedCourseYear : 'N/A';
-            $clean['interview_date'] ??= date('Y-m-d');
-            $computedAge = null;
-            if (!empty($person['date_of_birth'])) {
-                try {
-                    $computedAge = (new \DateTimeImmutable((string) $person['date_of_birth']))->diff(new \DateTimeImmutable('today'))->y;
-                } catch (\Throwable) {
-                    $computedAge = null;
-                }
-            }
-            $clean['demographics'] ??= [
-                'age'     => $computedAge,
-                'gender'  => $person['gender'] ?? 'prefer_not_to_say',
-                'contact' => $person['phone'] ?? $person['contact_number'] ?? '',
-            ];
-            $clean['presenting_concerns'] ??= 'Student presenting with academic adjustment stress.';
-            $clean['mental_health_screening'] ??= [
-                'phq9_score' => 4,
-                'gad7_score' => 3,
-                'risk_level' => 'low',
-            ];
-            $clean['family_social_support'] ??= 'Supportive family and peer circle.';
-            $clean['counselor_assessment'] ??= 'Mild adjustment reaction; good resilience and support systems.';
-            $clean['intervention_plan'] ??= 'Weekly follow-up, stress management techniques, time management coaching.';
+            $clean['presenting_concerns'] ??= 'Student presenting with academic adjustment concerns.';
+            $clean['concern_severity'] ??= 'not_so_serious';
             $clean['privacy_consent_acknowledged'] ??= true;
         } elseif ($canonicalKey === self::FORM_PSYCHOSOCIAL_CONTACT) {
+            $student = $this->studentModel->scoped($tenantId)->where('person_id', (int) $person['id'])->first();
+            $programPart = trim((string) ($student['program'] ?? $student['course'] ?? ''));
+            $yearPart = trim((string) ($student['year_level'] ?? ''));
+            $combinedCourseYear = trim($programPart . ($yearPart !== '' ? ' - Year ' . $yearPart : ''));
+            $clean['department'] ??= ($programPart !== '' ? $programPart : 'Office of the Guidance Center');
             $clean['session_date'] ??= date('Y-m-d');
-            $clean['session_number'] ??= 1;
-            $clean['modality'] ??= 'in_person';
-            $clean['client_state'] ??= 'Client appears calm, oriented, and collaborative.';
-            $clean['interventions_used'] ??= 'Active listening, validation, cognitive reframing.';
-            $clean['client_response'] ??= 'Client demonstrated improved perspective and expressed relief.';
-            $clean['action_items'] ??= 'Practice deep breathing exercises before exams.';
-            $clean['next_session_date'] ??= date('Y-m-d', strtotime('+1 week'));
+            $clean['student_name'] ??= $fullName !== '' ? $fullName : 'Student Name';
+            $clean['student_id'] ??= $student['student_id'] ?? $person['mis_id'] ?? 'S-' . $person['id'];
+            $clean['course_year'] ??= $combinedCourseYear !== '' ? $combinedCourseYear : 'N/A';
+            $clean['referral_source'] ??= 'walk_in';
+            $clean['session_type'] ??= 'individual';
+            $clean['presenting_concerns'] ??= 'Student presenting for psychosocial support contact session.';
+            $clean['intervention_plan'] ??= 'Active listening, validation, and supportive coping guidance.';
+            $clean['privacy_consent_acknowledged'] ??= true;
         } elseif ($canonicalKey === self::FORM_COUNSELING_CONTACT) {
+            $student = $this->studentModel->scoped($tenantId)->where('person_id', (int) $person['id'])->first();
+            $programPart = trim((string) ($student['program'] ?? $student['course'] ?? ''));
+            $yearPart = trim((string) ($student['year_level'] ?? ''));
+            $combinedCourseYear = trim($programPart . ($yearPart !== '' ? ' - Year ' . $yearPart : ''));
+            $clean['department'] ??= ($programPart !== '' ? $programPart : 'Office of the Guidance Center');
             $clean['session_date'] ??= date('Y-m-d');
-            $clean['session_number'] ??= 1;
-            $clean['time_start'] ??= '09:00:00';
-            $clean['time_end'] ??= '10:00:00';
-            $clean['session_type'] ??= 'regular';
-            $clean['concerns_discussed'] ??= 'Academic performance anxiety and sleep disruption.';
-            $clean['counseling_goals'] ??= 'Identify anxiety triggers and establish regular sleep hygiene.';
-            $clean['interventions_and_responses'] ??= 'Psychoeducation on sleep hygiene; client agreed to track sleep schedule.';
-            $clean['homework_and_commitments'] ??= 'Maintain sleep log for 7 days.';
-            $clean['next_schedule'] ??= date('Y-m-d H:i:s', strtotime('+1 week 09:00:00'));
+            $clean['student_name'] ??= $fullName !== '' ? $fullName : 'Student Name';
+            $clean['student_id'] ??= $student['student_id'] ?? $person['mis_id'] ?? 'S-' . $person['id'];
+            $clean['course_year'] ??= $combinedCourseYear !== '' ? $combinedCourseYear : 'N/A';
+            $clean['referral_source'] ??= 'walk_in';
+            if (in_array((string) ($clean['session_type'] ?? ''), ['regular', 'closure', ''], true)) {
+                $clean['session_type'] = 'individual';
+            }
+            $clean['session_type'] ??= 'individual';
+            $clean['presenting_concerns'] ??= 'Student presenting for counseling session.';
+            $clean['intervention_plan'] ??= 'Supportive counseling intervention and coping strategies.';
+            $clean['privacy_consent_acknowledged'] ??= true;
         }
 
         return $clean;

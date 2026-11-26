@@ -9,6 +9,8 @@ $val = $formData[$fieldName] ?? ($schemaMeta['default'] ?? '');
 $disabledAttr = $isEditable ? '' : 'disabled';
 $reqAttr = $required ? 'required' : '';
 $isInterview = (bool) ($isInterview ?? false);
+$wsPrefix = (string) ($wsPrefix ?? ($isInterview ? 'giw' : ''));
+$isStructured = $wsPrefix !== '';
 ?>
 
 <?php if ($type === 'object'): ?>
@@ -17,8 +19,8 @@ $isInterview = (bool) ($isInterview ?? false);
   $objVal = is_array($val) ? $val : [];
   ?>
   <div class="col-12">
-    <div class="<?= $isInterview ? 'giw-object' : 'border rounded p-3 bg-light-subtle' ?>">
-      <div class="<?= $isInterview ? 'giw-object-title' : 'fw-semibold small text-uppercase text-muted mb-2' ?>">
+    <div class="<?= $isStructured ? esc($wsPrefix) . '-object' : 'border rounded p-3 bg-light-subtle' ?>">
+      <div class="<?= $isStructured ? esc($wsPrefix) . '-object-title' : 'fw-semibold small text-uppercase text-muted mb-2' ?>">
         <?= esc($label) ?>
         <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
       </div>
@@ -53,7 +55,7 @@ $isInterview = (bool) ($isInterview ?? false);
 
 <?php elseif ($type === 'boolean'): ?>
   <div class="col-12">
-    <div class="form-check <?= $isInterview ? 'giw-consent' : '' ?>">
+    <div class="form-check <?= $isStructured ? esc($wsPrefix) . '-consent' : '' ?>">
       <input type="hidden" name="fields[<?= esc($fieldName) ?>]" value="0">
       <input class="form-check-input" type="checkbox" id="field_<?= esc($fieldName) ?>"
              name="fields[<?= esc($fieldName) ?>]" value="1"
@@ -66,14 +68,14 @@ $isInterview = (bool) ($isInterview ?? false);
   </div>
 
 <?php elseif ($type === 'textarea'): ?>
-  <div class="col-12">
-    <label for="field_<?= esc($fieldName) ?>" class="form-label fw-semibold <?= $isInterview ? 'giw-narrative-label' : '' ?>">
+  <div class="<?= esc($colClass) ?>">
+    <label for="field_<?= esc($fieldName) ?>" class="form-label fw-semibold <?= $isInterview ? 'giw-narrative-label' : (!empty($isContactWorkspace) ? 'gcw-narrative-label' : '') ?>">
       <span><?= esc($label) ?><?php if ($required): ?> <span class="text-danger">*</span><?php endif; ?></span>
       <?php if ($encrypted): ?>
-        <span class="<?= $isInterview ? 'ce-tag giw-encrypted' : 'badge bg-light text-success border ms-1' ?>"><i class="bi bi-lock-fill" aria-hidden="true"></i> Encrypted</span>
+        <span class="<?= $isInterview ? 'ce-tag giw-encrypted' : (!empty($isContactWorkspace) ? 'ce-tag gcw-encrypted' : 'badge bg-light text-success border ms-1') ?>"><i class="bi bi-lock-fill" aria-hidden="true"></i> Encrypted</span>
       <?php endif; ?>
     </label>
-    <textarea id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]" rows="<?= $isInterview ? 4 : 3 ?>"
+    <textarea id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]" rows="<?= ($isInterview || !empty($isContactWorkspace)) ? 4 : 3 ?>"
               class="form-control" <?= $disabledAttr ?> <?= $reqAttr ?>><?= esc((string) $val) ?></textarea>
   </div>
 
@@ -84,8 +86,10 @@ $isInterview = (bool) ($isInterview ?? false);
       <?= esc($label) ?><?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
     </label>
     <select id="field_<?= esc($fieldName) ?>" name="fields[<?= esc($fieldName) ?>]" class="form-select" <?= $disabledAttr ?> <?= $reqAttr ?>>
+      <?php $optLabels = is_array($meta['option_labels'] ?? null) ? $meta['option_labels'] : []; ?>
       <?php foreach ($options as $opt): ?>
-        <option value="<?= esc((string) $opt) ?>" <?= ((string) $val === (string) $opt) ? 'selected' : '' ?>><?= esc(ucwords(str_replace('_', ' ', (string) $opt))) ?></option>
+        <?php $optStr = (string) $opt; ?>
+        <option value="<?= esc($optStr) ?>" <?= ((string) $val === $optStr) ? 'selected' : '' ?>><?= esc((string) ($optLabels[$optStr] ?? ucwords(str_replace('_', ' ', $optStr)))) ?></option>
       <?php endforeach; ?>
     </select>
   </div>

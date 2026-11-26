@@ -313,12 +313,53 @@
         <p class="auth-help text-center text-muted mb-0">
           Trouble signing in? Contact your system administrator.
         </p>
+
+        <div class="auth-privacy-bar">
+          <button type="button"
+                  class="auth-privacy-trigger"
+                  data-bs-toggle="modal"
+                  data-bs-target="#dataPrivacyPolicyModal">
+            <i class="bi bi-shield-check" aria-hidden="true"></i>
+            <span>Data Privacy Policy</span>
+          </button>
+        </div>
       </div>
 
     </section>
 
   </div>
 </main>
+
+<!-- Data Privacy Policy Modal -->
+<div class="modal fade auth-privacy-modal"
+     id="dataPrivacyPolicyModal"
+     tabindex="-1"
+     aria-labelledby="dataPrivacyPolicyModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2 mb-0" id="dataPrivacyPolicyModalLabel">
+          <i class="bi bi-shield-check" aria-hidden="true"></i>
+          <span>Foundation University — Data Privacy Policy</span>
+        </h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <?= $this->include('partials/privacy_policy_content') ?>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <a href="<?= esc(site_url('privacy-policy'), 'attr') ?>"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Open Full Page
+        </a>
+        <button type="button" class="btn btn-primary btn-sm auth-privacy-close-btn" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 <?= $this->endSection() ?>
 
 <?= $this->section('scripts') ?>

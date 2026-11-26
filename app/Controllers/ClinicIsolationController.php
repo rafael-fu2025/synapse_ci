@@ -59,7 +59,11 @@ final class ClinicIsolationController extends BaseController
             return view('clinic/isolation/index', $viewData);
         } catch (Throwable $e) {
             $status = in_array($e->getCode(), [401, 403], true) ? $e->getCode() : 500;
-            return $this->response->setStatusCode($status)->setBody(esc($status === 500 ? 'Unable to load isolation calendar.' : $e->getMessage()));
+            $message = $status === 500 ? 'Unable to load isolation calendar.' : $e->getMessage();
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $message);
+            }
+            return $this->response->setStatusCode($status)->setBody(esc($message));
         }
     }
 

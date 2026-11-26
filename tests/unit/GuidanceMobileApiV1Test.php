@@ -85,7 +85,7 @@ final class GuidanceMobileApiV1Test extends FreshDatabaseTestCase
             'person_id'         => $this->studentUser['person_id'],
             'scheduled_date'    => date('Y-m-d', strtotime('+2 days')),
             'scheduled_time'    => '11:00',
-            'purpose'           => 'counseling',
+            'purpose'           => 'personal_social',
             'counselor_user_id' => $this->counselorUser['id'],
             'actor'             => $this->counselorUser,
         ], 1);

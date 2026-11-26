@@ -5,6 +5,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.EXACT_SUBJECT`
+- **Role:** `employee`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-08`
 - **Surface:** Employee Portal Guidance referral and Guidance intake workstation
 - **Route/API:** POST /portal/referrals/resolve-student; POST /guidance/intake/resolve-subject
 - **Actor/grants:** Active employee for the portal route; Guidance actor with guidance.intake.process for the workstation route
@@ -25,6 +28,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.PORTAL_SUBMIT`
+- **Role:** `employee`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-08`
 - **Surface:** Employee Portal Guidance referral
 - **Route/API:** GET /portal/referrals/create; POST /portal/referrals/store
 - **Actor/grants:** Active employee-backed referrer; student actors denied
@@ -45,6 +51,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.STAFF_CREATE`
+- **Role:** `guidance_intern`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-02`
 - **Surface:** Guidance intake workspace
 - **Route/API:** POST /guidance/intake/staff-create
 - **Actor/grants:** Guidance actor with guidance.intake.process
@@ -64,6 +73,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.RECEIVE_TRIAGE`
+- **Role:** `guidance_intern`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-02`
 - **Surface:** Guidance intake workspace
 - **Route/API:** POST /guidance/intake/{id}/receive|triage
 - **Actor/grants:** Guidance actor with guidance.intake.process
@@ -83,6 +95,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.ACCEPT_LINK_CASE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-05`
 - **Surface:** Guidance intake workspace
 - **Route/API:** POST /guidance/intake/{id}/accept|link-case
 - **Actor/grants:** Qualified Guidance actor with intake.process and cases.write/create
@@ -102,6 +117,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.TERMINAL_PATHS`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-02`, `UC-GD-05`
 - **Surface:** Portal and Guidance intake
 - **Route/API:** POST /guidance/intake/{id}/decline|withdraw|external-handoff
 - **Actor/grants:** Original referrer for withdraw; Guidance processor for decline/handoff
@@ -121,6 +139,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.INTAKE.CLINIC_BRIDGE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-02`, `UC-RF-03`
 - **Surface:** Guidance intake bridge
 - **Route/API:** POST /guidance/intake/bridge-clinic/{referralId}
 - **Actor/grants:** Guidance actor with intake.process and referral read
@@ -140,6 +161,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.GOVERNANCE.MULTI_AUTHORITY_GATE`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-16`
 - **Surface:** Guidance governance gates
 - **Route/API:** GET /guidance/governance/gates; POST /guidance/governance/gates/{key}/signoff
 - **Actor/grants:** Distinct Guidance Head, QA Office, and DPO authority accounts
@@ -159,6 +183,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.GOVERNANCE.FAIL_CLOSED`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-16`
 - **Surface:** Gated Guidance workflows
 - **Route/API:** Representative controlled-form/safety/MI/evaluation action
 - **Actor/grants:** Otherwise authorized Guidance practitioner/manager
@@ -178,6 +205,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.GOVERNANCE.GUARDIAN_CAPACITY`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-16`
 - **Surface:** Controlled-form attestation
 - **Route/API:** Representative form finalize/attestation route
 - **Actor/grants:** Authenticated form actor
@@ -197,6 +227,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.PRACTITIONER.REGISTER`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-16`
 - **Surface:** Guidance practitioner governance
 - **Route/API:** POST /guidance/governance/practitioners/register
 - **Actor/grants:** Guidance manager with governance authority
@@ -216,6 +249,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.PRACTITIONER.SUPERVISION`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-16`
 - **Surface:** Guidance practitioner governance
 - **Route/API:** POST /guidance/governance/practitioners/supervision
 - **Actor/grants:** Guidance manager/supervisor
@@ -235,6 +271,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.PRACTITIONER.DIRECT_FINALIZE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Guidance form/session finalization
 - **Route/API:** Representative finalize route
 - **Actor/grants:** Licensed counsellor/supervisor versus associate/lapsed/expired actors
@@ -254,6 +293,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.PRACTITIONER.COSIGN`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-13`
 - **Surface:** Clinical controlled form
 - **Route/API:** POST /guidance/clinical/forms/{id}/submit-cosign|cosign
 - **Actor/grants:** Associate author and currently assigned eligible supervisor

@@ -69,12 +69,13 @@ Overlay strings are bounded one-line plain text. Controls, raw HTML, Markdown im
 
 The validator checks, among other invariants:
 
-- exact case heading, field order, required values, and at least two consecutively numbered steps;
+- exact case heading, field order, required values (`Role`, `Module`, `Use Cases`), and at least two consecutively numbered steps;
+- bidirectional Use Case synchronization against `papers/blackbox/use-cases.json` (every declared `UC-*` covered by at least one case);
 - ID syntax/uniqueness and lifecycle/verdict enums;
-- exactly 245 current cases and any declared per-section counts;
+- exactly 266 current cases and any declared per-section counts;
 - exactly 119 unique legacy rows with 72 `RETAIN`, 42 `REWRITE`, and 5 `RETIRED` dispositions;
 - bidirectional mapping for surviving legacy IDs and absence of retired IDs from current cases;
-- case and authoritative traceability coverage for all 14 patch commits declared by `suite.json`/`TRACEABILITY.md` (`baseline` is accepted for unchanged cases);
+- case and authoritative traceability coverage for all 23 patch commits declared by `suite.json`/`TRACEABILITY.md` (`baseline` is accepted for unchanged cases);
 - repository source-path existence and syntactically valid positive line ranges;
 - strict JSON syntax/schema structure, including duplicate-key rejection, finite numbers only, and bounded bytes/depth;
 - one-run-root evidence containment with no absolute/drive/ADS/device/dot/control components, no symlinked components, and only nonempty single-link regular files;

@@ -745,7 +745,8 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
             [
                 'person_id'            => $student1PersonId,
                 'presenting_concerns'  => $secretClinicalMarker,
-                'counselor_assessment' => $secretClinicalMarker,
+                'concern_severity'     => 'serious',
+                'perceived_cause'      => $secretClinicalMarker,
             ],
             1,
             $counselorActor
@@ -757,7 +758,7 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
             'counselor_user_id' => $this->licensedCounselorUserId,
             'scheduled_date'    => date('Y-m-d', strtotime('+2 days')),
             'scheduled_time'    => '09:30:00',
-            'purpose'           => 'counseling',
+            'purpose'           => 'personal_social',
             'notes'             => $secretAptNotesMarker,
             'actor'             => $counselorActor,
         ], 1);
@@ -892,7 +893,7 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
         $referralDraft = $this->intakeService->createDraft(
             subjectPersonId: $subjectPersonId,
             sourceType: 'faculty',
-            selections: ['academic_deficiency', 'emotional_distress'],
+            selections: ['absenteeism', 'excessive_anxiety'],
             narrative: 'Student missed two capstone milestones and expressed feeling overwhelmed.',
             priorActions: 'Initial academic advising check-in.',
             priorityHint: 'urgent',
@@ -960,7 +961,7 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
             'counselor_user_id' => $this->associateUserId,
             'scheduled_date'    => date('Y-m-d', strtotime('+1 day')),
             'scheduled_time'    => '10:00:00',
-            'purpose'           => 'counseling',
+            'purpose'           => 'personal_social',
             'notes'             => 'First structured counseling session.',
             'actor'             => $associateActor,
         ], 1);
@@ -991,13 +992,13 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
         $clinicalDraft = $this->clinicalService->createClinicalDraft(
             GuidanceClinicalFormService::FORM_PSYCHOSOCIAL_INTERVIEW,
             [
-                'person_id'            => $subjectPersonId,
-                'case_id'              => $caseId,
-                'episode_id'           => $episodeId,
-                'appointment_id'       => $appointmentId,
-                'presenting_concerns'  => 'Capstone workload anxiety and perfectionism.',
-                'counselor_assessment' => 'Student demonstrates strong resilience; needs structured milestone breakdown.',
-                'intervention_plan'    => 'Weekly task chunking and cognitive reframing exercises.',
+                'person_id'           => $subjectPersonId,
+                'case_id'             => $caseId,
+                'episode_id'          => $episodeId,
+                'appointment_id'      => $appointmentId,
+                'presenting_concerns' => 'Capstone workload anxiety and perfectionism.',
+                'concern_severity'    => 'serious',
+                'hoped_changes'       => 'Weekly task chunking and steady rest schedule.',
             ],
             1,
             $associateActor

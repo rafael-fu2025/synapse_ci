@@ -138,13 +138,13 @@ $initials = strtoupper(
         <div class="ce-card">
           <div class="ce-card-header">
             <h3 class="ce-card-title">
-              <i class="bi bi-file-earmark-medical" aria-hidden="true"></i> Presenting Concerns &amp; Narrative
+              <i class="bi bi-file-earmark-medical" aria-hidden="true"></i> Reason for Referral &amp; Incident Observed
             </h3>
             <span class="ce-tag ce-mono">Catalog v<?= esc($referral['concern_catalog_version'] ?? '1.0.0') ?></span>
           </div>
           <div class="ce-card-body">
             <div class="mb-3">
-              <div class="ce-kv-label mb-2">Concern Catalog Selections</div>
+              <div class="ce-kv-label mb-2">Reason for Referral Selections</div>
               <?php if ($concernKeys === []): ?>
                 <span class="small text-muted">None specified.</span>
               <?php else: ?>
@@ -159,18 +159,18 @@ $initials = strtoupper(
                 </div>
               <?php endif; ?>
               <?php if ($otherSpecify !== ''): ?>
-                <div class="small mt-2"><strong>Other specified:</strong> <?= esc($otherSpecify) ?></div>
+                <div class="small mt-2"><strong>Others (Please specify):</strong> <?= esc($otherSpecify) ?></div>
               <?php endif; ?>
             </div>
 
             <div class="mb-3">
-              <div class="ce-kv-label">Referral Narrative</div>
+              <div class="ce-kv-label">Description of Behavior / Incident Observed</div>
               <div class="ce-kv-box small" style="white-space: pre-wrap;"><?= esc($referral['narrative'] ?? '') ?></div>
             </div>
 
             <?php if (!empty($referral['prior_actions'])): ?>
               <div class="mb-3">
-                <div class="ce-kv-label">Prior Actions Taken by Referrer</div>
+                <div class="ce-kv-label">Remarks / Prior Actions</div>
                 <div class="ce-kv-box small" style="white-space: pre-wrap;"><?= esc($referral['prior_actions']) ?></div>
               </div>
             <?php endif; ?>

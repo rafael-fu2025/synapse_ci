@@ -18,6 +18,14 @@ $toInputLocal = static function (?string $dt): string {
     }
     return str_replace(' ', 'T', substr(trim($dt), 0, 16));
 };
+$toDisplayLocal = static function (?string $dt): string {
+    if ($dt === null || trim($dt) === '') {
+        return '';
+    }
+    $parsed = \DateTimeImmutable::createFromFormat('Y-m-d H:i:s', substr(trim($dt), 0, 19))
+        ?: \DateTimeImmutable::createFromFormat('Y-m-d H:i', substr(trim($dt), 0, 16));
+    return $parsed instanceof \DateTimeImmutable ? $parsed->format('d/m/Y h:i A') : trim($dt);
+};
 ?>
 <div class="adm-modal">
   <div class="adm-identity">
@@ -56,24 +64,40 @@ $toInputLocal = static function (?string $dt): string {
       <div class="row g-2">
         <div class="col-md-6">
           <div class="adm-field">
-            <label class="adm-label" for="intern-edit-starts">Starts at (Asia/Manila)</label>
-            <input id="intern-edit-starts"
-                   name="starts_at"
-                   type="datetime-local"
-                   class="form-control"
-                   value="<?= esc($toInputLocal($placement['starts_at'] ?? null)) ?>"
-                   <?= $status === 'active' ? 'readonly' : 'required' ?>>
+            <label class="adm-label" for="intern-edit-starts-display">Starts at (Asia/Manila)</label>
+            <?php if ($status === 'active'): ?>
+              <input id="intern-edit-starts-display"
+                     type="text"
+                     class="form-control"
+                     value="<?= esc($toDisplayLocal($placement['starts_at'] ?? null)) ?>"
+                     aria-describedby="intern-edit-starts-help"
+                     disabled>
+              <small id="intern-edit-starts-help" class="adm-help">Locked once placement is active.</small>
+            <?php else: ?>
+              <input id="intern-edit-starts-display"
+                     type="text"
+                     class="form-control"
+                     data-datetimepicker
+                     data-target="#intern-edit-starts"
+                     placeholder="DD/MM/YYYY hh:mm A"
+                     autocomplete="off"
+                     required>
+            <?php endif; ?>
+            <input type="hidden" id="intern-edit-starts" name="starts_at" value="<?= esc($toInputLocal($placement['starts_at'] ?? null)) ?>">
           </div>
         </div>
         <div class="col-md-6">
           <div class="adm-field">
-            <label class="adm-label" for="intern-edit-ends">Ends at (Asia/Manila)</label>
-            <input id="intern-edit-ends"
-                   name="ends_at"
-                   type="datetime-local"
+            <label class="adm-label" for="intern-edit-ends-display">Ends at (Asia/Manila)</label>
+            <input id="intern-edit-ends-display"
+                   type="text"
                    class="form-control"
-                   value="<?= esc($toInputLocal($placement['ends_at'] ?? null)) ?>"
+                   data-datetimepicker
+                   data-target="#intern-edit-ends"
+                   placeholder="DD/MM/YYYY hh:mm A"
+                   autocomplete="off"
                    required>
+            <input type="hidden" id="intern-edit-ends" name="ends_at" value="<?= esc($toInputLocal($placement['ends_at'] ?? null)) ?>">
           </div>
         </div>
       </div>

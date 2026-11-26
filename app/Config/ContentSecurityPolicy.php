@@ -97,14 +97,14 @@ class ContentSecurityPolicy extends BaseConfig
      *
      * @var list<string>|string
      */
-    public $styleSrc = ['self', 'https://fonts.googleapis.com'];
+    public $styleSrc = 'self';
 
     /**
      * Specifies valid sources for stylesheets <link> elements.
      *
      * @var list<string>|string
      */
-    public array|string $styleSrcElem = ['self', 'https://fonts.googleapis.com'];
+    public array|string $styleSrcElem = 'self';
 
     /**
      * Specifies valid sources for stylesheets inline
@@ -150,7 +150,7 @@ class ContentSecurityPolicy extends BaseConfig
      *
      * @var list<string>|string
      */
-    public $fontSrc = ['self', 'https://fonts.gstatic.com', 'data:'];
+    public $fontSrc = ['self', 'data:'];
 
     /**
      * Lists valid endpoints for submission from `<form>` tags.

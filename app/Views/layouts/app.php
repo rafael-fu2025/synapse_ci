@@ -26,10 +26,8 @@
 
   <script src="<?= base_url('assets/js/auth-theme-init.js') ?>"></script>
 
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- Local Fonts -->
+  <link href="<?= base_url('assets/css/core/fonts.css') ?>" rel="stylesheet">
 
   <!-- Vendor CSS Files -->
   <link href="<?= base_url('assets/vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">

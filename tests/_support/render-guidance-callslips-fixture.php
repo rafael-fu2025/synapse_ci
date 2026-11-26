@@ -213,7 +213,7 @@ final class GuidanceCallSlipsFixtureView
 }
 
 $validStatuses = ['pending', 'acknowledged', 'attended', 'missed', 'cancelled'];
-$validPurposes = ['personal_counseling', 'career_counseling', 'routine_interview', 'follow_up', 'academic_counseling', 'others'];
+$validPurposes = ['personal_counseling', 'career_counseling', 'academic_counseling', 'routine_interview', 'testing_interpretation', 'others'];
 $status = $fixtureGet['status'] ?? '';
 if (!is_string($status)) throw new InvalidArgumentException('Invalid synthetic attendance filter.', 422);
 if ($status !== '' && !in_array($status, $validStatuses, true)) { $status = ''; }

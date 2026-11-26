@@ -25,10 +25,10 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import secure_io
 
-EXPECTED_CASE_COUNT = 245
+EXPECTED_CASE_COUNT = 266
 EXPECTED_LEGACY_COUNT = 119
 EXPECTED_LEGACY_DISPOSITIONS = {"RETAIN": 72, "REWRITE": 42, "RETIRED": 5}
-EXPECTED_PATCH_COMMIT_COUNT = 14
+EXPECTED_PATCH_COMMIT_COUNT = 23
 MAX_JSON_BYTES = 4 * 1024 * 1024
 MAX_JSON_DEPTH = 64
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
@@ -78,6 +78,7 @@ WINDOWS_DEVICE_NAMES = {
     *(f"LPT{index}" for index in range(1, 10)),
 }
 CASE_ID_RE = re.compile(r"^[A-Z][A-Z0-9]*(?:-[A-Z][A-Z0-9]*)*-\d{3}$")
+USE_CASE_ID_RE = re.compile(r"^UC-[A-Z]+-\d{2}$")
 COMMIT_RE = re.compile(r"(?<![0-9A-Fa-f])([0-9A-Fa-f]{7,40})(?![0-9A-Fa-f])")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 HEADING_RE = re.compile(
@@ -103,6 +104,9 @@ PRE_STEP_FIELDS = (
     "Legacy IDs",
     "Changed by",
     "Requirement",
+    "Role",
+    "Module",
+    "Use Cases",
     "Surface",
     "Route/API",
     "Actor/grants",
@@ -172,6 +176,9 @@ class Case:
     legacy_ids: list[str] = dataclasses.field(default_factory=list)
     changed_by: list[str] = dataclasses.field(default_factory=list)
     source_references: list[SourceReference] = dataclasses.field(default_factory=list)
+    role: str = ""
+    module: str = ""
+    use_cases: list[str] = dataclasses.field(default_factory=list)
     effective_verdict: str = "NOT_RUN"
     effective_evidence: list[dict[str, Any]] = dataclasses.field(default_factory=list)
     effective_actual: str = ""
@@ -226,6 +233,7 @@ class SuiteData:
     legacy_rows: list[LegacyRow]
     archive_path: str
     outputs: dict[str, str]
+    use_case_catalog: dict[str, Any] | None = None
     results_path: Path | None = None
     result_entries: dict[str, ResultEntry] = dataclasses.field(default_factory=dict)
     archive_state: str = "not present"
@@ -421,6 +429,21 @@ def _parse_changed_by(value: str, report: ValidationReport, context: str) -> lis
     return list(dict.fromkeys(commits))
 
 
+def _parse_use_cases(value: str, report: ValidationReport, context: str) -> list[str]:
+    cleaned = value.strip().replace("`", "")
+    if not cleaned:
+        report.error(f"{context}: Use Cases must declare at least one UC-XX-NN identifier")
+        return []
+    parts = [part.strip() for part in re.split(r"[,;/]+", cleaned) if part.strip()]
+    invalid = [part for part in parts if not USE_CASE_ID_RE.fullmatch(part)]
+    if invalid:
+        report.error(f"{context}: invalid Use Case ID(s): {', '.join(invalid)}")
+    duplicates = [item for item, count in collections.Counter(parts).items() if count > 1]
+    if duplicates:
+        report.error(f"{context}: duplicate Use Case IDs: {', '.join(sorted(duplicates))}")
+    return [part for part in dict.fromkeys(parts) if USE_CASE_ID_RE.fullmatch(part)]
+
+
 def _extract_source_references(value: str, report: ValidationReport, context: str) -> list[SourceReference]:
     references: list[SourceReference] = []
     seen: set[tuple[str, int | None, int | None]] = set()
@@ -564,6 +587,9 @@ def parse_section(
         legacy_ids = _parse_legacy_ids(fields.get("Legacy IDs", ""), report, context)
         changed_by = _parse_changed_by(fields.get("Changed by", ""), report, context)
         source_refs = _extract_source_references(fields.get("Source", ""), report, context)
+        role_value = _normalise_code_value(fields.get("Role", ""))
+        module_value = fields.get("Module", "").strip()
+        use_case_ids = _parse_use_cases(fields.get("Use Cases", ""), report, context)
         raw = "\n".join(lines[start:end]).rstrip() + "\n"
         cases.append(
             Case(
@@ -578,6 +604,9 @@ def parse_section(
                 legacy_ids=legacy_ids,
                 changed_by=changed_by,
                 source_references=source_refs,
+                role=role_value,
+                module=module_value,
+                use_cases=use_case_ids,
                 effective_verdict=verdict if verdict in VERDICTS else "NOT_RUN",
             )
         )
@@ -1249,6 +1278,105 @@ def _validate_source_references(root: Path, cases: Sequence[Case], report: Valid
                     f"{case.section_path}:{case.start_line} ({case.case_id}): "
                     f"Source path does not exist as a file: {normalised}"
                 )
+
+
+def _load_and_validate_use_cases(
+    root: Path,
+    suite_dir: Path,
+    manifest: dict[str, Any],
+    cases: Sequence[Case],
+    report: ValidationReport,
+) -> dict[str, Any] | None:
+    raw_path = manifest.get("use_cases_path")
+    if raw_path is None:
+        default_file = suite_dir / "use-cases.json"
+        if not default_file.is_file():
+            report.error("suite.json must declare use_cases_path or provide papers/blackbox/use-cases.json")
+            return None
+        resolved_path = default_file
+    else:
+        resolved = _resolve_declared_path(
+            root,
+            raw_path,
+            report,
+            "suite.json use_cases_path",
+            suite_dir=suite_dir,
+            allow_suite_relative=True,
+        )
+        if resolved is None:
+            return None
+        resolved_path = resolved[1]
+
+    catalog = _load_json(resolved_path, report, "use-case catalog")
+    if not isinstance(catalog, dict):
+        if catalog is not None:
+            report.error("use-cases.json root must be a JSON object")
+        return None
+
+    roles = catalog.get("roles")
+    modules = catalog.get("modules")
+    use_cases = catalog.get("use_cases")
+    if not isinstance(roles, list) or not roles:
+        report.error("use-cases.json must declare a non-empty roles array")
+        return None
+    if not isinstance(modules, list) or not all(isinstance(m, str) and m.strip() for m in modules):
+        report.error("use-cases.json must declare a non-empty array of module names")
+        return None
+    if not isinstance(use_cases, list) or not use_cases:
+        report.error("use-cases.json must declare a non-empty use_cases array")
+        return None
+
+    role_ids: set[str] = set()
+    for index, role in enumerate(roles):
+        if not isinstance(role, dict) or not isinstance(role.get("id"), str) or not role["id"].strip():
+            report.error(f"use-cases.json roles[{index}] must define a non-empty id")
+            continue
+        rid = role["id"].strip()
+        if rid in role_ids:
+            report.error(f"use-cases.json duplicates role id {rid!r}")
+        role_ids.add(rid)
+        if not isinstance(role.get("label"), str) or not role["label"].strip():
+            report.error(f"use-cases.json roles[{index}] ({rid}) must define a label")
+
+    module_set = {m.strip() for m in modules}
+    uc_ids: set[str] = set()
+    for index, uc in enumerate(use_cases):
+        if not isinstance(uc, dict):
+            report.error(f"use-cases.json use_cases[{index}] must be an object")
+            continue
+        uid = uc.get("id")
+        if not isinstance(uid, str) or not USE_CASE_ID_RE.fullmatch(uid):
+            report.error(f"use-cases.json use_cases[{index}] has invalid id {uid!r}")
+            continue
+        if uid in uc_ids:
+            report.error(f"use-cases.json duplicates use case id {uid}")
+        uc_ids.add(uid)
+        if uc.get("role") not in role_ids:
+            report.error(f"use-cases.json {uid} references unknown role {uc.get('role')!r}")
+        if uc.get("module") not in module_set:
+            report.error(f"use-cases.json {uid} references unknown module {uc.get('module')!r}")
+        if not isinstance(uc.get("title"), str) or not uc["title"].strip():
+            report.error(f"use-cases.json {uid} must define a title")
+
+    covered_ucs: set[str] = set()
+    for case in cases:
+        ctx = f"{case.section_path}:{case.start_line} ({case.case_id})"
+        if case.role not in role_ids:
+            report.error(f"{ctx}: Role {case.role!r} is not declared in use-cases.json")
+        if case.module not in module_set:
+            report.error(f"{ctx}: Module {case.module!r} is not declared in use-cases.json")
+        for uid in case.use_cases:
+            if uid not in uc_ids:
+                report.error(f"{ctx}: Use Case {uid} is not declared in use-cases.json")
+            else:
+                covered_ucs.add(uid)
+
+    uncovered = sorted(uc_ids - covered_ucs)
+    if uncovered:
+        report.error(
+            f"use-cases.json declares use case(s) with zero covering black-box tests: {', '.join(uncovered)}"
+        )
+    return catalog
 
 
 def _forbidden_secret_keys(value: Any, pointer: str = "$") -> list[str]:
@@ -2667,6 +2795,9 @@ def validate_project(
         legacy_rows=legacy_rows,
         archive_path=archive_path,
         outputs=outputs,
+    )
+    suite.use_case_catalog = _load_and_validate_use_cases(
+        root, suite_path.parent, manifest, all_cases, report
     )
 
     known_current_ids = set(id_locations)

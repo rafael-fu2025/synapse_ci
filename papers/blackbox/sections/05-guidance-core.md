@@ -5,6 +5,9 @@
 - **Legacy IDs:** `GD-001`
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.DASHBOARD.SCOPED`
+- **Role:** `guidance_intern`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-01`, `UC-GD-03`
 - **Surface:** Guidance dashboard
 - **Route/API:** GET /guidance
 - **Actor/grants:** Guidance actor with queue/case/report grants appropriate to role
@@ -24,6 +27,9 @@
 - **Legacy IDs:** `GD-002`
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CASE.CREATE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-05`
 - **Surface:** Guidance cases
 - **Route/API:** GET /guidance/cases/create; POST /guidance/cases/store
 - **Actor/grants:** Qualified Guidance actor with guidance.cases.create
@@ -43,6 +49,9 @@
 - **Legacy IDs:** `GD-003`
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.SESSION.NOTE_LIFECYCLE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-05`
 - **Surface:** Guidance case session
 - **Route/API:** POST /guidance/cases/{id}/session; POST /guidance/sessions/{id}/notes; GET /guidance/sessions/{id}/read
 - **Actor/grants:** Assigned qualified counsellor with guidance.cases.write/counseling.author
@@ -62,6 +71,9 @@
 - **Legacy IDs:** `GD-004`
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CASE.CONSULTATION_ACCESS`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-06`
 - **Surface:** Guidance case workspace
 - **Route/API:** GET /guidance/cases/{id}; transfer consultation routes
 - **Actor/grants:** Owner counsellor, accepted consultant, unrelated counsellor
@@ -81,6 +93,9 @@
 - **Legacy IDs:** `GD-005`
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CASE.READ_ANY_AUDIT`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-12`
 - **Surface:** Guidance case workspace
 - **Route/API:** GET /guidance/cases/{id}
 - **Actor/grants:** Guidance supervisor/admin with guidance.cases.read_any but not assigned owner
@@ -100,6 +115,9 @@
 - **Legacy IDs:** `GD-006`
 - **Changed by:** bea71cf
 - **Requirement:** `GUIDANCE.FOLLOWUP.ENCRYPTED_OUTCOME`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-05`
 - **Surface:** Guidance case follow-ups
 - **Route/API:** POST /guidance/followups/{id}/complete|missed
 - **Actor/grants:** Assigned owner or active supervisor with guidance.cases.write
@@ -119,6 +137,9 @@
 - **Legacy IDs:** `GD-007`
 - **Changed by:** bea71cf
 - **Requirement:** `GUIDANCE.CASE.ENCRYPTED_CLOSURE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-05`
 - **Surface:** Guidance case workspace
 - **Route/API:** POST /guidance/cases/{id}/close
 - **Actor/grants:** Assigned owner or active supervisor with guidance.cases.write
@@ -138,6 +159,9 @@
 - **Legacy IDs:** `GD-008`
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.QUEUE.CALLED_TICKET_SESSION`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-01`, `UC-GD-05`
 - **Surface:** Guidance queue and case chooser
 - **Route/API:** POST /guidance/queue/call/{id}; POST /guidance/cases/start-for-ticket/{id}
 - **Actor/grants:** Guidance queue manager and qualified case actor
@@ -155,38 +179,44 @@
 ## GD-009 — Question bank revision can be previewed and archived
 - **Lifecycle:** `READY`
 - **Legacy IDs:** `GD-009`
-- **Changed by:** baseline
+- **Changed by:** `6deffdf`
 - **Requirement:** `GUIDANCE.QUESTION_BANK.LIFECYCLE`
-- **Surface:** Guidance question bank
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-14`
+- **Surface:** Guidance question bank (including linear-scale items)
 - **Route/API:** POST /guidance/question-bank/store|{id}/update|{id}/archive
 - **Actor/grants:** Guidance manager with applicable survey/question-bank authority
-- **Preconditions:** Unique synthetic question, audience/type/category values; no published survey depends on cleanup version.
+- **Preconditions:** Unique synthetic question (including linear-scale min/max configuration), audience/type/category values; no published survey depends on cleanup version.
 **Steps**
-1. Create the question, update it to a new revision, and open preview.
+1. Create a question (including linear-scale rating bounds), update it to a new revision, and open preview.
 2. Archive it and inspect active catalog/search results.
-- **Expected:** Revision metadata increments, preview reflects the selected immutable revision, and archived item leaves the active set.
+- **Expected:** Revision metadata increments, preview reflects the selected immutable revision and scale endpoints, and archived item leaves the active set.
 - **Negative/non-disclosure:** Archive does not rewrite survey copies or disclose responses; unauthorized actors cannot author.
 - **Cleanup:** Remove/reset synthetic bank records after archival evidence.
-- **Source:** app/Config/Routes.php:226-235; docs/QUESTION_BANK.md:1-92
+- **Source:** app/Config/Routes.php:233-243; docs/QUESTION_BANK.md:1-92
 - **Evidence:** Create/edit/preview/archive screenshots and revision/catalog state.
 - **Verdict:** `NOT_RUN`
 
 ## GD-010 — Survey copies bank revisions and publishes to its audience
 - **Lifecycle:** `READY`
 - **Legacy IDs:** `GD-010`
-- **Changed by:** b868a49
+- **Changed by:** b868a49, 6deffdf
 - **Requirement:** `GUIDANCE.SURVEY.PUBLISH`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-14`
 - **Surface:** Guidance survey builder
 - **Route/API:** POST /guidance/surveys/store|{id}/publish
 - **Actor/grants:** Guidance actor with guidance.surveys.manage
-- **Preconditions:** Active synthetic bank question; valid survey window/audience; target and non-target synthetic portal actors.
+- **Preconditions:** Active synthetic bank question (including linear scale); valid survey window/audience; target and non-target synthetic portal actors.
 **Steps**
 1. Create a survey by copying the bank revision, review the draft, and publish it.
 2. Open portal survey lists as target and non-target actors, then archive/update the bank source separately.
-- **Expected:** Published survey is available only to the target audience and retains its copied bank ID/revision independently of later source changes.
+- **Expected:** Published survey is available only to the target audience and retains its copied bank ID/revision and scale bounds independently of later source changes.
 - **Negative/non-disclosure:** Draft/closed surveys and confidential response data are not exposed; publishing does not grant broad Guidance record access.
 - **Cleanup:** Close/delete the survey, question copy, and responses.
-- **Source:** app/Config/Routes.php:236-249; app/Services/Guidance/SurveyService.php:1-420
+- **Source:** app/Config/Routes.php:244-259; app/Services/Guidance/SurveyService.php:1-420
 - **Evidence:** Builder/publish states, copied revision metadata, and two-audience portal comparison.
 - **Verdict:** `NOT_RUN`
 
@@ -195,6 +225,9 @@
 - **Legacy IDs:** `GD-011`
 - **Changed by:** baseline
 - **Requirement:** `GUIDANCE.SURVEY.RESPONSE_REVIEW`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-15`
 - **Surface:** Guidance survey responses
 - **Route/API:** GET /guidance/surveys/{id}/responses/{responseId}; POST .../export
 - **Actor/grants:** Guidance actor with guidance.responses.read
@@ -214,6 +247,9 @@
 - **Legacy IDs:** `GD-012`
 - **Changed by:** baseline
 - **Requirement:** `GUIDANCE.ANNOUNCEMENT.PUBLISH`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-14`
 - **Surface:** Guidance announcements
 - **Route/API:** POST /guidance/announcements/store|{id}/publish
 - **Actor/grants:** Guidance admin/supervisor with guidance.announcements.manage

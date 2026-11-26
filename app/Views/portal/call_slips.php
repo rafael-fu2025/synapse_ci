@@ -22,6 +22,14 @@ $statusMetaMap = [
     'missed'       => ['tone' => 'is-danger',    'label' => 'Missed'],
     'cancelled'    => ['tone' => 'is-inactive',  'label' => 'Cancelled'],
 ];
+$purposeLabels = [
+    'personal_counseling'    => 'Personal Counseling',
+    'career_counseling'      => 'Career Counseling',
+    'academic_counseling'    => 'Academic Counseling (INC or etc.)',
+    'routine_interview'      => 'Interview (Initial, Routine & Exit)',
+    'testing_interpretation' => 'Testing/ Test Interpretation',
+    'others'                 => 'Others',
+];
 
 $tabs = [
     'all'          => 'All',
@@ -115,7 +123,8 @@ $tabs = [
             $csTimeRaw = (string) ($cs['call_time'] ?? '');
             $csTimeFormatted = $csTimeRaw !== '' && strtotime($csTimeRaw) ? date('g:i A', strtotime($csTimeRaw)) : $csTimeRaw;
             $csSchedule = trim($csDateFormatted . ($csTimeFormatted !== '' ? ' · ' . $csTimeFormatted : ''));
-            $csPurpose = ucwords(str_replace('_', ' ', (string) ($cs['purpose'] ?? 'counseling')));
+            $rawCsPurpose = (string) ($cs['purpose'] ?? 'personal_counseling');
+            $csPurpose = $purposeLabels[$rawCsPurpose] ?? ucwords(str_replace('_', ' ', $rawCsPurpose));
             $csPurposeOther = trim((string) ($cs['purpose_other'] ?? ''));
             ?>
             <article class="pa-cs-row <?= $csStatus === 'pending' ? 'is-pending' : '' ?>">

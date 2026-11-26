@@ -104,13 +104,13 @@ $statusTone = static fn (string $status): string => match ($status) {
             </div>
           </div>
 
-          <!-- Step 2: Presenting Concerns -->
+          <!-- Step 2: Reason for Referral -->
           <div class="rf-band">
             <div class="rf-step-label">
-              <span class="rf-step-num">2.</span>Presenting Concerns <span class="rf-step-opt">Select all that apply</span>
+              <span class="rf-step-num">2.</span>Reason for Referral <span class="rf-step-opt">Select all that apply</span>
             </div>
             <p class="rf-step-help">
-              The concerns, narrative, priority, and prior actions below will be copied into a separate confidential referral for every selected student.
+              The selected reasons, incident description, priority, and remarks below will be copied into a separate confidential referral for every selected student.
             </p>
 
             <div class="rf-concern-grid">
@@ -129,8 +129,8 @@ $statusTone = static fn (string $status): string => match ($status) {
             </div>
 
             <div id="reasonsOtherWrap" class="rf-other-wrap d-none">
-              <label for="reasonsOtherSpecify" class="rf-sub-label">If "Others" selected, please specify</label>
-              <input type="text" id="reasonsOtherSpecify" name="reasons_other_specify" class="form-control rf-input" maxlength="500" placeholder="Optional clarification" disabled>
+              <label for="reasonsOtherSpecify" class="rf-sub-label">Others (Please specify)</label>
+              <input type="text" id="reasonsOtherSpecify" name="reasons_other_specify" class="form-control rf-input" maxlength="500" placeholder="Please specify other reason for referral" disabled>
             </div>
           </div>
 
@@ -149,11 +149,11 @@ $statusTone = static fn (string $status): string => match ($status) {
             </p>
           </div>
 
-          <!-- Steps 4 & 5: Encrypted Narrative & Prior Actions -->
+          <!-- Steps 4 & 5: Description of Behavior / Incident Observed & Remarks -->
           <div class="rf-band">
             <div class="rf-field-group">
               <label for="reasonsNarrative" class="rf-step-label">
-                <span class="rf-step-num">4.</span>Observable Concerns &amp; Narrative<span class="rf-step-req" aria-hidden="true">*</span>
+                <span class="rf-step-num">4.</span>Description of Behavior / Incident Observed<span class="rf-step-req" aria-hidden="true">*</span>
               </label>
               <textarea name="reasons_narrative"
                         id="reasonsNarrative"
@@ -161,19 +161,19 @@ $statusTone = static fn (string $status): string => match ($status) {
                         class="form-control rf-textarea"
                         maxlength="4096"
                         required
-                        placeholder="Describe specific behaviors, attendance patterns, or concerns observed. Encrypted prior to storage."></textarea>
+                        placeholder="Describe specific behaviors or incidents observed. You may submit directly to the Guidance Center; encrypted prior to storage."></textarea>
             </div>
 
             <div class="rf-field-group">
               <label for="priorActionsTaken" class="rf-step-label">
-                <span class="rf-step-num">5.</span>Prior Actions / Interventions Taken <span class="rf-step-opt">Optional</span>
+                <span class="rf-step-num">5.</span>Remarks <span class="rf-step-opt">Optional (prior context / initial actions)</span>
               </label>
               <textarea name="prior_actions_taken"
                         id="priorActionsTaken"
                         rows="3"
                         class="form-control rf-textarea"
                         maxlength="4096"
-                        placeholder="E.g., initial student conference, parent/adviser notice, academic support offered"></textarea>
+                        placeholder="Additional remarks or initial teacher/adviser actions taken"></textarea>
             </div>
           </div>
 

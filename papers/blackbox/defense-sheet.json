@@ -1,0 +1,1420 @@
+{
+  "schema_version": 1,
+  "title": "Black Box Testing — Live Evaluation Sheet",
+  "version": "2026.11-defense.1",
+  "allocated_time": "2 Hours (3 Evaluators: 2 Technical Advisers + 1 Capstone Adviser)",
+  "technical_appendix": "papers/blackbox/SYNAPSE-BlackBox-Testing.md",
+  "tracks": [
+    {
+      "id": "Track A",
+      "evaluator": "Technical Adviser 1",
+      "focus": "Public Access, Shared Portal, Student, Employee & Clinic Operations",
+      "roles": [
+        "public",
+        "all_authenticated",
+        "student",
+        "employee",
+        "clinic_intern",
+        "clinic_staff",
+        "clinic_physician",
+        "clinic_admin"
+      ],
+      "estimated_minutes": 55
+    },
+    {
+      "id": "Track B",
+      "evaluator": "Technical Adviser 2",
+      "focus": "Team Workspace, Interdepartmental Referrals & Guidance Operations",
+      "roles": [
+        "workstation_member",
+        "guidance_intern",
+        "counsellor",
+        "guidance_supervisor",
+        "guidance_admin"
+      ],
+      "estimated_minutes": 45
+    },
+    {
+      "id": "Track C",
+      "evaluator": "Capstone Adviser",
+      "focus": "Facilities (BMG), Reports, Audit Trail, Platform Admin & Optional Grants",
+      "roles": [
+        "bmg_intern",
+        "facilities_op",
+        "bmg_admin",
+        "report_viewer",
+        "audit_reader",
+        "superadmin",
+        "commissioned_hardware_op",
+        "ai_granted_staff"
+      ],
+      "estimated_minutes": 35
+    }
+  ],
+  "cases": [
+    {
+      "id": "PUB-01",
+      "role": "public",
+      "module": "Authentication, Session & Privacy",
+      "function": "Privacy Policy / Public Page",
+      "use_cases": ["UC-SH-01"],
+      "mapped_cases": ["AU-013"],
+      "scenario": "Verify a visitor can read the Data Privacy Policy without signing in",
+      "steps": [
+        "Open a browser without signing in.",
+        "Navigate to the Data Privacy Policy page (/privacy-policy).",
+        "Scroll through the sections and check the Back to Sign In link."
+      ],
+      "expected": "The full Foundation University Data Privacy Policy opens cleanly with a working Back to Sign In button.",
+      "remarks": ""
+    },
+    {
+      "id": "PUB-02",
+      "role": "public",
+      "module": "Authentication, Session & Privacy",
+      "function": "Privacy Policy / Login Modal",
+      "use_cases": ["UC-SH-01"],
+      "mapped_cases": ["AU-014"],
+      "scenario": "Verify the Data Privacy Policy modal opens from the Sign-In screen",
+      "steps": [
+        "Open any SYNAPSE login screen.",
+        "Click the Data Privacy Policy link on the login card.",
+        "Read the notice inside the popup modal and close it."
+      ],
+      "expected": "The Data Privacy Policy modal opens cleanly and lets the user return to the login form.",
+      "remarks": ""
+    },
+    {
+      "id": "PUB-03",
+      "role": "public",
+      "module": "Authentication, Session & Privacy",
+      "function": "Login / Invalid Credentials",
+      "use_cases": ["UC-SH-02"],
+      "mapped_cases": ["AU-003", "AU-005"],
+      "scenario": "Verify sign-in with an invalid password or repeated wrong attempts",
+      "steps": [
+        "Open the login page.",
+        "Enter an invalid username or wrong password and click Sign In.",
+        "Repeat wrong sign-in attempts several times."
+      ],
+      "expected": "System displays an error message without logging in and temporarily slows down repeated failed attempts.",
+      "remarks": ""
+    },
+    {
+      "id": "PUB-04",
+      "role": "public",
+      "module": "Authentication, Session & Privacy",
+      "function": "Login / Valid Credentials",
+      "use_cases": ["UC-SH-02"],
+      "mapped_cases": ["AU-001", "AU-002"],
+      "scenario": "Verify a user can sign in with valid credentials on the matching portal",
+      "steps": [
+        "Open the portal or workstation login page.",
+        "Enter valid university credentials.",
+        "Click Sign In."
+      ],
+      "expected": "The user is authenticated and redirected to their Home Dashboard.",
+      "remarks": ""
+    },
+    {
+      "id": "PUB-05",
+      "role": "public",
+      "module": "Guidance & Counseling",
+      "function": "Document Verification / Public Check",
+      "use_cases": ["UC-SH-03"],
+      "mapped_cases": ["GD-FRM-007"],
+      "scenario": "Verify anyone can check the authenticity of a printed Guidance document",
+      "steps": [
+        "Open the public document verification page.",
+        "Enter a valid document code and security code (or scan its QR link).",
+        "Click Verify."
+      ],
+      "expected": "System confirms whether the document is authentic and displays only basic document status without exposing personal details.",
+      "remarks": ""
+    },
+
+    {
+      "id": "SH-01",
+      "role": "all_authenticated",
+      "module": "Authentication, Session & Privacy",
+      "function": "Session / Logout & Back Button",
+      "use_cases": ["UC-SH-04"],
+      "mapped_cases": ["AU-006", "AU-012"],
+      "scenario": "Verify logout ends the session and browser Back button cannot reopen pages",
+      "steps": [
+        "Sign in with a valid account.",
+        "Click Sign Out and confirm.",
+        "Press the browser Back button."
+      ],
+      "expected": "The session ends and the user stays on the login screen instead of returning to private pages.",
+      "remarks": ""
+    },
+    {
+      "id": "SH-02",
+      "role": "all_authenticated",
+      "module": "Authentication, Session & Privacy",
+      "function": "Access Control / Wrong Portal Boundary",
+      "use_cases": ["UC-SH-02", "UC-SH-04"],
+      "mapped_cases": ["AU-004"],
+      "scenario": "Verify a user cannot enter a department workstation without matching role rights",
+      "steps": [
+        "Sign in as a Student on the personal portal.",
+        "Open a staff workstation URL (for example, Clinic or Admin) in the address bar.",
+        "Observe the system response."
+      ],
+      "expected": "Access is denied cleanly and no department patient, counselling, or admin data is shown.",
+      "remarks": ""
+    },
+    {
+      "id": "SH-03",
+      "role": "all_authenticated",
+      "module": "Personal Portal & Self-Service",
+      "function": "Profile / Contact Info Update",
+      "use_cases": ["UC-SH-05"],
+      "mapped_cases": ["PT-PRF-001", "PT-PRF-003", "PT-PRF-004"],
+      "scenario": "Verify user can update contact details while official university fields stay locked",
+      "steps": [
+        "Open My Profile in the portal.",
+        "Edit the phone number or current residence address and click Save.",
+        "Check university ID and enrollment fields."
+      ],
+      "expected": "Contact details save successfully while official university identity fields remain read-only.",
+      "remarks": ""
+    },
+    {
+      "id": "SH-04",
+      "role": "all_authenticated",
+      "module": "Personal Portal & Self-Service",
+      "function": "Profile / Photo & Emergency Contact",
+      "use_cases": ["UC-SH-05"],
+      "mapped_cases": ["PT-007", "PT-008", "PT-PRF-002"],
+      "scenario": "Verify user can upload a profile photo and update emergency contact details",
+      "steps": [
+        "Open My Profile and go to Profile Photo and Emergency Contact.",
+        "Upload a valid image file and enter an emergency contact person and number.",
+        "Click Save."
+      ],
+      "expected": "The new profile photo and emergency contact details appear on the profile.",
+      "remarks": ""
+    },
+    {
+      "id": "SH-05",
+      "role": "all_authenticated",
+      "module": "Realtime & Notifications",
+      "function": "Notifications & Navigation Shell",
+      "use_cases": ["UC-SH-06"],
+      "mapped_cases": ["PT-011", "RT-NT-001", "UX-WEB-001"],
+      "scenario": "Verify user can open personal notifications, mark them read, and collapse the sidebar",
+      "steps": [
+        "Click the bell icon to open the notification inbox.",
+        "Mark one notification (or Mark All) as read.",
+        "Resize or toggle the navigation drawer on desktop/mobile view."
+      ],
+      "expected": "Unread count drops after marking read and the responsive menu drawer opens and closes smoothly.",
+      "remarks": ""
+    },
+
+    {
+      "id": "STU-01",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "Appointments / Request Booking",
+      "use_cases": ["UC-PT-01"],
+      "mapped_cases": ["PT-001", "PT-002"],
+      "scenario": "Verify a student can submit an appointment request to Clinic or Guidance",
+      "steps": [
+        "Sign in as a Student and open Appointments.",
+        "Choose department, preferred schedule/reason, and submit the request.",
+        "View the My Appointments list."
+      ],
+      "expected": "The new appointment request appears in the student's list with Pending/Requested status.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-02",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "Appointments / Cancel Own Request",
+      "use_cases": ["UC-PT-01"],
+      "mapped_cases": ["PT-004"],
+      "scenario": "Verify a student can cancel an eligible pending appointment",
+      "steps": [
+        "Open My Appointments as a Student.",
+        "Click Cancel on an upcoming pending appointment.",
+        "Enter a short cancellation reason and confirm."
+      ],
+      "expected": "The appointment status changes to Cancelled immediately.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-03",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "Queue & Visit History",
+      "use_cases": ["UC-PT-02"],
+      "mapped_cases": ["PT-005", "PT-006"],
+      "scenario": "Verify a student can view live queue position and personal visit history",
+      "steps": [
+        "Sign in as a Student with a queue ticket and past visits.",
+        "Check the Live Queue card on the Home Dashboard.",
+        "Open the Visit History page."
+      ],
+      "expected": "Current queue number/status and nonclinical past visit dates appear cleanly without clinical notes.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-04",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "Announcements / Read Tracking",
+      "use_cases": ["UC-PT-03"],
+      "mapped_cases": ["PT-009"],
+      "scenario": "Verify a student can read Clinic or Guidance announcements",
+      "steps": [
+        "Open Announcements in the Student portal.",
+        "Click on an active published announcement.",
+        "Return to the announcements list."
+      ],
+      "expected": "The announcement text opens and is marked as read for that student's account.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-05",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "Surveys / Answer Survey",
+      "use_cases": ["UC-PT-03"],
+      "mapped_cases": ["PT-010"],
+      "scenario": "Verify a student can answer and submit a published Guidance survey",
+      "steps": [
+        "Open Surveys in the Student portal.",
+        "Open an active survey, answer the rating scale and choice questions.",
+        "Click Submit."
+      ],
+      "expected": "System records the submission and shows the survey as Completed so it cannot be submitted twice.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-06",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "Call Slips / Student Acknowledgement",
+      "use_cases": ["UC-PT-04"],
+      "mapped_cases": ["GD-CALL-002"],
+      "scenario": "Verify a student can acknowledge a received Guidance call slip",
+      "steps": [
+        "Open Call Slips in the Student portal.",
+        "Click an unacknowledged call slip issued by a counsellor.",
+        "Click Acknowledge."
+      ],
+      "expected": "The call slip updates to Acknowledged with a confirmation timestamp.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-07",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "MI Assessment / Complete & PDF",
+      "use_cases": ["UC-PT-05"],
+      "mapped_cases": ["GD-MI-002", "GD-MI-003", "GD-MI-004", "GD-MI-005"],
+      "scenario": "Verify a student can complete an assigned Multiple Intelligences test and download PDF",
+      "steps": [
+        "Open an assigned MI assessment as a Student.",
+        "Answer the items, review, and click Finalize Submission.",
+        "View the eight-domain profile and click Download PDF."
+      ],
+      "expected": "All eight intelligence domain scores appear clearly and the MI result PDF downloads cleanly.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-08",
+      "role": "student",
+      "module": "Personal Portal & Self-Service",
+      "function": "Service Evaluation / Token Redemption",
+      "use_cases": ["UC-PT-06"],
+      "mapped_cases": ["GD-OGC-004", "GD-EVL-002", "GD-EVL-003"],
+      "scenario": "Verify a student can redeem an evaluation code and submit anonymous feedback",
+      "steps": [
+        "Open Service Evaluation and enter a valid one-time evaluation token (PEF-008 or CEF-009).",
+        "Fill in the ratings and optional comment.",
+        "Click Submit."
+      ],
+      "expected": "Feedback is accepted once, and trying the same evaluation code a second time is rejected.",
+      "remarks": ""
+    },
+    {
+      "id": "STU-09",
+      "role": "student",
+      "module": "Mobile Application & Platform",
+      "function": "Mobile App / Login & Dashboard",
+      "use_cases": ["UC-PT-07"],
+      "mapped_cases": ["MB-001", "MB-002", "MB-005", "MB-013"],
+      "scenario": "Verify a student can sign in on the mobile personal app and view portal status",
+      "steps": [
+        "Open the SYNAPSE Mobile app.",
+        "Select the university server and sign in as a Student.",
+        "Check Home dashboard, Appointments, and Notifications tabs."
+      ],
+      "expected": "The mobile dashboard loads the student's active queue, appointments, and notifications smoothly.",
+      "remarks": "[Optional: Mobile App]"
+    },
+
+    {
+      "id": "EMP-01",
+      "role": "employee",
+      "module": "Personal Portal & Self-Service",
+      "function": "Guidance Referral / Submit GGR-005",
+      "use_cases": ["UC-PT-08"],
+      "mapped_cases": ["GD-INT-001", "GD-OGC-002"],
+      "scenario": "Verify an employee can refer students to Guidance using form GGR-005",
+      "steps": [
+        "Sign in as an Employee (Faculty/Staff).",
+        "Open Guidance Referral (GGR-005), select one or more students, enter observed behavior and reason.",
+        "Click Submit Referral."
+      ],
+      "expected": "The referral is created and listed under the employee's submitted referrals.",
+      "remarks": ""
+    },
+    {
+      "id": "EMP-02",
+      "role": "employee",
+      "module": "Personal Portal & Self-Service",
+      "function": "Guidance Referral / Withdraw",
+      "use_cases": ["UC-PT-08"],
+      "mapped_cases": ["GD-INT-002", "RF-004"],
+      "scenario": "Verify an employee can withdraw a pending referral before Guidance accepts it",
+      "steps": [
+        "Open Submitted Referrals as the Employee.",
+        "Locate a pending referral that has not yet been accepted.",
+        "Click Withdraw Referral and confirm."
+      ],
+      "expected": "The referral status changes to Withdrawn immediately.",
+      "remarks": ""
+    },
+
+    {
+      "id": "CLI-01",
+      "role": "clinic_intern",
+      "module": "Clinic Operations & Extensions",
+      "function": "Clinic Records / Read-Only View",
+      "use_cases": ["UC-CL-01"],
+      "mapped_cases": ["CL-001", "CL-002"],
+      "scenario": "Verify a Clinic Intern can browse patient records, isolation list, and clearances",
+      "steps": [
+        "Sign in as a Clinic Intern with an active shift.",
+        "Open Patient Records and search for a student.",
+        "Check Isolation Tracker and Clearances tabs."
+      ],
+      "expected": "Clinical summaries and records are visible in read-only mode.",
+      "remarks": ""
+    },
+    {
+      "id": "CLI-02",
+      "role": "clinic_intern",
+      "module": "Clinic Operations & Extensions",
+      "function": "Clinic Queue / Call & Check-In",
+      "use_cases": ["UC-CL-02"],
+      "mapped_cases": ["CL-005", "CL-011", "CL-012"],
+      "scenario": "Verify a Clinic Intern can check in an arriving patient and call the next ticket",
+      "steps": [
+        "Open the Clinic Queue screen as Clinic Intern.",
+        "Check in a scheduled or walk-in patient.",
+        "Click Call Next on the waiting queue item."
+      ],
+      "expected": "The ticket moves to In Service and the queue updates.",
+      "remarks": ""
+    },
+    {
+      "id": "CLI-03",
+      "role": "clinic_intern",
+      "module": "Clinic Operations & Extensions",
+      "function": "Encounters / Draft Vitals & Notes",
+      "use_cases": ["UC-CL-03"],
+      "mapped_cases": ["CL-006", "CL-007", "CL-CORE-001"],
+      "scenario": "Verify a Clinic Intern can open an encounter and save draft vitals and notes",
+      "steps": [
+        "Open an active Clinic encounter as Clinic Intern.",
+        "Enter vital signs (temperature, blood pressure) and initial complaints.",
+        "Click Save Draft."
+      ],
+      "expected": "The draft vitals and notes are saved cleanly to the open encounter.",
+      "remarks": ""
+    },
+    {
+      "id": "CLI-04",
+      "role": "clinic_intern",
+      "module": "Clinic Operations & Extensions",
+      "function": "Inventory & Role Limits / Blocked Actions",
+      "use_cases": ["UC-CL-01", "UC-CL-03", "UC-CL-04"],
+      "mapped_cases": ["CL-RBAC-002"],
+      "scenario": "Verify Clinic Intern sees inventory read-only and cannot seal encounters or dispense medicine",
+      "steps": [
+        "Open Medicine Inventory as Clinic Intern and verify stock levels are visible.",
+        "Look for stock adjustment, medicine dispensing, and Seal Encounter buttons.",
+        "Confirm those final action controls are disabled or blocked."
+      ],
+      "expected": "Clinic Intern can view inventory read-only and is blocked from adjusting stock, dispensing medicine, or sealing encounters.",
+      "remarks": ""
+    },
+
+    {
+      "id": "CLS-01",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Health Profile & Delayed Labs",
+      "use_cases": ["UC-CL-05"],
+      "mapped_cases": ["CL-003", "CL-004", "CL-EXT-002"],
+      "scenario": "Verify Clinic Staff can update a patient's health profile and record lab results",
+      "steps": [
+        "Sign in as Clinic Staff and open a patient's profile.",
+        "Update allergies/medical history and save.",
+        "Attach or record a delayed laboratory test result."
+      ],
+      "expected": "Health profile changes and laboratory results appear in the patient's record.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-02",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Dispensing & Seal Encounter",
+      "use_cases": ["UC-CL-06"],
+      "mapped_cases": ["CL-008", "CL-009", "CL-010"],
+      "scenario": "Verify Clinic Staff can dispense medicine from a batch and seal the encounter",
+      "steps": [
+        "Open an active clinical encounter as Clinic Staff.",
+        "Select a medicine batch, enter dispensed quantity, and save.",
+        "Click Seal Encounter and confirm."
+      ],
+      "expected": "Stock batch quantity deducts automatically and the encounter becomes sealed and locked from direct edits.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-03",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Sealed Encounter / Post-Visit Addendum",
+      "use_cases": ["UC-CL-07"],
+      "mapped_cases": ["CL-EXT-001", "CL-EXT-002"],
+      "scenario": "Verify Clinic Staff can append a signed addendum to an already sealed encounter",
+      "steps": [
+        "Open a previously sealed clinical encounter.",
+        "Click Add Addendum, enter follow-up notes, and submit.",
+        "View the encounter timeline."
+      ],
+      "expected": "The original sealed record stays unchanged while the timestamped addendum is appended below it.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-04",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Scheduling / Clinic Appointments",
+      "use_cases": ["UC-CL-08"],
+      "mapped_cases": ["CL-013", "PT-003", "PT-SCH-001"],
+      "scenario": "Verify Clinic Staff can confirm, reschedule, and check in student appointments (while availability templates stay admin-only)",
+      "steps": [
+        "Open Clinic Appointments as Clinic Staff.",
+        "Confirm or reschedule a pending student appointment and verify same-day queue check-in.",
+        "Confirm provider availability setup remains restricted to Clinic Administrator."
+      ],
+      "expected": "Student appointments confirm and check in cleanly, while /clinic/appointments/availability stays blocked (403) for non-admin Clinic Staff.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-05",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Medicine Inventory / Batches & Reversal",
+      "use_cases": ["UC-CL-09"],
+      "mapped_cases": ["CL-014", "CL-INV-001", "CL-INV-002", "CL-INV-003"],
+      "scenario": "Verify Clinic Staff can receive medicine batches, quarantine stock, and reverse mistakes",
+      "steps": [
+        "Open Medicine Inventory as Clinic Staff.",
+        "Receive a new batch with lot number and expiry date.",
+        "Test quarantine/adjustment and reverse an incorrect stock log entry."
+      ],
+      "expected": "Batch balances update accurately and the ledger records every stock movement and reversal.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-06",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Isolation Tracker / Record & Clear",
+      "use_cases": ["UC-CL-10"],
+      "mapped_cases": ["CL-ISO-001", "CL-ISO-002"],
+      "scenario": "Verify Clinic Staff can record a communicable isolation case and later mark it cleared",
+      "steps": [
+        "Open Isolation Tracker and log a new student isolation case.",
+        "Save the case and verify it shows as Active.",
+        "Open the case and record Medical Clearance."
+      ],
+      "expected": "The case starts as Active and moves to Cleared with a clearance date.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-07",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Health Clearances / Issue Certificate",
+      "use_cases": ["UC-CL-11"],
+      "mapped_cases": ["CL-EXT-003"],
+      "scenario": "Verify Clinic Staff can issue an enrollment or medical health clearance",
+      "steps": [
+        "Open Clearances and Certificates in Clinic.",
+        "Select a student, enter clearance purpose/remarks, and click Issue Clearance.",
+        "Preview or print the issued clearance."
+      ],
+      "expected": "The health clearance is issued, recorded on the student's profile, and ready for printing.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-08",
+      "role": "clinic_staff",
+      "module": "Clinic Operations & Extensions",
+      "function": "Clinic Reports / Summary & PDF",
+      "use_cases": ["UC-CL-12"],
+      "mapped_cases": ["CL-RPT-001", "CL-RPT-002"],
+      "scenario": "Verify Clinic Staff can view monthly Clinic summary reports and download PDF",
+      "steps": [
+        "Open Clinic Reports.",
+        "Choose a date range and view consultation and medicine totals.",
+        "Click Export PDF."
+      ],
+      "expected": "On-screen totals match the period and a cleanly formatted Clinic PDF report downloads.",
+      "remarks": ""
+    },
+    {
+      "id": "CLS-09",
+      "role": "clinic_staff",
+      "module": "Interdepartmental Referrals",
+      "function": "Referrals / Send to Guidance",
+      "use_cases": ["UC-RF-01"],
+      "mapped_cases": ["RF-001", "RF-002"],
+      "scenario": "Verify Clinic Staff can create and send an interdepartmental referral to Guidance",
+      "steps": [
+        "Open Referrals in Clinic and click New Referral.",
+        "Select a student, set Guidance as target department, enter non-sensitive referral summary, and submit.",
+        "Check Outgoing Referrals list."
+      ],
+      "expected": "The referral is created with Pending status and appears for the Guidance team.",
+      "remarks": ""
+    },
+
+    {
+      "id": "CLP-01",
+      "role": "clinic_physician",
+      "module": "Clinic Operations & Extensions",
+      "function": "Physician Encounter / Finalize & Seal",
+      "use_cases": ["UC-CL-13"],
+      "mapped_cases": ["CL-RBAC-001"],
+      "scenario": "Verify Clinic Physician can examine an open encounter, prescribe/dispense, and seal it",
+      "steps": [
+        "Sign in as Clinic Physician.",
+        "Open a triaged encounter, review vitals, add diagnosis/plan, and dispense medicine if needed.",
+        "Click Seal Encounter."
+      ],
+      "expected": "Clinic Physician seals the encounter successfully with physician signature attribution.",
+      "remarks": ""
+    },
+
+    {
+      "id": "CLA-01",
+      "role": "clinic_admin",
+      "module": "Clinic Operations & Extensions",
+      "function": "Clinic Announcements & Provider Availability",
+      "use_cases": ["UC-CL-14"],
+      "mapped_cases": ["CL-ANN-001"],
+      "scenario": "Verify Clinic Administrator can publish Clinic announcements and manage provider availability",
+      "steps": [
+        "Sign in as Clinic Administrator and open Clinic Announcements.",
+        "Click New Announcement, enter title/body, set status to Published, and save.",
+        "Open Clinic Provider Availability and confirm schedule templates save cleanly."
+      ],
+      "expected": "The published Clinic announcement appears in the portal and Clinic provider availability templates save without error.",
+      "remarks": ""
+    },
+    {
+      "id": "CLA-02",
+      "role": "clinic_admin",
+      "module": "Archive Governance",
+      "function": "Archive & Restore / Clinic Scope",
+      "use_cases": ["UC-AD-05"],
+      "mapped_cases": ["ARV-002", "ARV-004"],
+      "scenario": "Verify Clinic Administrator can archive a Clinic/Team record and restore it cleanly",
+      "steps": [
+        "Open an inactive Clinic Team item or eligible Clinic record as Clinic Administrator.",
+        "Click Archive and enter a reason.",
+        "Open the Archive Center, locate the item, and click Restore."
+      ],
+      "expected": "The archived item moves to the Archive Center and returns to active view when restored.",
+      "remarks": ""
+    },
+    {
+      "id": "CLA-03",
+      "role": "clinic_admin",
+      "module": "Student Intern Governance",
+      "function": "Intern Placements / Shift Schedule",
+      "use_cases": ["UC-AD-06"],
+      "mapped_cases": ["INT-001", "INT-002", "INT-003", "INT-004"],
+      "scenario": "Verify Clinic Administrator can assign a Clinic Intern placement and control active shifts",
+      "steps": [
+        "Open Student Intern Governance in Clinic Admin.",
+        "Assign an enrolled student intern with supervisor and shift schedule.",
+        "Test revoking or updating the placement."
+      ],
+      "expected": "The student intern gets Clinic Intern access only while their shift placement is active.",
+      "remarks": ""
+    },
+    {
+      "id": "CLA-04",
+      "role": "clinic_admin",
+      "module": "Administration, Access & Platform",
+      "function": "Employee Access & MIS Sync",
+      "use_cases": ["UC-AD-07"],
+      "mapped_cases": ["AD-005", "AD-006"],
+      "scenario": "Verify Clinic Administrator can grant Clinic employee access and sync department directory",
+      "steps": [
+        "Open Employee Access Management in Clinic.",
+        "Assign or revoke Clinic workstation access for a staff account.",
+        "Trigger Scoped MIS Directory Sync."
+      ],
+      "expected": "Staff access updates immediately and the directory sync completes without affecting other departments.",
+      "remarks": ""
+    },
+
+    {
+      "id": "TW-01",
+      "role": "workstation_member",
+      "module": "Team Workspace (Web & Mobile)",
+      "function": "Team Tasks / Create & Complete",
+      "use_cases": ["UC-TW-01"],
+      "mapped_cases": ["TW-WEB-001", "TW-WEB-002", "TW-WEB-003", "TW-MOB-001"],
+      "scenario": "Verify a department member can create, update, and complete a Team task",
+      "steps": [
+        "Open Team Workspace -> Tasks in a department workstation.",
+        "Create a new task with assignee, due date, and checklist item.",
+        "Tick the checklist item and mark the task Complete."
+      ],
+      "expected": "The task appears on the board, updates progress, and moves cleanly to Completed.",
+      "remarks": ""
+    },
+    {
+      "id": "TW-02",
+      "role": "workstation_member",
+      "module": "Team Workspace (Web & Mobile)",
+      "function": "Team Calendar / Schedule & Cancel",
+      "use_cases": ["UC-TW-02"],
+      "mapped_cases": ["TW-WEB-006", "TW-WEB-007", "TW-MOB-009"],
+      "scenario": "Verify a department member can add and cancel a Team Calendar event",
+      "steps": [
+        "Open Team Calendar and click Add Event.",
+        "Enter event title, time, and save.",
+        "Open the created event and click Cancel Event."
+      ],
+      "expected": "The calendar displays the scheduled event and removes/marks it cancelled cleanly.",
+      "remarks": ""
+    },
+    {
+      "id": "TW-03",
+      "role": "workstation_member",
+      "module": "Team Workspace (Web & Mobile)",
+      "function": "Team Chat / Send, Mention & Scroll",
+      "use_cases": ["UC-TW-03"],
+      "mapped_cases": ["TW-WEB-009", "TW-WEB-011", "TW-WEB-012", "TW-MOB-012"],
+      "scenario": "Verify members can chat with @mentions and load older messages by scrolling",
+      "steps": [
+        "Open Team Chat and send a message using @ to mention a teammate.",
+        "Scroll up to load earlier chat history.",
+        "Click the scroll-to-latest button to jump back down."
+      ],
+      "expected": "The @mentioned teammate gets a generic notification, older messages load smoothly, and jump-to-latest works.",
+      "remarks": ""
+    },
+    {
+      "id": "TW-04",
+      "role": "workstation_member",
+      "module": "Interdepartmental Referrals",
+      "function": "Referrals / Acknowledge Incoming",
+      "use_cases": ["UC-RF-02"],
+      "mapped_cases": ["RF-005", "RF-006", "RF-010"],
+      "scenario": "Verify the receiving department can acknowledge and review an incoming referral",
+      "steps": [
+        "Open Incoming Referrals in the receiving workstation.",
+        "Click a pending referral from the other department.",
+        "Click Acknowledge / Mark Under Review."
+      ],
+      "expected": "The referral updates to Acknowledged / Under Review for both departments.",
+      "remarks": ""
+    },
+    {
+      "id": "TW-05",
+      "role": "workstation_member",
+      "module": "Interdepartmental Referrals",
+      "function": "Referrals / Hand Off to Care",
+      "use_cases": ["UC-RF-03"],
+      "mapped_cases": ["GD-INT-007", "RF-007", "RF-008"],
+      "scenario": "Verify a reviewed referral can be converted into a Clinic encounter or Guidance intake/case",
+      "steps": [
+        "Open an acknowledged referral in the receiving department.",
+        "Click Convert to Encounter (Clinic) or Open Intake/Case (Guidance).",
+        "Confirm creation."
+      ],
+      "expected": "A linked encounter or Guidance case/intake opens with prefilled student referral info.",
+      "remarks": ""
+    },
+    {
+      "id": "TW-06",
+      "role": "workstation_member",
+      "module": "Interdepartmental Referrals",
+      "function": "Referrals / Close Completed",
+      "use_cases": ["UC-RF-04"],
+      "mapped_cases": ["RF-009"],
+      "scenario": "Verify an acted-upon interdepartmental referral can be closed into history",
+      "steps": [
+        "Open a handed-off referral.",
+        "Click Close Referral and enter brief outcome remarks.",
+        "Confirm closure."
+      ],
+      "expected": "The referral moves to Closed History without exposing confidential clinical notes to the sender.",
+      "remarks": ""
+    },
+
+    {
+      "id": "GDI-01",
+      "role": "guidance_intern",
+      "module": "Guidance & Counseling",
+      "function": "Guidance Queue & Schedule View",
+      "use_cases": ["UC-GD-01"],
+      "mapped_cases": ["GD-001", "GD-008"],
+      "scenario": "Verify a Guidance Intern can operate the daily Guidance queue and view schedules",
+      "steps": [
+        "Sign in as Guidance Intern during an active shift.",
+        "Open the Guidance Queue and check in/call the next waiting student.",
+        "Check the department schedule overview."
+      ],
+      "expected": "The queue advances cleanly and scheduled appointments display properly.",
+      "remarks": ""
+    },
+    {
+      "id": "GDI-02",
+      "role": "guidance_intern",
+      "module": "Guidance & Counseling",
+      "function": "Intakes & Safety Triage",
+      "use_cases": ["UC-GD-02"],
+      "mapped_cases": ["GD-INT-003", "GD-INT-004", "GD-INT-006"],
+      "scenario": "Verify a Guidance Intern can log an intake request and run initial safety triage",
+      "steps": [
+        "Open Guidance Intakes as Guidance Intern.",
+        "Complete a walk-in or referred intake form and mark safety screening flags.",
+        "Submit the intake for counselling."
+      ],
+      "expected": "The intake is saved and urgent safety flags are highlighted prominently for review.",
+      "remarks": ""
+    },
+    {
+      "id": "GDI-03",
+      "role": "guidance_intern",
+      "module": "Guidance & Counseling",
+      "function": "Clients Directory & Assigned Cases",
+      "use_cases": ["UC-GD-03"],
+      "mapped_cases": ["GD-REC-001", "GD-REC-002", "GD-REC-003"],
+      "scenario": "Verify Guidance Intern can search Clients Directory and open assigned cases only",
+      "steps": [
+        "Open Clients Directory and search for an assigned student.",
+        "Open the student's assigned case.",
+        "Confirm unassigned private cases remain inaccessible."
+      ],
+      "expected": "Directory search works cleanly and the intern sees only their assigned cases.",
+      "remarks": ""
+    },
+    {
+      "id": "GDI-04",
+      "role": "guidance_intern",
+      "module": "Guidance & Counseling",
+      "function": "Draft Forms / Co-Sign Required",
+      "use_cases": ["UC-GD-04"],
+      "mapped_cases": ["INT-005"],
+      "scenario": "Verify Guidance Intern form drafts require Supervisor co-sign before finalizing",
+      "steps": [
+        "Open an assigned case as Guidance Intern and draft a clinical/consultation form (CCF-009).",
+        "Click Save / Submit for Co-Sign.",
+        "Verify the intern cannot self-finalize without supervisor co-signature."
+      ],
+      "expected": "The form saves in Pending Co-Sign status awaiting a Guidance Supervisor.",
+      "remarks": ""
+    },
+
+    {
+      "id": "CNS-01",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Cases / Sessions & Follow-Ups",
+      "use_cases": ["UC-GD-05"],
+      "mapped_cases": ["GD-002", "GD-003", "GD-006"],
+      "scenario": "Verify a Counsellor can open a case, record confidential session notes, and schedule follow-up",
+      "steps": [
+        "Sign in as Counsellor and open an assigned case (or create one from intake).",
+        "Add a new Counseling Session note and set a follow-up date.",
+        "Click Save Session."
+      ],
+      "expected": "The session note and follow-up reminder appear in the case timeline.",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-02",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Care Episodes & Case Transfers",
+      "use_cases": ["UC-GD-06"],
+      "mapped_cases": ["GD-004", "GD-EPI-001", "GD-EPI-002"],
+      "scenario": "Verify a Counsellor can manage care episodes and request a case transfer",
+      "steps": [
+        "Open a client folder and create or update a Care Episode.",
+        "Record consultation notes and initiate a Transfer to another counsellor.",
+        "Confirm the transfer status."
+      ],
+      "expected": "The care episode tracks progress and the transfer updates case ownership properly.",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-03",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Official OGC Forms / Fill & Finalize",
+      "use_cases": ["UC-GD-07"],
+      "mapped_cases": ["GD-FRM-002", "GD-FRM-004", "GD-OGC-001", "GD-OGC-002"],
+      "scenario": "Verify a Counsellor can fill out and finalize official OGC forms (PIF-008, PCF-008, CCF-009)",
+      "steps": [
+        "Open Controlled Forms inside a student case.",
+        "Fill in required fields for PIF-008, PCF-008, or CCF-009.",
+        "Click Finalize Form."
+      ],
+      "expected": "The form validates required OGC fields, saves, and locks with a unique document code.",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-04",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Official OGC Forms / Print PDF",
+      "use_cases": ["UC-GD-07"],
+      "mapped_cases": ["GD-FRM-006", "GD-FRM-008"],
+      "scenario": "Verify a Counsellor can generate and print an official OGC form PDF",
+      "steps": [
+        "Open a finalized OGC form in the case.",
+        "Click Print / Download Official PDF.",
+        "Inspect the generated PDF header and contents."
+      ],
+      "expected": "The formatted Foundation University OGC PDF opens with institutional header and verification code.",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-05",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Call Slips (CSP-007) & Appointments (GAP-006)",
+      "use_cases": ["UC-GD-08"],
+      "mapped_cases": ["GD-CALL-001", "GD-OGC-003"],
+      "scenario": "Verify a Counsellor can issue a controlled Call Slip (CSP-007) and GAP-006 form",
+      "steps": [
+        "Open a student case and click Issue Call Slip (CSP-007).",
+        "Enter date, time, venue, and reason, then click Send.",
+        "Check the student's portal or GAP-006 record."
+      ],
+      "expected": "The call slip is issued with an official number and notifies the student immediately.",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-06",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "MI Assessment / Assign & View Results",
+      "use_cases": ["UC-GD-09"],
+      "mapped_cases": ["GD-MI-001", "GD-MI-004", "GD-MI-005"],
+      "scenario": "Verify a Counsellor can assign an MI assessment and interpret completed results",
+      "steps": [
+        "Open Assessments in Guidance and assign an MI test to a student.",
+        "Open a completed student MI submission.",
+        "Review all eight domain scores and export PDF."
+      ],
+      "expected": "The MI assignment is created and completed scores display clearly for counselling review.",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-07",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Evaluations / Issue Token & View Summary",
+      "use_cases": ["UC-GD-10"],
+      "mapped_cases": ["GD-OGC-004", "GD-EVL-001", "GD-EVL-005"],
+      "scenario": "Verify a Counsellor can issue an evaluation code and see anonymous aggregate scores",
+      "steps": [
+        "Open a completed counselling encounter and click Issue Evaluation Code.",
+        "Open Own Evaluation Summary.",
+        "Check displayed average ratings."
+      ],
+      "expected": "A one-time token is generated and aggregate ratings show only after enough anonymous responses exist.",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-08",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Guidance Scheduling / Student Appointments",
+      "use_cases": ["UC-GD-11"],
+      "mapped_cases": ["PT-003", "PT-SCH-001"],
+      "scenario": "Verify a Counsellor can confirm, book, and manage student appointments (while availability templates stay supervisor/admin-only)",
+      "steps": [
+        "Open Guidance Appointments as Counsellor.",
+        "Book, confirm, or check in a student appointment on an open slot.",
+        "Confirm counsellor availability setup remains restricted to Guidance Supervisor / Admin."
+      ],
+      "expected": "The student appointment appears on both Counsellor and Student schedules, while /guidance/appointments/availability stays blocked (403).",
+      "remarks": ""
+    },
+    {
+      "id": "CNS-09",
+      "role": "counsellor",
+      "module": "Guidance & Counseling",
+      "function": "Privacy Boundary / Other Counsellor Cases",
+      "use_cases": ["UC-GD-05"],
+      "mapped_cases": ["GD-007"],
+      "scenario": "Verify a Counsellor cannot open another counsellor's confidential case",
+      "steps": [
+        "Sign in as Counsellor A.",
+        "Search or try opening a case assigned exclusively to Counsellor B.",
+        "Observe access response."
+      ],
+      "expected": "Access is denied so confidential counselling notes remain strictly private.",
+      "remarks": ""
+    },
+
+    {
+      "id": "GDS-01",
+      "role": "guidance_supervisor",
+      "module": "Guidance & Counseling",
+      "function": "Oversight / View Any Case & Reassign",
+      "use_cases": ["UC-GD-12"],
+      "mapped_cases": ["GD-005", "GD-CLN-003"],
+      "scenario": "Verify Guidance Supervisor can oversee all Guidance cases and reassign caseloads",
+      "steps": [
+        "Sign in as Guidance Supervisor and browse all unit cases.",
+        "Open a case assigned to a counsellor.",
+        "Use Reassign Case to transfer it to another counsellor."
+      ],
+      "expected": "Supervisor can review every case and reassignment transfers caseload ownership immediately.",
+      "remarks": ""
+    },
+    {
+      "id": "GDS-02",
+      "role": "guidance_supervisor",
+      "module": "Guidance & Counseling",
+      "function": "Co-Sign / Approve Intern & Associate Forms",
+      "use_cases": ["UC-GD-13"],
+      "mapped_cases": ["GD-PRC-004", "GD-FRM-005", "GD-CLN-002"],
+      "scenario": "Verify Guidance Supervisor can review and co-sign pending clinical forms",
+      "steps": [
+        "Open the Pending Co-Sign queue as Guidance Supervisor.",
+        "Review a draft form submitted by a Guidance Intern.",
+        "Click Co-Sign & Finalize."
+      ],
+      "expected": "The form becomes finalized with both the drafter's and supervisor's names recorded.",
+      "remarks": ""
+    },
+    {
+      "id": "GDS-03",
+      "role": "guidance_supervisor",
+      "module": "Guidance & Counseling",
+      "function": "Announcements, Question Bank & Surveys",
+      "use_cases": ["UC-GD-14"],
+      "mapped_cases": ["GD-009", "GD-010", "GD-012"],
+      "scenario": "Verify Guidance Supervisor can publish announcements and build a new student survey",
+      "steps": [
+        "Publish a Guidance announcement.",
+        "Open Question Bank / Surveys and add rating scale or multiple-choice items.",
+        "Publish the survey."
+      ],
+      "expected": "The announcement and new survey become visible for students in their portal.",
+      "remarks": ""
+    },
+    {
+      "id": "GDS-04",
+      "role": "guidance_supervisor",
+      "module": "Guidance & Counseling",
+      "function": "Survey Results & Comment Moderation",
+      "use_cases": ["UC-GD-15"],
+      "mapped_cases": ["GD-011", "GD-EVL-004"],
+      "scenario": "Verify Guidance Supervisor can inspect survey totals and moderate evaluation comments",
+      "steps": [
+        "Open Survey Responses and review summary charts/counts.",
+        "Open Evaluation Comment Moderation.",
+        "Approve or hide a submitted student comment."
+      ],
+      "expected": "Survey results display cleanly and only approved comments appear in reports.",
+      "remarks": ""
+    },
+    {
+      "id": "GDS-05",
+      "role": "guidance_supervisor",
+      "module": "Guidance & Counseling",
+      "function": "Form Governance, Practitioners & Availability",
+      "use_cases": ["UC-GD-16"],
+      "mapped_cases": ["GD-GOV-001", "GD-PRC-001", "GD-FRM-001"],
+      "scenario": "Verify Guidance Supervisor can manage controlled forms, practitioner profiles, rollout gates, and counsellor availability",
+      "steps": [
+        "Open Form Governance and Activation Gates settings in Guidance.",
+        "Inspect OGC form definitions and Practitioner Profiles.",
+        "Open Guidance Provider Availability and confirm counsellor schedules load for management."
+      ],
+      "expected": "Supervisor views and updates form governance, practitioner activation gates, and counsellor availability cleanly.",
+      "remarks": ""
+    },
+
+    {
+      "id": "GDA-01",
+      "role": "guidance_admin",
+      "module": "Archive Governance",
+      "function": "Legal Holds / Place & Lift",
+      "use_cases": ["UC-GD-17"],
+      "mapped_cases": ["ARV-003"],
+      "scenario": "Verify Guidance Administrator can place and lift a Legal Hold on an archived record",
+      "steps": [
+        "Sign in as Guidance Administrator and open an archived Guidance record.",
+        "Click Place Legal Hold with a reason and confirm.",
+        "Test lifting the legal hold afterward."
+      ],
+      "expected": "While held, the record cannot be purged; lifting the hold restores normal retention rules.",
+      "remarks": ""
+    },
+    {
+      "id": "GDA-02",
+      "role": "guidance_admin",
+      "module": "Student Intern Governance",
+      "function": "Intern Placements & Employee Access",
+      "use_cases": ["UC-AD-06", "UC-AD-07"],
+      "mapped_cases": ["INT-001", "AD-005"],
+      "scenario": "Verify Guidance Administrator can manage Guidance Intern placements and staff access",
+      "steps": [
+        "Open Guidance Intern Governance and assign a Guidance Intern shift.",
+        "Open Guidance Employee Access and check workstation grants.",
+        "Confirm changes save properly."
+      ],
+      "expected": "Guidance intern placements and staff access settings update cleanly for Guidance only.",
+      "remarks": ""
+    },
+
+    {
+      "id": "BMI-01",
+      "role": "bmg_intern",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Composting Units / Read-Only View",
+      "use_cases": ["UC-BM-01"],
+      "mapped_cases": ["BM-001", "BM-013"],
+      "scenario": "Verify a BMG Intern can view composting drums, active batches, and metrics",
+      "steps": [
+        "Sign in as BMG Intern with an active shift.",
+        "Open the BMG Facilities dashboard.",
+        "Inspect drum status, temperature/moisture readings, and batch logs."
+      ],
+      "expected": "Composting unit statuses, batches, and recorded readings display cleanly.",
+      "remarks": ""
+    },
+    {
+      "id": "BMI-02",
+      "role": "bmg_intern",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Role Limits / No Unit Configuration",
+      "use_cases": ["UC-BM-01"],
+      "mapped_cases": ["BM-002", "INT-006"],
+      "scenario": "Verify a BMG Intern cannot add, edit, or archive composting drum units",
+      "steps": [
+        "Sign in as BMG Intern.",
+        "Open a composting drum detail view.",
+        "Check that Register Unit, Archive Unit, and hardware setup controls are unavailable."
+      ],
+      "expected": "BMG Intern is prevented from modifying or archiving composting infrastructure.",
+      "remarks": ""
+    },
+
+    {
+      "id": "FOP-01",
+      "role": "facilities_op",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Batches / Start New Batch",
+      "use_cases": ["UC-BM-02"],
+      "mapped_cases": ["BM-003", "BM-004", "BM-006"],
+      "scenario": "Verify a Facilities Operator can start a composting batch on an available drum",
+      "steps": [
+        "Sign in as Facilities Operator and choose an idle drum unit.",
+        "Click Start Batch, enter waste weight and notes.",
+        "Click Save."
+      ],
+      "expected": "The batch becomes Active and the drum shows an active batch in progress.",
+      "remarks": ""
+    },
+    {
+      "id": "FOP-02",
+      "role": "facilities_op",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Batches / Release or Cancel",
+      "use_cases": ["UC-BM-02"],
+      "mapped_cases": ["BM-007", "BM-008"],
+      "scenario": "Verify a Facilities Operator can finish/release or cancel an active composting batch",
+      "steps": [
+        "Open an active composting batch as Facilities Operator.",
+        "Record final output weight and click Release Batch (or test Cancel on a test batch).",
+        "Check the drum status."
+      ],
+      "expected": "The batch closes cleanly in history and the drum returns to ready/idle state.",
+      "remarks": ""
+    },
+
+    {
+      "id": "BMA-01",
+      "role": "bmg_admin",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Drum Units / Register & Maintenance",
+      "use_cases": ["UC-BM-03"],
+      "mapped_cases": ["BM-002", "BM-009", "BM-HW-005"],
+      "scenario": "Verify BMG Administrator can register, edit, and archive composting drum units",
+      "steps": [
+        "Sign in as BMG Administrator and open Composting Units.",
+        "Add or edit a drum unit and toggle Maintenance mode.",
+        "Archive a retired test unit."
+      ],
+      "expected": "Composting unit details update cleanly and archived units leave the active list.",
+      "remarks": ""
+    },
+    {
+      "id": "BMA-02",
+      "role": "bmg_admin",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Rotation Schedules / Configure",
+      "use_cases": ["UC-BM-04"],
+      "mapped_cases": ["BM-009", "BM-011"],
+      "scenario": "Verify BMG Administrator can configure and trigger drum rotation schedules",
+      "steps": [
+        "Open a composting unit's Rotation Schedule settings.",
+        "Set rotation interval and duration, then click Save Schedule.",
+        "Click Run / Trigger Rotation Test if enabled."
+      ],
+      "expected": "The rotation schedule saves cleanly and displays next scheduled rotation time.",
+      "remarks": ""
+    },
+    {
+      "id": "BMA-03",
+      "role": "bmg_admin",
+      "module": "Archive Governance",
+      "function": "BMG Archive & Intern Governance",
+      "use_cases": ["UC-AD-05", "UC-AD-06"],
+      "mapped_cases": ["ARV-002", "INT-001"],
+      "scenario": "Verify BMG Administrator can restore an archived BMG item and assign a BMG Intern",
+      "steps": [
+        "Open the Archive Center in BMG and restore an archived BMG/Team record.",
+        "Open BMG Intern Governance and view/assign a BMG Intern placement.",
+        "Save changes."
+      ],
+      "expected": "The archived record restores properly and BMG Intern scheduling updates cleanly.",
+      "remarks": ""
+    },
+
+    {
+      "id": "RPT-01",
+      "role": "report_viewer",
+      "module": "Reporting & Audit Trail",
+      "function": "Reports / Operational Dashboard",
+      "use_cases": ["UC-AD-01"],
+      "mapped_cases": ["AD-001", "AD-012"],
+      "scenario": "Verify a Report Viewer can view aggregate operational dashboards across modules",
+      "steps": [
+        "Sign in as Report Viewer.",
+        "Open the Reports dashboard and apply a date filter.",
+        "Check Clinic, Guidance, and BMG aggregate counts."
+      ],
+      "expected": "Summary charts and numeric totals display accurately without private individual notes.",
+      "remarks": ""
+    },
+    {
+      "id": "RPT-02",
+      "role": "report_viewer",
+      "module": "Reporting & Audit Trail",
+      "function": "Reports / Export & Audit Isolation",
+      "use_cases": ["UC-AD-02"],
+      "mapped_cases": ["AD-010", "AD-011", "AD-012"],
+      "scenario": "Verify Report Viewer can export CSV/PDF reports and cannot open Admin or Audit pages",
+      "steps": [
+        "Click Export CSV and Export PDF on a filtered report.",
+        "Try opening the Audit Explorer or Platform Admin URLs.",
+        "Observe access response."
+      ],
+      "expected": "CSV and PDF reports download cleanly while Audit Explorer and Admin routes remain blocked.",
+      "remarks": ""
+    },
+
+    {
+      "id": "AUD-01",
+      "role": "audit_reader",
+      "module": "Reporting & Audit Trail",
+      "function": "Audit Explorer / Filter & Verify Chain",
+      "use_cases": ["UC-AD-03"],
+      "mapped_cases": ["AD-001", "AD-002", "AD-003"],
+      "scenario": "Verify Audit Reader can search system audit logs and verify tamper-evident chain integrity",
+      "steps": [
+        "Sign in as Audit Reader and open Audit Explorer.",
+        "Filter audit entries by actor, action, or date range.",
+        "Click Verify Hash Chain."
+      ],
+      "expected": "Matching audit events display cleanly and chain verification confirms no tampering.",
+      "remarks": ""
+    },
+    {
+      "id": "AUD-02",
+      "role": "audit_reader",
+      "module": "Archive Governance",
+      "function": "Archive Center / Read-Only Inspection",
+      "use_cases": ["UC-AD-04"],
+      "mapped_cases": ["ARV-001"],
+      "scenario": "Verify Audit Reader can inspect archived items, retention rules, and holds read-only",
+      "steps": [
+        "Open the Archive Center as Audit Reader.",
+        "Browse archived records, Legal Holds, and Retention Policies.",
+        "Confirm edit/restore/purge buttons are not permitted."
+      ],
+      "expected": "Archive Center records and policies are visible in read-only mode with no write actions allowed.",
+      "remarks": ""
+    },
+
+    {
+      "id": "ADM-01",
+      "role": "superadmin",
+      "module": "Administration, Access & Platform",
+      "function": "Admin Auth / Break-Glass Sign-In",
+      "use_cases": ["UC-AD-08"],
+      "mapped_cases": ["AU-011"],
+      "scenario": "Verify Platform Owner can sign in on the Admin workstation using break-glass login",
+      "steps": [
+        "Open the Admin workstation login page.",
+        "Enter the configured local operator/superadmin credentials.",
+        "Click Sign In."
+      ],
+      "expected": "Superadmin signs in directly and opens the Platform Administration dashboard.",
+      "remarks": ""
+    },
+    {
+      "id": "ADM-02",
+      "role": "superadmin",
+      "module": "Administration, Access & Platform",
+      "function": "Users, RBAC Roles & Login Carousel",
+      "use_cases": ["UC-AD-08"],
+      "mapped_cases": ["AD-006", "AD-007", "AD-009", "AD-OPS-001"],
+      "scenario": "Verify Superadmin can manage RBAC role assignments, MIS sync, and sign-in carousel banners",
+      "steps": [
+        "Open User & Role Management and inspect or update a user's department role.",
+        "Open Sign-In Carousel settings and preview/toggle a login banner.",
+        "Open MIS Sync panel and check sync status."
+      ],
+      "expected": "Role permissions, carousel slides, and platform operations update cleanly.",
+      "remarks": ""
+    },
+    {
+      "id": "ADM-03",
+      "role": "superadmin",
+      "module": "Archive Governance",
+      "function": "Retention Policies & Ledger Safety",
+      "use_cases": ["UC-AD-09"],
+      "mapped_cases": ["ARV-005", "ARV-006", "ARV-008"],
+      "scenario": "Verify Superadmin can configure archive retention rules while immutable logs stay protected",
+      "steps": [
+        "Open Archive Center -> Retention Policies as Superadmin.",
+        "Adjust retention days for an eligible category and save.",
+        "Verify audit/security ledgers cannot be permanently deleted."
+      ],
+      "expected": "Retention policies save properly and immutable ledgers remain protected from purge.",
+      "remarks": ""
+    },
+    {
+      "id": "ADM-04",
+      "role": "superadmin",
+      "module": "AI Insights",
+      "function": "AI Providers & Department Grants",
+      "use_cases": ["UC-AD-10"],
+      "mapped_cases": ["AI-001", "AI-002", "AI-003", "AI-004"],
+      "scenario": "Verify Superadmin can configure AI provider settings and grant AI access to staff",
+      "steps": [
+        "Open Platform AI Configuration as Superadmin.",
+        "Verify provider model settings and test connection status.",
+        "Assign or revoke an explicit AI grant for a department staff member."
+      ],
+      "expected": "AI provider settings and department staff AI grants save cleanly.",
+      "remarks": ""
+    },
+
+    {
+      "id": "HW-01",
+      "role": "commissioned_hardware_op",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Hardware / Commission & Control Drum",
+      "use_cases": ["UC-BM-05"],
+      "mapped_cases": ["BM-010", "BM-HW-001", "BM-HW-002", "BM-HW-003"],
+      "scenario": "Verify an authorized Hardware Operator can commission a controller and send device commands",
+      "steps": [
+        "Sign in with a facilities.hardware.manage grant.",
+        "Open Hardware Devices and check online/commissioned controller status.",
+        "Issue a test motor/aeration command."
+      ],
+      "expected": "The device acknowledges the command cleanly and logs the telemetry/action.",
+      "remarks": "[Optional: Hardware / Simulated]"
+    },
+    {
+      "id": "HW-02",
+      "role": "commissioned_hardware_op",
+      "module": "Facilities (BMG) & Hardware",
+      "function": "Hardware / USB Firmware Provisioning",
+      "use_cases": ["UC-BM-06"],
+      "mapped_cases": ["BM-012"],
+      "scenario": "Verify an authorized Hardware Operator can generate USB firmware provisioning",
+      "steps": [
+        "Open USB Firmware Provisioning under BMG Hardware.",
+        "Select target controller profile and generate provisioning package.",
+        "Verify authorization challenge completes."
+      ],
+      "expected": "The provisioning package builds cleanly with device credentials ready to flash.",
+      "remarks": "[Optional: Hardware / Simulated]"
+    },
+
+    {
+      "id": "AI-01",
+      "role": "ai_granted_staff",
+      "module": "AI Insights",
+      "function": "AI Insights / Prepare & Generate",
+      "use_cases": ["UC-AI-01"],
+      "mapped_cases": ["AI-005", "AI-006", "AI-007", "AI-REC-001"],
+      "scenario": "Verify AI-granted staff can generate an aggregate AI insight summary for their unit",
+      "steps": [
+        "Sign in as staff granted ai.insights access.",
+        "Open AI Insights, select a department date range, and preview the anonymized summary input.",
+        "Click Generate AI Insight."
+      ],
+      "expected": "System generates a readable aggregate trend report in Draft/Pending Review state without personal names.",
+      "remarks": ""
+    },
+    {
+      "id": "AI-02",
+      "role": "ai_granted_staff",
+      "module": "AI Insights",
+      "function": "AI Insights / Review & Approve",
+      "use_cases": ["UC-AI-02"],
+      "mapped_cases": ["AI-009", "AI-010", "AI-REC-004"],
+      "scenario": "Verify an authorized reviewer can approve a generated AI insight for viewing",
+      "steps": [
+        "Open a newly generated AI Insight draft.",
+        "Review the recommendations and click Approve Insight.",
+        "Open the Approved Insights tab."
+      ],
+      "expected": "The insight moves to Approved status and becomes visible to authorized readers.",
+      "remarks": ""
+    }
+  ]
+}

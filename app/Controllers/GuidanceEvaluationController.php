@@ -19,24 +19,38 @@ use Throwable;
 final class GuidanceEvaluationController extends BaseController
 {
     public const PSYCHOSOCIAL_DIMENSIONS = [
+        'rating_clarity'     => 'The goal of the psychosocial support session was achieved.',
+        'rating_helpfulness' => 'The psychosocial support session was helpful.',
         'rating_welcoming'   => 'The guidance personnel were approachable and welcoming.',
         'rating_empathy'     => 'The guidance personnel understood and empathized with me.',
-        'rating_clarity'     => 'The goal of the psychosocial support session was clear and achieved.',
-        'rating_helpfulness' => 'The psychosocial support session was helpful.',
-        'rating_environment' => 'Confidentiality and a safe, supportive environment were maintained.',
+        'rating_environment' => 'Confidentiality was kept.',
     ];
 
     public const COUNSELING_DIMENSIONS = [
-        'rating_rapport'                 => 'The counselor was approachable, welcoming, and established good rapport.',
+        'rating_goal_progress'           => 'The goal of the counseling session was achieved.',
+        'rating_overall_service'         => 'The counseling session was helpful.',
+        'rating_rapport'                 => 'The counselor was approachable and welcoming.',
         'rating_understanding'           => 'The counselor understood and empathized with me.',
-        'rating_goal_progress'           => 'The goal of the counseling session was achieved and progress was made.',
-        'rating_confidentiality_comfort' => 'Confidentiality was kept and I felt comfortable during the session.',
-        'rating_overall_service'         => 'Overall, the counseling session was helpful and effective.',
+        'rating_confidentiality_comfort' => 'Confidentiality was kept.',
     ];
 
     public const VISIT_TYPE_LABELS = [
         'walk_in'   => 'Voluntarily came / Walk-in',
         'called'    => 'Called by Guidance Personnel / Counselor',
+        'referred'  => 'Referred',
+        'follow_up' => 'Follow-up',
+    ];
+
+    public const PSYCHOSOCIAL_VISIT_TYPE_LABELS = [
+        'walk_in'   => 'Voluntarily came / Walk-in',
+        'called'    => 'Called by Guidance Personnel',
+        'referred'  => 'Referred',
+        'follow_up' => 'Follow-up',
+    ];
+
+    public const COUNSELING_VISIT_TYPE_LABELS = [
+        'walk_in'   => 'Voluntarily came / Walk-in',
+        'called'    => 'Called by Counselor / Counselor-initiated',
         'referred'  => 'Referred',
         'follow_up' => 'Follow-up',
     ];
@@ -126,12 +140,12 @@ final class GuidanceEvaluationController extends BaseController
             'formCode'         => $formCode,
             'isPsychosocial'   => $isPsychosocial,
             'dimensions'       => $isPsychosocial ? self::PSYCHOSOCIAL_DIMENSIONS : self::COUNSELING_DIMENSIONS,
-            'visitTypes'       => self::VISIT_TYPE_LABELS,
+            'visitTypes'       => $isPsychosocial ? self::PSYCHOSOCIAL_VISIT_TYPE_LABELS : self::COUNSELING_VISIT_TYPE_LABELS,
             'ratingScale'      => self::RATING_SCALE,
             'booleanField'     => $isPsychosocial ? 'future_visit_willingness' : 'recommend_service',
             'booleanQuestion'  => $isPsychosocial
                 ? 'Would you still wish to come and visit your guidance personnel in the future?'
-                : 'Would you recommend this counseling service / wish to visit your counselor in the future?',
+                : 'Would you still wish to come and visit your counselor in the future?',
             'commentField'     => $isPsychosocial ? 'qualitative_comments' : 'qualitative_feedback',
             'submitUrl'        => site_url('/portal/evaluations/submit'),
             'breadcrumbs'      => [
@@ -169,6 +183,7 @@ final class GuidanceEvaluationController extends BaseController
                 'future_visit_willingness' => $input['future_visit_willingness'] ?? null,
                 'recommend_service'        => $input['recommend_service'] ?? null,
                 'boolean_response'         => $input['boolean_response'] ?? null,
+                'future_visit_reason'      => $input['future_visit_reason'] ?? ($input['boolean_reason'] ?? null),
                 'qualitative_comments'     => $input['qualitative_comments'] ?? null,
                 'qualitative_feedback'     => $input['qualitative_feedback'] ?? null,
             ];
@@ -272,9 +287,11 @@ final class GuidanceEvaluationController extends BaseController
             'pageTitle'            => 'Service Evaluation Aggregates',
             'psychosocial'         => $psychosocial,
             'counseling'           => $counseling,
-            'psychosocialLabels'   => self::PSYCHOSOCIAL_DIMENSIONS,
-            'counselingLabels'     => self::COUNSELING_DIMENSIONS,
-            'visitTypeLabels'      => self::VISIT_TYPE_LABELS,
+            'psychosocialLabels'           => self::PSYCHOSOCIAL_DIMENSIONS,
+            'counselingLabels'             => self::COUNSELING_DIMENSIONS,
+            'visitTypeLabels'              => self::VISIT_TYPE_LABELS,
+            'psychosocialVisitTypeLabels'  => self::PSYCHOSOCIAL_VISIT_TYPE_LABELS,
+            'counselingVisitTypeLabels'    => self::COUNSELING_VISIT_TYPE_LABELS,
             'providerUserId'       => $providerUserId,
             'providerName'         => $this->resolveProviderDisplayName($providerUserId, $tenantId),
             'providers'            => $providers,

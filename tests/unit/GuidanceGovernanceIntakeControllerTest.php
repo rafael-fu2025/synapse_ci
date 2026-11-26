@@ -356,7 +356,7 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
         $ctrl = $this->makeIntakeController($this->supervisorUserId, $this->facultyUserId, 'POST', [
             'source_type'       => 'employee_teacher',
             'subject_person_ids' => [$this->studentPersonId, $this->secondStudentPersonId],
-            'reasons'           => ['emotional_distress'],
+            'reasons'           => ['excessive_anxiety'],
             'reasons_narrative' => 'Observed severe distress during exam week.',
             'priority_hint'     => 'urgent',
             'action'            => 'submit',
@@ -372,7 +372,7 @@ final class GuidanceGovernanceIntakeControllerTest extends FreshDatabaseTestCase
         $ctrl = $this->makeIntakeController($this->supervisorUserId, $this->facultyUserId, 'POST', [
             'source_type'        => 'employee_teacher',
             'subject_person_ids' => [$this->studentPersonId, $this->secondStudentPersonId],
-            'reasons'            => ['emotional_distress'],
+            'reasons'            => ['excessive_anxiety'],
             'reasons_narrative'  => 'Observed severe distress during exam week.',
             'priority_hint'      => 'urgent',
             'action'             => 'submit',

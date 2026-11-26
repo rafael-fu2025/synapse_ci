@@ -24,10 +24,11 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
             'student_name' => 'Juan Dela Cruz & Maria Santos',
             'student_id' => 'STU-2026-99',
             'course_year' => 'BS Computer Science - 3rd Year',
+            'contact_number' => '09171234567',
             'scheduled_date' => '2026-11-20',
             'scheduled_time' => '10:30 AM',
             'counselor_name' => 'Dr. Jane Roe, RGC',
-            'purpose' => 'routine_interview',
+            'purpose' => 'personal_social',
             'purpose_other' => '',
         ];
 
@@ -41,6 +42,7 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
             'issuing_counselor_name' => 'Prof. Alex Mercer, RGC',
             'purpose' => 'personal_counseling',
             'purpose_other' => '',
+            'note' => 'Please report before 3rd period.',
         ];
 
         $this->sampleAttestation = [
@@ -104,17 +106,29 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('Juan Dela Cruz \\& Maria Santos', $latex);
         $this->assertStringContainsString('STU-2026-99', $latex);
         $this->assertStringContainsString('BS Computer Science - 3rd Year', $latex);
+        $this->assertStringContainsString('09171234567', $latex);
         $this->assertStringContainsString('2026-11-20', $latex);
         $this->assertStringContainsString('10:30 AM', $latex);
         $this->assertStringContainsString('Dr. Jane Roe, RGC', $latex);
 
-        // Purpose checkbox: routine interview checked (\boxtimes), others unchecked (\square)
-        $this->assertStringContainsString('$\\boxtimes$ Routine Interview', $latex);
-        $this->assertStringContainsString('$\\square$ Counseling', $latex);
-        $this->assertStringContainsString('$\\square$ Follow-up', $latex);
-        $this->assertStringContainsString('$\\square$ Intake', $latex);
-        $this->assertStringContainsString('$\\square$ Inquiry', $latex);
-        $this->assertStringContainsString('$\\square$ Others', $latex);
+        // Official OGC Reason checkboxes: Personal/Social checked, others unchecked
+        $this->assertStringContainsString('A. Counseling/Psychosocial', $latex);
+        $this->assertStringContainsString('$\\boxtimes$ Personal/Social', $latex);
+        $this->assertStringContainsString('$\\square$ Academic', $latex);
+        $this->assertStringContainsString('$\\square$ Career', $latex);
+        $this->assertStringContainsString('$\\square$ Others please specify:', $latex);
+        $this->assertStringContainsString('\\textbf{B.} $\\square$ \\textbf{Consultation}', $latex);
+
+        // Preferred Sched slots (10:30 AM maps to 9:00-10:40AM)
+        $this->assertStringContainsString('Preferred Sched', $latex);
+        $this->assertStringContainsString('$\\boxtimes$ 9:00-10:40AM', $latex);
+        $this->assertStringContainsString('$\\square$ 10:40-11:40AM', $latex);
+        $this->assertStringContainsString('$\\square$ 2:00-2:40PM', $latex);
+        $this->assertStringContainsString('$\\square$ 3:00-3:40PM', $latex);
+
+        // Official 2-day Note (no fabricated 5-minute reminder)
+        $this->assertStringContainsString('scheduled 2 days prior to your appointment, except for emergencies.', $latex);
+        $this->assertStringNotContainsString('5 minutes before', $latex);
 
         // Verification code & digital attestation
         $this->assertStringContainsString('SYN-DOC-TEST1234', $latex);
@@ -133,7 +147,8 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
     public function testRenderAppointmentSlipQuadLayout(): void
     {
         $snapshot = array_merge($this->sampleAppointmentData, [
-            'purpose' => 'intake',
+            'purpose' => 'consultation',
+            'scheduled_time' => '02:15 PM',
             'verification_code' => 'SYN-DOC-QUAD5678',
             'attestation' => $this->sampleAttestation,
             'is_draft' => false,
@@ -146,20 +161,18 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('F-OGC-GRE-GAP-006-00', $latex);
         $this->assertStringContainsString('2025-09-01', $latex);
 
-        // 4 copies replicated
-        $this->assertStringContainsString('Copy 1 (Student Copy)', $latex);
-        $this->assertStringContainsString('Copy 2 (Counselor / Office Copy)', $latex);
-        $this->assertStringContainsString('Copy 3 (Teacher / Department Copy)', $latex);
-        $this->assertStringContainsString('Copy 4 (Guard / File Copy)', $latex);
-
-        // Dashed cut lines
+        // No fabricated Copy labels; 4 identical slips separated by dashed cut lines
+        $this->assertStringNotContainsString('Copy 1 (Student Copy)', $latex);
+        $this->assertStringNotContainsString('5 mins before', $latex);
         $this->assertStringContainsString('CUT ALONG DASHED LINE', $latex);
         $this->assertStringContainsString('\\cleaders\\hbox', $latex);
         $this->assertStringContainsString('\\cleaders\\vbox', $latex);
 
-        // Checkbox intake checked
-        $this->assertStringContainsString('$\\boxtimes$ Intake', $latex);
-        $this->assertStringContainsString('$\\square$ Routine Int.', $latex);
+        // Consultation checked + 2:00-2:40PM preferred sched checked + official note
+        $this->assertStringContainsString('\\textbf{B.} $\\boxtimes$ \\textbf{Consultation}', $latex);
+        $this->assertStringContainsString('$\\square$ Personal/Social', $latex);
+        $this->assertStringContainsString('$\\boxtimes$ 2:00-2:40PM', $latex);
+        $this->assertStringContainsString('scheduled 2 days prior to your appointment, except for emergencies.', $latex);
 
         // Also test '4up' alias
         $latex4up = GuidanceFormLatex::renderAppointmentSlip($snapshot, ['layout' => '4up']);
@@ -176,7 +189,7 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
 
         $latex = GuidanceFormLatex::renderAppointmentSlip($snapshot, ['layout' => 'single']);
 
-        $this->assertStringContainsString('$\\boxtimes$ Others (Scholarship Clearance \\& Exit Interview)', $latex);
+        $this->assertStringContainsString('$\\boxtimes$ Others please specify: Scholarship Clearance \\& Exit Interview', $latex);
         $this->assertStringContainsString('DRAFT - PREVIEW ONLY', $latex);
         $this->assertStringContainsString('Unfinalized draft record', $latex);
     }
@@ -195,11 +208,12 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('F-OGC-GSP-CSP-007-00', $latex);
         $this->assertStringContainsString('00', $latex);
         $this->assertStringContainsString('September 1, 2025', $latex);
+        $this->assertStringNotContainsString('mdframed', $latex);
 
-        // Header and excuse lead-in
+        // Header and verbatim official lead-in
         $this->assertStringContainsString('OFFICE OF THE GUIDANCE CENTER', $latex);
         $this->assertStringContainsString('GUIDANCE CALL SLIP', $latex);
-        $this->assertStringContainsString('Please excuse the student named below', $latex);
+        $this->assertStringContainsString('to see the Guidance Counselor for the following purpose/reason:', $latex);
 
         // Details
         $this->assertStringContainsString('CS-2026-0088', $latex);
@@ -210,18 +224,28 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('02:00 PM', $latex);
         $this->assertStringContainsString('Prof. Alex Mercer, RGC', $latex);
 
-        // Checkboxes: personal counseling checked
-        $this->assertStringContainsString('$\\boxtimes$ Personal Counseling', $latex);
-        $this->assertStringContainsString('$\\square$ Career Counseling', $latex);
-        $this->assertStringContainsString('$\\square$ Routine Interview', $latex);
-        $this->assertStringContainsString('$\\square$ Follow-up', $latex);
-        $this->assertStringContainsString('$\\square$ Academic Counseling', $latex);
-        $this->assertStringContainsString('$\\square$ Others', $latex);
+        // Exact 6 OGC Call Slip purposes in order
+        $expectedPurposes = [
+            '$\\boxtimes$ Personal Counseling',
+            '$\\square$ Career Counseling',
+            '$\\square$ Academic Counseling (INC or etc.)',
+            '$\\square$ Interview (Initial, Routine \\& Exit)',
+            '$\\square$ Testing/ Test Interpretation',
+            '$\\square$ Others:',
+        ];
+        $lastPos = -1;
+        foreach ($expectedPurposes as $expectedPurpose) {
+            $pos = strpos($latex, $expectedPurpose);
+            $this->assertNotFalse($pos, "Missing expected call slip purpose: {$expectedPurpose}");
+            $this->assertGreaterThan($lastPos, $pos, "Call slip purpose out of order: {$expectedPurpose}");
+            $lastPos = $pos;
+        }
 
-        // Tear-off slip lines and teacher acknowledgment
-        $this->assertStringContainsString('TEAR-OFF RETURN SLIP / TEACHER ACKNOWLEDGMENT', $latex);
-        $this->assertStringContainsString('Teacher / Instructor Acknowledgment Return Section', $latex);
-        $this->assertStringContainsString('Teacher / Instructor Signature:', $latex);
+        // Note and Guidance Personnel signature; zero fabricated tear-off teacher acknowledgment
+        $this->assertStringContainsString('\\textbf{Note:} Please report before 3rd period.', $latex);
+        $this->assertStringContainsString('\\textbf{Guidance Personnel}', $latex);
+        $this->assertStringNotContainsString('TEAR-OFF RETURN SLIP', $latex);
+        $this->assertStringNotContainsString('Teacher / Instructor Acknowledgment', $latex);
 
         // Verification and attestation
         $this->assertStringContainsString('SYN-DOC-CALL9988', $latex);
@@ -231,7 +255,7 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
     public function testRenderCallSlipQuadLayout(): void
     {
         $snapshot = array_merge($this->sampleCallSlipData, [
-            'purpose' => 'career_counseling',
+            'purpose' => 'testing_interpretation',
             'verification_code' => 'SYN-DOC-CALL4UP',
             'attestation' => $this->sampleAttestation,
             'is_draft' => false,
@@ -239,23 +263,20 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
 
         $latex = GuidanceFormLatex::renderCallSlip($snapshot, ['layout' => 'quad']);
 
-        // Canonical code
+        // Canonical code & no mdframed
         $this->assertStringContainsString('F-OGC-GSP-CSP-007-00', $latex);
         $this->assertStringContainsString('2025-09-01', $latex);
+        $this->assertStringNotContainsString('mdframed', $latex);
 
-        // 4 copies
-        $this->assertStringContainsString('Copy 1 (Student Copy)', $latex);
-        $this->assertStringContainsString('Copy 2 (Guidance File Copy)', $latex);
-        $this->assertStringContainsString('Copy 3 (Teacher / Class Copy)', $latex);
-        $this->assertStringContainsString('Copy 4 (Department / Admin Copy)', $latex);
-
-        // Dashed cut lines
+        // No fabricated Copy labels or Tear-Off Return Slip
+        $this->assertStringNotContainsString('Copy 1 (Student Copy)', $latex);
+        $this->assertStringNotContainsString('Tear-Off Return Slip', $latex);
         $this->assertStringContainsString('CUT ALONG DASHED LINE', $latex);
-        $this->assertStringContainsString('Tear-Off Return Slip', $latex);
 
-        // Checkbox: career counseling checked
-        $this->assertStringContainsString('$\\boxtimes$ Career', $latex);
-        $this->assertStringContainsString('$\\square$ Personal', $latex);
+        // Exact purpose checked: Testing/ Test Interpretation
+        $this->assertStringContainsString('$\\boxtimes$ Testing/ Test Interpretation', $latex);
+        $this->assertStringContainsString('$\\square$ Personal Counseling', $latex);
+        $this->assertStringContainsString('Guidance Personnel', $latex);
     }
 
     public function testGuidanceDocumentServiceIntegration(): void
@@ -321,7 +342,7 @@ final class GuidanceSlipPdfTest extends CIUnitTestCase
         );
         $this->assertStringContainsString('F-OGC-GSP-CSP-007-00', $renderedCall);
         $this->assertStringContainsString('GUIDANCE CALL SLIP', $renderedCall);
-        $this->assertStringContainsString('TEAR-OFF RETURN SLIP', $renderedCall);
+        $this->assertStringContainsString('to see the Guidance Counselor for the following purpose/reason:', $renderedCall);
         $this->assertStringContainsString('SYN-DOC-CALL77', $renderedCall);
     }
 

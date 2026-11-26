@@ -5,6 +5,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.RECORDS.DIRECTORY`
+- **Role:** `guidance_intern`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-03`
 - **Surface:** Guidance Clients & Records
 - **Route/API:** GET /guidance/clients
 - **Actor/grants:** Guidance actor with guidance.cases.read
@@ -24,6 +27,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.RECORDS.CUMULATIVE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-03`, `UC-GD-05`
 - **Surface:** Guidance client record
 - **Route/API:** GET /guidance/clients/{personId}
 - **Actor/grants:** Guidance actor with base read plus section-specific grants
@@ -43,6 +49,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.RECORDS.AUTHORIZATION`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-03`, `UC-GD-06`
 - **Surface:** Guidance client record
 - **Route/API:** GET /guidance/clients/{personId}
 - **Actor/grants:** Owner, accepted consultant, read_any supervisor, base-read-only counsellor
@@ -62,6 +71,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.RECORDS.READ_AUDIT_FAIL_CLOSED`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Guidance form/note/episode reader
 - **Route/API:** Representative GET for draft/final/legacy note/episode closure
 - **Actor/grants:** Otherwise authorized owner/supervisor
@@ -81,6 +93,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.FORMS.CANONICAL_DEFINITIONS`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-16`
 - **Surface:** Controlled Forms definitions
 - **Route/API:** GET /guidance/forms/definitions; POST /guidance/forms/sync-manifest
 - **Actor/grants:** Guidance supervisor/admin with guidance.forms.manage
@@ -100,6 +115,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.FORMS.CONTEXT_GRAPH`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Controlled Forms
 - **Route/API:** POST /guidance/forms/create
 - **Actor/grants:** Authorized Guidance form author with case access
@@ -119,6 +137,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.FORMS.DRAFT_AUTOSAVE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Controlled Form editor
 - **Route/API:** POST/GET /guidance/forms/{id}/draft
 - **Actor/grants:** Authorized creator/current supervisor with context access
@@ -138,6 +159,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.FORMS.FINALIZE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Controlled Form editor
 - **Route/API:** POST /guidance/forms/{id}/finalize; GET .../revision/{n}
 - **Actor/grants:** Eligible author or current supervisor with required grants
@@ -157,6 +181,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.FORMS.PENDING_COSIGN`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-13`
 - **Surface:** Controlled Form editor/co-sign queue
 - **Route/API:** POST /guidance/forms/{id}/finalize|submit-cosign|cosign
 - **Actor/grants:** Associate author and current eligible supervisor
@@ -176,6 +203,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.FORMS.ISSUE_DOCUMENT`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Controlled document
 - **Route/API:** GET /guidance/forms/{id}/preview; POST /guidance/forms/{id}/issue
 - **Actor/grants:** Authorized Guidance actor with context read and guidance.documents.print
@@ -195,6 +225,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.FORMS.PUBLIC_VERIFY`
+- **Role:** `public`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-SH-03`
 - **Surface:** Document verification
 - **Route/API:** GET /guidance/verify/{token}
 - **Actor/grants:** Anonymous verifier
@@ -214,6 +247,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.FORMS.READ_AUDIT`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Controlled form readers
 - **Route/API:** GET draft/final/preview routes
 - **Actor/grants:** Authorized creator/current supervisor/read oversight
@@ -233,6 +269,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.EPISODE.OPEN`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-06`
 - **Surface:** Guidance episodes
 - **Route/API:** POST /guidance/episodes/open
 - **Actor/grants:** Guidance actor with cases.create or intake.manage/process
@@ -252,6 +291,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `GUIDANCE.EPISODE.AUTHORIZED_DETAIL`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-06`
 - **Surface:** Guidance episode detail
 - **Route/API:** GET /guidance/episodes/{id}
 - **Actor/grants:** Primary counsellor, consultant/read_any actor, unauthorized counsellor
@@ -271,6 +313,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.EPISODE.CLOSE_TRANSFER`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-06`
 - **Surface:** Guidance episode
 - **Route/API:** POST /guidance/episodes/{id}/close|transfer
 - **Actor/grants:** Assigned primary counsellor or authorized supervisor
@@ -290,6 +335,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CALL_SLIP.ISSUE`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-08`
 - **Surface:** Guidance call slips
 - **Route/API:** POST /guidance/call-slips/issue; GET /guidance/call-slips/{id}/pdf
 - **Actor/grants:** Qualified actor with guidance.call_slips.issue
@@ -309,6 +357,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CALL_SLIP.ACKNOWLEDGE`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-04`
 - **Surface:** Portal call slips
 - **Route/API:** GET /portal/call-slips; POST /portal/guidance/call-slips/{id}/acknowledge
 - **Actor/grants:** Target student; other student control; Guidance issuer
@@ -328,6 +379,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CLINICAL.CREATE_DRAFT`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
 - **Surface:** Guidance clinical forms
 - **Route/API:** POST /guidance/clinical/forms/create
 - **Actor/grants:** Qualified actor with guidance.clinical.author and case access
@@ -347,6 +401,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CLINICAL.COSIGN`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-13`
 - **Surface:** Clinical co-sign queue
 - **Route/API:** GET /guidance/clinical/cosign-queue; POST .../{id}/submit-cosign|cosign
 - **Actor/grants:** Associate author and current eligible supervisor with clinical.cosign
@@ -366,6 +423,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.CLINICAL.TRANSFER_MODES`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-12`, `UC-GD-06`
 - **Surface:** Guidance case transfer
 - **Route/API:** POST /guidance/clinical/cases/{id}/transfer/request; POST .../transfers/{id}/respond; POST .../cases/{id}/reassign
 - **Actor/grants:** Current owner, designated receiver, and actor with guidance.cases.reassign
@@ -378,4 +438,92 @@
 - **Cleanup:** Close/delete case and transfer/assignment fixtures.
 - **Source:** app/Services/Guidance/GuidanceTransferService.php:53-355; app/Services/Guidance/GuidanceAccessPolicy.php:159-218
 - **Evidence:** Ownership/access at each phase, assignment history, canceled stale offers, and audit metadata.
+- **Verdict:** `NOT_RUN`
+
+## GD-OGC-001 — PIF-008, PCF-008, and CCF-009 conform verbatim to official OGC clinical schemas
+- **Lifecycle:** `READY`
+- **Legacy IDs:** None
+- **Changed by:** `e7d5572`
+- **Requirement:** `GUIDANCE.OGC.CLINICAL_CONTACT_SCHEMAS`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`
+- **Surface:** Guidance clinical forms (`F-OGC-GPS-PIF-008-00`, `F-OGC-GPS-PCF-008-00`, `F-OGC-GCS-CCF-009-00`) (uncommitted `feat/archive-management` OGC alignment)
+- **Route/API:** GET /guidance/clinical/forms/new/{type}; POST /guidance/clinical/forms/create; GET /guidance/clinical/forms/{id}/pdf
+- **Actor/grants:** Qualified `counsellor` with `guidance.clinical.author` and case access
+- **Preconditions:** Manifest synced (`docs/guidance/forms/manifest.json`); active open case and episode; PDF compiler enabled (`DocumentHeaderLatex`).
+**Steps**
+1. Author, save draft, finalize, and export PDFs for `PIF-008`, `PCF-008` (structured contact workspace & 5-P formulation), and `CCF-009`.
+2. Inspect web editor fields and generated PDFs for fabricated unapproved psychometric scales (`PHQ-9`, `GAD-7`, synthetic screening risk levels).
+- **Expected:** All three forms render only official OGC fields verbatim with the unified Foundation University institutional header (`DocumentHeaderLatex`) and zero fabricated clinical scales.
+- **Negative/non-disclosure:** Unapproved PHQ-9/GAD-7/screening risk-level fields are absent from manifest, UI, and PDF; unauthorized/unlinked clinicians fail closed.
+- **Cleanup:** Delete/reset disposable clinical form drafts and PDF artifacts.
+- **Source:** docs/guidance/forms/manifest.json:1-200; app/Services/Guidance/GuidanceClinicalFormService.php:1-160; app/Services/Reporting/GuidanceFormLatex.php:1-200; app/Services/Reporting/DocumentHeaderLatex.php:1-76
+- **Evidence:** Form editor screenshots, rendered PDFs, and `GuidanceClinicalPdfTest` corroboration.
+- **Verdict:** `NOT_RUN`
+
+## GD-OGC-002 — General Referral GGR-005 matches all 21 official referral reasons and OGC actions
+- **Lifecycle:** `READY`
+- **Legacy IDs:** None
+- **Changed by:** `e7d5572`
+- **Requirement:** `GUIDANCE.OGC.GENERAL_REFERRAL_SCHEMA`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-07`, `UC-PT-08`
+- **Surface:** Portal Referral (`F-OGC-GRE-GGR-005-00`) & Guidance Intake detail/PDF (uncommitted `feat/archive-management` OGC alignment)
+- **Route/API:** GET /portal/referrals/create; POST /portal/referrals/store; GET /guidance/intake/{id}; GET /guidance/forms/{id}/preview
+- **Actor/grants:** Active `employee` referrer; receiving `counsellor`
+- **Preconditions:** Active same-tenant student identifier; clean tenant with synced `GGR-005` manifest revision.
+**Steps**
+1. Open `/portal/referrals/create` as `employee`, inspect the referral concern/reason checklist, verify all 21 official OGC referral reasons plus remarks/prior actions, and submit for a student.
+2. Process receipt/action in `/guidance/intake/{id}` and render controlled `F-OGC-GRE-GGR-005-00` form preview/PDF.
+- **Expected:** Both web form and LaTeX PDF preserve the 21 official OGC reasons, referrer remarks, and `OGC Action Taken` verbatim with zero retired 12-reason mismatch.
+- **Negative/non-disclosure:** Student accounts remain forbidden from `/portal/referrals/create`; deprecated/fabricated reason keys are rejected cleanly.
+- **Cleanup:** Withdraw/delete disposable intake and generated PDF.
+- **Source:** app/Services/Guidance/GuidanceIntakeService.php:1-120; app/Views/portal/referrals/create.php:1-100; app/Views/guidance/intake/view.php:1-80; docs/guidance/forms/manifest.json:1-200
+- **Evidence:** 21-reason UI capture, intake receipt/action state, and rendered `GGR-005` PDF.
+- **Verdict:** `NOT_RUN`
+
+## GD-OGC-003 — Appointment GAP-006 and Call Slip CSP-007 match official schedules, 6 purposes, and layout
+- **Lifecycle:** `READY`
+- **Legacy IDs:** None
+- **Changed by:** `e7d5572`
+- **Requirement:** `GUIDANCE.OGC.APPOINTMENT_AND_CALL_SLIP_LAYOUT`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-08`, `UC-GD-11`
+- **Surface:** Guidance Appointments (`F-OGC-GRE-GAP-006-00`) & Call Slips (`F-OGC-GSP-CSP-007-00`) (uncommitted `feat/archive-management` OGC alignment)
+- **Route/API:** POST /guidance/call-slips/issue; GET /guidance/call-slips/{id}/pdf; GET /guidance/appointments/{id}/pdf
+- **Actor/grants:** Qualified `counsellor` with `guidance.call_slips.issue` / `guidance.appointments.manage`
+- **Preconditions:** Migration `2026-11-26-000001_AlignGuidanceAppointmentAndCallSlipPurposes` applied; manifest synced; synthetic student.
+**Steps**
+1. Issue a controlled `CSP-007` call slip selecting `Testing/ Test Interpretation` (`testing_interpretation`) or another official purpose from the 6-purpose set, then render single and 4-up PDFs.
+2. Render `GAP-006` appointment PDF verifying `A. Counseling / Psychosocial Support` + `B. Consultation`, the 4 `Preferred Sched` slots (`9:00-10:40AM`, `10:40-11:40AM`, `2:00-2:40PM`, `3:00-3:40PM`), and the official 2-day note.
+- **Expected:** Both forms match OGC DOCX layout verbatim with `Note:` and `Guidance Personnel` on `CSP-007`, unified `DocumentHeaderLatex` header, and zero fabricated Copy 1–4 labels, tear-off return slips, or 5-minute reminders.
+- **Negative/non-disclosure:** Unlisted legacy purpose codes fail validation and single/4-up LaTeX builds compile cleanly without `mdframed` overflows.
+- **Cleanup:** Remove disposable call slip, appointment, and PDFs.
+- **Source:** app/Services/Guidance/GuidanceAppointmentService.php:21-72; app/Services/Guidance/GuidanceCallSlipService.php:21-40; app/Views/guidance/call_slips/index.php:1-80; app/Services/Reporting/GuidanceFormLatex.php:1-200
+- **Evidence:** `GAP-006` and `CSP-007` rendered PNG/PDF inspections and `GuidanceSlipPdfTest` corroboration.
+- **Verdict:** `NOT_RUN`
+
+## GD-OGC-004 — Evaluation forms PEF-008 and CEF-009 match verbatim 1–5 items, visit types, and future-visit reason
+- **Lifecycle:** `READY`
+- **Legacy IDs:** None
+- **Changed by:** `e7d5572`
+- **Requirement:** `GUIDANCE.OGC.EVALUATION_FORMS_SCHEMA`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-10`, `UC-PT-06`
+- **Surface:** Evaluation Redemption & Aggregate PDF (`F-OGC-GPS-PEF-008-00`, `F-OGC-GCS-CEF-009-00`) (uncommitted `feat/archive-management` OGC alignment)
+- **Route/API:** GET /portal/evaluations/redeem/{token}; POST /portal/evaluations/submit; GET /guidance/evaluations/aggregate-pdf
+- **Actor/grants:** Token-holding `student` (`guidance.evaluations.submit`); `counsellor` / `guidance_supervisor` for aggregate PDF
+- **Preconditions:** Issued one-time `PEF-008` and `CEF-009` tokens; manifest synced (`revisions=2`); threshold-eligible cohort.
+**Steps**
+1. Open `/portal/evaluations/redeem/{token}` for both `PEF-008` and `CEF-009`; confirm items 1–5 verbatim text, `visit_type` selector enabled on both forms, `Willingness to Visit Again`, and optional `Reason/s why:` (`future_visit_reason`).
+2. Submit responses for both forms and inspect `/guidance/evaluations/dashboard` and `/guidance/evaluations/aggregate-pdf`.
+- **Expected:** Both forms collect exact verbatim items 1–5 and optional `Reason/s why:` without fabricated `Service Recommendation Rate`; aggregates and PDF reflect the aligned dimension wording.
+- **Negative/non-disclosure:** Fabricated recommendation-rate fields are absent and anonymous/threshold guarantees remain intact.
+- **Cleanup:** Reset disposable tokens, evaluations, and PDFs.
+- **Source:** app/Controllers/GuidanceEvaluationController.php:21-65; app/Services/Guidance/GuidanceServiceEvaluationService.php:20-76; app/Views/portal/evaluations/submit.php:1-120; docs/guidance/forms/manifest.json:1-200
+- **Evidence:** `PEF-008`/`CEF-009` form screenshots, aggregate PDF inspection, and `GuidanceServiceEvaluationPdfTest` corroboration.
 - **Verdict:** `NOT_RUN`

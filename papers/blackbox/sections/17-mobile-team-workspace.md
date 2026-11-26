@@ -5,6 +5,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`, `884b9f0`
 - Requirement: Workspace entitlement must be server-derived from current bearer identity, feature rollout, live department membership, and available Team schema; only entitled units/features appear. Final rollout policy remains unresolved.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: Mobile context switcher and workspace tabs.
 - Route/API: `GET /api/v1/me`.
 - Actor/grants: Student, single-unit staff, multi-unit/superadmin, revoked-role variants.
@@ -27,6 +30,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`
 - Requirement: Team unit is one of exact server route segments `clinic|guidance|facilities`; tenant, actor, role, and unit selectors in body/query cannot broaden scope, and every service reloads current bearer identity/membership.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: All Team Workspace APIs.
 - Route/API: `/api/v1/team/{unit}/*`.
 - Actor/grants: Member of exactly one unit; second-tenant fixture.
@@ -49,6 +55,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`
 - Requirement: Switching personal/work/unit contexts must prompt before discarding any retained draft, block while a submission is pending, run discard callbacks once after dialog dismissal, and never navigate beneath a native modal.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: Mobile context tab bar, unit picker, account sheet.
 - Route/API: Client navigation only until a form submits.
 - Actor/grants: User with personal plus at least two workspace units.
@@ -71,6 +80,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`
 - Requirement: Entitlement refresh must dispose drafts/submission registrations scoped to a revoked personal/unit context, retain still-authorized context work, close pending discard/destination state, and move to a valid context.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: Mobile WorkspaceProvider.
 - Route/API: `GET /api/v1/me` refresh.
 - Actor/grants: Multi-context user whose one unit or personal entitlement is revoked.
@@ -93,6 +105,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`
 - Requirement: Task list must support team/mine, text, status, priority, and page filters, return bounded counts/pagination, and compute editability from current actor/unit policy.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: Mobile Team Board/My Tasks.
 - Route/API: `GET /api/v1/team/{unit}/tasks`.
 - Actor/grants: Unit member and manager variants.
@@ -115,6 +130,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`
 - Requirement: Create requires valid task fields and UUIDv4 `client_nonce`; identical retry must return the same task, while nonce reuse with different content or scope conflicts and concurrent retries create one row/notification set.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: Mobile task form.
 - Route/API: `POST /api/v1/team/{unit}/tasks`.
 - Actor/grants: Current unit member.
@@ -137,6 +155,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`
 - Requirement: Full task update and status-only move must require current positive version, current edit authority, valid transition/input, and atomically increment version/activity/notifications; stale writers must refresh rather than overwrite.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: Mobile task detail/edit/board move.
 - Route/API: `POST /api/v1/team/{unit}/tasks/{id}/update`; `/status`.
 - Actor/grants: Authorized editor plus unauthorized member.
@@ -159,6 +180,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`
 - Requirement: Comment creation must validate plain bounded text and UUIDv4 nonce, use current unit membership, create one comment/activity/notification set for identical retries, and return a bounded detail projection.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-01`
 - Surface: Mobile task comments.
 - Route/API: `POST /api/v1/team/{unit}/tasks/{id}/comments`; task detail GET.
 - Actor/grants: Current unit member.
@@ -181,6 +205,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`, `884b9f0`
 - Requirement: Agenda/week/month listing must use Manila date boundaries, independently bound events/task deadlines to 250 each, sort combined items, support team/mine/status, and identify truncation without treating tasks as appointments.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-02`
 - Surface: Mobile Team Calendar.
 - Route/API: `GET /api/v1/team/{unit}/calendar`.
 - Actor/grants: Unit member.
@@ -203,6 +230,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`
 - Requirement: Event create requires valid title and real Manila `YYYY-MM-DDTHH:mm` start/end with duration `(0,31d]`, up to 100 unique active same-unit participants, and UUIDv4 nonce idempotency.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-02`
 - Surface: Mobile calendar event form.
 - Route/API: `POST /api/v1/team/{unit}/calendar/events`.
 - Actor/grants: Unit member.
@@ -225,6 +255,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `902fdd6`
 - Requirement: Only manager or creator may update/cancel; update replaces all editable fields with current version, cancel is terminal and current-version repeat is no-op, while stale versions always conflict.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-02`
 - Surface: Mobile event detail/edit/cancel.
 - Route/API: `POST /api/v1/team/{unit}/calendar/events/{id}/update`; `/cancel`.
 - Actor/grants: Creator, unit manager, participant/noneditor.
@@ -247,6 +280,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `73b8a11`, `a06b70b`
 - Requirement: Chat history must return fixed 40-message latest/before/after/around windows with deterministic cursors/read summary; cursor modes are mutually exclusive and current unit membership is rechecked.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-03`
 - Surface: Mobile Team Chat history/deep link.
 - Route/API: `GET /api/v1/team/{unit}/chat/messages`.
 - Actor/grants: Current unit member.
@@ -269,6 +305,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `73b8a11`, `a06b70b`
 - Requirement: Sending requires bounded plain body, UUIDv4 nonce, active same-unit task/reply references, and structurally valid member mentions using UTF-16 offsets; identical ambiguous retry creates one message/mention/notification set.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-03`
 - Surface: Mobile Team Chat composer.
 - Route/API: `POST /api/v1/team/{unit}/chat/messages`.
 - Actor/grants: Current unit member.
@@ -291,6 +330,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `73b8a11`
 - Requirement: Mark-read must accept a valid last message in the current unit, never move the marker backward, return authoritative last/unread/latest summary, and not alter another user/unit/account.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-03`
 - Surface: Mobile Team Chat read behavior.
 - Route/API: `POST /api/v1/team/{unit}/chat/read`.
 - Actor/grants: Two current unit members.
@@ -313,6 +355,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `c91477a`, `73b8a11`
 - Requirement: Team task/calendar/chat hints must invalidate mapped query keys for the current entitled unit and active account, with authoritative refetch, bounded polling fallback, and no cross-unit cache overwrite.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-03`
 - Surface: Mobile Team Board/Calendar/Chat.
 - Route/API: User realtime grant plus Team GET APIs.
 - Actor/grants: Unit member; second member mutates resources.
@@ -335,6 +380,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `c179273`, `a06b70b`
 - Requirement: Team push/inbox targets must parse only supported kind/unit/positive ID, bind to active connection owner/account, recheck `/me` feature entitlement before and after unit tree commit, respect draft/submission guards, and consume rejected targets without replay loops.
+- Role: `workstation_member`
+- Module: Team Workspace (Web & Mobile)
+- Use Cases: `UC-TW-03`
 - Surface: Mobile notification → Team navigation.
 - Route/API: Notification target projection, `/me`, target Team detail/history.
 - Actor/grants: Entitled and later-revoked Team user.

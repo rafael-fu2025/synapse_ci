@@ -140,12 +140,12 @@ final class GuidanceFormLatex
             $signer = self::escape((string) ($attestation['signer_role'] ?? 'Counselor'));
             $date = self::escape((string) ($attestation['attested_at'] ?? ''));
             $hash = self::escape(substr((string) ($attestation['snapshot_hash'] ?? ''), 0, 16) . '...');
-            $attestationBanner = "\\begin{mdframed}[backgroundcolor=gray!10,roundcorner=4pt]\n"
+            $attestationBanner = "\\begin{mdframed}[backgroundcolor=gray!10]\n"
                 . "\\small \\textbf{Digitally Finalized by:} {$signer} on {$date} \\\\\n"
                 . "\\textbf{Record Hash (SHA-256):} \\texttt{{$hash}} \\quad \\textbf{Method:} Authenticated Account Attestation\n"
                 . "\\end{mdframed}\\par\\vspace{0.8em}\n";
         } elseif ($isDraft) {
-            $attestationBanner = "\\begin{mdframed}[backgroundcolor=orange!10,roundcorner=4pt]\n"
+            $attestationBanner = "\\begin{mdframed}[backgroundcolor=orange!10]\n"
                 . "\\small \\textbf{ATTENTION:} Unfinalized draft record. Not official without authenticated attestation.\n"
                 . "\\end{mdframed}\\par\\vspace{0.8em}\n";
         }
@@ -175,7 +175,7 @@ final class GuidanceFormLatex
 \\usepackage{amsmath,amssymb}
 \\usepackage{graphicx}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
+\\usepackage[framemethod=tikz]{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
@@ -226,30 +226,67 @@ LATEX;
         $name = self::escape((string) ($data['student_name'] ?? ''));
         $id = self::escape((string) ($data['student_id'] ?? ''));
         $course = self::escape((string) ($data['course_year'] ?? ''));
+        $contact = self::escape((string) ($data['contact_number'] ?? $data['phone'] ?? ''));
         $date = self::escape((string) ($data['scheduled_date'] ?? $data['appointment_date'] ?? ''));
-        $time = self::escape((string) ($data['scheduled_time'] ?? $data['appointment_time'] ?? ''));
+        $rawTime = (string) ($data['scheduled_time'] ?? $data['appointment_time'] ?? '');
+        $time = self::escape($rawTime);
         $counselor = self::escape((string) ($data['counselor_name'] ?? $data['assigned_counselor'] ?? ''));
 
         $purposeRaw = (string) ($data['purpose'] ?? '');
         $purposeOtherRaw = (string) ($data['purpose_other'] ?? $data['other_purpose'] ?? '');
 
-        $normPurpose = strtolower(str_replace([' ', '-'], '_', trim($purposeRaw)));
-        $isRoutine = ($normPurpose === 'routine_interview');
-        $isCounseling = ($normPurpose === 'counseling');
-        $isFollowUp = ($normPurpose === 'follow_up');
-        $isIntake = ($normPurpose === 'intake');
-        $isInquiry = ($normPurpose === 'inquiry');
-        $isOthers = ($normPurpose === 'others' || $normPurpose === 'other' || (!$isRoutine && !$isCounseling && !$isFollowUp && !$isIntake && !$isInquiry && $normPurpose !== ''));
+        $normPurpose = strtolower(str_replace([' ', '-', '/'], '_', trim($purposeRaw)));
+        $isPersonalSocial = ($normPurpose === 'personal_social' || $normPurpose === 'counseling');
+        $isAcademic = ($normPurpose === 'academic');
+        $isCareer = ($normPurpose === 'career');
+        $isConsultation = ($normPurpose === 'consultation' || $normPurpose === 'inquiry');
+        $isOthers = ($normPurpose === 'others'
+            || $normPurpose === 'other'
+            || $normPurpose === 'routine_interview'
+            || $normPurpose === 'follow_up'
+            || $normPurpose === 'intake'
+            || (!$isPersonalSocial && !$isAcademic && !$isCareer && !$isConsultation && $normPurpose !== ''));
 
-        $checkRoutine = self::check($isRoutine);
-        $checkCounseling = self::check($isCounseling);
-        $checkFollowUp = self::check($isFollowUp);
-        $checkIntake = self::check($isIntake);
-        $checkInquiry = self::check($isInquiry);
+        $checkPersonalSocial = self::check($isPersonalSocial);
+        $checkAcademic = self::check($isAcademic);
+        $checkCareer = self::check($isCareer);
         $checkOthers = self::check($isOthers);
+        $checkConsultation = self::check($isConsultation);
 
-        $otherText = $purposeOtherRaw !== '' ? $purposeOtherRaw : ($isOthers && $normPurpose !== 'others' && $normPurpose !== 'other' ? $purposeRaw : '');
-        $othersSpecify = ($isOthers && $otherText !== '') ? ' (' . self::escape($otherText) . ')' : '';
+        $legacyOtherLabel = match ($normPurpose) {
+            'routine_interview' => 'Routine Interview',
+            'follow_up'         => 'Follow-up',
+            'intake'            => 'Intake',
+            default             => $purposeRaw,
+        };
+        $otherText = $purposeOtherRaw !== ''
+            ? $purposeOtherRaw
+            : ($isOthers && $normPurpose !== 'others' && $normPurpose !== 'other' ? $legacyOtherLabel : '');
+        $othersSpecify = ($isOthers && $otherText !== '') ? self::escape($otherText) : '';
+
+        // Preferred schedule slots matching official OGC form
+        $schedRaw = trim((string) ($data['preferred_schedule'] ?? ''));
+        $normSched = strtolower(str_replace(' ', '', $schedRaw));
+        if ($normSched === '' && $rawTime !== '') {
+            $ts = strtotime('1970-01-01 ' . trim($rawTime));
+            if ($ts !== false) {
+                $mins = ((int) date('G', $ts)) * 60 + (int) date('i', $ts);
+                if ($mins >= 540 && $mins <= 639) {
+                    $normSched = '9:00-10:40am';
+                } elseif ($mins >= 640 && $mins <= 700) {
+                    $normSched = '10:40-11:40am';
+                } elseif ($mins >= 840 && $mins <= 880) {
+                    $normSched = '2:00-2:40pm';
+                } elseif ($mins >= 900 && $mins <= 940) {
+                    $normSched = '3:00-3:40pm';
+                }
+            }
+        }
+
+        $checkSlot1 = self::check($normSched === '9:00-10:40am');
+        $checkSlot2 = self::check($normSched === '10:40-11:40am');
+        $checkSlot3 = self::check($normSched === '2:00-2:40pm');
+        $checkSlot4 = self::check($normSched === '3:00-3:40pm');
 
         $watermark = $isDraft
             ? "\\usepackage{draftwatermark}\n\\SetWatermarkText{DRAFT - PREVIEW ONLY}\n\\SetWatermarkScale{0.6}\n\\SetWatermarkColor[gray]{0.85}\n"
@@ -261,16 +298,20 @@ LATEX;
                 $name,
                 $id,
                 $course,
+                $contact,
                 $date,
                 $time,
                 $counselor,
-                $checkRoutine,
-                $checkCounseling,
-                $checkFollowUp,
-                $checkIntake,
-                $checkInquiry,
+                $checkPersonalSocial,
+                $checkAcademic,
+                $checkCareer,
                 $checkOthers,
                 $othersSpecify,
+                $checkConsultation,
+                $checkSlot1,
+                $checkSlot2,
+                $checkSlot3,
+                $checkSlot4,
                 $verificationCode,
                 $attestation,
                 $watermark,
@@ -283,16 +324,20 @@ LATEX;
             $name,
             $id,
             $course,
+            $contact,
             $date,
             $time,
             $counselor,
-            $checkRoutine,
-            $checkCounseling,
-            $checkFollowUp,
-            $checkIntake,
-            $checkInquiry,
+            $checkPersonalSocial,
+            $checkAcademic,
+            $checkCareer,
             $checkOthers,
             $othersSpecify,
+            $checkConsultation,
+            $checkSlot1,
+            $checkSlot2,
+            $checkSlot3,
+            $checkSlot4,
             $verificationCode,
             $attestation,
             $watermark,
@@ -305,16 +350,20 @@ LATEX;
         string $name,
         string $id,
         string $course,
+        string $contact,
         string $date,
         string $time,
         string $counselor,
-        string $checkRoutine,
-        string $checkCounseling,
-        string $checkFollowUp,
-        string $checkIntake,
-        string $checkInquiry,
+        string $checkPersonalSocial,
+        string $checkAcademic,
+        string $checkCareer,
         string $checkOthers,
         string $othersSpecify,
+        string $checkConsultation,
+        string $checkSlot1,
+        string $checkSlot2,
+        string $checkSlot3,
+        string $checkSlot4,
         ?string $verificationCode,
         ?array $attestation,
         string $watermark,
@@ -329,12 +378,12 @@ LATEX;
             $signer = self::escape((string) ($attestation['signer_role'] ?? $attestation['signer_name'] ?? 'Counselor'));
             $attDate = self::escape((string) ($attestation['attested_at'] ?? ''));
             $hash = self::escape(substr((string) ($attestation['snapshot_hash'] ?? ''), 0, 16) . '...');
-            $attestationBanner = "\\begin{mdframed}[backgroundcolor=gray!10,roundcorner=4pt]\n"
+            $attestationBanner = "\\begin{mdframed}[backgroundcolor=gray!10]\n"
                 . "\\small \\textbf{Digitally Finalized by:} {$signer} on {$attDate} \\\\\n"
                 . "\\textbf{Record Hash (SHA-256):} \\texttt{{$hash}} \\quad \\textbf{Method:} Authenticated Account Attestation\n"
                 . "\\end{mdframed}\\par\\vspace{0.8em}\n";
         } elseif ($isDraft) {
-            $attestationBanner = "\\begin{mdframed}[backgroundcolor=orange!10,roundcorner=4pt]\n"
+            $attestationBanner = "\\begin{mdframed}[backgroundcolor=orange!10]\n"
                 . "\\small \\textbf{ATTENTION:} Unfinalized draft record. Not official without authenticated attestation.\n"
                 . "\\end{mdframed}\\par\\vspace{0.8em}\n";
         }
@@ -346,7 +395,7 @@ LATEX;
             $verificationLine,
             'Page \\thepage\\ of 1'
         );
-        $metaLine = '\\textbf{In-Doc Code:} F-OGC-GRE-GAP-006-00 \\quad \\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025'
+        $metaLine = '\\textbf{In-Doc Code:} F-OGC-GRE-GAP-006-00 \\quad \\textbf{Revision Number:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025'
             . ($num !== '' ? " \\quad \\textbf{Appt No:} {$num}" : '');
         $headerContainer = DocumentHeaderLatex::headerContainer(
             'guidance',
@@ -354,6 +403,8 @@ LATEX;
             'GUIDANCE APPOINTMENT FORM',
             $metaLine
         );
+        $dateTimeDisplay = trim($date . ($time !== '' ? ' ' . $time : ''));
+        $othersLine = $othersSpecify !== '' ? $othersSpecify : '\\underline{\\hspace{4cm}}';
 
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
@@ -362,7 +413,7 @@ LATEX;
 \\usepackage{amsmath,amssymb}
 \\usepackage{graphicx}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
+\\usepackage[framemethod=tikz]{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
@@ -377,36 +428,31 @@ LATEX;
 
 {$attestationBanner}
 
-\\noindent\\textbf{Appointment Details}\\par\\vspace{0.4em}
-\\begin{tabularx}{\\textwidth}{|l|X|l|X|}
+\\noindent\\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Appointment No:} & {$num} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Course \\& Year:} & {$course} \\\\ \\hline
-\\textbf{Scheduled Date:} & {$date} & \\textbf{Scheduled Time:} & {$time} \\\\ \\hline
-\\textbf{Assigned Counselor:} & {$counselor} & & \\\\ \\hline
+\\textbf{Date:} & {$dateTimeDisplay} & \\textbf{Appointment No:} & {$num} \\\\ \\hline
+\\textbf{Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
+\\textbf{Grade/Course/YR. Level:} & {$course} & \\textbf{Contact Number:} & {$contact} \\\\ \\hline
+\\textbf{Assigned Counselor:} & \\multicolumn{3}{l|}{{$counselor}} \\\\ \\hline
 \\end{tabularx}\\par\\vspace{1.2em}
 
-\\noindent\\textbf{Purpose of Appointment:}\\par\\vspace{0.4em}
-\\begin{tabular}{lll}
-{$checkRoutine} Routine Interview & {$checkCounseling} Counseling & {$checkFollowUp} Follow-up \\\\
-{$checkIntake} Intake & {$checkInquiry} Inquiry & {$checkOthers} Others{$othersSpecify} \\\\
-\\end{tabular}\\par\\vspace{1.5em}
+\\noindent\\begin{tabularx}{\\textwidth}{|X|X|}
+\\hline
+\\textbf{Reason:} & \\textbf{Preferred Sched} \\\\ \\hline
+\\textbf{A. Counseling/Psychosocial} & {$checkSlot1} 9:00-10:40AM \\\\
+\\quad {$checkPersonalSocial} Personal/Social & {$checkSlot2} 10:40-11:40AM \\\\
+\\quad {$checkAcademic} Academic & {$checkSlot3} 2:00-2:40PM \\\\
+\\quad {$checkCareer} Career & {$checkSlot4} 3:00-3:40PM \\\\
+\\quad {$checkOthers} Others please specify: {$othersLine} & \\\\
+\\textbf{B.} {$checkConsultation} \\textbf{Consultation} & \\\\ \\hline
+\\end{tabularx}\\par\\vspace{1.2em}
 
-\\begin{mdframed}[backgroundcolor=gray!5,roundcorner=3pt]
-\\small\\textbf{Important Reminders for the Student:}
-\\begin{itemize}
-  \\item Please be at the Office of the Guidance Center 5 minutes before your scheduled appointment.
-  \\item Present this appointment slip or confirmation upon arrival at the guidance reception.
-  \\item In case of unavoidable conflicts, please notify the Guidance Office ahead of time.
-\\end{itemize}
+\\begin{mdframed}[backgroundcolor=gray!5]
+\\small\\textbf{Note:} Please be informed that you will be scheduled 2 days prior to your appointment, except for emergencies.
 \\end{mdframed}
 
-\\vspace{1em}
-\\noindent\\begin{tabularx}{\\textwidth}{X r}
-\\textbf{Student Acknowledgment Signature:} \\underline{\\hspace{5.5cm}} & \\textbf{Date:} \\underline{\\hspace{3cm}} \\\\
-\\end{tabularx}
-
 \\vfill
+\\noindent{\\footnotesize\\textbf{Department Office:} Office of the Guidance Center (OGC) \\hfill \\textbf{Effectivity Date:} September 1, 2025 \\quad \\textbf{Revision Number:} 00}\\par\\vspace{0.3em}
 \\begin{center}
 \\footnotesize\\textit{CONFIDENTIALITY NOTICE: This document contains strictly privileged psychological/guidance information protected under RA 10173 and professional ethics standards. Unauthorized disclosure or reproduction is strictly prohibited.}
 \\end{center}
@@ -420,16 +466,20 @@ LATEX;
         string $name,
         string $id,
         string $course,
+        string $contact,
         string $date,
         string $time,
         string $counselor,
-        string $checkRoutine,
-        string $checkCounseling,
-        string $checkFollowUp,
-        string $checkIntake,
-        string $checkInquiry,
+        string $checkPersonalSocial,
+        string $checkAcademic,
+        string $checkCareer,
         string $checkOthers,
         string $othersSpecify,
+        string $checkConsultation,
+        string $checkSlot1,
+        string $checkSlot2,
+        string $checkSlot3,
+        string $checkSlot4,
         ?string $verificationCode,
         ?array $attestation,
         string $watermark,
@@ -442,7 +492,6 @@ LATEX;
         $attestationLine = '';
         if ($attestation !== null) {
             $signer = self::escape((string) ($attestation['signer_role'] ?? 'Counselor'));
-            $attDate = self::escape((string) ($attestation['attested_at'] ?? ''));
             $hash = self::escape(substr((string) ($attestation['snapshot_hash'] ?? ''), 0, 10) . '...');
             $attestationLine = "\\textbf{Attested:} {$signer} ({$hash})";
         } elseif ($isDraft) {
@@ -451,35 +500,28 @@ LATEX;
             $attestationLine = "\\textbf{Attestation:} Official Record";
         }
 
-        $copies = [
-            1 => 'Copy 1 (Student Copy)',
-            2 => 'Copy 2 (Counselor / Office Copy)',
-            3 => 'Copy 3 (Teacher / Department Copy)',
-            4 => 'Copy 4 (Guard / File Copy)',
-        ];
-
-        $quads = [];
-        foreach ($copies as $idx => $label) {
-            $quads[$idx] = self::renderAppointmentQuadrant(
-                $label,
-                $num,
-                $name,
-                $id,
-                $course,
-                $date,
-                $time,
-                $counselor,
-                $checkRoutine,
-                $checkCounseling,
-                $checkFollowUp,
-                $checkIntake,
-                $checkInquiry,
-                $checkOthers,
-                $othersSpecify,
-                $verificationLine,
-                $attestationLine
-            );
-        }
+        $quadrant = self::renderAppointmentQuadrant(
+            $num,
+            $name,
+            $id,
+            $course,
+            $contact,
+            $date,
+            $time,
+            $counselor,
+            $checkPersonalSocial,
+            $checkAcademic,
+            $checkCareer,
+            $checkOthers,
+            $othersSpecify,
+            $checkConsultation,
+            $checkSlot1,
+            $checkSlot2,
+            $checkSlot3,
+            $checkSlot4,
+            $verificationLine,
+            $attestationLine
+        );
 
         $headerColors = DocumentHeaderLatex::colorDefinitions();
 
@@ -490,7 +532,7 @@ LATEX;
 \\usepackage{amsmath,amssymb}
 \\usepackage{graphicx}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
+\\usepackage[framemethod=tikz]{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 {$headerColors}
@@ -503,7 +545,7 @@ LATEX;
 \\noindent
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[1]}
+{$quadrant}
 \\end{minipage}%
 \\hfill%
 \\begin{minipage}[t][125mm][t]{6mm}
@@ -514,7 +556,7 @@ LATEX;
 \\hfill%
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[2]}
+{$quadrant}
 \\end{minipage}
 
 \\vspace{2mm}
@@ -526,7 +568,7 @@ LATEX;
 \\noindent
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[3]}
+{$quadrant}
 \\end{minipage}%
 \\hfill%
 \\begin{minipage}[t][125mm][t]{6mm}
@@ -537,7 +579,7 @@ LATEX;
 \\hfill%
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[4]}
+{$quadrant}
 \\end{minipage}
 
 \\end{document}
@@ -545,21 +587,24 @@ LATEX;
     }
 
     private static function renderAppointmentQuadrant(
-        string $copyLabel,
         string $num,
         string $name,
         string $id,
         string $course,
+        string $contact,
         string $date,
         string $time,
         string $counselor,
-        string $checkRoutine,
-        string $checkCounseling,
-        string $checkFollowUp,
-        string $checkIntake,
-        string $checkInquiry,
+        string $checkPersonalSocial,
+        string $checkAcademic,
+        string $checkCareer,
         string $checkOthers,
         string $othersSpecify,
+        string $checkConsultation,
+        string $checkSlot1,
+        string $checkSlot2,
+        string $checkSlot3,
+        string $checkSlot4,
         string $verificationLine,
         string $attestationLine
     ): string {
@@ -569,27 +614,33 @@ LATEX;
             'GUIDANCE APPOINTMENT FORM',
             '\\textbf{F-OGC-GAP-006-00} (\\textbf{In-Doc:} F-OGC-GRE-GAP-006-00) \\enspace \\textbf{Rev:} 00 \\enspace \\textbf{Eff:} 2025-09-01'
         );
+        $dateTimeDisplay = trim($date . ($time !== '' ? ' ' . $time : ''));
+        $othersLine = $othersSpecify !== '' ? $othersSpecify : '\\underline{\\hspace{2.1cm}}';
 
         return <<<LATEX
 \\begin{mdframed}[linewidth=0.5pt,innerleftmargin=2mm,innerrightmargin=2mm,innertopmargin=2mm,innerbottommargin=2mm]
 {$quadHeader}
-{\\raggedleft\\tiny\\textit{{$copyLabel}}}\\par\\vspace{0.5mm}
+\\vspace{0.5mm}
 \\begin{tabularx}{\\linewidth}{|l|X|l|X|}
 \\hline
-\\textbf{\\tiny Appt No:} & {\\tiny {$num}} & \\textbf{\\tiny ID:} & {\\tiny {$id}} \\\\ \\hline
-\\textbf{\\tiny Name:} & \\multicolumn{3}{l|}{\\tiny {$name}} \\\\ \\hline
-\\textbf{\\tiny Course/Yr:} & {\\tiny {$course}} & \\textbf{\\tiny Sched:} & {\\tiny {$date} {$time}} \\\\ \\hline
+\\textbf{\\tiny Date:} & {\\tiny {$dateTimeDisplay}} & \\textbf{\\tiny Appt No:} & {\\tiny {$num}} \\\\ \\hline
+\\textbf{\\tiny Name:} & {\\tiny {$name}} & \\textbf{\\tiny ID:} & {\\tiny {$id}} \\\\ \\hline
+\\textbf{\\tiny Course/Yr:} & {\\tiny {$course}} & \\textbf{\\tiny Contact:} & {\\tiny {$contact}} \\\\ \\hline
 \\textbf{\\tiny Counselor:} & \\multicolumn{3}{l|}{\\tiny {$counselor}} \\\\ \\hline
 \\end{tabularx}\\par\\vspace{1mm}
-{\\tiny\\textbf{Purpose of Appointment:}}\\par
-{\\tiny
-{$checkRoutine} Routine Int. \\enspace {$checkCounseling} Counseling \\enspace {$checkFollowUp} Follow-up \\\\
-{$checkIntake} Intake \\enspace {$checkInquiry} Inquiry \\enspace {$checkOthers} Others{$othersSpecify}
-}\\par\\vspace{1mm}
-{\\tiny\\textit{Note: Please be at Guidance Center 5 mins before schedule.}}\\par\\vspace{1mm}
-{\\tiny\\textbf{Student Sig:} \\underline{\\hspace{2.5cm}} \\hfill \\textbf{Date:} \\underline{\\hspace{1.5cm}}}\\par\\vspace{1mm}
+\\begin{tabularx}{\\linewidth}{|>{\\tiny}X|>{\\tiny}p{31mm}|}
+\\hline
+\\textbf{Reason:} & \\textbf{Preferred Sched} \\\\ \\hline
+\\textbf{A. Counseling/Psychosocial} & {$checkSlot1} 9:00-10:40AM \\\\
+\\enspace {$checkPersonalSocial} Personal/Social & {$checkSlot2} 10:40-11:40AM \\\\
+\\enspace {$checkAcademic} Academic & {$checkSlot3} 2:00-2:40PM \\\\
+\\enspace {$checkCareer} Career & {$checkSlot4} 3:00-3:40PM \\\\
+\\enspace {$checkOthers} Others please specify: {$othersLine} & \\\\
+\\textbf{B.} {$checkConsultation} \\textbf{Consultation} & \\\\ \\hline
+\\end{tabularx}\\par\\vspace{1mm}
+{\\tiny\\textbf{Note:} Please be informed that you will be scheduled 2 days prior to your appointment, except for emergencies.}\\par\\vspace{1mm}
 {\\tiny {$verificationLine} \\hfill {$attestationLine}}\\par\\vspace{0.5mm}
-{\\tiny\\centering\\textit{Confidential Guidance Record --- RA 10173}\\par}
+{\\tiny\\centering\\textit{Department Office: Office of the Guidance Center (OGC) --- RA 10173}\\par}
 \\end{mdframed}
 LATEX;
     }
@@ -622,27 +673,29 @@ LATEX;
         $date = self::escape((string) ($data['call_date'] ?? $data['scheduled_date'] ?? ''));
         $time = self::escape((string) ($data['call_time'] ?? $data['scheduled_time'] ?? ''));
         $counselor = self::escape((string) ($data['issuing_counselor_name'] ?? $data['counselor_name'] ?? ''));
+        $note = self::escape((string) ($data['note'] ?? $data['delivery_notes'] ?? ''));
 
         $purposeRaw = (string) ($data['purpose'] ?? '');
         $purposeOtherRaw = (string) ($data['purpose_other'] ?? $data['other_purpose'] ?? '');
 
-        $normPurpose = strtolower(str_replace([' ', '-'], '_', trim($purposeRaw)));
+        $normPurpose = strtolower(str_replace([' ', '-', '/'], '_', trim($purposeRaw)));
         $isPersonal = ($normPurpose === 'personal_counseling');
         $isCareer = ($normPurpose === 'career_counseling');
-        $isRoutine = ($normPurpose === 'routine_interview');
-        $isFollowUp = ($normPurpose === 'follow_up');
         $isAcademic = ($normPurpose === 'academic_counseling');
-        $isOthers = ($normPurpose === 'others' || $normPurpose === 'other' || (!$isPersonal && !$isCareer && !$isRoutine && !$isFollowUp && !$isAcademic && $normPurpose !== ''));
+        $isInterview = ($normPurpose === 'routine_interview' || $normPurpose === 'interview');
+        $isTesting = ($normPurpose === 'testing_interpretation' || $normPurpose === 'testing__test_interpretation' || $normPurpose === 'testing_test_interpretation');
+        $isOthers = ($normPurpose === 'others' || $normPurpose === 'other' || (!$isPersonal && !$isCareer && !$isAcademic && !$isInterview && !$isTesting && $normPurpose !== ''));
 
         $checkPersonal = self::check($isPersonal);
         $checkCareer = self::check($isCareer);
-        $checkRoutine = self::check($isRoutine);
-        $checkFollowUp = self::check($isFollowUp);
         $checkAcademic = self::check($isAcademic);
+        $checkInterview = self::check($isInterview);
+        $checkTesting = self::check($isTesting);
         $checkOthers = self::check($isOthers);
 
-        $otherText = $purposeOtherRaw !== '' ? $purposeOtherRaw : ($isOthers && $normPurpose !== 'others' && $normPurpose !== 'other' ? $purposeRaw : '');
-        $othersSpecify = ($isOthers && $otherText !== '') ? ' (' . self::escape($otherText) . ')' : '';
+        $legacyOther = $normPurpose === 'follow_up' ? 'Follow-up' : $purposeRaw;
+        $otherText = $purposeOtherRaw !== '' ? $purposeOtherRaw : ($isOthers && $normPurpose !== 'others' && $normPurpose !== 'other' ? $legacyOther : '');
+        $othersSpecify = ($isOthers && $otherText !== '') ? self::escape($otherText) : '';
 
         $watermark = $isDraft
             ? "\\usepackage{draftwatermark}\n\\SetWatermarkText{DRAFT - PREVIEW ONLY}\n\\SetWatermarkScale{0.6}\n\\SetWatermarkColor[gray]{0.85}\n"
@@ -657,11 +710,12 @@ LATEX;
                 $date,
                 $time,
                 $counselor,
+                $note,
                 $checkPersonal,
                 $checkCareer,
-                $checkRoutine,
-                $checkFollowUp,
                 $checkAcademic,
+                $checkInterview,
+                $checkTesting,
                 $checkOthers,
                 $othersSpecify,
                 $verificationCode,
@@ -679,11 +733,12 @@ LATEX;
             $date,
             $time,
             $counselor,
+            $note,
             $checkPersonal,
             $checkCareer,
-            $checkRoutine,
-            $checkFollowUp,
             $checkAcademic,
+            $checkInterview,
+            $checkTesting,
             $checkOthers,
             $othersSpecify,
             $verificationCode,
@@ -701,11 +756,12 @@ LATEX;
         string $date,
         string $time,
         string $counselor,
+        string $note,
         string $checkPersonal,
         string $checkCareer,
-        string $checkRoutine,
-        string $checkFollowUp,
         string $checkAcademic,
+        string $checkInterview,
+        string $checkTesting,
         string $checkOthers,
         string $othersSpecify,
         ?string $verificationCode,
@@ -739,7 +795,7 @@ LATEX;
             $verificationLine,
             'Page \\thepage\\ of 1'
         );
-        $metaLine = '\\textbf{Rev:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025'
+        $metaLine = '\\textbf{Revision Number:} 00 \\quad \\textbf{Effectivity Date:} September 1, 2025'
             . ($num !== '' ? " \\quad \\textbf{Call Slip No:} {$num}" : '');
         $headerContainer = DocumentHeaderLatex::headerContainer(
             'guidance',
@@ -747,6 +803,9 @@ LATEX;
             'GUIDANCE CALL SLIP',
             $metaLine
         );
+        $dateTimeDisplay = trim($date . ($time !== '' ? ' ' . $time : ''));
+        $othersLine = $othersSpecify !== '' ? $othersSpecify : '\\underline{\\hspace{7cm}}';
+        $noteDisplay = $note !== '' ? $note : '\\underline{\\hspace{11.5cm}}';
 
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
@@ -769,45 +828,34 @@ LATEX;
 
 {$attestationBanner}
 
-\\noindent\\textit{Please excuse the student named below to report to the Office of the Guidance Center:}\\par\\vspace{0.5em}
-
-\\noindent\\textbf{Student \\& Call Details}\\par\\vspace{0.4em}
-\\begin{tabularx}{\\textwidth}{|l|X|l|X|}
+\\noindent\\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Call Slip No:} & {$num} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Course \\& Year:} & {$course} \\\\ \\hline
-\\textbf{Date of Call:} & {$date} & \\textbf{Time of Call:} & {$time} \\\\ \\hline
-\\textbf{Issuing Counselor:} & {$counselor} & & \\\\ \\hline
-\\end{tabularx}\\par\\vspace{1.2em}
-
-\\noindent\\textbf{Purpose of Call:}\\par\\vspace{0.4em}
-\\begin{tabular}{lll}
-{$checkPersonal} Personal Counseling & {$checkCareer} Career Counseling & {$checkRoutine} Routine Interview \\\\
-{$checkFollowUp} Follow-up & {$checkAcademic} Academic Counseling & {$checkOthers} Others{$othersSpecify} \\\\
-\\end{tabular}\\par\\vspace{1.5em}
-
-\\vspace{1.5em}
-\\noindent\\cleaders\\hbox to 4mm{\\hss\\rule{2mm}{0.4pt}\\hss}\\hfill%
-\\quad\\raisebox{-0.2ex}{\\footnotesize - - - - - - \\textbf{TEAR-OFF RETURN SLIP / TEACHER ACKNOWLEDGMENT} - - - - - -}\\quad%
-\\cleaders\\hbox to 4mm{\\hss\\rule{2mm}{0.4pt}\\hss}\\hfill\\kern0pt
-\\vspace{1em}
-
-\\noindent\\fbox{\\begin{minipage}{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}
-\\textbf{Teacher / Instructor Acknowledgment Return Section}\\par\\vspace{0.4em}
-\\small
-\\begin{tabularx}{\\linewidth}{|l|X|l|X|}
-\\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Call Slip No:} & {$num} & \\textbf{Date:} & {$date} \\\\ \\hline
-\\textbf{Subject / Section:} & & \\textbf{Time Released from Class:} & \\\\ \\hline
+\\textbf{Date:} & {$dateTimeDisplay} & \\textbf{Call Slip No:} & {$num} \\\\ \\hline
+\\textbf{Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
+\\textbf{Grade/Strand / Course/Yr. Level:} & \\multicolumn{3}{l|}{{$course}} \\\\ \\hline
 \\end{tabularx}\\par\\vspace{1em}
-\\noindent\\begin{tabularx}{\\linewidth}{X r}
-\\textbf{Teacher / Instructor Signature:} \\underline{\\hspace{5.5cm}} & \\textbf{Date Signed:} \\underline{\\hspace{2.5cm}} \\\\
-\\end{tabularx}\\par\\vspace{0.4em}
-\\textit{\\footnotesize Instructions: Please sign and return this acknowledgment slip with the student or to the Office of the Guidance Center.}
-\\end{minipage}}
+
+\\noindent\\textbf{to see the Guidance Counselor for the following purpose/reason:}\\par\\vspace{0.5em}
+\\noindent\\begin{tabular}{l}
+{$checkPersonal} Personal Counseling \\\\[0.35em]
+{$checkCareer} Career Counseling \\\\[0.35em]
+{$checkAcademic} Academic Counseling (INC or etc.) \\\\[0.35em]
+{$checkInterview} Interview (Initial, Routine \\& Exit) \\\\[0.35em]
+{$checkTesting} Testing/ Test Interpretation \\\\[0.35em]
+{$checkOthers} Others: {$othersLine} \\\\
+\\end{tabular}\\par\\vspace{1.2em}
+
+\\noindent\\textbf{Note:} {$noteDisplay}\\par\\vspace{2em}
+
+\\noindent\\hfill\\begin{minipage}{6cm}
+\\centering
+{$counselor}\\\\[0.2em]
+\\rule{5.5cm}{0.4pt}\\\\[0.2em]
+\\textbf{Guidance Personnel}
+\\end{minipage}
 
 \\vfill
+\\noindent{\\footnotesize\\textbf{Department Office:} Office of the Guidance Center (OGC) \\hfill \\textbf{Effectivity Date:} September 1, 2025 \\quad \\textbf{Revision Number:} 00}\\par\\vspace{0.3em}
 \\begin{center}
 \\footnotesize\\textit{CONFIDENTIALITY NOTICE: This document contains strictly privileged psychological/guidance information protected under RA 10173 and professional ethics standards. Unauthorized disclosure or reproduction is strictly prohibited.}
 \\end{center}
@@ -824,11 +872,12 @@ LATEX;
         string $date,
         string $time,
         string $counselor,
+        string $note,
         string $checkPersonal,
         string $checkCareer,
-        string $checkRoutine,
-        string $checkFollowUp,
         string $checkAcademic,
+        string $checkInterview,
+        string $checkTesting,
         string $checkOthers,
         string $othersSpecify,
         ?string $verificationCode,
@@ -843,7 +892,6 @@ LATEX;
         $attestationLine = '';
         if ($attestation !== null) {
             $signer = self::escape((string) ($attestation['signer_role'] ?? 'Counselor'));
-            $attDate = self::escape((string) ($attestation['attested_at'] ?? ''));
             $hash = self::escape(substr((string) ($attestation['snapshot_hash'] ?? ''), 0, 10) . '...');
             $attestationLine = "\\textbf{Attested:} {$signer} ({$hash})";
         } elseif ($isDraft) {
@@ -852,35 +900,25 @@ LATEX;
             $attestationLine = "\\textbf{Attestation:} Official Record";
         }
 
-        $copies = [
-            1 => 'Copy 1 (Student Copy)',
-            2 => 'Copy 2 (Guidance File Copy)',
-            3 => 'Copy 3 (Teacher / Class Copy)',
-            4 => 'Copy 4 (Department / Admin Copy)',
-        ];
-
-        $quads = [];
-        foreach ($copies as $idx => $label) {
-            $quads[$idx] = self::renderCallSlipQuadrant(
-                $label,
-                $num,
-                $name,
-                $id,
-                $course,
-                $date,
-                $time,
-                $counselor,
-                $checkPersonal,
-                $checkCareer,
-                $checkRoutine,
-                $checkFollowUp,
-                $checkAcademic,
-                $checkOthers,
-                $othersSpecify,
-                $verificationLine,
-                $attestationLine
-            );
-        }
+        $quadrant = self::renderCallSlipQuadrant(
+            $num,
+            $name,
+            $id,
+            $course,
+            $date,
+            $time,
+            $counselor,
+            $note,
+            $checkPersonal,
+            $checkCareer,
+            $checkAcademic,
+            $checkInterview,
+            $checkTesting,
+            $checkOthers,
+            $othersSpecify,
+            $verificationLine,
+            $attestationLine
+        );
 
         $headerColors = DocumentHeaderLatex::colorDefinitions();
 
@@ -906,7 +944,7 @@ LATEX;
 \\noindent
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[1]}
+{$quadrant}
 \\end{minipage}%
 \\hfill%
 \\begin{minipage}[t][125mm][t]{6mm}
@@ -917,7 +955,7 @@ LATEX;
 \\hfill%
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[2]}
+{$quadrant}
 \\end{minipage}
 
 \\vspace{2mm}
@@ -929,7 +967,7 @@ LATEX;
 \\noindent
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[3]}
+{$quadrant}
 \\end{minipage}%
 \\hfill%
 \\begin{minipage}[t][125mm][t]{6mm}
@@ -940,7 +978,7 @@ LATEX;
 \\hfill%
 \\begin{minipage}[t][125mm][t]{93mm}
 \\vspace{0pt}
-{$quads[4]}
+{$quadrant}
 \\end{minipage}
 \\end{minipage}
 
@@ -949,7 +987,6 @@ LATEX;
     }
 
     private static function renderCallSlipQuadrant(
-        string $copyLabel,
         string $num,
         string $name,
         string $id,
@@ -957,11 +994,12 @@ LATEX;
         string $date,
         string $time,
         string $counselor,
+        string $note,
         string $checkPersonal,
         string $checkCareer,
-        string $checkRoutine,
-        string $checkFollowUp,
         string $checkAcademic,
+        string $checkInterview,
+        string $checkTesting,
         string $checkOthers,
         string $othersSpecify,
         string $verificationLine,
@@ -973,29 +1011,33 @@ LATEX;
             'GUIDANCE CALL SLIP',
             '\\textbf{F-OGC-GSP-CSP-007-00} \\enspace \\textbf{Rev:} 00 \\enspace \\textbf{Eff:} 2025-09-01'
         );
+        $dateTimeDisplay = trim($date . ($time !== '' ? ' ' . $time : ''));
+        $othersLine = $othersSpecify !== '' ? $othersSpecify : '\\underline{\\hspace{3.2cm}}';
+        $noteDisplay = $note !== '' ? $note : '\\underline{\\hspace{5.8cm}}';
 
         return <<<LATEX
 \\noindent\\fbox{\\begin{minipage}[t]{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}
 {$quadHeader}
-{\\raggedleft\\tiny\\textit{{$copyLabel}}}\\par
-{\\tiny\\textit{Please excuse student to report to the Guidance Center:}}\\par\\vspace{0.5mm}
+\\vspace{0.5mm}
 \\begin{tabularx}{\\linewidth}{|l|X|l|X|}
 \\hline
-\\textbf{\\tiny Call Slip No:} & {\\tiny {$num}} & \\textbf{\\tiny ID:} & {\\tiny {$id}} \\\\ \\hline
-\\textbf{\\tiny Name:} & \\multicolumn{3}{l|}{\\tiny {$name}} \\\\ \\hline
-\\textbf{\\tiny Course/Yr:} & {\\tiny {$course}} & \\textbf{\\tiny Call Date/Time:} & {\\tiny {$date} {$time}} \\\\ \\hline
-\\textbf{\\tiny Counselor:} & \\multicolumn{3}{l|}{\\tiny {$counselor}} \\\\ \\hline
+\\textbf{\\tiny Date:} & {\\tiny {$dateTimeDisplay}} & \\textbf{\\tiny Slip No:} & {\\tiny {$num}} \\\\ \\hline
+\\textbf{\\tiny Name:} & {\\tiny {$name}} & \\textbf{\\tiny ID:} & {\\tiny {$id}} \\\\ \\hline
+\\textbf{\\tiny Grade/Course:} & \\multicolumn{3}{l|}{\\tiny {$course}} \\\\ \\hline
 \\end{tabularx}\\par\\vspace{0.8mm}
-{\\tiny\\textbf{Purpose:}}\\par
+{\\tiny\\textbf{to see the Guidance Counselor for the following purpose/reason:}}\\par\\vspace{0.4mm}
 {\\tiny
-{$checkPersonal} Personal \\enspace {$checkCareer} Career \\enspace {$checkRoutine} Routine \\\\
-{$checkFollowUp} Follow-up \\enspace {$checkAcademic} Academic \\enspace {$checkOthers} Others{$othersSpecify}
+{$checkPersonal} Personal Counseling \\\\
+{$checkCareer} Career Counseling \\\\
+{$checkAcademic} Academic Counseling (INC or etc.) \\\\
+{$checkInterview} Interview (Initial, Routine \\& Exit) \\\\
+{$checkTesting} Testing/ Test Interpretation \\\\
+{$checkOthers} Others: {$othersLine}
 }\\par\\vspace{0.8mm}
-\\noindent\\cleaders\\hbox to 3mm{\\hss\\rule{1.5mm}{0.3pt}\\hss}\\hfill{\\tiny - - - Tear-Off Return Slip - - -}\\hfill\\cleaders\\hbox to 3mm{\\hss\\rule{1.5mm}{0.3pt}\\hss}\\hfill\\kern0pt\\par\\vspace{0.5mm}
-{\\tiny\\textbf{Teacher Acknowledgment:} Subj: \\underline{\\hspace{1.5cm}} Rel: \\underline{\\hspace{1.2cm}}}\\par
-{\\tiny\\textbf{Signature:} \\underline{\\hspace{2.5cm}} Date: \\underline{\\hspace{1.2cm}}}\\par\\vspace{0.8mm}
-{\\tiny {$verificationLine} \\hfill {$attestationLine}}\\par\\vspace{0.5mm}
-{\\tiny\\centering\\textit{Confidential Guidance Record --- RA 10173}\\par}
+{\\tiny\\textbf{Note:} {$noteDisplay}}\\par\\vspace{1.2mm}
+\\noindent\\hfill{\\tiny\\begin{tabular}{c} {$counselor} \\\\ \\hline \\textbf{Guidance Personnel} \\end{tabular}}\\par\\vspace{0.8mm}
+{\\tiny {$verificationLine} \\hfill {$attestationLine}}\\par\\vspace{0.4mm}
+{\\tiny\\centering\\textit{Department Office: Office of the Guidance Center (OGC) --- RA 10173}\\par}
 \\end{minipage}}
 LATEX;
     }
@@ -1038,6 +1080,8 @@ LATEX;
         $id = self::escape((string) ($data['student_id'] ?? $data['id'] ?? ''));
         $course = self::escape((string) ($data['course_year'] ?? $data['course'] ?? $data['grade_strand_course'] ?? ''));
         $date = self::escape((string) ($data['interview_date'] ?? $data['scheduled_date'] ?? $data['date'] ?? ''));
+        $time = self::escape((string) ($data['interview_time'] ?? $data['time'] ?? ''));
+        $dateTimeDisplay = trim($date . ($time !== '' ? ' ' . $time : ''));
 
         $clientTypeRaw = strtolower((string) ($data['client_type'] ?? $data['type_of_client'] ?? ''));
         $isWalkIn = str_contains($clientTypeRaw, 'walk');
@@ -1048,46 +1092,40 @@ LATEX;
         $checkFollowUp = self::check($isFollowUp);
         $checkReferral = self::check($isReferral);
 
-        // Demographics
-        $demo = is_array($data['demographics'] ?? null) ? $data['demographics'] : [];
-        $age = self::escape((string) ($demo['age'] ?? $data['age'] ?? '---'));
-        $sex = self::escape((string) ($demo['sex'] ?? $demo['gender'] ?? $data['sex'] ?? $data['gender'] ?? '---'));
-        $contact = self::escape((string) ($demo['contact_number'] ?? $demo['contact'] ?? $data['contact_number'] ?? $data['contact'] ?? '---'));
-        $civil = self::escape((string) ($demo['civil_status'] ?? $data['civil_status'] ?? '---'));
-        $living = self::escape((string) ($demo['living_arrangement'] ?? $data['living_arrangement'] ?? '---'));
-        $emergency = self::escape((string) ($demo['emergency_contact'] ?? $data['emergency_contact'] ?? '---'));
+        $consentChecked = !empty($data['privacy_consent_acknowledged']);
+        $checkConsent = self::check($consentChecked);
 
-        // Presenting Concerns
+        // Q1: Issues / Concerns
         $concernsRaw = (string) ($data['presenting_concerns'] ?? $data['issues_concerns'] ?? $data['concerns'] ?? '');
         $concerns = self::escape($concernsRaw !== '' ? $concernsRaw : 'None recorded.');
 
-        // Mental Health Screening
-        $screeningRaw = $data['mental_health_screening'] ?? $data['screening'] ?? null;
-        $screeningText = '';
-        if (is_array($screeningRaw)) {
-            $parts = [];
-            foreach ($screeningRaw as $k => $v) {
-                if (is_scalar($v)) {
-                    $parts[] = '\textbf{' . self::escape((string) $k) . ':} ' . self::escape((string) $v);
-                }
-            }
-            $screeningText = !empty($parts) ? implode(" \\enspace \\textbar \\enspace \n", $parts) : '\textit{No acute risk indicators recorded.}';
-        } elseif (is_string($screeningRaw) && trim($screeningRaw) !== '') {
-            $screeningText = self::escape($screeningRaw);
-        } else {
-            $screeningText = '\textit{No acute mental health risk indicators or suicide risk flagged during intake screening.}';
-        }
+        // Q2: Seriousness
+        $severityRaw = strtolower(trim((string) ($data['concern_severity'] ?? $data['seriousness'] ?? '')));
+        $isVerySerious = ($severityRaw === 'very_serious' || $severityRaw === 'very serious');
+        $isSerious = ($severityRaw === 'serious');
+        $isNotSoSerious = ($severityRaw === 'not_so_serious' || $severityRaw === 'not so serious');
+        $checkVerySerious = self::check($isVerySerious);
+        $checkSerious = self::check($isSerious);
+        $checkNotSoSerious = self::check($isNotSoSerious);
 
-        // Family & Social Support
-        $familyRaw = (string) ($data['family_social_support'] ?? $data['family_support'] ?? $data['social_support'] ?? '');
-        $familySupport = self::escape($familyRaw !== '' ? $familyRaw : 'Adequate family and social support reported; no severe domestic stressors identified.');
+        // Q3-Q8 from F-OGC-GPS-PIF-008-00
+        $durationRaw = (string) ($data['problem_duration'] ?? '');
+        $duration = self::escape($durationRaw !== '' ? $durationRaw : '---');
 
-        // Counselor Assessment & Action/Intervention Plan
-        $assessmentRaw = (string) ($data['counselor_assessment'] ?? $data['assessment'] ?? '');
-        $assessment = self::escape($assessmentRaw !== '' ? $assessmentRaw : 'No formal clinical assessment notes recorded.');
+        $causeRaw = (string) ($data['perceived_cause'] ?? '');
+        $perceivedCause = self::escape($causeRaw !== '' ? $causeRaw : '---');
 
-        $planRaw = (string) ($data['intervention_plan'] ?? $data['action_plan'] ?? $data['plan'] ?? '');
-        $plan = self::escape($planRaw !== '' ? $planRaw : 'Routine monitoring and open-door follow-up as needed.');
+        $barriersRaw = (string) ($data['coping_barriers'] ?? '');
+        $copingBarriers = self::escape($barriersRaw !== '' ? $barriersRaw : '---');
+
+        $triedRaw = (string) ($data['prior_coping_attempts'] ?? '');
+        $priorAttempts = self::escape($triedRaw !== '' ? $triedRaw : '---');
+
+        $helpRaw = (string) ($data['desired_help'] ?? '');
+        $desiredHelp = self::escape($helpRaw !== '' ? $helpRaw : '---');
+
+        $changesRaw = (string) ($data['hoped_changes'] ?? '');
+        $hopedChanges = self::escape($changesRaw !== '' ? $changesRaw : '---');
 
         $watermark = $isDraft
             ? "\\usepackage{draftwatermark}\n\\SetWatermarkText{DRAFT - PREVIEW ONLY}\n\\SetWatermarkScale{0.6}\n\\SetWatermarkColor[gray]{0.85}\n"
@@ -1118,11 +1156,11 @@ LATEX;
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
 \\pdfminorversion=4
-\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
+\\usepackage[margin=16mm,top=20mm,bottom=20mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
 \\usepackage{graphicx}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
+\\usepackage[framemethod=tikz]{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
@@ -1137,49 +1175,66 @@ LATEX;
 
 {$attestationBanner}
 
-\\noindent\\textbf{I. Student Demographics \\& Academic Profile}\\par\\vspace{0.4em}
+\\begin{mdframed}[backgroundcolor=gray!3]
+\\footnotesize
+In accordance with the \\textbf{Data Privacy Act of 2012 (RA 10173)}, the University Guidance Center collects and processes your personal information or your son/daughter/ward's personal information and, when necessary, sensitive personal information for the purposes of providing counseling services, conducting assessments or interventions, maintaining records, and coordinating with authorized University officials for student welfare.\\par\\vspace{0.3em}
+Processing is based on the University's legitimate educational mandate and/or your consent, particularly when sensitive personal information is involved. The data will be kept confidential and accessed only by authorized personnel. It will be stored securely, retained in accordance with University policies, and disclosed only with your consent or as required by law.\\par\\vspace{0.3em}
+You have the right to be informed, access, correct, object to processing, and request the erasure of your personal data or your son/daughter/ward's personal data, subject to applicable legal limitations. For privacy-related concerns, you may contact the University Data Protection Officer (DPO): \\textbf{dpo@foundationu.com}.\\par\\vspace{0.4em}
+{$checkConsent} \\textbf{I have read and understood this Privacy Notice and voluntarily give my consent to the processing of my personal or my son/daughter/ward's personal and sensitive personal information for guidance and counseling purposes.}\\\\[0.3em]
+\\textbf{Student / Parent / Guardian:} {$name} \\hfill \\textbf{Date:} {$date}
+\\end{mdframed}\\par\\vspace{0.6em}
+
 \\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Course \\& Year:} & {$course} & \\textbf{Interview Date:} & {$date} \\\\ \\hline
-\\textbf{Client Type:} & \\multicolumn{3}{l|}{{$checkWalkIn} Walk-in \\enspace\\quad {$checkFollowUp} Follow-up \\enspace\\quad {$checkReferral} Referral} \\\\ \\hline
-\\textbf{Age / Sex:} & {$age} / {$sex} & \\textbf{Contact No:} & {$contact} \\\\ \\hline
-\\textbf{Civil Status:} & {$civil} & \\textbf{Living Setup:} & {$living} \\\\ \\hline
-\\textbf{Emergency Contact:} & \\multicolumn{3}{l|}{{$emergency}} \\\\ \\hline
-\\end{tabularx}\\par\\vspace{0.8em}
+\\textbf{Type of Client:} & \\multicolumn{3}{l|}{{$checkWalkIn} Walk-in \\enspace\\quad {$checkFollowUp} Follow-up \\enspace\\quad {$checkReferral} Referral} \\\\ \\hline
+\\textbf{Student's Name:} & {$name} & \\textbf{Date and Time:} & {$dateTimeDisplay} \\\\ \\hline
+\\textbf{Grade/Strand/Course \\& Year:} & {$course} & \\textbf{Student / MIS ID:} & {$id} \\\\ \\hline
+\\end{tabularx}\\par\\vspace{0.7em}
 
-\\noindent\\textbf{II. Presenting Concerns \\& Mental Health Screening}\\par\\vspace{0.4em}
-\\noindent\\textbf{A. Presenting Concerns:}\\par
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
+\\noindent\\textbf{1. ISSUES/CONCERNS} \\textit{(How would you describe your current situation? What are you experiencing? What are your main concerns?)}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
 {$concerns}
-\\end{mdframed}\\par\\vspace{0.5em}
+\\end{mdframed}\\par\\vspace{0.45em}
 
-\\noindent\\textbf{B. Mental Health Screening Indicators:}\\par
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$screeningText}
+\\noindent\\textbf{2. How serious are these matters for you at this time?}\\quad
+{$checkVerySerious} Very Serious \\qquad {$checkSerious} Serious \\qquad {$checkNotSoSerious} Not so Serious\\par\\vspace{0.55em}
+
+\\noindent\\textbf{3. How long have these been your problem?}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$duration}
+\\end{mdframed}\\par\\vspace{0.45em}
+
+\\noindent\\textbf{4. What do you think originally caused these problem/s?}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$perceivedCause}
+\\end{mdframed}\\par\\vspace{0.45em}
+
+\\noindent\\textbf{5. What other things currently making it hard to deal with the problem/s?}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$copingBarriers}
+\\end{mdframed}\\par\\vspace{0.45em}
+
+\\noindent\\textbf{6. What have you already tried in order to deal with the problem/s?}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$priorAttempts}
+\\end{mdframed}\\par\\vspace{0.45em}
+
+\\noindent\\textbf{7. What do you think would help solve the problem/s? What type of help do you want?}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$desiredHelp}
+\\end{mdframed}\\par\\vspace{0.45em}
+
+\\noindent\\textbf{8. What changes are you hoping for?}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$hopedChanges}
 \\end{mdframed}\\par\\vspace{0.8em}
 
-\\noindent\\textbf{III. Family \\& Social Support}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$familySupport}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{IV. Counselor Assessment \\& Clinical Impressions}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$assessment}
-\\end{mdframed}\\par\\vspace{0.5em}
-
-\\noindent\\textbf{V. Action \\& Intervention Plan}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$plan}
-\\end{mdframed}\\par\\vspace{1em}
-
-\\noindent\\textbf{VI. Digital Attestation \\& Professional Standing}\\par\\vspace{0.4em}
+\\noindent\\textbf{Attestation \\& Verification}\\par\\vspace{0.3em}
 {$attestationStamp}
 
 \\vfill
 \\begin{center}
-\\footnotesize\\textit{CONFIDENTIALITY NOTICE: This document contains strictly privileged psychological/guidance information protected under RA 10173 and professional ethics standards. Unauthorized disclosure or reproduction is strictly prohibited.}
+\\footnotesize\\textit{Department Office: Office of the Guidance Center (OGC) \\quad|\\quad Confidential record protected under RA 10173.}
 \\end{center}
 
 \\end{document}
@@ -1220,27 +1275,25 @@ LATEX;
 
         $instanceNum = self::escape((string) ($instance['instance_number'] ?? $snapshot['instance_number'] ?? $data['instance_number'] ?? ''));
 
-        $sessionNum = self::escape((string) ($data['session_number'] ?? $data['session_num'] ?? '1'));
+        $dept = self::escape((string) ($data['department'] ?? '---'));
         $sessionDate = self::escape((string) ($data['session_date'] ?? $data['date'] ?? ''));
-
-        $modalityRaw = strtolower((string) ($data['modality'] ?? 'in_person'));
-        $isTelehealth = str_contains($modalityRaw, 'tele');
-        $isPhone = str_contains($modalityRaw, 'phone');
-        $isInPerson = !$isTelehealth && !$isPhone;
-
-        $checkInPerson = self::check($isInPerson);
-        $checkTelehealth = self::check($isTelehealth);
-        $checkPhone = self::check($isPhone);
-
-        $timeStart = self::escape((string) ($data['time_started'] ?? $data['time_start'] ?? ''));
-        $timeEnd = self::escape((string) ($data['time_ended'] ?? $data['time_end'] ?? ''));
-        $timeStr = ($timeStart !== '' || $timeEnd !== '') ? "{$timeStart} -- {$timeEnd}" : '---';
-
         $name = self::escape((string) ($data['student_name'] ?? $data['name'] ?? ''));
         $id = self::escape((string) ($data['student_id'] ?? $data['id'] ?? ''));
         $course = self::escape((string) ($data['course_year'] ?? $data['course'] ?? ''));
-        $dept = self::escape((string) ($data['department'] ?? ''));
-        $counselor = self::escape((string) ($data['counselor_name'] ?? $data['counselor_associate_name'] ?? $data['practitioner_name'] ?? ''));
+
+        $timeStart = self::escape((string) ($data['time_started'] ?? $data['time_start'] ?? ''));
+        $timeEnd = self::escape((string) ($data['time_ended'] ?? $data['time_end'] ?? ''));
+        $timeStr = ($timeStart !== '' || $timeEnd !== '') ? trim("{$timeStart} -- {$timeEnd}", ' -') : '---';
+
+        $refRaw = strtolower(trim((string) ($data['referral_source'] ?? $data['client_type'] ?? '')));
+        $isWalkIn = ($refRaw === '' || str_contains($refRaw, 'walk'));
+        $isAssociateInit = str_contains($refRaw, 'associate') || str_contains($refRaw, 'initiated');
+        $isReferral = str_contains($refRaw, 'refer');
+        $isFollowUpRef = str_contains($refRaw, 'follow');
+        $checkRefWalkIn = self::check($isWalkIn);
+        $checkRefAssoc = self::check($isAssociateInit);
+        $checkRefReferral = self::check($isReferral);
+        $checkRefFollowUp = self::check($isFollowUpRef);
 
         $sessionTypeRaw = strtolower((string) ($data['session_type'] ?? ''));
         $isTypeIntake = str_contains($sessionTypeRaw, 'intake');
@@ -1255,11 +1308,17 @@ LATEX;
         $checkTypeIndiv = self::check($isTypeIndividual);
         $checkTypeGroup = self::check($isTypeGroup);
 
-        $clientState = self::escape((string) ($data['client_state'] ?? $data['client_presentation'] ?? 'None recorded.'));
-        $interventions = self::escape((string) ($data['interventions_used'] ?? $data['interventions'] ?? 'None recorded.'));
-        $clientResponse = self::escape((string) ($data['client_response'] ?? $data['response'] ?? 'None recorded.'));
-        $actionItems = self::escape((string) ($data['action_items'] ?? $data['homework'] ?? 'None recorded.'));
-        $nextDate = self::escape((string) ($data['next_session_date'] ?? $data['next_schedule'] ?? 'As scheduled / on-call'));
+        $consentChecked = !empty($data['privacy_consent_acknowledged']);
+        $checkConsent = self::check($consentChecked);
+
+        $presentingConcerns = self::escape((string) ($data['presenting_concerns'] ?? $data['client_state'] ?? 'None recorded.'));
+        $predisposing = self::escape((string) ($data['predisposing_factors'] ?? '---'));
+        $precipitating = self::escape((string) ($data['precipitating_factors'] ?? '---'));
+        $perpetuating = self::escape((string) ($data['perpetuating_factors'] ?? '---'));
+        $protectiveRisk = self::escape((string) ($data['protective_risk_factors'] ?? '---'));
+        $interventionPlan = self::escape((string) ($data['intervention_plan'] ?? $data['interventions_used'] ?? 'None recorded.'));
+        $followUpPlan = self::escape((string) ($data['follow_up_plan'] ?? $data['action_items'] ?? 'None recorded.'));
+        $nextSchedule = self::escape((string) ($data['next_session_schedule'] ?? $data['next_session_date'] ?? $data['next_schedule'] ?? 'As scheduled / on-call'));
 
         $watermark = $isDraft
             ? "\\usepackage{draftwatermark}\n\\SetWatermarkText{DRAFT - PREVIEW ONLY}\n\\SetWatermarkScale{0.6}\n\\SetWatermarkColor[gray]{0.85}\n"
@@ -1290,11 +1349,11 @@ LATEX;
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
 \\pdfminorversion=4
-\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
+\\usepackage[margin=16mm,top=20mm,bottom=20mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
 \\usepackage{graphicx}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
+\\usepackage[framemethod=tikz]{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
@@ -1309,44 +1368,70 @@ LATEX;
 
 {$attestationBanner}
 
-\\noindent\\textbf{I. Session \\& Student Information}\\par\\vspace{0.4em}
+\\begin{mdframed}[backgroundcolor=gray!3]
+\\footnotesize
+\\textbf{PRIVACY NOTICE AND CONSENT:} In accordance with the \\textbf{Data Privacy Act of 2012 (RA 10173)}, the University Guidance Center collects and processes your personal information or your son/daughter/ward's personal information and, when necessary, sensitive personal information for the purposes of providing counseling services, conducting assessments or interventions, maintaining records, and coordinating with authorized University officials for student welfare.\\par\\vspace{0.25em}
+Processing is based on the University's legitimate educational mandate and/or your consent, particularly when sensitive personal information is involved. The data will be kept confidential and accessed only by authorized personnel. It will be stored securely, retained in accordance with University policies, and disclosed only with your consent or as required by law.\\par\\vspace{0.25em}
+You have the right to be informed, access, correct, object to processing, and request the erasure of your personal data or your son/daughter/ward's personal data, subject to applicable legal limitations. For privacy-related concerns, you may contact the University Data Protection Officer (DPO): \\textbf{dpo@foundationu.com}.\\par\\vspace{0.35em}
+{$checkConsent} \\textbf{I have read and understood this Privacy Notice and voluntarily give my consent to the processing of my personal or my son/daughter/ward's personal and sensitive personal information for guidance and counseling purposes.}\\\\[0.25em]
+\\textbf{Student / Parent / Guardian:} {$name} \\hfill \\textbf{Date:} {$sessionDate}
+\\end{mdframed}\\par\\vspace{0.6em}
+
 \\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Session Number:} & {$sessionNum} & \\textbf{Session Date:} & {$sessionDate} \\\\ \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Course \\& Year:} & {$course} & \\textbf{Department:} & {$dept} \\\\ \\hline
-\\textbf{Counselor / Associate:} & {$counselor} & \\textbf{Time Started/Ended:} & {$timeStr} \\\\ \\hline
-\\textbf{Session Modality:} & \\multicolumn{3}{l|}{{$checkInPerson} In-Person \\enspace\\quad {$checkTelehealth} Telehealth \\enspace\\quad {$checkPhone} Phone} \\\\ \\hline
-\\textbf{Session Type:} & \\multicolumn{3}{l|}{{$checkTypeIntake} Intake \\enspace {$checkTypeFollowUp} Follow-up \\enspace {$checkTypeCrisis} Crisis \\enspace {$checkTypeIndiv} Individual \\enspace {$checkTypeGroup} Group} \\\\ \\hline
-\\end{tabularx}\\par\\vspace{0.8em}
+\\textbf{Department:} & {$dept} & \\textbf{Date:} & {$sessionDate} \\\\ \\hline
+\\textbf{Name of Student:} & {$name} & \\textbf{Student / MIS ID:} & {$id} \\\\ \\hline
+\\textbf{Course / Year / Grade / Section:} & {$course} & \\textbf{Time Started / Ended:} & {$timeStr} \\\\ \\hline
+\\textbf{Contact Source:} & \\multicolumn{3}{l|}{{$checkRefWalkIn} Walk in \\enspace {$checkRefAssoc} Counselor Associate-initiated \\enspace {$checkRefReferral} Referral \\enspace {$checkRefFollowUp} Follow-up} \\\\ \\hline
+\\textbf{Type of Session:} & \\multicolumn{3}{l|}{{$checkTypeIntake} Intake \\enspace {$checkTypeFollowUp} Follow-up \\enspace {$checkTypeCrisis} Crisis \\enspace {$checkTypeIndiv} Individual \\enspace {$checkTypeGroup} Group} \\\\ \\hline
+\\end{tabularx}\\par\\vspace{0.7em}
 
-\\noindent\\textbf{II. Client State \\& Presentation}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$clientState}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{III. Psychosocial Interventions Applied}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$interventions}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{IV. Client Response \\& Progress}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$clientResponse}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{V. Action Items \\& Next Session Schedule}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$actionItems}
+\\noindent\\textbf{Summary of Psychosocial Support Session}\\par\\vspace{0.35em}
+\\noindent\\textbf{Presenting Concern/s:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$presentingConcerns}
 \\end{mdframed}\\par\\vspace{0.4em}
-\\noindent\\textbf{Next Session Schedule:} {$nextDate}\\par\\vspace{1em}
 
-\\noindent\\textbf{VI. Digital Attestation \\& Verification}\\par\\vspace{0.4em}
+\\noindent\\textbf{Predisposing Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$predisposing}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Precipitating Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$precipitating}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Perpetuating Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$perpetuating}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Protective / Risk Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$protectiveRisk}
+\\end{mdframed}\\par\\vspace{0.6em}
+
+\\noindent\\textbf{Plans:}\\par\\vspace{0.35em}
+\\noindent\\textbf{Intervention:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$interventionPlan}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Follow up:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$followUpPlan}
+\\end{mdframed}\\par\\vspace{0.5em}
+
+\\noindent\\textbf{Next Session / Follow-Up}\\\\[0.2em]
+\\noindent\\textbf{Schedule for Next Session (Date and Time):} {$nextSchedule}\\par\\vspace{0.8em}
+
+\\noindent\\textbf{Counselor Associate's Signature / Attestation}\\par\\vspace{0.3em}
 {$attestationStamp}
 
 \\vfill
 \\begin{center}
-\\footnotesize\\textit{CONFIDENTIALITY NOTICE: This document contains strictly privileged psychological/guidance information protected under RA 10173 and professional ethics standards. Unauthorized disclosure or reproduction is strictly prohibited.}
+\\footnotesize\\textit{Department Office: Office of the Guidance Center (OGC) \\quad|\\quad Confidential record protected under RA 10173.}
 \\end{center}
 
 \\end{document}
@@ -1387,36 +1472,50 @@ LATEX;
 
         $instanceNum = self::escape((string) ($instance['instance_number'] ?? $snapshot['instance_number'] ?? $data['instance_number'] ?? ''));
 
-        $sessionNum = self::escape((string) ($data['session_number'] ?? $data['session_num'] ?? '1'));
+        $dept = self::escape((string) ($data['department'] ?? '---'));
         $sessionDate = self::escape((string) ($data['session_date'] ?? $data['date'] ?? ''));
-        $timeStart = self::escape((string) ($data['time_start'] ?? $data['time_started'] ?? ''));
-        $timeEnd = self::escape((string) ($data['time_end'] ?? $data['time_ended'] ?? ''));
-        $timeStr = ($timeStart !== '' || $timeEnd !== '') ? "{$timeStart} -- {$timeEnd}" : '---';
-
-        $sessionTypeRaw = strtolower((string) ($data['session_type'] ?? 'regular'));
-        $isTypeIntake = str_contains($sessionTypeRaw, 'intake');
-        $isTypeRegular = str_contains($sessionTypeRaw, 'regular');
-        $isTypeCrisis = str_contains($sessionTypeRaw, 'crisis');
-        $isTypeFollowUp = str_contains($sessionTypeRaw, 'follow');
-        $isTypeClosure = str_contains($sessionTypeRaw, 'closure') || str_contains($sessionTypeRaw, 'close');
-
-        $checkTypeIntake = self::check($isTypeIntake);
-        $checkTypeRegular = self::check($isTypeRegular);
-        $checkTypeCrisis = self::check($isTypeCrisis);
-        $checkTypeFollowUp = self::check($isTypeFollowUp);
-        $checkTypeClosure = self::check($isTypeClosure);
-
         $name = self::escape((string) ($data['student_name'] ?? $data['name'] ?? ''));
         $id = self::escape((string) ($data['student_id'] ?? $data['id'] ?? ''));
         $course = self::escape((string) ($data['course_year'] ?? $data['course'] ?? ''));
-        $dept = self::escape((string) ($data['department'] ?? ''));
-        $counselor = self::escape((string) ($data['counselor_name'] ?? $data['practitioner_name'] ?? ''));
 
-        $concerns = self::escape((string) ($data['concerns_discussed'] ?? $data['concerns'] ?? 'None recorded.'));
-        $goals = self::escape((string) ($data['counseling_goals'] ?? $data['goals'] ?? 'None recorded.'));
-        $interventions = self::escape((string) ($data['interventions_and_responses'] ?? $data['interventions'] ?? 'None recorded.'));
-        $homework = self::escape((string) ($data['homework_and_commitments'] ?? $data['homework'] ?? $data['action_items'] ?? 'None recorded.'));
-        $nextSchedule = self::escape((string) ($data['next_schedule'] ?? $data['next_session_date'] ?? 'To be coordinated with student'));
+        $timeStart = self::escape((string) ($data['time_started'] ?? $data['time_start'] ?? ''));
+        $timeEnd = self::escape((string) ($data['time_ended'] ?? $data['time_end'] ?? ''));
+        $timeStr = ($timeStart !== '' || $timeEnd !== '') ? trim("{$timeStart} -- {$timeEnd}", ' -') : '---';
+
+        $refRaw = strtolower(trim((string) ($data['referral_source'] ?? $data['client_type'] ?? '')));
+        $isWalkIn = ($refRaw === '' || str_contains($refRaw, 'walk'));
+        $isCounselorInit = str_contains($refRaw, 'counselor') || str_contains($refRaw, 'initiated');
+        $isReferral = str_contains($refRaw, 'refer');
+        $isFollowUpRef = str_contains($refRaw, 'follow');
+        $checkRefWalkIn = self::check($isWalkIn);
+        $checkRefCounselor = self::check($isCounselorInit);
+        $checkRefReferral = self::check($isReferral);
+        $checkRefFollowUp = self::check($isFollowUpRef);
+
+        $sessionTypeRaw = strtolower((string) ($data['session_type'] ?? ''));
+        $isTypeIntake = str_contains($sessionTypeRaw, 'intake');
+        $isTypeFollowUp = str_contains($sessionTypeRaw, 'follow');
+        $isTypeCrisis = str_contains($sessionTypeRaw, 'crisis');
+        $isTypeGroup = str_contains($sessionTypeRaw, 'group');
+        $isTypeIndividual = str_contains($sessionTypeRaw, 'indiv') || (!$isTypeIntake && !$isTypeFollowUp && !$isTypeCrisis && !$isTypeGroup);
+
+        $checkTypeIntake = self::check($isTypeIntake);
+        $checkTypeFollowUp = self::check($isTypeFollowUp);
+        $checkTypeCrisis = self::check($isTypeCrisis);
+        $checkTypeIndiv = self::check($isTypeIndividual);
+        $checkTypeGroup = self::check($isTypeGroup);
+
+        $consentChecked = !empty($data['privacy_consent_acknowledged']);
+        $checkConsent = self::check($consentChecked);
+
+        $presentingConcerns = self::escape((string) ($data['presenting_concerns'] ?? $data['concerns_discussed'] ?? $data['concerns'] ?? 'None recorded.'));
+        $predisposing = self::escape((string) ($data['predisposing_factors'] ?? '---'));
+        $precipitating = self::escape((string) ($data['precipitating_factors'] ?? '---'));
+        $perpetuating = self::escape((string) ($data['perpetuating_factors'] ?? '---'));
+        $protectiveRisk = self::escape((string) ($data['protective_risk_factors'] ?? '---'));
+        $interventionPlan = self::escape((string) ($data['intervention_plan'] ?? $data['interventions_and_responses'] ?? $data['interventions'] ?? 'None recorded.'));
+        $followUpPlan = self::escape((string) ($data['follow_up_plan'] ?? $data['homework_and_commitments'] ?? $data['homework'] ?? '---'));
+        $nextSchedule = self::escape((string) ($data['next_session_schedule'] ?? $data['next_schedule'] ?? $data['next_session_date'] ?? 'As scheduled / on-call'));
 
         $watermark = $isDraft
             ? "\\usepackage{draftwatermark}\n\\SetWatermarkText{DRAFT - PREVIEW ONLY}\n\\SetWatermarkScale{0.6}\n\\SetWatermarkColor[gray]{0.85}\n"
@@ -1448,11 +1547,11 @@ LATEX;
         return <<<LATEX
 \\documentclass[10pt,a4paper]{article}
 \\pdfminorversion=4
-\\usepackage[margin=18mm,top=20mm,bottom=22mm,headheight=14pt,headsep=6mm]{geometry}
+\\usepackage[margin=16mm,top=20mm,bottom=20mm,headheight=14pt,headsep=6mm]{geometry}
 \\usepackage{amsmath,amssymb}
 \\usepackage{graphicx}
 \\usepackage{xcolor}
-\\usepackage{mdframed}
+\\usepackage[framemethod=tikz]{mdframed}
 \\usepackage{array}
 \\usepackage{tabularx}
 \\usepackage{fancyhdr}
@@ -1467,43 +1566,70 @@ LATEX;
 
 {$attestationBanner}
 
-\\noindent\\textbf{I. Session \\& Student Information}\\par\\vspace{0.4em}
+\\begin{mdframed}[backgroundcolor=gray!3]
+\\footnotesize
+\\textbf{PRIVACY NOTICE AND CONSENT:} In accordance with the \\textbf{Data Privacy Act of 2012 (RA 10173)}, the University Guidance Center collects and processes your personal information or your son/daughter/ward's personal information and, when necessary, sensitive personal information for the purposes of providing counseling services, conducting assessments or interventions, maintaining records, and coordinating with authorized University officials for student welfare.\\par\\vspace{0.25em}
+Processing is based on the University's legitimate educational mandate and/or your consent, particularly when sensitive personal information is involved. The data will be kept confidential and accessed only by authorized personnel. It will be stored securely, retained in accordance with University policies, and disclosed only with your consent or as required by law.\\par\\vspace{0.25em}
+You have the right to be informed, access, correct, object to processing, and request the erasure of your personal data or your son/daughter/ward's personal data, subject to applicable legal limitations. For privacy-related concerns, you may contact the University Data Protection Officer (DPO): \\textbf{dpo@foundationu.com}.\\par\\vspace{0.35em}
+{$checkConsent} \\textbf{I have read and understood this Privacy Notice and voluntarily give my consent to the processing of my personal or my son/daughter/ward's personal and sensitive personal information for guidance and counseling purposes.}\\\\[0.25em]
+\\textbf{Student / Parent / Guardian:} {$name} \\hfill \\textbf{Date:} {$sessionDate}
+\\end{mdframed}\\par\\vspace{0.6em}
+
 \\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Session Number:} & {$sessionNum} & \\textbf{Session Date:} & {$sessionDate} \\\\ \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Course \\& Year:} & {$course} & \\textbf{Department:} & {$dept} \\\\ \\hline
-\\textbf{Counselor:} & {$counselor} & \\textbf{Time Start/End:} & {$timeStr} \\\\ \\hline
-\\textbf{Session Type:} & \\multicolumn{3}{l|}{{$checkTypeIntake} Intake \\enspace {$checkTypeRegular} Regular \\enspace {$checkTypeCrisis} Crisis \\enspace {$checkTypeFollowUp} Follow-up \\enspace {$checkTypeClosure} Closure} \\\\ \\hline
-\\end{tabularx}\\par\\vspace{0.8em}
+\\textbf{Department:} & {$dept} & \\textbf{Date:} & {$sessionDate} \\\\ \\hline
+\\textbf{Name of Student:} & {$name} & \\textbf{Student / MIS ID:} & {$id} \\\\ \\hline
+\\textbf{Course / Year / Grade / Section:} & {$course} & \\textbf{Time Started / Ended:} & {$timeStr} \\\\ \\hline
+\\textbf{Contact Source:} & \\multicolumn{3}{l|}{{$checkRefWalkIn} Walk in \\enspace {$checkRefCounselor} Counselor-initiated \\enspace {$checkRefReferral} Referral \\enspace {$checkRefFollowUp} Follow-up} \\\\ \\hline
+\\textbf{Type of Session:} & \\multicolumn{3}{l|}{{$checkTypeIntake} Intake \\enspace {$checkTypeFollowUp} Follow-up \\enspace {$checkTypeCrisis} Crisis \\enspace {$checkTypeIndiv} Individual \\enspace {$checkTypeGroup} Group} \\\\ \\hline
+\\end{tabularx}\\par\\vspace{0.7em}
 
-\\noindent\\textbf{II. Concerns Discussed}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$concerns}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{III. Counseling Goals}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$goals}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{IV. Interventions Applied \\& Client Responses}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$interventions}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{V. Homework, Commitments \\& Next Schedule}\\par\\vspace{0.4em}
-\\begin{mdframed}[backgroundcolor=gray!2,roundcorner=3pt]
-{$homework}
+\\noindent\\textbf{Summary of Counseling Session}\\par\\vspace{0.35em}
+\\noindent\\textbf{Presenting Concern/s:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$presentingConcerns}
 \\end{mdframed}\\par\\vspace{0.4em}
-\\noindent\\textbf{Next Scheduled Session:} {$nextSchedule}\\par\\vspace{1em}
 
-\\noindent\\textbf{VI. Digital Attestation \\& Supervisor Co-Signature}\\par\\vspace{0.4em}
+\\noindent\\textbf{Predisposing Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$predisposing}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Precipitating Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$precipitating}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Perpetuating Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$perpetuating}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Protective / Risk Factors:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$protectiveRisk}
+\\end{mdframed}\\par\\vspace{0.6em}
+
+\\noindent\\textbf{Plans:}\\par\\vspace{0.35em}
+\\noindent\\textbf{Intervention:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$interventionPlan}
+\\end{mdframed}\\par\\vspace{0.4em}
+
+\\noindent\\textbf{Follow up:}\\par
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$followUpPlan}
+\\end{mdframed}\\par\\vspace{0.5em}
+
+\\noindent\\textbf{Next Session / Follow-Up}\\\\[0.2em]
+\\noindent\\textbf{Schedule for Next Session (Date and Time):} {$nextSchedule}\\par\\vspace{0.8em}
+
+\\noindent\\textbf{Counselor's Signature / Attestation}\\par\\vspace{0.3em}
 {$attestationStamp}
 
 \\vfill
 \\begin{center}
-\\footnotesize\\textit{CONFIDENTIALITY NOTICE: This document contains strictly privileged psychological/guidance information protected under RA 10173 and professional ethics standards. Unauthorized disclosure or reproduction is strictly prohibited.}
+\\footnotesize\\textit{Department Office: Office of the Guidance Center (OGC) \\quad|\\quad Confidential record protected under RA 10173.}
 \\end{center}
 
 \\end{document}
@@ -1576,13 +1702,13 @@ LATEX;
         bool $isDraft
     ): string {
         if ($isDraft) {
-            return "\\begin{mdframed}[backgroundcolor=orange!10,roundcorner=4pt]\n"
+            return "\\begin{mdframed}[backgroundcolor=orange!10]\n"
                 . "\\small \\textbf{ATTENTION:} Unfinalized draft record. Not official without authenticated attestation.\n"
                 . "\\end{mdframed}\\par\\vspace{0.8em}\n";
         }
 
         if ($author === null && $cosigner === null) {
-            return "\\begin{mdframed}[backgroundcolor=gray!5,roundcorner=4pt]\n"
+            return "\\begin{mdframed}[backgroundcolor=gray!5]\n"
                 . "\\small \\textbf{Status:} Provisional Record (Awaiting Attestation)\n"
                 . "\\end{mdframed}\\par\\vspace{0.8em}\n";
         }
@@ -1607,7 +1733,7 @@ LATEX;
             $lines[] = "\\textbf{Verification Code:} " . self::escape($verificationCode);
         }
 
-        return "\\begin{mdframed}[backgroundcolor=gray!10,roundcorner=4pt]\n\\small\n"
+        return "\\begin{mdframed}[backgroundcolor=gray!10]\n\\small\n"
             . implode(" \\\\\n", $lines) . "\n"
             . "\\end{mdframed}\\par\\vspace{0.8em}\n";
     }
@@ -1620,7 +1746,7 @@ LATEX;
     ): string {
         if ($isDraft) {
             return <<<LATEX
-\\noindent\\begin{mdframed}[backgroundcolor=orange!5,roundcorner=3pt]
+\\noindent\\begin{mdframed}[backgroundcolor=orange!5]
 \\small\\textbf{Draft Watermark Notice:} This is an unfinalized preview document. Digital attestations and verification hashes are applied upon formal review and electronic signing.
 \\end{mdframed}
 LATEX;
@@ -1669,11 +1795,17 @@ LATEX;
     public static function renderPsychosocialEvaluation(array $snapshot, array $options = []): string
     {
         $dimensions = [
+            'rating_clarity' => 'The goal of the psychosocial support session was achieved.',
+            'rating_helpfulness' => 'The psychosocial support session was helpful.',
             'rating_welcoming' => 'The guidance personnel were approachable and welcoming.',
             'rating_empathy' => 'The guidance personnel understood and empathized with me.',
-            'rating_clarity' => 'The goal of the psychosocial support session was clear and achieved.',
-            'rating_helpfulness' => 'The psychosocial support session was helpful.',
-            'rating_environment' => 'Confidentiality and a safe, supportive environment were maintained.',
+            'rating_environment' => 'Confidentiality was kept.',
+        ];
+        $visitTypeLabels = [
+            'walk_in' => 'Voluntarily came / Walk-in',
+            'called' => 'Called by Guidance Personnel',
+            'referred' => 'Referred',
+            'follow_up' => 'Follow-up',
         ];
 
         return self::renderServiceEvaluationDocument(
@@ -1687,7 +1819,8 @@ LATEX;
             'Would you still wish to come and visit your guidance personnel in the future?',
             'Willingness to Visit Again Rate',
             'qualitative_comments',
-            true
+            true,
+            $visitTypeLabels
         );
     }
 
@@ -1701,11 +1834,17 @@ LATEX;
     public static function renderCounselingEvaluation(array $snapshot, array $options = []): string
     {
         $dimensions = [
-            'rating_rapport' => 'The counselor was approachable, welcoming, and established good rapport.',
+            'rating_goal_progress' => 'The goal of the counseling session was achieved.',
+            'rating_overall_service' => 'The counseling session was helpful.',
+            'rating_rapport' => 'The counselor was approachable and welcoming.',
             'rating_understanding' => 'The counselor understood and empathized with me.',
-            'rating_goal_progress' => 'The goal of the counseling session was achieved and progress was made.',
-            'rating_confidentiality_comfort' => 'Confidentiality was kept and I felt comfortable during the session.',
-            'rating_overall_service' => 'Overall, the counseling session was helpful and effective.',
+            'rating_confidentiality_comfort' => 'Confidentiality was kept.',
+        ];
+        $visitTypeLabels = [
+            'walk_in' => 'Voluntarily came / Walk-in',
+            'called' => 'Called by Counselor / Counselor-initiated',
+            'referred' => 'Referred',
+            'follow_up' => 'Follow-up',
         ];
 
         return self::renderServiceEvaluationDocument(
@@ -1716,10 +1855,11 @@ LATEX;
             'counseling_evaluation',
             $dimensions,
             'recommend_service',
-            'Would you recommend this counseling service / wish to visit your counselor in the future?',
-            'Service Recommendation Rate',
+            'Would you still wish to come and visit your counselor in the future?',
+            'Willingness to Visit Again Rate',
             'qualitative_feedback',
-            false
+            true,
+            $visitTypeLabels
         );
     }
 
@@ -1731,6 +1871,7 @@ LATEX;
      * @param array<string, mixed> $snapshot
      * @param array<string, mixed> $options
      * @param array<string, string> $dimensions
+     * @param array<string, string> $visitTypeLabels
      */
     private static function renderServiceEvaluationDocument(
         array $snapshot,
@@ -1743,7 +1884,8 @@ LATEX;
         string $booleanQuestionText,
         string $booleanAggregateLabel,
         string $commentFieldKey,
-        bool $includeVisitTypeSection
+        bool $includeVisitTypeSection,
+        array $visitTypeLabels = []
     ): string {
         $data = $snapshot;
         if (isset($snapshot['data']) && is_array($snapshot['data'])) {
@@ -1822,12 +1964,14 @@ LATEX;
         $reportDate = self::escape((string) ($data['submitted_date'] ?? $data['report_date'] ?? $data['date'] ?? date('Y-m-d')));
 
         // Visit Type handling (walk_in, called, referred, follow_up)
-        $visitTypeLabels = [
-            'walk_in' => 'Voluntarily came / Walk-in',
-            'called' => 'Called by Guidance Personnel / Counselor',
-            'referred' => 'Referred',
-            'follow_up' => 'Follow-up',
-        ];
+        if ($visitTypeLabels === []) {
+            $visitTypeLabels = [
+                'walk_in' => 'Voluntarily came / Walk-in',
+                'called' => 'Called by Guidance Personnel / Counselor',
+                'referred' => 'Referred',
+                'follow_up' => 'Follow-up',
+            ];
+        }
 
         $visitTypeBlock = '';
         if ($includeVisitTypeSection || isset($data['visit_type']) || isset($data['visit_type_distribution']) || isset($data['visit_types'])) {
@@ -1838,26 +1982,24 @@ LATEX;
 
                 $vtRows = '';
                 foreach ($visitTypeLabels as $vtKey => $vtLabel) {
-                    $escKey = self::escape($vtKey);
                     $escLabel = self::escape($vtLabel);
                     if (!$cohortMet) {
-                        $vtVal = 'Suppressed (Cohort $<$ ' . $minRequired . ')';
+                        $vtVal = 'Withheld (Fewer than ' . $minRequired . ' responses)';
                     } else {
                         $rawCount = $dist[$vtKey] ?? null;
                         $vtVal = $rawCount !== null ? self::escape((string) $rawCount) : 'Recorded in Cohort';
                     }
-                    $vtRows .= "% [visit_type: {$vtKey}]\n"
-                        . "\\textbf{{$escLabel}} (\\texttt{{$escKey}}) & {$vtVal} \\\\\n\\hline\n";
+                    $vtRows .= "\\textbf{{$escLabel}} & {$vtVal} \\\\\n\\hline\n";
                 }
 
                 $visitTypeBlock = <<<LATEX
 \\vspace{0.5em}
-\\noindent{\\bfseries Visit Type Distribution (walk\\_in, called, referred, follow\\_up)}
+\\noindent{\\bfseries Visit Type Distribution}
 \\vspace{0.25em}
 
 \\noindent\\begin{tabularx}{\\textwidth}{|X|c|}
 \\hline
-\\textbf{Visit Type Category} & \\textbf{Cohort Count / Share} \\\\
+\\textbf{Visit Type Category} & \\textbf{Responses} \\\\
 \\hline
 {$vtRows}\\end{tabularx}
 LATEX;
@@ -1867,16 +2009,19 @@ LATEX;
                 $checkCalled = self::check($selectedVt === 'called');
                 $checkReferred = self::check($selectedVt === 'referred');
                 $checkFollowUp = self::check($selectedVt === 'follow_up');
+                $walkInLabelEsc = self::escape($visitTypeLabels['walk_in'] ?? 'Voluntarily came / Walk-in');
+                $calledLabelEsc = self::escape($visitTypeLabels['called'] ?? 'Called by Guidance Personnel');
+                $referredLabelEsc = self::escape($visitTypeLabels['referred'] ?? 'Referred');
+                $followUpLabelEsc = self::escape($visitTypeLabels['follow_up'] ?? 'Follow-up');
 
                 $visitTypeBlock = <<<LATEX
-% [visit_type_options: walk_in, called, referred, follow_up]
 \\vspace{0.5em}
 \\noindent\\textbf{Please check visit type:} \\quad
-{$checkWalkIn} Voluntarily came / Walk-in (\\texttt{walk\\_in}) \\enspace
-{$checkCalled} Called by Guidance Personnel (\\texttt{called}) \\\\[0.25em]
+{$checkWalkIn} {$walkInLabelEsc} \\enspace
+{$checkCalled} {$calledLabelEsc} \\\\[0.25em]
 \\noindent\\phantom{\\textbf{Please check visit type:} \\quad}
-{$checkReferred} Referred (\\texttt{referred}) \\enspace
-{$checkFollowUp} Follow-up (\\texttt{follow\\_up})
+{$checkReferred} {$referredLabelEsc} \\enspace
+{$checkFollowUp} {$followUpLabelEsc}
 LATEX;
             }
         }
@@ -1901,12 +2046,11 @@ LATEX;
         $idx = 1;
 
         foreach ($dimensions as $dimKey => $dimStatement) {
-            $escKey = self::escape($dimKey);
             $escStatement = self::escape($dimStatement);
 
             if ($isAggregateMode) {
                 if (!$cohortMet) {
-                    $scoreCell = '\\textbf{SUPPRESSED} (Cohort $<$ ' . $minRequired . ')';
+                    $scoreCell = '\\textbf{SUPPRESSED} (Fewer than ' . $minRequired . ' responses)';
                 } else {
                     $rawMean = $averages[$dimKey] ?? $data[$dimKey] ?? $rawRatings[$dimKey] ?? null;
                     if (is_numeric($rawMean)) {
@@ -1914,16 +2058,12 @@ LATEX;
                         $computedSum += $val;
                         $computedCount++;
                         $fmt2 = number_format($val, 2);
-                        $fmtTrim = rtrim(rtrim($fmt2, '0'), '.');
-                        $scoreCell = ($fmt2 !== $fmtTrim)
-                            ? "\\textbf{{$fmt2} / 5.00} ({$fmtTrim})"
-                            : "\\textbf{{$fmt2} / 5.00}";
+                        $scoreCell = "\\textbf{{$fmt2} / 5.00}";
                     } else {
                         $scoreCell = '---';
                     }
                 }
-                $dimensionRows .= "% [dimension: {$dimKey}]\n"
-                    . "{$idx} & {$escStatement} (\\texttt{{$escKey}}) & {$scoreCell} \\\\\n\\hline\n";
+                $dimensionRows .= "{$idx} & {$escStatement} & {$scoreCell} \\\\\n\\hline\n";
             } else {
                 $selectedScore = $rawRatings[$dimKey] ?? $data[$dimKey] ?? null;
                 $selectedInt = is_numeric($selectedScore) ? (int) $selectedScore : null;
@@ -1933,8 +2073,7 @@ LATEX;
                     $scaleBoxes[] = "{$box} {$s}";
                 }
                 $scaleStr = implode(' \\enspace ', $scaleBoxes);
-                $dimensionRows .= "% [dimension: {$dimKey}]\n"
-                    . "{$idx} & {$escStatement} (\\texttt{{$escKey}}) & {$scaleStr} \\\\\n\\hline\n";
+                $dimensionRows .= "{$idx} & {$escStatement} & {$scaleStr} \\\\\n\\hline\n";
             }
             $idx++;
         }
@@ -1942,7 +2081,7 @@ LATEX;
         // Overall Mean Row in Aggregate Mode
         if ($isAggregateMode) {
             if (!$cohortMet) {
-                $overallCell = '\\textbf{SUPPRESSED} (Cohort $<$ ' . $minRequired . ')';
+                $overallCell = '\\textbf{SUPPRESSED} (Fewer than ' . $minRequired . ' responses)';
             } else {
                 $rawOverall = $averages['overall_mean'] ?? $data['overall_mean'] ?? null;
                 if (!is_numeric($rawOverall) && $computedCount > 0) {
@@ -1951,28 +2090,23 @@ LATEX;
                 if (is_numeric($rawOverall)) {
                     $ov = (float) $rawOverall;
                     $ovFmt2 = number_format($ov, 2);
-                    $ovTrim = rtrim(rtrim($ovFmt2, '0'), '.');
-                    $overallCell = ($ovFmt2 !== $ovTrim)
-                        ? "\\textbf{{$ovFmt2} / 5.00} ({$ovTrim})"
-                        : "\\textbf{{$ovFmt2} / 5.00}";
+                    $overallCell = "\\textbf{{$ovFmt2} / 5.00}";
                 } else {
                     $overallCell = '---';
                 }
             }
-            $dimensionRows .= "% [metric: overall_mean]\n"
-                . "\\multicolumn{2}{|r|}{\\textbf{Overall Mean Rating (\\texttt{overall\\_mean}):}} & {$overallCell} \\\\\n\\hline\n";
+            $dimensionRows .= "\\multicolumn{2}{|r|}{\\textbf{Overall Mean Rating:}} & {$overallCell} \\\\\n\\hline\n";
         }
 
         $tableColumnHeader = $isAggregateMode ? 'Mean Rating (1.00--5.00)' : 'Rating Scale (1--5)';
 
         // Boolean Response (future_visit_willingness / recommend_service)
-        $escBoolKey = self::escape($booleanFieldKey);
         $escBoolQuestion = self::escape($booleanQuestionText);
         $escBoolAggLabel = self::escape($booleanAggregateLabel);
 
         if ($isAggregateMode) {
             if (!$cohortMet) {
-                $booleanDisplay = '\\textbf{SUPPRESSED} --- Minimum cohort size of ' . $minRequired . ' not met (\\texttt{cohort\\_met = false}).';
+                $booleanDisplay = '\\textbf{SUPPRESSED} --- Minimum of ' . $minRequired . ' responses not yet reached.';
             } else {
                 $rawRate = $data['boolean_rate']
                     ?? $data[$booleanFieldKey . '_rate']
@@ -1982,47 +2116,43 @@ LATEX;
                     $numRate = (float) $rawRate;
                     if ($numRate >= 0.0 && $numRate <= 1.0 && !($numRate == 1.0 && isset($data['boolean_rate']) && $data['boolean_rate'] === 100)) {
                         $pct = $numRate * 100.0;
-                        $pctFmt1 = number_format($pct, 1);
-                        $pctTrim = rtrim(rtrim($pctFmt1, '0'), '.');
-                        $decFmt2 = number_format($numRate, 2);
-                        $decTrim = rtrim(rtrim($decFmt2, '0'), '.');
-                        $booleanDisplay = "\\textbf{{$pctFmt1}\\%} ({$pctTrim}\\% / ratio: {$decFmt2} / {$decTrim}) Affirmative";
                     } else {
-                        $pctFmt1 = number_format($numRate, 1);
-                        $pctTrim = rtrim(rtrim($pctFmt1, '0'), '.');
-                        $booleanDisplay = "\\textbf{{$pctFmt1}\\%} ({$pctTrim}\\%) Affirmative";
+                        $pct = $numRate;
                     }
+                    $pctFmt1 = number_format($pct, 1);
+                    $booleanDisplay = "\\textbf{{$pctFmt1}\\%} Affirmative";
                 } else {
                     $booleanDisplay = '---';
                 }
             }
             $booleanSection = <<<LATEX
-% [boolean_field: {$booleanFieldKey}]
 \\vspace{0.6em}
-\\noindent\\textbf{B. {$escBoolQuestion}} (\\texttt{{$escBoolKey}})\\\\[0.25em]
-\\noindent\\textbf{{$escBoolAggLabel} (\\texttt{boolean\\_rate}):} {$booleanDisplay}
+\\noindent\\textbf{B. {$escBoolQuestion}}\\\\[0.25em]
+\\noindent\\textbf{{$escBoolAggLabel}:} {$booleanDisplay}
 LATEX;
         } else {
-            $rawBool = $data[$booleanFieldKey] ?? $data['boolean_response'] ?? null;
+            $rawBool = $data[$booleanFieldKey] ?? $data['future_visit_willingness'] ?? $data['boolean_response'] ?? null;
             $isYes = ($rawBool === true || $rawBool === 1 || $rawBool === '1' || strtolower((string) $rawBool) === 'yes');
             $isNo = ($rawBool === false || $rawBool === 0 || $rawBool === '0' || strtolower((string) $rawBool) === 'no');
             $checkYes = self::check($isYes);
             $checkNo = self::check($isNo);
+            $rawReason = trim((string) ($data['future_visit_reason'] ?? $data['boolean_reason'] ?? ''));
+            $reasonDisplay = $rawReason !== ''
+                ? self::escape($rawReason)
+                : '\\underline{\\hspace{7.5cm}}';
 
             $booleanSection = <<<LATEX
-% [boolean_field: {$booleanFieldKey}]
 \\vspace{0.6em}
-\\noindent\\textbf{B. {$escBoolQuestion}} (\\texttt{{$escBoolKey}})\\\\[0.25em]
-\\noindent {$checkYes} \\textbf{Yes} \\qquad {$checkNo} \\textbf{No} \\qquad \\textbf{Reason(s) why:} \\underline{\\hspace{7.5cm}}
+\\noindent\\textbf{B. {$escBoolQuestion}}\\\\[0.25em]
+\\noindent {$checkYes} \\textbf{Yes} \\qquad {$checkNo} \\textbf{No} \\qquad \\textbf{Reason/s why:} {$reasonDisplay}
 LATEX;
         }
 
         // Qualitative Comments / Feedback Section
-        $escCommentKey = self::escape($commentFieldKey);
         if ($isAggregateMode) {
             if (!$cohortMet) {
-                $commentsContent = '\\textbf{COHORT SUPPRESSION ACTIVE:} Qualitative comments and feedback are strictly suppressed because the response count ($N = '
-                    . $totalResponses . '$) is below the minimum anonymity threshold ($M = ' . $minRequired . '$). No individual comments are disclosed.';
+                $commentsContent = '\\textbf{COHORT SUPPRESSION ACTIVE:} Qualitative comments and feedback are strictly withheld because only '
+                    . $totalResponses . ' response(s) have been recorded (minimum required: ' . $minRequired . '). No individual comments are disclosed.';
             } else {
                 $rawComments = $data['comments']
                     ?? $data['approved_comments']
@@ -2078,11 +2208,10 @@ LATEX;
         if ($isAggregateMode) {
             if ($cohortMet) {
                 $modeBanner = <<<LATEX
-% [cohort_met: true]
 \\noindent\\fcolorbox{boxborder}{boxbg}{%
 \\parbox{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}{%
 \\small
-\\textbf{AGGREGATE SUMMARY REPORT MODE (Threshold Met --- \\texttt{cohort\\_met = true})}\\\\[0.2em]
+\\textbf{AGGREGATE SUMMARY REPORT MODE (Minimum Threshold Met)}\\\\[0.2em]
 \\textbf{Provider / Personnel:} {$providerName} \\hfill \\textbf{Total Responses:} {$totalResponses} (Minimum Required: {$minRequired})\\\\
 \\textbf{Academic Year / Term:} {$academicYear} / {$academicTerm} \\hfill \\textbf{Report Date:} {$reportDate}
 }%
@@ -2091,12 +2220,11 @@ LATEX;
 LATEX;
             } else {
                 $modeBanner = <<<LATEX
-% [cohort_met: false]
 \\noindent\\fcolorbox{boxborder}{warnbg}{%
 \\parbox{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}{%
 \\small
-\\textbf{COHORT THRESHOLD SUPPRESSION NOTICE (\\texttt{cohort\\_met = false})}\\\\[0.2em]
-Total evaluation responses (\$N = {$totalResponses}\$) have not reached the minimum anonymity threshold of \$M = {$minRequired}\$ (\\texttt{MIN\\_COHORT\\_SIZE = 5}). To prevent student re-identification and preserve strict pseudonymity, all dimension averages, willingness/recommendation rates, and qualitative comments are suppressed.\\\\
+\\textbf{COHORT THRESHOLD SUPPRESSION NOTICE}\\\\[0.2em]
+Total evaluation responses ({$totalResponses}) have not reached the minimum anonymity threshold of {$minRequired} responses. To prevent student re-identification and preserve strict pseudonymity, all dimension averages, willingness-to-visit-again rates, and qualitative comments are suppressed.\\\\
 \\textbf{Provider / Personnel:} {$providerName} \\hfill \\textbf{Report Date:} {$reportDate}
 }%
 }
@@ -2104,14 +2232,13 @@ Total evaluation responses (\$N = {$totalResponses}\$) have not reached the mini
 LATEX;
             }
         } else {
-            $escEvalTypeKey = self::escape($evaluationTypeKey);
+            $escEvalTypeLabel = self::escape(self::humanizeFieldLabel($evaluationTypeKey));
             $modeBanner = <<<LATEX
-% [mode: form_template_preview] [evaluation_type: {$evaluationTypeKey}]
 \\noindent\\fcolorbox{boxborder}{boxbg}{%
 \\parbox{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}{%
 \\small
 \\textbf{Personnel / Counselor Evaluated:} {$providerName} \\hfill \\textbf{Date:} {$reportDate}\\\\
-\\textbf{Academic Year / Term:} {$academicYear} / {$academicTerm} \\hfill \\textbf{Evaluation Type:} \\texttt{{$escEvalTypeKey}}
+\\textbf{Academic Year / Term:} {$academicYear} / {$academicTerm} \\hfill \\textbf{Evaluation Type:} {$escEvalTypeLabel}
 }%
 }
 \\vspace{0.5em}
@@ -2171,7 +2298,7 @@ LATEX;
 \\noindent\\fcolorbox{boxborder}{boxbg}{%
 \\parbox{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}{%
 \\footnotesize
-\\textbf{PRIVACY AND PSEUDONYMITY NOTICE (RA 10173):} In accordance with the Data Privacy Act of 2012 (RA 10173), your evaluation is collected solely for guidance service quality improvement. This evaluation is strictly \\textbf{pseudonymous and cryptographically unlinked} from your student identity (no \\texttt{person\\_id}, \\texttt{student\\_id}, \\texttt{session\\_id}, \\texttt{episode\\_id}, or \\texttt{token\\_id} is stored in evaluation records). Individual responses are never disclosed to providers; aggregate summaries and moderated qualitative comments are released only when the minimum cohort threshold (\$n \\ge {$minRequired}\$) is met.
+\\textbf{PRIVACY AND PSEUDONYMITY NOTICE (RA 10173):} In accordance with the Data Privacy Act of 2012 (RA 10173), your evaluation is collected solely for guidance service quality improvement. This evaluation is strictly \\textbf{pseudonymous and cryptographically unlinked} from your student identity (no student ID, personal identifier, session record, or evaluation token is stored with submitted responses). Individual responses are never disclosed to providers; aggregate summaries and moderated qualitative comments are released only when the minimum cohort threshold (\$n \\ge {$minRequired}\$) is met.
 }%
 }
 
@@ -2194,8 +2321,7 @@ LATEX;
 {$booleanSection}
 
 \\vspace{0.6em}
-% [comment_field: {$commentFieldKey}]
-\\noindent\\textbf{C. Comments and Suggestions / Qualitative Feedback (\\texttt{{$escCommentKey}})}\\\\[0.3em]
+\\noindent\\textbf{C. Comments and Suggestions}\\\\[0.3em]
 \\noindent\\fcolorbox{boxborder}{white}{%
 \\parbox{\\dimexpr\\linewidth-2\\fboxsep-2\\fboxrule\\relax}{%
 \\small
@@ -2242,43 +2368,110 @@ LATEX;
         $id = self::escape((string) ($d['student_id'] ?? ''));
         $course = self::escape((string) ($d['course_year'] ?? ''));
         $refName = self::escape((string) ($d['referring_name'] ?? ''));
+        $refDesigRaw = (string) ($d['referring_designation'] ?? '');
+        $refDesigNorm = strtolower(trim($refDesigRaw));
         $refDept = self::escape((string) ($d['referring_department'] ?? ''));
+        $contact = self::escape((string) ($d['contact_number'] ?? ''));
         $date = self::escape((string) ($d['referral_date'] ?? ''));
-        $reasons = (array) ($d['reasons'] ?? []);
-        $narrative = self::escape((string) ($d['reasons_narrative'] ?? ''));
-        $prior = self::escape((string) ($d['prior_actions_taken'] ?? ''));
+        $time = self::escape((string) ($d['referral_time'] ?? ''));
+        $dateTime = trim($date . ($time !== '' ? ' ' . $time : ''));
 
-        $checkAcademic = self::check(in_array('academic_deficiency', $reasons, true));
-        $checkAbsences = self::check(in_array('frequent_absences_tardiness', $reasons, true));
-        $checkBehavior = self::check(in_array('behavioral_misconduct', $reasons, true));
-        $checkEmotional = self::check(in_array('emotional_distress', $reasons, true));
-        $checkFamily = self::check(in_array('family_problems', $reasons, true));
-        $checkPeer = self::check(in_array('peer_relationship_conflict', $reasons, true));
+        $reasons = array_map(static fn ($r): string => (string) $r, (array) ($d['reasons'] ?? []));
+        $othersSpec = self::escape((string) ($d['reasons_other_specify'] ?? ''));
+        $narrative = self::escape((string) ($d['reasons_narrative'] ?? 'None recorded.'));
+        $remarksRaw = trim((string) ($d['remarks'] ?? $d['prior_actions_taken'] ?? ''));
+        $remarks = self::escape($remarksRaw !== '' ? $remarksRaw : '---');
+
+        $dateReceived = self::escape((string) ($d['date_received'] ?? ''));
+        $respondedDate = self::escape((string) ($d['responded_date'] ?? ''));
+        $actionTakenRaw = trim((string) ($d['action_taken'] ?? ''));
+        $actionTaken = self::escape($actionTakenRaw !== '' ? $actionTakenRaw : '');
+
+        // Left column (10 official items from 5. F-OGC-GRE-GGR-005-00)
+        $cFamily = self::check(in_array('family_concerns', $reasons, true));
+        $cPoorSelf = self::check(in_array('poor_self_esteem', $reasons, true));
+        $cVictimBully = self::check(in_array('victim_of_bullying', $reasons, true));
+        $cVictimPhys = self::check(in_array('victim_of_physical_abuse', $reasons, true));
+        $cVictimSex = self::check(in_array('victim_of_sexual_abuse', $reasons, true));
+        $cAnger = self::check(in_array('anger_management_issues', $reasons, true));
+        $cOutOfTouch = self::check(in_array('out_of_touch_with_reality', $reasons, true));
+        $cFear = self::check(in_array('excessive_fear', $reasons, true));
+        $cAnxiety = self::check(in_array('excessive_anxiety', $reasons, true));
+        $cSadness = self::check(in_array('persistent_sadness', $reasons, true));
+
+        // Right column (10 official items from 5. F-OGC-GRE-GGR-005-00)
+        $cSelfHarm = self::check(in_array('self_harming_tendencies', $reasons, true));
+        $cAbsenteeism = self::check(in_array('absenteeism', $reasons, true));
+        $cTardiness = self::check(in_array('tardiness', $reasons, true));
+        $cInattentive = self::check(in_array('inattentiveness', $reasons, true));
+        $cDisruptive = self::check(in_array('disruptive_behaviors', $reasons, true));
+        $cBullying = self::check(in_array('bullying', $reasons, true));
+        $cFighting = self::check(in_array('fighting', $reasons, true));
+        $cStealing = self::check(in_array('stealing', $reasons, true));
+        $cCheating = self::check(in_array('cheating', $reasons, true));
+        $cExtreme = self::check(in_array('extreme_behavioral_changes', $reasons, true));
+
+        $cOthers = self::check(in_array('others', $reasons, true) || $othersSpec !== '');
+        $othersLine = $othersSpec !== '' ? $othersSpec : '\\underline{\\hspace{9cm}}';
+
+        // Referrer Designation checkboxes: Adviser, Teacher, Others
+        $isAdviser = str_contains($refDesigNorm, 'adviser');
+        $isTeacher = !$isAdviser && (str_contains($refDesigNorm, 'teacher') || str_contains($refDesigNorm, 'faculty'));
+        $isDesigOther = $refDesigRaw !== '' && !$isAdviser && !$isTeacher;
+        $cAdviser = self::check($isAdviser);
+        $cTeacher = self::check($isTeacher);
+        $cDesigOther = self::check($isDesigOther);
+        $desigOtherText = $isDesigOther ? ' (' . self::escape($refDesigRaw) . ')' : '';
 
         return <<<LATEX
-\\noindent\\textbf{A. Student Information}\\par\\vspace{0.3em}
+\\noindent\\begin{tabularx}{\\textwidth}{|l|X|l|X|}
+\\hline
+\\textbf{Department:} & {$refDept} & \\textbf{Date \\& Time:} & {$dateTime} \\\\ \\hline
+\\textbf{To:} & \\multicolumn{3}{l|}{The School Counselor/Personnel} \\\\ \\hline
+\\textbf{May I refer:} & {$name} & \\textbf{Student / MIS ID:} & {$id} \\\\ \\hline
+\\textbf{Course / Year / Grade \\& Section:} & \\multicolumn{3}{l|}{{$course}} \\\\ \\hline
+\\end{tabularx}\\par\\vspace{0.55em}
+
+\\noindent\\textbf{Reason For Referral:}\\par\\vspace{0.25em}
+\\noindent\\small
+\\begin{tabularx}{\\textwidth}{|X|X|}
+\\hline
+{$cFamily} Family concerns & {$cSelfHarm} Self-harming tendencies/behaviors \\\\
+{$cPoorSelf} Poor Self-esteem & {$cAbsenteeism} Absenteeism \\\\
+{$cVictimBully} Victim of bullying & {$cTardiness} Tardiness \\\\
+{$cVictimPhys} Victim of physical abuse & {$cInattentive} Inattentiveness \\\\
+{$cVictimSex} Victim of sexual abuse & {$cDisruptive} Disruptive behaviors inside the classroom \\\\
+{$cAnger} Anger management issues & {$cBullying} Bullying \\\\
+{$cOutOfTouch} Student seemed out of touch with reality (e.g., having bizarre thoughts or perceptions) & {$cFighting} Fighting \\\\
+{$cFear} Excessive fear & {$cStealing} Stealing \\\\
+{$cAnxiety} Excessive anxiety & {$cCheating} Cheating \\\\
+{$cSadness} Persistent sadness & {$cExtreme} Extreme behavioral changes \\\\ \\hline
+\\multicolumn{2}{|p{\\dimexpr\\textwidth-2\\tabcolsep-2\\arrayrulewidth\\relax}|}{{$cOthers} \\textbf{Others (Please specify):} {$othersLine}} \\\\ \\hline
+\\end{tabularx}\\normalsize\\par\\vspace{0.55em}
+
+\\noindent\\textbf{Description of Behavior / Incident Observed:} \\textit{\\footnotesize(Note: You may use an additional sheet of paper if the space is not enough. Please submit this form to the Guidance Center.)}\\par\\vspace{0.25em}
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$narrative}
+\\end{mdframed}\\par\\vspace{0.45em}
+
+\\noindent\\textbf{REMARKS:}\\par\\vspace{0.25em}
+\\begin{mdframed}[backgroundcolor=gray!2]
+{$remarks}
+\\end{mdframed}\\par\\vspace{0.6em}
+
+\\noindent\\begin{tabularx}{\\textwidth}{X l}
+\\textbf{Signature Over Printed Name:} {$refName} & \\textbf{Contact \\#:} {$contact} \\\\
+\\multicolumn{2}{l}{\\textbf{Designation:} {$cAdviser} Adviser \\enspace {$cTeacher} Teacher \\enspace {$cDesigOther} Others{$desigOtherText}} \\\\
+\\end{tabularx}\\par\\vspace{0.55em}
+
+\\noindent\\textbf{For School Counselors/Personnel use only}\\par\\vspace{0.2em}
 \\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Course \\& Year:} & {$course} & \\textbf{Referral Date:} & {$date} \\\\ \\hline
-\\textbf{Referred By:} & {$refName} & \\textbf{Department:} & {$refDept} \\\\ \\hline
-\\end{tabularx}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{B. Reasons for Referral}\\par\\vspace{0.3em}
-\\begin{tabular}{llll}
-{$checkAcademic} Academic Deficiency & {$checkAbsences} Absences/Tardiness & {$checkBehavior} Behavioral Misconduct \\\\
-{$checkEmotional} Emotional Distress & {$checkFamily} Family Problems & {$checkPeer} Peer Conflicts \\\\
-\\end{tabular}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{C. Observations \\& Reason Narrative}\\par\\vspace{0.3em}
-\\begin{mdframed}
-{$narrative}
-\\end{mdframed}\\par\\vspace{0.8em}
-
-\\noindent\\textbf{D. Actions Taken Prior to Referral}\\par\\vspace{0.3em}
-\\begin{mdframed}
-{$prior}
-\\end{mdframed}
+\\textbf{Date Received:} & {$dateReceived} & \\textbf{Responded Date:} & {$respondedDate} \\\\ \\hline
+\\end{tabularx}
+\\vspace{-0.4pt}\\noindent\\begin{tabularx}{\\textwidth}{|l|X|}
+\\textbf{Action Taken:} & {$actionTaken} \\\\ \\hline
+\\end{tabularx}
 LATEX;
     }
 
@@ -2288,20 +2481,23 @@ LATEX;
         $name = self::escape((string) ($d['student_name'] ?? ''));
         $id = self::escape((string) ($d['student_id'] ?? ''));
         $course = self::escape((string) ($d['course_year'] ?? ''));
+        $contact = self::escape((string) ($d['contact_number'] ?? $d['phone'] ?? ''));
         $date = self::escape((string) ($d['scheduled_date'] ?? ''));
         $time = self::escape((string) ($d['scheduled_time'] ?? ''));
         $counselor = self::escape((string) ($d['counselor_name'] ?? ''));
         $purpose = self::escape((string) ($d['purpose'] ?? ''));
+        $prefSched = self::escape((string) ($d['preferred_schedule'] ?? ''));
 
         return <<<LATEX
 \\noindent\\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Appointment No:} & {$num} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Course/Yr:} & {$course} \\\\ \\hline
-\\textbf{Scheduled Date:} & {$date} & \\textbf{Time:} & {$time} \\\\ \\hline
-\\textbf{Assigned Counselor:} & {$counselor} & \\textbf{Purpose:} & {$purpose} \\\\ \\hline
+\\textbf{Date:} & {$date} {$time} & \\textbf{Appointment No:} & {$num} \\\\ \\hline
+\\textbf{Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
+\\textbf{Grade/Course/YR. Level:} & {$course} & \\textbf{Contact Number:} & {$contact} \\\\ \\hline
+\\textbf{Reason:} & {$purpose} & \\textbf{Preferred Sched:} & {$prefSched} \\\\ \\hline
+\\textbf{Assigned Counselor:} & \\multicolumn{3}{l|}{{$counselor}} \\\\ \\hline
 \\end{tabularx}\\par\\vspace{1em}
-\\textit{Note: Please be at the Guidance Center 5 minutes before your scheduled appointment.}
+\\textbf{Note:} Please be informed that you will be scheduled 2 days prior to your appointment, except for emergencies.
 LATEX;
     }
 
@@ -2315,17 +2511,19 @@ LATEX;
         $time = self::escape((string) ($d['call_time'] ?? ''));
         $purpose = self::escape((string) ($d['purpose'] ?? ''));
         $counselor = self::escape((string) ($d['issuing_counselor_name'] ?? ''));
+        $note = self::escape((string) ($d['note'] ?? $d['delivery_notes'] ?? ''));
 
         return <<<LATEX
-\\noindent Please excuse the student named below to report to the Guidance Center:\\par\\vspace{0.5em}
+\\noindent\\textbf{to see the Guidance Counselor for the following purpose/reason:}\\par\\vspace{0.5em}
 \\begin{tabularx}{\\textwidth}{|l|X|l|X|}
 \\hline
-\\textbf{Call Slip No:} & {$num} & \\textbf{Student ID:} & {$id} \\\\ \\hline
-\\textbf{Student Name:} & {$name} & \\textbf{Course/Yr:} & {$course} \\\\ \\hline
-\\textbf{Date of Call:} & {$date} & \\textbf{Time:} & {$time} \\\\ \\hline
-\\textbf{Purpose:} & {$purpose} & \\textbf{Issuing Counselor:} & {$counselor} \\\\ \\hline
+\\textbf{Date:} & {$date} {$time} & \\textbf{Call Slip No:} & {$num} \\\\ \\hline
+\\textbf{Name:} & {$name} & \\textbf{Student ID:} & {$id} \\\\ \\hline
+\\textbf{Grade/Strand / Course/Yr. Level:} & \\multicolumn{3}{l|}{{$course}} \\\\ \\hline
+\\textbf{Purpose:} & {$purpose} & \\textbf{Guidance Personnel:} & {$counselor} \\\\ \\hline
+\\textbf{Note:} & \\multicolumn{3}{l|}{{$note}} \\\\ \\hline
 \\end{tabularx}\\par\\vspace{1em}
-\\textbf{Instructor/Teacher Acknowledgment Signature:} \\underline{\\hspace{6cm}}
+\\noindent\\hfill\\textbf{Guidance Personnel Signature:} \\underline{\\hspace{5.5cm}}
 LATEX;
     }
 
@@ -2410,9 +2608,73 @@ LATEX;
         $lines = [];
         foreach ($d as $key => $val) {
             if (is_scalar($val)) {
-                $lines[] = '\\textbf{' . self::escape((string) $key) . ':} ' . self::escape((string) $val) . ' \\\\';
+                $label = self::humanizeFieldLabel((string) $key);
+                $lines[] = '\\textbf{' . self::escape($label) . ':} ' . self::escape((string) $val) . ' \\\\';
             }
         }
         return implode("\n", $lines);
+    }
+
+    private static function humanizeFieldLabel(string $key): string
+    {
+        $normalized = strtolower(trim($key));
+        $map = [
+            'phq9_score' => 'PHQ-9 Score',
+            'gad7_score' => 'GAD-7 Score',
+            'risk_level' => 'Risk Level',
+            'suicide_risk' => 'Suicide Risk',
+            'self_harm_risk' => 'Self-Harm Risk',
+            'mood' => 'Mood',
+            'affect' => 'Affect',
+            'sleep_pattern' => 'Sleep Pattern',
+            'psychosocial_support_evaluation' => 'Psychosocial Support Evaluation',
+            'counseling_evaluation' => 'Counseling Evaluation',
+        ];
+
+        if (isset($map[$normalized])) {
+            return $map[$normalized];
+        }
+
+        // Preserve labels that already contain human formatting (spaces, mixed case, slashes).
+        if (str_contains($key, ' ') || str_contains($key, '/') || preg_match('/[A-Z]/', $key) === 1) {
+            return trim($key);
+        }
+
+        $words = preg_split('/[_-]+/', trim($key)) ?: [$key];
+        $formatted = [];
+        foreach ($words as $word) {
+            if ($word === '') {
+                continue;
+            }
+            $upper = strtoupper($word);
+            if (in_array($upper, ['ID', 'PHQ9', 'GAD7', 'OGC', 'BMI', 'BP'], true)) {
+                $formatted[] = match ($upper) {
+                    'PHQ9' => 'PHQ-9',
+                    'GAD7' => 'GAD-7',
+                    default => $upper,
+                };
+            } else {
+                $formatted[] = ucfirst(strtolower($word));
+            }
+        }
+
+        return implode(' ', $formatted);
+    }
+
+    private static function humanizeScreeningValue(string $key, string $value): string
+    {
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return '';
+        }
+
+        $normalizedKey = strtolower(trim($key));
+        if ($normalizedKey === 'risk_level' || str_ends_with($normalizedKey, '_risk')) {
+            if ($trimmed === strtolower($trimmed) && preg_match('/^[a-z0-9_-]+$/', $trimmed) === 1) {
+                return ucwords(str_replace(['_', '-'], ' ', $trimmed));
+            }
+        }
+
+        return $trimmed;
     }
 }

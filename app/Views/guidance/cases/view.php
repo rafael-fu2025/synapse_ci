@@ -573,47 +573,72 @@ $statusDotClass = match ($caseStatus) {
             <?php if ($canAuthorClinical): ?>
               <div class="collapse mb-3" id="close-with-ccf-panel">
                 <div class="ce-dispense-panel">
-                  <h6 class="fw-bold mb-1">Close Session &amp; Attach Counseling Contact Sheet (F-OGC-GCS-CCF-009-00)</h6>
+                  <h6 class="fw-bold mb-1">Close Session &amp; Attach Counseling Contact Form (F-OGC-GCS-CCF-009-00)</h6>
                   <p class="small text-muted mb-3">
-                    Attaches the controlled Counseling Contact Sheet directly to Session #<?= esc($activeSession['session_number']) ?>.
-                    Leave <em>Concerns Discussed</em> blank to automatically reuse your saved session notes without duplicate entry.
+                    Attaches the controlled Counseling Contact Form directly to Session #<?= esc($activeSession['session_number']) ?>.
+                    Leave <em>Presenting Concern/s</em> blank to automatically reuse your saved session notes without duplicate entry.
                   </p>
                   <form action="<?= site_url('/guidance/sessions/' . $activeSession['id'] . '/close') ?>" method="POST" data-background-submit>
                     <?= csrf_field() ?>
                     <input type="hidden" name="attach_contact_sheet" value="1">
                     <div class="row g-2 mb-2">
                       <div class="col-md-3">
-                        <label class="form-label" for="ccf-time-start-display">Time Start</label>
+                        <label class="form-label" for="ccf-time-start-display">Time Started</label>
                         <input id="ccf-time-start-display" type="text" class="form-control form-control-sm" data-timepicker data-target="#ccf-time-start" placeholder="hh:mm A" autocomplete="off">
-                        <input id="ccf-time-start" type="hidden" name="time_start" value="<?= esc(date('H:i', strtotime((string) $activeSession['started_at']))) ?>">
+                        <input id="ccf-time-start" type="hidden" name="time_started" value="<?= esc(date('H:i', strtotime((string) $activeSession['started_at']))) ?>">
                       </div>
                       <div class="col-md-3">
-                        <label class="form-label" for="ccf-time-end-display">Time End</label>
+                        <label class="form-label" for="ccf-time-end-display">Time Ended</label>
                         <input id="ccf-time-end-display" type="text" class="form-control form-control-sm" data-timepicker data-target="#ccf-time-end" placeholder="hh:mm A" autocomplete="off">
-                        <input id="ccf-time-end" type="hidden" name="time_end" value="<?= esc(date('H:i')) ?>">
+                        <input id="ccf-time-end" type="hidden" name="time_ended" value="<?= esc(date('H:i')) ?>">
                       </div>
-                      <div class="col-md-6">
-                        <label class="form-label" for="ccf-next-schedule">Next Schedule (Optional)</label>
-                        <input id="ccf-next-schedule" type="text" name="next_schedule" class="form-control form-control-sm" placeholder="YYYY-MM-DD HH:MM:SS">
+                      <div class="col-md-3">
+                        <label class="form-label" for="ccf-referral-source">Contact Source</label>
+                        <select id="ccf-referral-source" name="referral_source" class="form-select form-select-sm" required>
+                          <option value="walk_in">Walk in</option>
+                          <option value="counselor_initiated" selected>Counselor-initiated</option>
+                          <option value="referral">Referral</option>
+                          <option value="follow_up">Follow-up</option>
+                        </select>
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label" for="ccf-session-type">Type of Session</label>
+                        <select id="ccf-session-type" name="session_type" class="form-select form-select-sm" required>
+                          <option value="intake">Intake</option>
+                          <option value="follow_up">Follow-up</option>
+                          <option value="crisis">Crisis</option>
+                          <option value="individual" selected>Individual</option>
+                          <option value="group">Group</option>
+                        </select>
                       </div>
                     </div>
                     <div class="mb-2">
-                      <label class="form-label" for="ccf-concerns">Concerns Discussed (Optional — reuses saved note if blank)</label>
-                      <textarea id="ccf-concerns" name="concerns_discussed" rows="2" class="form-control form-control-sm" placeholder="Leave blank to import saved session note automatically"></textarea>
+                      <label class="form-label" for="ccf-concerns">Presenting Concern/s (Optional — reuses saved note if blank)</label>
+                      <textarea id="ccf-concerns" name="presenting_concerns" rows="2" class="form-control form-control-sm" placeholder="Leave blank to import saved session note automatically"></textarea>
                     </div>
                     <div class="row g-2 mb-2">
                       <div class="col-md-6">
-                        <label class="form-label" for="ccf-goals">Counseling Goals</label>
-                        <textarea id="ccf-goals" name="counseling_goals" rows="2" class="form-control form-control-sm" required placeholder="Session goals and objectives"></textarea>
+                        <label class="form-label" for="ccf-intervention">Intervention Plan</label>
+                        <textarea id="ccf-intervention" name="intervention_plan" rows="2" class="form-control form-control-sm" required placeholder="Counseling intervention and approach"></textarea>
                       </div>
                       <div class="col-md-6">
-                        <label class="form-label" for="ccf-interventions">Interventions &amp; Responses</label>
-                        <textarea id="ccf-interventions" name="interventions_and_responses" rows="2" class="form-control form-control-sm" required placeholder="Techniques applied and client response"></textarea>
+                        <label class="form-label" for="ccf-followup">Follow up Plan (Optional)</label>
+                        <textarea id="ccf-followup" name="follow_up_plan" rows="2" class="form-control form-control-sm" placeholder="Planned follow-up actions"></textarea>
                       </div>
                     </div>
-                    <div class="mb-2">
-                      <label class="form-label" for="ccf-homework">Homework &amp; Commitments (Optional)</label>
-                      <input id="ccf-homework" type="text" name="homework_and_commitments" class="form-control form-control-sm" placeholder="Agreed client follow-through">
+                    <div class="row g-2 mb-2 align-items-center">
+                      <div class="col-md-6">
+                        <label class="form-label" for="ccf-next-schedule">Schedule for Next Session (Optional)</label>
+                        <input id="ccf-next-schedule" type="text" name="next_session_schedule" class="form-control form-control-sm" placeholder="YYYY-MM-DD HH:MM:SS">
+                      </div>
+                      <div class="col-md-6 pt-md-4">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" name="privacy_consent_acknowledged" value="1" id="ccf-privacy-consent" checked required>
+                          <label class="form-check-label small" for="ccf-privacy-consent">
+                            RA 10173 Privacy Notice &amp; Consent acknowledged
+                          </label>
+                        </div>
+                      </div>
                     </div>
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pt-2">
                       <div class="form-check">

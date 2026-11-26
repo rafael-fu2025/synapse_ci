@@ -271,23 +271,25 @@ def _program_version(executable: str, label: str) -> tuple[str, int]:
     return first, int(match.group(1))
 
 
-def check_prerequisites() -> tuple[str, str]:
-    pandoc = _find_program(("pandoc",), "Pandoc")
+def check_prerequisites(*, require_pandoc: bool = True) -> tuple[str | None, str]:
+    pandoc: str | None = None
+    if require_pandoc:
+        pandoc = _find_program(("pandoc",), "Pandoc")
+        pandoc_version, pandoc_major = _program_version(pandoc, "Pandoc")
+        if pandoc_major not in SUPPORTED_PANDOC_MAJOR:
+            raise PublishError(
+                f"unsupported Pandoc major version {pandoc_major}; tested majors: {sorted(SUPPORTED_PANDOC_MAJOR)}"
+            )
+        print(f"Pandoc: {pandoc_version} [{pandoc}]")
     libreoffice = _find_program(("libreoffice", "soffice"), "LibreOffice")
-    pandoc_version, pandoc_major = _program_version(pandoc, "Pandoc")
     libreoffice_version, libreoffice_major = _program_version(
         libreoffice, "LibreOffice"
     )
-    if pandoc_major not in SUPPORTED_PANDOC_MAJOR:
-        raise PublishError(
-            f"unsupported Pandoc major version {pandoc_major}; tested majors: {sorted(SUPPORTED_PANDOC_MAJOR)}"
-        )
     if libreoffice_major not in SUPPORTED_LIBREOFFICE_MAJOR:
         raise PublishError(
             "unsupported LibreOffice major version "
             f"{libreoffice_major}; tested majors: {sorted(SUPPORTED_LIBREOFFICE_MAJOR)}"
         )
-    print(f"Pandoc: {pandoc_version} [{pandoc}]")
     print(f"LibreOffice: {libreoffice_version} [{libreoffice}]")
     return pandoc, libreoffice
 
@@ -514,7 +516,9 @@ def _publish_transaction(root: Path, payloads: dict[Path, bytes]) -> None:
         raise
 
 
-def publish(root: Path, results: Path | None = None) -> None:
+def publish(root: Path, results: Path | None = None, *, layout: str = "template") -> None:
+    if layout not in ("template", "pandoc"):
+        raise PublishError(f"unsupported publication layout: {layout!r}")
     root = secure_io.absolute_lexical(root)
     try:
         secure_io.verify_absolute_directory(root)
@@ -522,7 +526,7 @@ def publish(root: Path, results: Path | None = None) -> None:
         raise PublishError(f"repository root is unsafe: {exc}") from exc
     suite, outputs, archive_path = _load_suite(root)
     _protect_archive((outputs["docx"], outputs["pdf"]), archive_path, root)
-    pandoc, libreoffice = check_prerequisites()
+    pandoc, libreoffice = check_prerequisites(require_pandoc=(layout == "pandoc"))
     _check_markdown_current(root, results)
     markdown = outputs["markdown"]
     try:
@@ -573,25 +577,38 @@ def publish(root: Path, results: Path | None = None) -> None:
         staged_pdf = stage / outputs["pdf"].name
         environment = _safe_subprocess_environment(home)
         user_installation = (home / "libreoffice-profile").as_uri()
-        _run(
-            [
-                pandoc,
-                str(staged_markdown),
-                "--from=gfm-raw_html-raw_attribute",
-                "--to=docx",
-                "--standalone",
-                "--sandbox",
-                "--resource-path",
-                str(resource),
-                "--metadata",
-                f"title={title}",
-                "--output",
-                str(staged_docx),
-            ],
-            "Pandoc Markdown-to-DOCX conversion",
-            cwd=resource,
-            environment=environment,
-        )
+        if layout == "template":
+            tools_dir = str(Path(__file__).resolve().parent)
+            if tools_dir not in sys.path:
+                sys.path.insert(0, tools_dir)
+            import docx_template
+            import validate
+
+            suite_data, report = validate.validate_project(root, results)
+            if not report.ok or suite_data is None:
+                raise PublishError("black-box suite failed validation before template DOCX build")
+            docx_template.build_template_docx(suite_data, staged_docx, title=title)
+        else:
+            assert pandoc is not None
+            _run(
+                [
+                    pandoc,
+                    str(staged_markdown),
+                    "--from=gfm-raw_html-raw_attribute",
+                    "--to=docx",
+                    "--standalone",
+                    "--sandbox",
+                    "--resource-path",
+                    str(resource),
+                    "--metadata",
+                    f"title={title}",
+                    "--output",
+                    str(staged_docx),
+                ],
+                "Pandoc Markdown-to-DOCX conversion",
+                cwd=resource,
+                environment=environment,
+            )
         docx_payload = _validate_docx(staged_docx, stage)
         _run(
             [
@@ -635,6 +652,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=_default_root(), help="repository root")
     parser.add_argument("--results", type=Path, help="sanitized result overlay used by build.py")
     parser.add_argument(
+        "--layout",
+        choices=("template", "pandoc"),
+        default="template",
+        help="DOCX generation layout: template (default, matches sample DOCX with narrow margins) or pandoc",
+    )
+    parser.add_argument(
         "--check-prerequisites",
         action="store_true",
         help="check supported Pandoc and LibreOffice versions and do not convert",
@@ -645,7 +668,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             check_prerequisites()
             print("Supported publication prerequisites are available.")
         else:
-            publish(args.root, args.results)
+            publish(args.root, args.results, layout=args.layout)
     except PublishError as exc:
         print(f"Publication failed: {exc}", file=sys.stderr)
         return 1

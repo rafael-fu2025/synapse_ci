@@ -346,12 +346,18 @@ __pycache__/
 !/tests/browser/clinic-e2e-live.test.cjs
 !/tests/browser/guidance-e2e-live.test.cjs
 # Versioned black-box specifications and sanitized result summaries. Raw evidence
-# remains under ignored writable/blackbox/runs/.
+# and regenerable root DOCX/PDF exports remain local-only.
 !/papers/
 /papers/*
 !/papers/blackbox/
 !/papers/blackbox/**
+/papers/blackbox/evidence/
+/papers/blackbox/SYNAPSE-BlackBox-Testing.docx
+/papers/blackbox/SYNAPSE-BlackBox-Testing.pdf
+/papers/blackbox/SYNAPSE-BlackBox-Testing-Defense.docx
+/papers/blackbox/SYNAPSE-BlackBox-Testing-Defense.pdf
 /fwdforguidancecumulative/
+/scratch/
 
 #-------------------------
 # Composer

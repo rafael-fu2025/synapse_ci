@@ -5,6 +5,9 @@
 - Legacy IDs: None
 - Changed by: `73b8a11`, `39f7339`
 - Requirement: Each immutable API runtime owns one base URL, credential binding, access token, query client, connection owner, and monotonic session version; retiring it aborts requests and makes all captured callbacks fail as session-changed.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Entire React Native API layer.
 - Route/API: All mobile APIs.
 - Actor/grants: Any mobile account; two test server profiles/accounts.
@@ -27,6 +30,9 @@
 - Legacy IDs: None
 - Changed by: `73b8a11`, `39f7339`
 - Requirement: In an approved LAN test build only, server switching must durably mark the new profile signed-out/pending, retire old runtime/cache/navigation, queue bounded old-origin session/push cleanup without refresh, clear old credentials/scope, then mount new runtime; rollout of test profiles remains policy-gated.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Hidden sign-in/settings server selector.
 - Route/API: Old `POST /api/v1/auth/logout`, push revoke, then selected server APIs.
 - Actor/grants: Test operator using LAN build.
@@ -49,6 +55,9 @@
 - Legacy IDs: None
 - Changed by: `c179273`
 - Requirement: Android 13+ first launch may request notification permission once while an active caller exists, independent of authentication/Firebase/LAN capability; a check-only race must not consume onboarding, background/unmount before native request must not mark attempted, and later automatic foreground checks never reprompt.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Android native permission lifecycle.
 - Route/API: Native permission API; no server route required.
 - Actor/grants: Fresh app installation, signed out or signed in.
@@ -71,6 +80,9 @@
 - Legacy IDs: None
 - Changed by: `73b8a11`, `c179273`
 - Requirement: A LAN client must authenticate and verify scope version, deployment ID, and `lan-test` audience before submitting any routable device token; unsupported/failed capability check suspends setup without unsafe legacy fallback. Push rollout remains gated.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Phone notification setup.
 - Route/API: `GET /api/v1/push/capabilities`; `POST /api/v1/push/token`.
 - Actor/grants: Signed-in LAN-test account.
@@ -93,6 +105,9 @@
 - Legacy IDs: None
 - Changed by: `73b8a11`, `c179273`
 - Requirement: Scoped LAN registration must atomically bind exact tenant/user, deployment, stable installation, bearer-derived API family, audience, registration UUID, and capability; replacement retires the prior activation and context reuse conflicts. Push rollout remains gated.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Push registry/server and mobile secure scope.
 - Route/API: `POST /api/v1/push/token`.
 - Actor/grants: Signed-in LAN-test user.
@@ -115,6 +130,9 @@
 - Legacy IDs: None
 - Changed by: `73b8a11`, `c179273`
 - Requirement: Scoped revoke must match current tenant/user/token/audience/registration/API family; obsolete revoke is no-op, legacy revoke cannot strip scoped activation, logout revokes the family, and late registration after owner retirement is withdrawn from the old origin. Push rollout remains gated.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Sign-out, account/server switch, token refresh cleanup.
 - Route/API: `DELETE /api/v1/push/token`; `POST /api/v1/auth/logout`.
 - Actor/grants: Signed-in user with scoped activation.
@@ -137,6 +155,9 @@
 - Legacy IDs: None
 - Changed by: `c179273`, `a06b70b`
 - Requirement: Foreground/background/cold-start push must parse only supported type, positive numeric ID, valid Team unit, and current push/connection owner; navigation rechecks entitlement and invalid/revoked targets are consumed once with in-app fallback.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Native push router/banner and navigation gate.
 - Route/API: Push payload handling followed by relevant API detail.
 - Actor/grants: Current account with personal/Team targets; second account/server.
@@ -159,6 +180,9 @@
 - Legacy IDs: None
 - Changed by: `e5b7eba`, `a06b70b`, `c179273`
 - Requirement: Core screens, fixed tab/header controls, forms, dialogs, and chat composer must remain reachable above status/navigation/gesture bars and keyboard across supported Android sizes/orientations; motion respects reduced-motion preference without changing state semantics.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: React Native layout/navigation/transitions.
 - Route/API: Client UI; ordinary APIs for loaded screens.
 - Actor/grants: Personal-only and Team-entitled accounts.

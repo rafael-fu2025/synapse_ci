@@ -318,7 +318,8 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
             [
                 'person_id'           => $this->studentPersonId,
                 'presenting_concerns' => 'Academic stress and anxiety regarding final capstone project.',
-                'intervention_plan'   => 'Stress reduction coaching and bi-weekly check-ins.',
+                'concern_severity'    => 'serious',
+                'hoped_changes'       => 'Better time management and calmer exam preparation.',
             ],
             1,
             $actor
@@ -337,10 +338,10 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         $contactDraft = $this->clinicalService->createClinicalDraft(
             'F-OGC-GPS-PCF-008-00', // Using form code
             [
-                'person_id'          => $this->studentPersonId,
-                'client_state'       => 'Calm and reflective.',
-                'interventions_used' => 'Cognitive reframing.',
-                'client_response'    => 'Expressed positive outlook.',
+                'person_id'           => $this->studentPersonId,
+                'presenting_concerns' => 'Academic workload stress and mild sleep disruption.',
+                'intervention_plan'   => 'Cognitive reframing and sleep routine coaching.',
+                'follow_up_plan'      => 'Check in after one week.',
             ],
             1,
             $actor
@@ -353,10 +354,10 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         $contactSheetDraft = $this->clinicalService->createClinicalDraft(
             'counseling_contact_sheet',
             [
-                'person_id'                   => $this->studentPersonId,
-                'concerns_discussed'          => 'Career counseling and goal setting.',
-                'counseling_goals'            => 'Clarify career direction.',
-                'interventions_and_responses' => 'Discussed strengths inventory.',
+                'person_id'           => $this->studentPersonId,
+                'presenting_concerns' => 'Career counseling and goal setting.',
+                'intervention_plan'   => 'Discussed strengths inventory and exploratory goals.',
+                'follow_up_plan'      => 'Review career exploration worksheet next session.',
             ],
             1,
             $actor
@@ -522,17 +523,18 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         $licActor = ['id' => $this->licensedCounselorUserId, 'tenant_id' => 1];
 
         $secretConcerns = 'CONFIDENTIAL_PRESENTING_CONCERN_XYZ_987';
-        $secretAssessment = 'CONFIDENTIAL_COUNSELOR_ASSESSMENT_ABC_654';
-        $secretPlan = 'CONFIDENTIAL_INTERVENTION_PLAN_MNO_321';
+        $secretCause = 'CONFIDENTIAL_PERCEIVED_CAUSE_ABC_654';
+        $secretHopedChanges = 'CONFIDENTIAL_HOPED_CHANGES_MNO_321';
 
         // 1. Create draft with confidential clinical text
         $draft = $this->clinicalService->createClinicalDraft(
             GuidanceClinicalFormService::FORM_PSYCHOSOCIAL_INTERVIEW,
             [
-                'person_id'            => $this->studentPersonId,
-                'presenting_concerns'  => $secretConcerns,
-                'counselor_assessment' => $secretAssessment,
-                'intervention_plan'    => $secretPlan,
+                'person_id'           => $this->studentPersonId,
+                'presenting_concerns' => $secretConcerns,
+                'concern_severity'    => 'serious',
+                'perceived_cause'     => $secretCause,
+                'hoped_changes'       => $secretHopedChanges,
             ],
             1,
             $licActor
@@ -548,8 +550,8 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         foreach ($rawDraftRow as $col => $val) {
             if (is_string($val)) {
                 $this->assertStringNotContainsString($secretConcerns, $val, "Draft column {$col} must not contain plaintext.");
-                $this->assertStringNotContainsString($secretAssessment, $val, "Draft column {$col} must not contain plaintext.");
-                $this->assertStringNotContainsString($secretPlan, $val, "Draft column {$col} must not contain plaintext.");
+                $this->assertStringNotContainsString($secretCause, $val, "Draft column {$col} must not contain plaintext.");
+                $this->assertStringNotContainsString($secretHopedChanges, $val, "Draft column {$col} must not contain plaintext.");
             }
         }
 
@@ -561,8 +563,8 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         foreach ($rawInstanceRow as $col => $val) {
             if (is_string($val)) {
                 $this->assertStringNotContainsString($secretConcerns, $val, "Instance column {$col} must not contain plaintext.");
-                $this->assertStringNotContainsString($secretAssessment, $val, "Instance column {$col} must not contain plaintext.");
-                $this->assertStringNotContainsString($secretPlan, $val, "Instance column {$col} must not contain plaintext.");
+                $this->assertStringNotContainsString($secretCause, $val, "Instance column {$col} must not contain plaintext.");
+                $this->assertStringNotContainsString($secretHopedChanges, $val, "Instance column {$col} must not contain plaintext.");
             }
         }
 
@@ -582,16 +584,16 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         foreach ($rawRevRow as $col => $val) {
             if (is_string($val)) {
                 $this->assertStringNotContainsString($secretConcerns, $val, "Revision column {$col} must not contain plaintext.");
-                $this->assertStringNotContainsString($secretAssessment, $val, "Revision column {$col} must not contain plaintext.");
-                $this->assertStringNotContainsString($secretPlan, $val, "Revision column {$col} must not contain plaintext.");
+                $this->assertStringNotContainsString($secretCause, $val, "Revision column {$col} must not contain plaintext.");
+                $this->assertStringNotContainsString($secretHopedChanges, $val, "Revision column {$col} must not contain plaintext.");
             }
         }
 
         // 3. Verify that authorized service decryption retrieves the exact plaintext
         $finalized = $this->clinicalService->getFinalizedClinicalForm($instanceId, 1, 1, $licActor);
         $this->assertSame($secretConcerns, $finalized['data']['presenting_concerns']);
-        $this->assertSame($secretAssessment, $finalized['data']['counselor_assessment']);
-        $this->assertSame($secretPlan, $finalized['data']['intervention_plan']);
+        $this->assertSame($secretCause, $finalized['data']['perceived_cause']);
+        $this->assertSame($secretHopedChanges, $finalized['data']['hoped_changes']);
     }
 
     public function testAssociateWorkflowSubmitCoSignAndSupervisorFinalization(): void
@@ -670,8 +672,9 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         $draft = $this->clinicalService->createClinicalDraft(
             GuidanceClinicalFormService::FORM_PSYCHOSOCIAL_CONTACT,
             [
-                'person_id'    => $this->studentPersonId,
-                'client_state' => 'Relaxed and responsive.',
+                'person_id'           => $this->studentPersonId,
+                'presenting_concerns' => 'Relaxed and responsive; discussing exam study pacing.',
+                'intervention_plan'   => 'Active listening and coping plan review.',
             ],
             1,
             $licActor
@@ -694,7 +697,7 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
 
         // Verify finalized data is readable
         $finalizedBundle = $this->clinicalService->getFinalizedClinicalForm($instanceId, 1, 1, $licActor);
-        $this->assertSame('Relaxed and responsive.', $finalizedBundle['data']['client_state']);
+        $this->assertSame('Relaxed and responsive; discussing exam study pacing.', $finalizedBundle['data']['presenting_concerns']);
     }
 
     public function testClinicalHistoryForCaseMergesControlledFormsAndLegacyNotes(): void
@@ -761,9 +764,9 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         $contactSheet = $this->clinicalService->createClinicalDraft(
             GuidanceClinicalFormService::FORM_COUNSELING_CONTACT,
             [
-                'person_id'          => $this->studentPersonId,
-                'case_id'            => $caseId,
-                'concerns_discussed' => 'Follow up on test anxiety coping mechanisms.',
+                'person_id'           => $this->studentPersonId,
+                'case_id'             => $caseId,
+                'presenting_concerns' => 'Follow up on test anxiety coping mechanisms.',
             ],
             1,
             $licActor
@@ -823,11 +826,11 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
             'created_at'         => date('Y-m-d H:i:s'),
         ]);
 
-        // Attach contact sheet to session without providing concerns_discussed
+        // Attach contact sheet to session without providing presenting_concerns
         $result = $this->clinicalService->attachContactSheetToSession(
             $sessionId,
             [
-                'counseling_goals' => 'Establish weekly schedule planner.',
+                'intervention_plan' => 'Establish weekly schedule planner.',
             ],
             1,
             $licActor
@@ -845,7 +848,7 @@ final class GuidanceClinicalFormServiceTest extends FreshDatabaseTestCase
         $this->assertSame($this->studentPersonId, (int) $contactSheet['person_id']);
 
         // 3. Pre-existing note was automatically populated without duplicate data entry
-        $this->assertStringContainsString('Pre-existing session notes about time management.', $contactSheet['data']['concerns_discussed']);
+        $this->assertStringContainsString('Pre-existing session notes about time management.', $contactSheet['data']['presenting_concerns']);
     }
 
     public function testInvalidClinicalFormKeyThrowsException(): void

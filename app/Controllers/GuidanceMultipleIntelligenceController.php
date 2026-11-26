@@ -897,6 +897,10 @@ final class GuidanceMultipleIntelligenceController extends BaseController
                 ->setJSON(['success' => false, 'message' => $message]);
         }
 
+        if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+            return \App\Services\ErrorPageRenderer::htmlResponse($this->response, 404, $message);
+        }
+
         return $this->response->setStatusCode(404)
             ->setHeader('Cache-Control', 'private, no-store')
             ->setBody(esc($message));

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filters;
 
+use App\Services\ErrorPageRenderer;
 use App\Services\LoginRateLimiter;
 use CodeIgniter\Filters\FilterInterface;
 use CodeIgniter\HTTP\IncomingRequest;
@@ -48,11 +49,13 @@ final class LoginThrottleFilter implements FilterInterface
             return $response->setJSON(['success' => false, 'message' => $message,
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
         }
-        return $response->setContentType('text/html')->setBody(
-            '<!doctype html><html lang="en"><meta charset="utf-8"><title>Sign-in unavailable</title>' .
-            '<main><h1>' . ($status === 429 ? 'Too many sign-in attempts' : 'Sign-in unavailable') . '</h1>' .
-            '<p>' . esc($message) . '</p><a href="' . esc(site_url('/auth/login'), 'attr') . '">Return to sign in</a></main></html>'
-        );
+        return ErrorPageRenderer::htmlResponse($response, $status, $message, [
+            'title'        => $status === 429 ? 'Too many sign-in attempts' : 'Sign-in unavailable',
+            'heading'      => $status === 429 ? 'Too many sign-in attempts' : 'Sign-in unavailable',
+            'retryAfter'   => max(1, $retryAfter),
+            'primaryHref'  => site_url('/auth/login'),
+            'primaryLabel' => 'Return to sign in',
+        ]);
     }
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)

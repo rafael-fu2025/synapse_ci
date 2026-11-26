@@ -275,7 +275,7 @@ final class GuidanceTranscriptEnhancementsTest extends FreshDatabaseTestCase
         self::assertFalse($directory[$this->licensedUserId]['is_associate']);
     }
 
-    public function testClinicalPrefillUsesRealMisPhoneProgramAndAge(): void
+    public function testClinicalPrefillUsesRealMisAndProgram(): void
     {
         (new GuidanceFormDefinitionService())->syncManifestToDatabase($this->tenantId);
 
@@ -290,9 +290,8 @@ final class GuidanceTranscriptEnhancementsTest extends FreshDatabaseTestCase
         $data = $instance['data'] ?? [];
         self::assertSame($this->studentMisId, $data['student_id']);
         self::assertSame('BS Psychology - Year 3', $data['course_year']);
-        self::assertSame('09171234567', $data['demographics']['contact']);
-        $expectedAge = (new \DateTimeImmutable('2004-05-10'))->diff(new \DateTimeImmutable('today'))->y;
-        self::assertSame($expectedAge, $data['demographics']['age']);
+        self::assertArrayNotHasKey('demographics', $data);
+        self::assertArrayNotHasKey('mental_health_screening', $data);
     }
 
     public function testCumulativeRecordAndSurveyStaffInterviewAttribution(): void

@@ -10,8 +10,23 @@ $routes->post('auth/login', 'AuthController::attemptLogin', ['filter' => ['web_c
 $routes->post('auth/logout', 'AuthController::logout', ['filter' => 'web_csrf']);
 $routes->get('auth/logout/confirm', 'AuthController::confirmLogout');
 $routes->get('auth/logout', static function () {
-    return service('response')->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Use the Sign Out confirmation to end your session.');
+    return \App\Services\ErrorPageRenderer::htmlResponse(
+        service('response')->setHeader('Allow', 'POST'),
+        405,
+        'Use the Sign Out confirmation to end your session.',
+        [
+            'heading'        => 'Use Sign Out confirmation',
+            'primaryHref'    => site_url('auth/logout/confirm'),
+            'primaryLabel'   => 'Open Sign Out confirmation',
+            'secondaryHref'  => site_url('/'),
+            'secondaryLabel' => 'Return to portal',
+        ]
+    );
 });
+$routes->get('privacy-policy', 'AuthController::privacyPolicy');
+
+// Public non-PII controlled document verification
+$routes->get('guidance/verify/(:segment)', 'GuidanceFormsController::verify/$1');
 
 // Managed login carousel artwork. The files live outside the web root in the
 // private store, so this controller is the only way to publish them.
@@ -358,7 +373,11 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('guidance/cases/choose-for-ticket/(:num)', 'GuidanceController::chooseSessionForTicket/$1');
         $routes->post('guidance/cases/start-for-ticket/(:num)', 'GuidanceController::startForTicket/$1');
         $routes->get('guidance/cases/start-for-ticket/(:num)', static function () {
-            return service('response')->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Method not allowed.');
+            return \App\Services\ErrorPageRenderer::htmlResponse(
+                service('response')->setHeader('Allow', 'POST'),
+                405,
+                'Method not allowed.'
+            );
         });
         $routes->get('guidance/sessions/(:num)/read', 'GuidanceController::readSessionNote/$1');
         $routes->post('guidance/sessions/(:num)/notes', 'GuidanceController::saveSessionNotes/$1');
@@ -476,9 +495,6 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
     $routes->get('portal/evaluations/redeem/(:segment)', 'GuidanceEvaluationController::redeem/$1');
     $routes->post('portal/evaluations/submit', 'GuidanceEvaluationController::submit');
 
-    // Public non-PII controlled document verification
-    $routes->get('guidance/verify/(:segment)', 'GuidanceFormsController::verify/$1');
-
     foreach (['clinic', 'guidance'] as $unit) {
         $routes->group($unit . '/referrals', ['filter' => 'portal_access:' . $unit], static function (RouteCollection $routes) use ($unit): void {
             $routes->get('', 'ReferralController::index/' . $unit);
@@ -519,7 +535,11 @@ $routes->group('', ['filter' => ['auth', 'web_csrf', 'portal_host', 'web_access'
         $routes->get('clinic/encounters/(:num)/certificate', 'ClinicController::encounterCertificate/$1');
         $routes->post('clinic/encounters/start-for-ticket/(:num)', 'ClinicController::startForTicket/$1', ['filter' => 'inventory_csrf']);
         $routes->get('clinic/encounters/start-for-ticket/(:num)', static function () {
-            return service('response')->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Method not allowed.');
+            return \App\Services\ErrorPageRenderer::htmlResponse(
+                service('response')->setHeader('Allow', 'POST'),
+                405,
+                'Method not allowed.'
+            );
         });
         $routes->post('clinic/encounters/start-direct/(:num)', 'ClinicController::startDirect/$1');
 

@@ -96,6 +96,13 @@ final class MisSyncController extends BaseController
 
     private function methodNotAllowed(string $method)
     {
+        if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+            return \App\Services\ErrorPageRenderer::htmlResponse(
+                $this->response->setHeader('Allow', $method),
+                405,
+                'Method not allowed.'
+            );
+        }
         return $this->response->setStatusCode(405)->setHeader('Allow', $method)
             ->setHeader('Cache-Control', 'private, no-store')->setBody('Method not allowed.');
     }
@@ -122,6 +129,9 @@ final class MisSyncController extends BaseController
             if ($this->json()) {
                 return $this->response->setJSON(['success' => false, 'message' => $message,
                     'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            }
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $message);
             }
             return $this->response->setContentType('text/plain')->setBody($message);
         }

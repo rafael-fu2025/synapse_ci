@@ -7,6 +7,9 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
 - Requirement: Authenticated identified student dashboard may return only own noncancelled Guidance appointments, noncancelled call slips, active MI assignments, and unexpired HMAC-eligible evaluation token metadata; it must exclude clinical notes, safety/triage, forms, and raw evaluation token.
+- Role: `student`
+- Module: Personal Portal & Self-Service
+- Use Cases: `UC-PT-02`, `UC-PT-07`
 - Surface: Guidance Mobile API V1 (no native UI yet).
 - Route/API: `GET /api/v1/guidance/dashboard`.
 - Actor/grants: Active bearer identity linked to a person; student-only eligibility is unresolved under CD-006.
@@ -29,6 +32,9 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
 - Requirement: A student may acknowledge only an own tenant-scoped call slip through the allowed mobile action; server resolves live actor, records `acknowledged` via the domain service, and returns only mobile-safe slip fields.
+- Role: `student`
+- Module: Personal Portal & Self-Service
+- Use Cases: `UC-PT-04`
 - Surface: Guidance Mobile API V1.
 - Route/API: `POST /api/v1/guidance/call-slips/{id}/acknowledge`.
 - Actor/grants: Active bearer student who owns the slip.
@@ -51,6 +57,9 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
 - Requirement: Student self-referral is retired; the V1 API must not expose a route or controller action that creates `self` intake referrals.
+- Role: `employee`
+- Module: Personal Portal & Self-Service
+- Use Cases: `UC-PT-08`
 - Surface: Guidance Mobile API V1 (no native UI).
 - Route/API: legacy `POST /api/v1/guidance/self-referral` (retired).
 - Actor/grants: Student, employee, counselor, and superadmin bearer variants.
@@ -73,6 +82,9 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
 - Requirement: Student may list only own assignments, save own item-score drafts, and—only when reproduction gate is enabled—finalize all 80 scores 0–4 with student capacity and explicit attestation; own results include immutable score/snapshot metadata without counselor-only data.
+- Role: `student`
+- Module: Personal Portal & Self-Service
+- Use Cases: `UC-PT-05`
 - Surface: Guidance Mobile API V1.
 - Route/API: `GET /api/v1/guidance/mi`; `POST /mi/{assignment}/draft`; `POST /mi/{assignment}/finalize`; `GET /mi/results/{submission}`.
 - Actor/grants: Active identified student owning assignment.
@@ -95,6 +107,9 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
 - Requirement: An identified student may submit a service evaluation only with an own eligible issued/unexpired raw redemption token and valid form payload; successful redemption is single-use and response exposes only evaluation ID/type/form/date.
+- Role: `student`
+- Module: Personal Portal & Self-Service
+- Use Cases: `UC-PT-06`
 - Surface: Guidance Mobile API V1.
 - Route/API: `POST /api/v1/guidance/evaluations/submit`.
 - Actor/grants: Active identified student eligible for the evaluation.
@@ -117,6 +132,9 @@ All cases are conditional because native Guidance UI is not yet part of the mobi
 - Legacy IDs: None
 - Changed by: `b868a49`, `884b9f0`
 - Requirement: Clinical authoring, clinical co-sign, safety triage/escalation, and case transfer/reassignment have no mobile authority; all methods/paths under explicit mobile boundaries and blocked `action` payloads must return `403` even for privileged staff bearers.
+- Role: `student`
+- Module: Mobile Application & Platform
+- Use Cases: `UC-PT-07`
 - Surface: Guidance Mobile API boundary.
 - Route/API: `/api/v1/guidance/clinical/*`; `/safety/*`; `/cosign/*`; `/cases` and `/cases/*`; allowed endpoints carrying blocked `action`.
 - Actor/grants: Student, counselor, supervisor/admin, superadmin bearer variants.

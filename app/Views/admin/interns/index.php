@@ -19,23 +19,15 @@ $search = (string) ($search ?? '');
            data-endpoint="<?= esc($baseUrl) ?>"
            data-refresh-owner="admin.interns"
            data-refresh-url="<?= esc((string) current_url(true), 'attr') ?>"
-           aria-labelledby="admin-interns-heading">
+           aria-label="Student Interns &amp; Supervision">
 
     <div class="adm-band">
-      <div class="adm-intern-head">
-        <div>
-          <h2 class="adm-intro-title" id="admin-interns-heading">Student Intern Placements &amp; Supervision</h2>
-          <?php if (($actor['role'] ?? '') === 'superadmin'): ?>
-            <p class="adm-intro-desc">Manage time-bounded Clinic, Guidance, and Facilities (BMG) student intern placements with mandatory staff supervision, automatic expiry, and RA 10173 self-access protection.</p>
-          <?php else: ?>
-            <p class="adm-intro-desc">Assign and monitor active student interns for your unit. Placements automatically activate at the scheduled start time, revert cleanly on expiry or revocation, and preserve the student's personal health portal identity.</p>
-          <?php endif; ?>
-        </div>
-        <div class="adm-intern-head-cta">
-          <a href="<?= esc($baseUrl . '/create') ?>" class="btn btn-primary adm-btn" data-app-modal-open>
-            <i class="bi bi-mortarboard" aria-hidden="true"></i> Assign Student Intern
-          </a>
-        </div>
+      <div class="mb-3">
+        <?php if (($actor['role'] ?? '') === 'superadmin'): ?>
+          <p class="adm-intro-desc mb-0">Manage time-bounded Clinic, Guidance, and Facilities (BMG) student intern placements with mandatory staff supervision, automatic expiry, and RA 10173 self-access protection.</p>
+        <?php else: ?>
+          <p class="adm-intro-desc mb-0">Assign and monitor active student interns for your unit. Placements automatically activate at the scheduled start time, revert cleanly on expiry or revocation, and preserve the student's personal health portal identity.</p>
+        <?php endif; ?>
       </div>
 
       <div class="adm-intern-kpis" aria-label="Placement status summary">

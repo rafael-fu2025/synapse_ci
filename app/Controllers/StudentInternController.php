@@ -157,6 +157,9 @@ final class StudentInternController extends BaseController
                     'csrf'    => ['name' => csrf_token(), 'hash' => csrf_hash()],
                 ]);
             }
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $message);
+            }
             return $this->response->setContentType('text/plain')->setBody($message);
         }
     }

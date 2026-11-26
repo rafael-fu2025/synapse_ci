@@ -38,27 +38,41 @@
         "referring_designation": {"type": "string", "required": true, "max_length": 128},
         "referring_department": {"type": "string", "required": true, "max_length": 128},
         "referral_date": {"type": "date", "required": true},
+        "referral_time": {"type": "time", "required": false},
         "reasons": {
           "type": "array",
           "items": "string",
           "allowed": [
-            "academic_deficiency",
-            "frequent_absences_tardiness",
-            "behavioral_misconduct",
-            "emotional_distress",
-            "family_problems",
-            "financial_difficulty",
-            "peer_relationship_conflict",
-            "substance_use_suspicion",
-            "bullying_harassment",
-            "grief_loss",
-            "career_indecision",
+            "family_concerns",
+            "poor_self_esteem",
+            "victim_of_bullying",
+            "victim_of_physical_abuse",
+            "victim_of_sexual_abuse",
+            "anger_management_issues",
+            "out_of_touch_with_reality",
+            "excessive_fear",
+            "excessive_anxiety",
+            "persistent_sadness",
+            "self_harming_tendencies",
+            "absenteeism",
+            "tardiness",
+            "inattentiveness",
+            "disruptive_behaviors",
+            "bullying",
+            "fighting",
+            "stealing",
+            "cheating",
+            "extreme_behavioral_changes",
             "others"
           ]
         },
         "reasons_other_specify": {"type": "string", "required": false, "max_length": 500},
         "reasons_narrative": {"type": "string", "required": true, "encrypted": true, "max_length": 4096},
+        "remarks": {"type": "string", "required": false, "encrypted": true, "max_length": 4096},
         "prior_actions_taken": {"type": "string", "required": false, "encrypted": true, "max_length": 4096},
+        "date_received": {"type": "date", "required": false},
+        "responded_date": {"type": "date", "required": false},
+        "action_taken": {"type": "string", "required": false, "encrypted": true, "max_length": 4096},
         "priority_hint": {"type": "enum", "values": ["routine", "urgent", "crisis"], "default": "routine"}
       }
     },
@@ -85,15 +99,21 @@
         "student_name": {"type": "string", "required": true, "max_length": 255},
         "student_id": {"type": "string", "required": true, "max_length": 64},
         "course_year": {"type": "string", "required": true, "max_length": 128},
+        "contact_number": {"type": "string", "required": false, "max_length": 32},
         "scheduled_date": {"type": "date", "required": true},
         "scheduled_time": {"type": "time", "required": true},
         "counselor_name": {"type": "string", "required": true, "max_length": 255},
         "purpose": {
           "type": "enum",
-          "values": ["routine_interview", "counseling", "follow_up", "intake", "inquiry", "others"],
+          "values": ["personal_social", "academic", "career", "consultation", "others"],
           "required": true
         },
-        "purpose_other": {"type": "string", "required": false, "max_length": 255}
+        "purpose_other": {"type": "string", "required": false, "max_length": 255},
+        "preferred_schedule": {
+          "type": "enum",
+          "values": ["9:00-10:40AM", "10:40-11:40AM", "2:00-2:40PM", "3:00-3:40PM"],
+          "required": false
+        }
       }
     },
     {
@@ -122,10 +142,11 @@
         "call_time": {"type": "time", "required": true},
         "purpose": {
           "type": "enum",
-          "values": ["personal_counseling", "career_counseling", "routine_interview", "follow_up", "academic_counseling", "others"],
+          "values": ["personal_counseling", "career_counseling", "academic_counseling", "routine_interview", "testing_interpretation", "others"],
           "required": true
         },
         "purpose_other": {"type": "string", "required": false, "max_length": 255},
+        "note": {"type": "string", "required": false, "max_length": 500},
         "issuing_counselor_name": {"type": "string", "required": true, "max_length": 255}
       }
     },
@@ -147,16 +168,28 @@
         "dpo_privacy_signoff"
       ],
       "fields": {
-        "student_name": {"type": "string", "required": true, "max_length": 255},
-        "student_id": {"type": "string", "required": true, "max_length": 64},
-        "course_year": {"type": "string", "required": true, "max_length": 128},
+        "client_type": {
+          "type": "enum",
+          "values": ["walk_in", "follow_up", "referral"],
+          "required": true
+        },
         "interview_date": {"type": "date", "required": true},
-        "demographics": {"type": "object", "encrypted": true, "required": true},
+        "interview_time": {"type": "time", "required": false},
+        "student_name": {"type": "string", "required": true, "max_length": 255},
+        "student_id": {"type": "string", "required": false, "max_length": 64},
+        "course_year": {"type": "string", "required": true, "max_length": 128},
         "presenting_concerns": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
-        "mental_health_screening": {"type": "object", "encrypted": true, "required": false},
-        "family_social_support": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
-        "counselor_assessment": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
-        "intervention_plan": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "concern_severity": {
+          "type": "enum",
+          "values": ["very_serious", "serious", "not_so_serious"],
+          "required": true
+        },
+        "problem_duration": {"type": "string", "encrypted": true, "required": false, "max_length": 2048},
+        "perceived_cause": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "coping_barriers": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "prior_coping_attempts": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "desired_help": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "hoped_changes": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
         "privacy_consent_acknowledged": {"type": "boolean", "required": true}
       }
     },
@@ -178,14 +211,32 @@
         "dpo_privacy_signoff"
       ],
       "fields": {
+        "department": {"type": "string", "required": false, "max_length": 128},
         "session_date": {"type": "date", "required": true},
-        "session_number": {"type": "integer", "required": true},
-        "modality": {"type": "enum", "values": ["in_person", "telehealth", "phone"], "required": true},
-        "client_state": {"type": "string", "encrypted": true, "required": true, "max_length": 2048},
-        "interventions_used": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
-        "client_response": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
-        "action_items": {"type": "string", "encrypted": true, "required": false, "max_length": 2048},
-        "next_session_date": {"type": "date", "required": false}
+        "student_name": {"type": "string", "required": true, "max_length": 255},
+        "student_id": {"type": "string", "required": false, "max_length": 64},
+        "course_year": {"type": "string", "required": true, "max_length": 128},
+        "time_started": {"type": "time", "required": false},
+        "time_ended": {"type": "time", "required": false},
+        "referral_source": {
+          "type": "enum",
+          "values": ["walk_in", "counselor_associate_initiated", "referral", "follow_up"],
+          "required": true
+        },
+        "session_type": {
+          "type": "enum",
+          "values": ["intake", "follow_up", "crisis", "individual", "group"],
+          "required": true
+        },
+        "presenting_concerns": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "predisposing_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "precipitating_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "perpetuating_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "protective_risk_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "intervention_plan": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "follow_up_plan": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "next_session_schedule": {"type": "datetime", "required": false},
+        "privacy_consent_acknowledged": {"type": "boolean", "required": true}
       }
     },
     {
@@ -213,12 +264,13 @@
           "values": ["walk_in", "called", "referred", "follow_up"],
           "required": true
         },
-        "rating_welcoming": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
-        "rating_empathy": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "rating_clarity": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "rating_helpfulness": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_welcoming": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_empathy": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "rating_environment": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "future_visit_willingness": {"type": "boolean", "required": true},
+        "future_visit_reason": {"type": "string", "encrypted": true, "required": false, "max_length": 512},
         "qualitative_comments": {"type": "string", "encrypted": true, "required": false, "max_length": 2048}
       }
     },
@@ -241,16 +293,32 @@
         "dpo_privacy_signoff"
       ],
       "fields": {
+        "department": {"type": "string", "required": false, "max_length": 128},
         "session_date": {"type": "date", "required": true},
-        "session_number": {"type": "integer", "required": true},
-        "time_start": {"type": "time", "required": true},
-        "time_end": {"type": "time", "required": true},
-        "session_type": {"type": "enum", "values": ["intake", "regular", "crisis", "follow_up", "closure"], "required": true},
-        "concerns_discussed": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
-        "counseling_goals": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
-        "interventions_and_responses": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
-        "homework_and_commitments": {"type": "string", "encrypted": true, "required": false, "max_length": 2048},
-        "next_schedule": {"type": "datetime", "required": false}
+        "student_name": {"type": "string", "required": true, "max_length": 255},
+        "student_id": {"type": "string", "required": false, "max_length": 64},
+        "course_year": {"type": "string", "required": true, "max_length": 128},
+        "time_started": {"type": "time", "required": false},
+        "time_ended": {"type": "time", "required": false},
+        "referral_source": {
+          "type": "enum",
+          "values": ["walk_in", "counselor_initiated", "referral", "follow_up"],
+          "required": true
+        },
+        "session_type": {
+          "type": "enum",
+          "values": ["intake", "follow_up", "crisis", "individual", "group"],
+          "required": true
+        },
+        "presenting_concerns": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "predisposing_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "precipitating_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "perpetuating_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "protective_risk_factors": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "intervention_plan": {"type": "string", "encrypted": true, "required": true, "max_length": 4096},
+        "follow_up_plan": {"type": "string", "encrypted": true, "required": false, "max_length": 4096},
+        "next_session_schedule": {"type": "datetime", "required": false},
+        "privacy_consent_acknowledged": {"type": "boolean", "required": true}
       }
     },
     {
@@ -273,12 +341,18 @@
         "dpo_privacy_signoff"
       ],
       "fields": {
+        "visit_type": {
+          "type": "enum",
+          "values": ["walk_in", "called", "referred", "follow_up"],
+          "required": false
+        },
+        "rating_goal_progress": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
+        "rating_overall_service": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "rating_rapport": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "rating_understanding": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
-        "rating_goal_progress": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "rating_confidentiality_comfort": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
-        "rating_overall_service": {"type": "integer", "minimum": 1, "maximum": 5, "required": true},
         "recommend_service": {"type": "boolean", "required": true},
+        "future_visit_reason": {"type": "string", "encrypted": true, "required": false, "max_length": 512},
         "qualitative_feedback": {"type": "string", "encrypted": true, "required": false, "max_length": 2048}
       }
     }

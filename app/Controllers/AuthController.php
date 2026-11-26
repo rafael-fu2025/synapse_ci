@@ -149,6 +149,21 @@ final class AuthController extends BaseController
     }
 
     /**
+     * Public Foundation University Data Privacy Policy page (no authentication required).
+     */
+    public function privacyPolicy()
+    {
+        service('response')->setHeader('Cache-Control', 'private, no-store');
+        $isLoggedIn = session('user') !== null && (new AuthenticatedUser())->current() !== null;
+
+        return view('auth/privacy_policy', [
+            'title'     => 'Data Privacy Policy',
+            'backUrl'   => $isLoggedIn ? site_url('/') : site_url('auth/login'),
+            'backLabel' => $isLoggedIn ? 'Back to Portal' : 'Back to Sign In',
+        ]);
+    }
+
+    /**
      * Sign out current user.
      */
     public function logout()

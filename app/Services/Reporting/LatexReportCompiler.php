@@ -66,7 +66,7 @@ class LatexReportCompiler
             }
 
             $directory = self::createWorkspace();
-            if (@file_put_contents($directory . '/report.tex', $source) !== strlen($source)) {
+            if (@file_put_contents($directory . DIRECTORY_SEPARATOR . 'report.tex', $source) !== strlen($source)) {
                 throw new RuntimeException();
             }
             foreach ([
@@ -77,7 +77,7 @@ class LatexReportCompiler
             ] as $path => $filename) {
                 $asset = defined('ROOTPATH') ? ROOTPATH . $path : '';
                 if ($asset !== '' && is_file($asset)) {
-                    if (filesize($asset) > self::MAX_LOG || !@copy($asset, $directory . '/' . $filename)) {
+                    if (filesize($asset) > self::MAX_LOG || !@copy($asset, $directory . DIRECTORY_SEPARATOR . $filename)) {
                         throw new RuntimeException();
                     }
                 }
@@ -143,7 +143,7 @@ class LatexReportCompiler
             if (($exitCode === -1 ? $closedCode : $exitCode) !== 0) {
                 throw new RuntimeException();
             }
-            $pdfPath = $directory . '/report.pdf';
+            $pdfPath = $directory . DIRECTORY_SEPARATOR . 'report.pdf';
             if (!is_file($pdfPath) || is_link($pdfPath)) {
                 throw new RuntimeException();
             }
@@ -189,14 +189,14 @@ class LatexReportCompiler
         // File-backed output avoids Windows' blocking anonymous-pipe behaviour.
         return @proc_open($command, [
             0 => ['file', PHP_OS_FAMILY === 'Windows' ? 'NUL' : '/dev/null', 'r'],
-            1 => ['file', $directory . '/stdout.log', 'w'],
-            2 => ['file', $directory . '/stderr.log', 'w'],
+            1 => ['file', $directory . DIRECTORY_SEPARATOR . 'stdout.log', 'w'],
+            2 => ['file', $directory . DIRECTORY_SEPARATOR . 'stderr.log', 'w'],
         ], $pipes, $directory, $environment, ['bypass_shell' => true, 'suppress_errors' => true]);
     }
 
     private static function createWorkspace(): string
     {
-        $base = rtrim(defined('WRITEPATH') ? WRITEPATH : sys_get_temp_dir(), '/\\') . '/report-temp';
+        $base = rtrim(defined('WRITEPATH') ? WRITEPATH : sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'report-temp';
         if ((!is_dir($base) && !@mkdir($base, 0700, true)) || is_link($base)) {
             throw new RuntimeException();
         }
@@ -212,7 +212,7 @@ class LatexReportCompiler
                 throw new RuntimeException();
             }
         }
-        $directory = $base . '/job-' . bin2hex(random_bytes(16));
+        $directory = $base . DIRECTORY_SEPARATOR . 'job-' . bin2hex(random_bytes(16));
         if (!@mkdir($directory, 0700)) {
             throw new RuntimeException();
         }
