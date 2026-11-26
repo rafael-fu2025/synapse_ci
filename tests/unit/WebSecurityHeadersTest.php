@@ -52,8 +52,10 @@ final class WebSecurityHeadersTest extends CIUnitTestCase
         $report = $response->getHeaderLine('Content-Security-Policy-Report-Only');
         $enforced = $response->getHeaderLine('Content-Security-Policy');
         $this->assertStringContainsString("script-src 'self'", $report);
-        $this->assertStringContainsString('https://fonts.googleapis.com', $report);
-        $this->assertStringContainsString('https://fonts.gstatic.com', $report);
+        $this->assertStringContainsString("style-src 'self'", $report);
+        $this->assertStringContainsString("font-src 'self' data:", $report);
+        $this->assertStringNotContainsString('https://fonts.googleapis.com', $report);
+        $this->assertStringNotContainsString('https://fonts.gstatic.com', $report);
         $this->assertStringNotContainsString('unsafe-inline', $report);
         $this->assertStringNotContainsString('unsafe-eval', $report);
         $this->assertStringNotContainsString('script-src', $enforced);

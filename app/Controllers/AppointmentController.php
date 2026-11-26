@@ -432,7 +432,11 @@ final class AppointmentController extends BaseController
 
     private function errorResponse(\Exception $e)
     {
-        return $this->response->setStatusCode($this->status($e))->setBody(esc($e->getMessage()));
+        $status = $this->status($e);
+        if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+            return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $e->getMessage());
+        }
+        return $this->response->setStatusCode($status)->setBody(esc($e->getMessage()));
     }
 
     private function respondToForm(string $message, bool $success, string $redirect, int $status = 422, ?array $refresh = null)

@@ -307,7 +307,7 @@ final class GuidanceSafetyTriageTest extends FreshDatabaseTestCase
         $draft = $this->intakeService->createDraft(
             subjectPersonId: $this->studentPersonId,
             sourceType: 'employee_teacher',
-            selections: ['emotional_distress'],
+            selections: ['persistent_sadness'],
             narrative: 'Student appears a bit fatigued in morning classes.',
             priorActions: null,
             priorityHint: 'routine',

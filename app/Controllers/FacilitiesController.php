@@ -315,9 +315,14 @@ final class FacilitiesController extends BaseController
             if ($status === 503) { log_message('error', 'BMG operation failed: {exception}', ['exception' => $error]); }
             $message = $status === 503 ? 'Drum operations are temporarily unavailable. Please retry or contact support.' : $error->getMessage();
             $this->response->setStatusCode($status);
-            return $this->json() ? $this->response->setJSON(['success' => false, 'message' => $message,
-                'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]])
-                : $this->response->setContentType('text/plain')->setBody($message);
+            if ($this->json()) {
+                return $this->response->setJSON(['success' => false, 'message' => $message,
+                    'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            }
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $message);
+            }
+            return $this->response->setContentType('text/plain')->setBody($message);
         }
     }
 

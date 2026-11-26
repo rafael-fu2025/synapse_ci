@@ -5,6 +5,9 @@
 - **Legacy IDs:** `CL-001`
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.DASHBOARD.CURRENT_DAY`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-01`, `UC-CL-02`
 - **Surface:** Clinic dashboard
 - **Route/API:** GET /clinic
 - **Actor/grants:** Clinic member with dashboard/queue/appointment read grants
@@ -24,6 +27,9 @@
 - **Legacy IDs:** `CL-002`
 - **Changed by:** 884b9f0
 - **Requirement:** `CLINIC.PATIENT.SEARCH`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-01`
 - **Surface:** Patient registry
 - **Route/API:** GET /clinic/patients
 - **Actor/grants:** Clinic actor with clinic.patients.read
@@ -43,6 +49,9 @@
 - **Legacy IDs:** `CL-003`
 - **Changed by:** 884b9f0
 - **Requirement:** `CLINIC.PATIENT.CHART`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-05`
 - **Surface:** Patient chart
 - **Route/API:** GET /clinic/patients/{personId}
 - **Actor/grants:** Clinic actor with clinic.patients.read and encounter read
@@ -62,6 +71,9 @@
 - **Legacy IDs:** `CL-004`
 - **Changed by:** baseline
 - **Requirement:** `CLINIC.PATIENT.HEALTH_UPDATE`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-05`
 - **Surface:** Patient chart
 - **Route/API:** POST /clinic/patients/{personId}/health
 - **Actor/grants:** Clinic actor with clinic.patients.write
@@ -81,6 +93,9 @@
 - **Legacy IDs:** `CL-005`
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.ENCOUNTER.CALLED_TICKET`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-02`, `UC-CL-03`
 - **Surface:** Clinic queue to encounter
 - **Route/API:** POST /clinic/encounters/start-for-ticket/{queueEntryId}
 - **Actor/grants:** Clinic actor with clinic.encounters.create and queue.manage
@@ -100,6 +115,9 @@
 - **Legacy IDs:** `CL-006`
 - **Changed by:** baseline
 - **Requirement:** `CLINIC.ENCOUNTER.VITALS`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-03`
 - **Surface:** Encounter stepper
 - **Route/API:** POST /clinic/encounters/{id}/vitals
 - **Actor/grants:** Clinic actor with clinic.encounters.write
@@ -119,6 +137,9 @@
 - **Legacy IDs:** `CL-007`
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.ENCOUNTER.DRAFT`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-03`
 - **Surface:** Encounter stepper
 - **Route/API:** POST /clinic/encounters/{id}/draft; POST /clinic/encounters/{id}/assessment
 - **Actor/grants:** Clinic actor with clinic.encounters.write
@@ -138,6 +159,9 @@
 - **Legacy IDs:** `CL-008`
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.DISPENSE.USABLE_STOCK`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-06`
 - **Surface:** Encounter medicine step
 - **Route/API:** POST /clinic/encounters/{id}/dispense
 - **Actor/grants:** Clinic actor with encounter write and clinic.inventory.write
@@ -157,6 +181,9 @@
 - **Legacy IDs:** `CL-009`
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.DISPENSE.INSUFFICIENT`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-06`
 - **Surface:** Encounter medicine step
 - **Route/API:** POST /clinic/encounters/{id}/dispense
 - **Actor/grants:** Clinic actor with encounter write and inventory write
@@ -176,6 +203,9 @@
 - **Legacy IDs:** `CL-010`
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.ENCOUNTER.SEAL`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-06`
 - **Surface:** Encounter completion
 - **Route/API:** POST /clinic/encounters/{id}/complete
 - **Actor/grants:** Clinic physician/staff/admin with clinic.encounters.seal
@@ -195,6 +225,9 @@
 - **Legacy IDs:** `CL-011`
 - **Changed by:** baseline
 - **Requirement:** `CLINIC.QUEUE.WALKIN_LIFECYCLE`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-02`
 - **Surface:** Clinic queue board
 - **Route/API:** POST /clinic/queue/walkin|call/{id}|start/{id}|complete/{id}
 - **Actor/grants:** Clinic actor with clinic.queue.manage
@@ -214,6 +247,9 @@
 - **Legacy IDs:** `CL-012`
 - **Changed by:** baseline
 - **Requirement:** `CLINIC.QUEUE.EXCEPTION_TRANSITIONS`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-02`
 - **Surface:** Clinic queue board
 - **Route/API:** POST /clinic/queue/skip|recall|no-show/{id}
 - **Actor/grants:** Clinic actor with clinic.queue.manage
@@ -233,6 +269,9 @@
 - **Legacy IDs:** `CL-013`
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.APPOINTMENT.CHECK_IN`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-08`
 - **Surface:** Clinic appointments
 - **Route/API:** POST /clinic/appointments/{id}/confirm; POST /clinic/appointments/check-in/{id}
 - **Actor/grants:** Clinic scheduler with appointment write and queue authority
@@ -252,6 +291,9 @@
 - **Legacy IDs:** `CL-014`
 - **Changed by:** b868a49, 884b9f0
 - **Requirement:** `CLINIC.INVENTORY.RECEIVE_ADJUST`
+- **Role:** `clinic_staff`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-09`
 - **Surface:** Clinic inventory
 - **Route/API:** POST /clinic/inventory/{id}/receive; POST /clinic/inventory/batches/{id}/adjust
 - **Actor/grants:** Clinic actor with clinic.inventory.write
@@ -271,6 +313,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `CLINIC.ENCOUNTER.SINGLE_OPEN`
+- **Role:** `clinic_intern`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-03`
 - **Surface:** Queue and encounter start
 - **Route/API:** POST /clinic/encounters/start-for-ticket/{id}; POST /clinic/encounters/start-direct/{personId}
 - **Actor/grants:** Clinic actor with clinic.encounters.create

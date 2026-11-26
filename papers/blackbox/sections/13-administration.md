@@ -5,6 +5,9 @@
 - Legacy IDs: `AD-001`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: The administrative dashboard must derive tenant-scoped operational counters and must never serve cached audit data to a reports-only identity.
+- Role: `audit_reader`
+- Module: Reporting & Audit Trail
+- Use Cases: `UC-AD-01`, `UC-AD-03`
 - Surface: Platform web dashboard.
 - Route/API: `GET /admin`; `GET /dashboard`.
 - Actor/grants: Superadmin/audit reader with `audit.read`; report viewer with `reports.read` for the negative variant.
@@ -27,6 +30,9 @@
 - Legacy IDs: `AD-002`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: The audit explorer must validate scalar filters, exact event/action/entity/actor values, date order, 25/50/100 page sizes, and BIGINT-safe older/newer cursors while remaining tenant-scoped.
+- Role: `audit_reader`
+- Module: Reporting & Audit Trail
+- Use Cases: `UC-AD-03`
 - Surface: Administrative audit ledger.
 - Route/API: `GET /admin/audit`.
 - Actor/grants: Actor with `audit.read`.
@@ -49,6 +55,9 @@
 - Legacy IDs: `AD-003`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: Verification must inspect the current tenant ledger from genesis to head, return pass only for an intact chain, identify a broken event on failure, and state that no external checkpoint was checked.
+- Role: `audit_reader`
+- Module: Reporting & Audit Trail
+- Use Cases: `UC-AD-03`
 - Surface: Audit ledger verification action.
 - Route/API: `POST /admin/audit/verify`.
 - Actor/grants: Actor with `audit.read`.
@@ -71,6 +80,9 @@
 - Legacy IDs: `AD-005`
 - Changed by: `bea71cf`
 - Requirement: An authorized manual reference or people sync must publish optional user-scoped progress, commit only a complete validated result, and report incomplete upstream failure without exposing payloads; live MIS execution requires an approved campaign.
+- Role: `superadmin`
+- Module: Administration, Access & Platform
+- Use Cases: `UC-AD-07`
 - Surface: MIS synchronization administration.
 - Route/API: `GET /admin/mis-sync`; `POST /admin/mis-sync/run`; `POST /admin/mis-sync/people`.
 - Actor/grants: Actor with `mis.sync`; fake MIS client by default, approved upstream operator only in a gated campaign.
@@ -93,6 +105,9 @@
 - Legacy IDs: `AD-006`
 - Changed by: `bea71cf`
 - Requirement: An authorized administrator may assign only policy-permitted roles to an active employee, with nonblank reason and current `auth_version`; the write increments that version, invalidates mobile/browser authority, and records one audit event. Final employee assignment policy remains unresolved.
+- Role: `superadmin`
+- Module: Administration, Access & Platform
+- Use Cases: `UC-AD-07`, `UC-AD-08`
 - Surface: Employee access administration.
 - Route/API: `GET /admin/access/{user}/edit`; `POST /admin/access/{user}/update`.
 - Actor/grants: Superadmin or department administrator allowed by current policy and `rbac.manage`.
@@ -115,6 +130,9 @@
 - Legacy IDs: `AD-007`
 - Changed by: `bea71cf`, `c179273`
 - Requirement: Authorized carousel create/edit/reorder/toggle/delete actions must be tenant-safe, validate managed assets, and become visible to web/mobile login surfaces without exposing the private store.
+- Role: `superadmin`
+- Module: Administration, Access & Platform
+- Use Cases: `UC-AD-08`
 - Surface: Carousel administration, web login, and mobile login carousel.
 - Route/API: `/admin/carousel/*`; `GET /auth/login`; `GET /api/v1/auth/carousel`.
 - Actor/grants: RBAC manager; platform owner for protected default deletion where required.
@@ -132,26 +150,29 @@
 - Evidence: Admin/web/mobile captures, sanitized asset headers, and cleanup proof.
 - Verdict: `NOT_RUN`
 
-## AD-009 — Role and permission catalogue reflects grants without implying assignability
-- Lifecycle: `DRAFT`
-- Legacy IDs: `AD-009`
-- Changed by: `bea71cf`
-- Requirement: The catalogue must list every role holding current database grants, including nonassignable `student`, with scope labels and permission codes, while the assignment selector remains actor-policy-specific. Whether the governed count is 14 or 12 remains unresolved.
+## AD-009 — Role and permission catalogue reflects all 16 grants without implying assignability
+- **Lifecycle:** `READY`
+- **Legacy IDs:** `AD-009`
+- **Changed by:** `bea71cf`, `62c790b`
+- **Requirement:** The catalogue must list all 16 database-granted roles (13 assignable employee roles plus non-employee catalogue roles `student`, `guidance_intern`, and `bmg_intern`), while the assignment selector remains actor-policy-specific.
+- **Role:** `superadmin`
+- **Module:** Administration, Access & Platform
+- **Use Cases:** `UC-AD-08`
 - Surface: Employee access detail/catalogue.
 - Route/API: `GET /admin/access/{user}/edit`.
 - Actor/grants: Authorized employee-access administrator.
-- Preconditions: Seeded permission/role grant tables and an employee target.
+- Preconditions: Seeded permission/role grant tables (`PermissionsAndRolesSeeder`) and an employee target.
 
 **Steps**
 1. Open access detail and inventory every role/permission combination shown in the catalogue.
-2. Compare it with distinct `role_permissions` roles plus the current target role and catalogue-only labels.
-3. Compare the role assignment selector as superadmin, clinic admin, and guidance admin.
+2. Compare it with distinct `role_permissions` roles (16 total: 13 in `EmployeeAccessService::ROLES` plus 3 in `CATALOGUE_LABELS`: `student`, `guidance_intern`, `bmg_intern`).
+3. Compare the role assignment selector as `superadmin`, `clinic_admin`, and `guidance_admin`.
 
-- Expected: Granted roles and codes are visible as catalogue facts; selector choices follow current scoped assignment policy and are not equated with catalogue membership.
-- Negative/non-disclosure: A displayed role does not imply it is assignable; absent grants are not invented; no secret or user-specific clinical data appears.
+- Expected: All 16 granted roles and codes are visible as catalogue facts; selector choices follow current scoped assignment policy (excluding `student` and student interns governed under `/admin/interns`).
+- Negative/non-disclosure: A displayed role does not imply it is assignable on `/admin/access`; absent grants are not invented; no clinical data appears.
 - Cleanup: None.
-- Source: `app/Services/EmployeeAccessService.php:16-39`; `app/Services/EmployeeAccessService.php:112-126`
-- Evidence: Role/grant reconciliation table and role-specific selector screenshots.
+- Source: `app/Services/EmployeeAccessService.php:16-63`; `app/Services/EmployeeAccessService.php:114-129`; `app/Database/Seeds/PermissionsAndRolesSeeder.php:122-277`
+- Evidence: 16-role/grant reconciliation table and role-specific selector screenshots.
 - Verdict: `NOT_RUN`
 
 ## AD-010 — Operational CSV export is aggregate, bounded, and injection-safe
@@ -159,6 +180,9 @@
 - Legacy IDs: `AD-010`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: CSV export must contain only tenant-scoped daily aggregate counts over the authorized units/Manila date range, neutralize formula-leading cells, stay under 8 MiB, remain memory-backed, and audit metadata before release.
+- Role: `report_viewer`
+- Module: Reporting & Audit Trail
+- Use Cases: `UC-AD-02`
 - Surface: Operational report export.
 - Route/API: `POST /reports/export/operational` with `format=csv`.
 - Actor/grants: Actor authorized by report export policy for selected units.
@@ -179,8 +203,11 @@
 ## AD-011 — Operational PDF matches authorized aggregate source
 - Lifecycle: `READY`
 - Legacy IDs: `AD-011`
-- Changed by: `bea71cf`, `884b9f0`
-- Requirement: PDF export must render the same authorized aggregate period/unit dataset as CSV, start with a valid PDF signature, use a safe deterministic filename, no-store headers, and audit before body release.
+- Changed by: `bea71cf`, `884b9f0`, `62c790b`
+- Requirement: PDF export must render the same authorized aggregate period/unit dataset as CSV under the unified institutional PDF header (`DocumentHeaderLatex`), start with a valid PDF signature, use a safe deterministic filename, no-store headers, and audit before body release.
+- Role: `report_viewer`
+- Module: Reporting & Audit Trail
+- Use Cases: `UC-AD-02`
 - Surface: Operational report export.
 - Route/API: `POST /reports/export/operational` with `format=pdf`.
 - Actor/grants: Authorized report actor for selected units.
@@ -188,13 +215,13 @@
 
 **Steps**
 1. Export CSV and PDF for the identical selection; retain hashes and extract only sanitized aggregate text from the PDF.
-2. Compare dates, units, metrics, counts, and any clinic aggregate insight panels against the server’s authorized dataset.
+2. Compare institutional header/seal layout, dates, units, metrics, counts, and any clinic aggregate insight panels against the server’s authorized dataset.
 3. Inspect signature, filename, content type, no-store/nosniff headers, and export audit row; simulate renderer failure.
 
 - Expected: PDF is a valid `%PDF-1.4` document whose aggregate figures match its source dataset; failure returns no download; metadata-only audit precedes release.
 - Negative/non-disclosure: No patient/person-level rows, hidden notes, renderer diagnostics, temp plaintext artifact, or unauthorized unit appears.
 - Cleanup: Delete downloaded PDF/CSV and renderer temporary output; retire DB.
-- Source: `app/Controllers/ReportExportController.php:32-53`; `app/Services/Reporting/OperationalExportService.php:23-43`; `app/Services/Reporting/ExportPdf.php:10-24`
+- Source: `app/Controllers/ReportExportController.php:32-53`; `app/Services/Reporting/OperationalExportService.php:23-43`; `app/Services/Reporting/DocumentHeaderLatex.php:1-76`
 - Evidence: File hashes, sanitized text comparison, response headers, failure response, and audit row.
 - Verdict: `NOT_RUN`
 
@@ -203,6 +230,9 @@
 - Legacy IDs: `AD-012`
 - Changed by: `bea71cf`
 - Requirement: A report viewer may use operational dashboards/exports allowed by `reports.read` but must be denied audit ledger and unrelated administration routes requiring separate grants.
+- Role: `report_viewer`
+- Module: Reporting & Audit Trail
+- Use Cases: `UC-AD-01`, `UC-AD-02`
 - Surface: Main dashboard, report export, administrative audit/access/AI pages.
 - Route/API: `GET /dashboard`; `/reports/export`; `/admin/audit`; `/admin/access`; `/admin/ai`.
 - Actor/grants: Active `report_viewer` with reports grant and no audit/RBAC/AI configuration grants.
@@ -225,6 +255,9 @@
 - Legacy IDs: None
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: High-impact administrative writes must use POST/CSRF where web-based, refresh actor authority at mutation time, require optimistic version where defined, and fail without partial state after role/session changes.
+- Role: `superadmin`
+- Module: Administration, Access & Platform
+- Use Cases: `UC-AD-08`
 - Surface: Employee access, carousel, AI configuration, MIS sync, and audit verification controls.
 - Route/API: Relevant `/admin/*` POST routes.
 - Actor/grants: Initially authorized administrator whose grant/session is revoked in a second session.

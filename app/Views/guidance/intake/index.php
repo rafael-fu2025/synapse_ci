@@ -165,7 +165,7 @@ $statusDot = static fn (string $status): string => match ($status) {
             </div>
 
             <div class="mb-3">
-              <div class="form-label">Presenting Concerns (Select at least one)</div>
+              <div class="form-label">Reason for Referral (Select at least one)</div>
               <div class="gi-concern-grid">
                 <?php foreach (($concernCatalog['checklist'] ?? []) as $code => $label): ?>
                   <label class="gi-concern-tile">
@@ -178,18 +178,18 @@ $statusDot = static fn (string $status): string => match ($status) {
 
             <div class="row g-3 mb-3">
               <div id="intakeWalkinOtherWrap" class="col-md-4 d-none">
-                <label class="form-label" for="intakeWalkinOther">If Others, Specify (Optional)</label>
+                <label class="form-label" for="intakeWalkinOther">Others (Please specify)</label>
                 <input type="text" id="intakeWalkinOther" name="reasons_other_specify" maxlength="500" class="form-control form-control-sm" disabled>
               </div>
               <div class="col-12 col-md">
-                <label class="form-label" for="intakeWalkinPrior">Prior Teacher / Adviser Actions (Optional)</label>
-                <input type="text" id="intakeWalkinPrior" name="prior_actions_taken" maxlength="500" class="form-control form-control-sm" placeholder="Initial talks, parent contact, or academic intervention taken">
+                <label class="form-label" for="intakeWalkinPrior">Remarks (Optional)</label>
+                <input type="text" id="intakeWalkinPrior" name="prior_actions_taken" maxlength="500" class="form-control form-control-sm" placeholder="Additional remarks or initial teacher/adviser actions">
               </div>
             </div>
 
             <div class="mb-3">
-              <label class="form-label" for="intakeWalkinNarrative">Observed / Reported Reason for Referral</label>
-              <textarea id="intakeWalkinNarrative" name="reasons_narrative" rows="3" maxlength="2000" class="form-control form-control-sm" required placeholder="Specific behaviors, concerns, or walk-in reason..."></textarea>
+              <label class="form-label" for="intakeWalkinNarrative">Description of Behavior / Incident Observed</label>
+              <textarea id="intakeWalkinNarrative" name="reasons_narrative" rows="3" maxlength="2000" class="form-control form-control-sm" required placeholder="Specific behaviors or incidents observed..."></textarea>
             </div>
 
             <div class="d-flex flex-wrap gap-2 justify-content-end">

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filters;
 
+use App\Services\ErrorPageRenderer;
 use CodeIgniter\Filters\FilterInterface;
 use CodeIgniter\HTTP\IncomingRequest;
 use CodeIgniter\HTTP\RequestInterface;
@@ -59,7 +60,18 @@ class WebCsrfFilter implements FilterInterface
                 }
                 return $redirect;
             }
-            return $response->setBody(esc($message . ' This request was not processed. A fresh security token was issued; reload this page and retry.'));
+            return ErrorPageRenderer::htmlResponse(
+                $response,
+                403,
+                $message . ' This request was not processed. A fresh security token was issued; reload this page and retry.',
+                [
+                    'heading'        => 'Security token expired',
+                    'primaryHref'    => site_url('/'),
+                    'primaryLabel'   => 'Return to dashboard',
+                    'secondaryHref'  => site_url('/auth/login'),
+                    'secondaryLabel' => 'Sign in',
+                ]
+            );
         }
         return null;
     }

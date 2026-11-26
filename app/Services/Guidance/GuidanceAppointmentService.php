@@ -21,13 +21,54 @@ use Throwable;
 final class GuidanceAppointmentService
 {
     public const VALID_PURPOSES = [
-        'routine_interview',
-        'counseling',
-        'follow_up',
-        'intake',
-        'inquiry',
+        'personal_social',
+        'academic',
+        'career',
+        'consultation',
         'others',
     ];
+
+    public const PURPOSE_LABELS = [
+        'personal_social' => 'Personal/Social',
+        'academic'        => 'Academic',
+        'career'          => 'Career',
+        'consultation'    => 'Consultation',
+        'others'          => 'Others',
+    ];
+
+    public const PREFERRED_SCHEDULES = [
+        '9:00-10:40AM',
+        '10:40-11:40AM',
+        '2:00-2:40PM',
+        '3:00-3:40PM',
+    ];
+
+    public static function inferPreferredSchedule(string $time): ?string
+    {
+        $trimmed = trim($time);
+        if ($trimmed === '') {
+            return null;
+        }
+        $ts = strtotime('1970-01-01 ' . $trimmed);
+        if ($ts === false) {
+            return null;
+        }
+        $minutes = ((int) date('G', $ts)) * 60 + (int) date('i', $ts);
+        if ($minutes >= 540 && $minutes <= 639) {
+            return '9:00-10:40AM';
+        }
+        if ($minutes >= 640 && $minutes <= 700) {
+            return '10:40-11:40AM';
+        }
+        if ($minutes >= 840 && $minutes <= 880) {
+            return '2:00-2:40PM';
+        }
+        if ($minutes >= 900 && $minutes <= 940) {
+            return '3:00-3:40PM';
+        }
+
+        return null;
+    }
 
     public const VALID_STATUSES = [
         'scheduled',
@@ -117,6 +158,19 @@ final class GuidanceAppointmentService
             throw new InvalidArgumentException("purpose_other is required when purpose is 'others'.", 422);
         }
 
+        $preferredScheduleRaw = isset($data['preferred_schedule']) ? trim((string) $data['preferred_schedule']) : '';
+        if ($preferredScheduleRaw !== '') {
+            if (!in_array($preferredScheduleRaw, self::PREFERRED_SCHEDULES, true)) {
+                throw new InvalidArgumentException(
+                    "Invalid preferred_schedule '{$preferredScheduleRaw}'. Allowed: " . implode(', ', self::PREFERRED_SCHEDULES),
+                    422
+                );
+            }
+            $preferredSchedule = $preferredScheduleRaw;
+        } else {
+            $preferredSchedule = self::inferPreferredSchedule($scheduledTime);
+        }
+
         // 5. Counselor resolution
         $counselorUserId = (int) ($data['counselor_user_id'] ?? $authority['id']);
         $counselor = $this->userModel->scoped($tid)->find($counselorUserId);
@@ -167,6 +221,7 @@ final class GuidanceAppointmentService
         }
 
         // 8. Create controlled form instance for guidance_appointment_form (F-OGC-GAP-006-00)
+        $contactNumber = trim((string) ($data['contact_number'] ?? $person['phone'] ?? ''));
         $formDraftData = [
             'appointment_number' => $appointmentNumber,
             'student_name' => $studentName,
@@ -177,8 +232,14 @@ final class GuidanceAppointmentService
             'counselor_name' => $counselorName,
             'purpose' => $purpose,
         ];
+        if ($contactNumber !== '') {
+            $formDraftData['contact_number'] = substr($contactNumber, 0, 32);
+        }
         if ($purposeOther !== null && $purposeOther !== '') {
             $formDraftData['purpose_other'] = $purposeOther;
+        }
+        if ($preferredSchedule !== null) {
+            $formDraftData['preferred_schedule'] = $preferredSchedule;
         }
 
         $formInstance = $this->formService->createDraft(
@@ -329,6 +390,7 @@ final class GuidanceAppointmentService
             'last_name' => $person['last_name'] ?? null,
             'full_name' => $person ? trim(($person['first_name'] ?? '') . ' ' . ($person['last_name'] ?? '')) : '',
             'email' => $person['email'] ?? null,
+            'phone' => $person['phone'] ?? null,
             'program' => $studentProfile['program'] ?? null,
             'year_level' => isset($studentProfile['year_level']) ? (int) $studentProfile['year_level'] : null,
             'section' => $studentProfile['section'] ?? null,

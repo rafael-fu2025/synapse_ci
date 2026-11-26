@@ -894,6 +894,13 @@ final class ClinicController extends BaseController
     public function startForTicket(int $queueEntryId)
     {
         if (!$this->request->is('post')) {
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse(
+                    $this->response->setHeader('Allow', 'POST'),
+                    405,
+                    'Method not allowed.'
+                );
+            }
             return $this->response->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Method not allowed.');
         }
         try {
@@ -1052,6 +1059,13 @@ final class ClinicController extends BaseController
     public function startDirect(int $personId)
     {
         if (!$this->request->is('post')) {
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse(
+                    $this->response->setHeader('Allow', 'POST'),
+                    405,
+                    'Method not allowed.'
+                );
+            }
             return $this->response->setStatusCode(405)->setHeader('Allow', 'POST')->setBody('Method not allowed.');
         }
         try {
@@ -1089,7 +1103,11 @@ final class ClinicController extends BaseController
             return view('clinic/reports/summary', $viewData);
         } catch (\Throwable $e) {
             $status = in_array($e->getCode(), [403, 422], true) || $e instanceof \InvalidArgumentException ? ($e->getCode() ?: 422) : 500;
-            return $this->response->setStatusCode($status)->setBody(esc($status === 500 ? 'Unable to load Clinic summary report.' : $e->getMessage()));
+            $message = $status === 500 ? 'Unable to load Clinic summary report.' : $e->getMessage();
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $message);
+            }
+            return $this->response->setStatusCode($status)->setBody(esc($message));
         }
     }
 
@@ -1127,6 +1145,9 @@ final class ClinicController extends BaseController
                     ->setHeader('Cache-Control', 'private, no-store')
                     ->setJSON(['message' => $message]);
             }
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $message);
+            }
             return $this->response->setStatusCode($status)->setBody(esc($message));
         }
     }
@@ -1142,6 +1163,9 @@ final class ClinicController extends BaseController
             return ExportPdf::response($this->response, $pdf, 'clinic-certificate-enc-' . $id . '.pdf');
         } catch (\Throwable $e) {
             $status = in_array($e->getCode(), [403, 404, 422], true) ? $e->getCode() : 503;
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $e->getMessage());
+            }
             return $this->response->setStatusCode($status)->setBody(esc($e->getMessage()));
         }
     }
@@ -1169,6 +1193,9 @@ final class ClinicController extends BaseController
             return ExportPdf::response($this->response, $pdf, 'clinic-clearance-' . $clearanceId . '.pdf');
         } catch (\Throwable $e) {
             $status = in_array($e->getCode(), [403, 404, 422], true) ? $e->getCode() : 503;
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $e->getMessage());
+            }
             return $this->response->setStatusCode($status)->setBody(esc($e->getMessage()));
         }
     }

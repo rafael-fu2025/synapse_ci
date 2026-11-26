@@ -174,7 +174,7 @@ final class GuidanceFormServiceTest extends FreshDatabaseTestCase
             'referring_designation' => 'Faculty Instructor',
             'referring_department' => 'College of Arts and Sciences',
             'referral_date' => date('Y-m-d'),
-            'reasons' => ['academic_deficiency', 'emotional_distress'],
+            'reasons' => ['absenteeism', 'excessive_anxiety'],
             'reasons_narrative' => 'Student has missed major exams and appeared withdrawn in class.',
             'prior_actions_taken' => 'Instructor spoke with student after class and suggested guidance consultation.',
             'priority_hint' => 'routine',
@@ -305,6 +305,52 @@ final class GuidanceFormServiceTest extends FreshDatabaseTestCase
         $this->assertArrayNotHasKey('student_name', $verified);
         $this->assertArrayNotHasKey('narrative', $verified);
         $this->assertArrayNotHasKey('person_id', $verified);
+    }
+
+    public function testGeneralReferralLatexMatchesOfficialOgcrForm(): void
+    {
+        $tex = \App\Services\Reporting\GuidanceFormLatex::render(
+            ['id' => 1, 'instance_number' => 'OGC-2026-GGR-01', 'status' => 'finalized'],
+            ['internal_key' => 'guidance_general_referral', 'form_code' => 'F-OGC-GRE-GGR-005-00', 'canonical_title' => 'Guidance General Referral Form'],
+            ['revision_number' => '01', 'effectivity_date' => '2025-09-01'],
+            [
+                'student_name'          => 'Juana Dela Cruz',
+                'student_id'            => 'STU-10023',
+                'course_year'           => 'BS Psychology - 3rd Year',
+                'referring_name'        => 'Prof. Santos',
+                'referring_designation' => 'Teacher',
+                'referring_department'  => 'College of Arts and Sciences',
+                'contact_number'        => '09171234567',
+                'referral_date'         => '2026-11-26',
+                'referral_time'         => '10:30 AM',
+                'reasons'               => ['excessive_anxiety', 'absenteeism'],
+                'reasons_narrative'     => 'Observed frequent absences and test anxiety.',
+                'remarks'               => 'Initial check-in completed by adviser.',
+                'date_received'         => '2026-11-26',
+                'responded_date'        => '2026-11-26',
+                'action_taken'          => 'Scheduled psychosocial support intake.',
+            ],
+            ['signer_role' => 'Licensed Guidance Counselor', 'attested_at' => '2026-11-26 11:00:00', 'snapshot_hash' => str_repeat('a', 64)],
+            'SYN-DOC-GGR-01',
+            false
+        );
+
+        $this->assertStringContainsString('F-OGC-GRE-GGR-005-00', $tex);
+        $this->assertStringContainsString('Family concerns', $tex);
+        $this->assertStringContainsString('Self-harming tendencies/behaviors', $tex);
+        $this->assertStringContainsString('$\\boxtimes$ Excessive anxiety', $tex);
+        $this->assertStringContainsString('$\\boxtimes$ Absenteeism', $tex);
+        $this->assertStringContainsString('Description of Behavior / Incident Observed:', $tex);
+        $this->assertStringContainsString('REMARKS:', $tex);
+        $this->assertStringContainsString('$\\boxtimes$ Teacher', $tex);
+        $this->assertStringContainsString('For School Counselors/Personnel use only', $tex);
+        $this->assertStringContainsString('Scheduled psychosocial support intake.', $tex);
+        $this->assertStringNotContainsString('Academic Deficiency', $tex);
+
+        if (getenv('SYNAPSE_TEST_LATEX') === '1') {
+            $pdf = \App\Services\Reporting\LatexReportCompiler::compile($tex);
+            $this->assertStringStartsWith('%PDF-', $pdf);
+        }
     }
 }
 

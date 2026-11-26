@@ -5,6 +5,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.MI.ASSIGN`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-09`
 - **Surface:** MI assessment console
 - **Route/API:** POST /guidance/assessments/mi/assign
 - **Actor/grants:** Qualified Guidance actor with guidance.assessments.assign
@@ -24,6 +27,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.MI.DRAFT`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-05`
 - **Surface:** Portal MI assessment
 - **Route/API:** POST /portal/assessments/mi/{id}/draft
 - **Actor/grants:** Assigned person with guidance.assessments.take
@@ -43,6 +49,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.MI.FINALIZE`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-05`
 - **Surface:** Portal MI assessment
 - **Route/API:** POST /portal/assessments/mi/{id}/finalize
 - **Actor/grants:** Assigned person with guidance.assessments.take
@@ -62,6 +71,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.MI.RESULTS`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-05`, `UC-GD-09`
 - **Surface:** Portal/counsellor MI results
 - **Route/API:** GET /portal/assessments/mi/results/{id}; GET /guidance/assessments/mi/results/{id}
 - **Actor/grants:** Owning person and authorized Guidance interpreter/viewer
@@ -81,6 +93,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.MI.PDF`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-05`, `UC-GD-09`
 - **Surface:** MI result PDF
 - **Route/API:** GET /portal/assessments/mi/results/{id}/pdf; GET /guidance/assessments/mi/results/{id}/pdf
 - **Actor/grants:** Owning person or authorized Guidance result viewer
@@ -100,6 +115,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.MI.ISOLATION`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-05`
 - **Surface:** MI portal and console
 - **Route/API:** MI draft/final/results routes
 - **Actor/grants:** Assigned person, authorized counsellor, foreign/unrelated actors
@@ -114,23 +132,26 @@
 - **Evidence:** Actor/ID access matrix and negative sentinel search in denied responses.
 - **Verdict:** `NOT_RUN`
 
-## GD-EVL-001 — Evaluation token issuance contract awaits a production entry point
-- **Lifecycle:** `DRAFT`
+## GD-EVL-001 — Qualified Guidance practitioner issues a one-time evaluation token through production workflow
+- **Lifecycle:** `READY`
 - **Legacy IDs:** None
-- **Changed by:** b868a49
+- **Changed by:** `e7d5572`
 - **Requirement:** `GUIDANCE.EVALUATION.TOKEN_ISSUE`
-- **Surface:** Guidance service completion/evaluation
-- **Route/API:** No production route currently invokes token issuance
-- **Actor/grants:** To be decided by Guidance governance
-- **Preconditions:** Product decision defines the eligible service context, actor, delivery channel, and production route before this case can become READY.
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-10`
+- **Surface:** Guidance service evaluations console
+- **Route/API:** GET /guidance/evaluations/dashboard; POST /guidance/evaluations/issue
+- **Actor/grants:** Authorized Guidance `counsellor`, `guidance_supervisor`, or `guidance_admin` (`guidance.evaluations.view_aggregates` / supervisor any-provider scope)
+- **Preconditions:** Eligible same-tenant client with optional matching episode or counselling session; active provider user ID; manifest synced.
 **Steps**
-1. After a production entry point is approved and implemented, complete the eligible synthetic service context and invoke token issuance through that user-facing workflow.
-2. Attempt duplicate issuance for the same person/context/type and inspect only sanitized eligibility and token-state projections.
-- **Expected:** The future supported workflow delivers one raw token once, stores only the hash/eligibility HMAC, and rejects duplicate issuance; until that entry point exists, the case remains NOT_RUN and cannot certify token issuance.
-- **Negative/non-disclosure:** A test-only service call or direct database insert cannot satisfy this black-box case; raw token, person ID, and session/episode ID are not logged or copied into an evaluation response.
-- **Cleanup:** Expire/delete the synthetic token/context securely through the future supported cleanup workflow or retire the disposable database.
-- **Source:** app/Services/Guidance/GuidanceServiceEvaluationService.php:189-267; app/Config/Routes.php:413-437
-- **Evidence:** Approved product decision, reachable production workflow, one-time delivery with value redacted, stored hash/HMAC state, and duplicate denial.
+1. Open `/guidance/evaluations/dashboard` and submit `POST /guidance/evaluations/issue` for `PEF-008` or `CEF-009` linked to the synthetic client/context.
+2. Attempt duplicate issuance for the same person/context/type, cross-client session/episode mismatch, and unauthorized issuance by an unrelated role or ordinary counsellor specifying another provider.
+- **Expected:** One raw token and main-portal redeem URL (`/portal/evaluations/redeem/{token}`) return once (`201`/redirect flash), only SHA-256 hash/HMAC eligibility are persisted, and duplicate/mismatched/unauthorized requests fail closed.
+- **Negative/non-disclosure:** Raw token is never stored in plaintext or copied into `guidance_service_evaluations` or audit logs; `session_id`/`episode_id` belong strictly to the selected client.
+- **Cleanup:** Expire/delete the synthetic token and context in disposable teardown.
+- **Source:** app/Config/Routes.php:453-459; app/Controllers/GuidanceEvaluationController.php:500-596; app/Services/Guidance/GuidanceServiceEvaluationService.php:200-270
+- **Evidence:** Token issuance form/JSON output (raw token redacted), stored hash/HMAC check, and duplicate/scope denial matrix.
 - **Verdict:** `NOT_RUN`
 
 ## GD-EVL-002 — One-time token submits an unlinkable pseudonymous evaluation
@@ -138,6 +159,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.EVALUATION.SUBMIT`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-06`
 - **Surface:** Portal evaluation redemption
 - **Route/API:** GET /portal/evaluations/redeem/{token}; POST /portal/evaluations/submit
 - **Actor/grants:** Token holder with guidance.evaluations.submit as applicable
@@ -157,6 +181,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.EVALUATION.VALIDATION`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-06`
 - **Surface:** Portal evaluation redemption
 - **Route/API:** POST /portal/evaluations/submit
 - **Actor/grants:** Token holder
@@ -176,6 +203,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.EVALUATION.MODERATION`
+- **Role:** `guidance_supervisor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-15`
 - **Surface:** Evaluation moderation console
 - **Route/API:** GET/POST /guidance/evaluations/moderate/{id}
 - **Actor/grants:** Guidance supervisor/admin with guidance.evaluations.moderate
@@ -195,6 +225,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.EVALUATION.AGGREGATE_PRIVACY`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-10`
 - **Surface:** Evaluation dashboard
 - **Route/API:** GET /guidance/evaluations/dashboard
 - **Actor/grants:** Counsellor viewing own aggregate; supervisor/admin viewing authorized providers
@@ -214,6 +247,9 @@
 - **Legacy IDs:** None
 - **Changed by:** b868a49
 - **Requirement:** `GUIDANCE.EVALUATION.AGGREGATE_PDF`
+- **Role:** `counsellor`
+- **Module:** Guidance & Counseling
+- **Use Cases:** `UC-GD-10`
 - **Surface:** Evaluation aggregate export
 - **Route/API:** GET /guidance/evaluations/aggregate-pdf
 - **Actor/grants:** Authorized aggregate viewer

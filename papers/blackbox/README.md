@@ -1,14 +1,14 @@
 # SYNAPSE current black-box catalog
 
-This directory contains the current, source-traceable black-box specification for application commit `884b9f0d647b9b7deb0085ac6af8d4520a269c53`. It is a draft test catalog, not an execution report, release sign-off, safety case, privacy certification, or current certification claim.
+This directory contains the current, source-traceable black-box specification aligned with application commit `e7d5572fd117c7f556393894798ec408204cd4ca` (plus uncommitted `feat/archive-management` official OGC 8-Form alignment and public Data Privacy Policy updates) and synchronized with **Figure 5 (1–6 of 6)** of the capstone Use Case model.
 
 ## Authority model
 
-1. `sections/*.md` are the canonical current cases. A case ID appears exactly once there.
-2. `suite.json` fixes section order, expected counts, commits, and allowed states.
-3. `SYNAPSE-BlackBox-Testing.md` and `SYNAPSE-BlackBox-Testing.html` at this directory root are generated views only. Do not hand-edit them and do not treat a stale/missing generated view as authority.
-4. `TRACEABILITY.md`, `CONTRACT-DECISIONS.md`, `RUNBOOK.md`, and `EVIDENCE.md` govern scope, unresolved policy, execution, and proof.
-5. Source code at the target commit defines implemented behavior; a case describes how that behavior must be observed. Where policy is unresolved, the case is `DRAFT` rather than inventing a decision.
+1. `sections/*.md` are the canonical current cases. Each case ID appears exactly once there and declares its primary `Role`, `Module`, and `Use Cases` (`UC-*`).
+2. `use-cases.json` defines the canonical 16 RBAC roles (plus Public, Shared Authenticated, Department Workstation Member, and Explicit Grant bands), 15 modules, and 72 Use Cases (`UC-*`) matching **Figure 5**.
+3. `suite.json` fixes section order, expected counts, commits, and allowed states.
+4. `SYNAPSE-BlackBox-Testing.md` and `SYNAPSE-BlackBox-Testing.html` at this directory root are generated views organized under **Option A: User Role → Module → Functionality**, with an auto-generated **Use Case ↔ Black-Box Traceability Matrix**. Do not hand-edit generated outputs.
+5. `TRACEABILITY.md`, `CONTRACT-DECISIONS.md`, `RUNBOOK.md`, and `EVIDENCE.md` govern scope, unresolved policy, execution, and proof.
 
 ## Current versus archive
 
@@ -32,13 +32,9 @@ Do not copy raw historical personal, clinical, counseling, credential, cookie, t
 - `BLOCKED`: execution could not reach an assertion because a prerequisite was unavailable or unsafe. BLOCKED is not PASS.
 - `NOT_IN_RUN`: the case belongs to the suite but is excluded from the identified run because its conditional campaign or approved run scope does not apply. This is not PASS or BLOCKED.
 
-A verdict may change from `NOT_RUN` only through a governed run. Automated tests, code inspection, old reports, or a generated document alone cannot set PASS. Editing prose must not imply execution. A hash match proves only that the files supplied to the validator are internally consistent; it does not independently attest who executed the run, whether that identity is trusted, or whether the observation is correct. A separately verifiable signed attestation may add provenance, but its signer and trust policy must still be evaluated outside these tools.
-
-For PASS or FAIL, the overlay must map verified evidence to every numbered step and to expected, negative/non-disclosure, and cleanup assertions. BLOCKED must identify blocker evidence; NOT_IN_RUN must identify scope evidence and is never accepted execution evidence. Dirty runs cannot carry any non-NOT_RUN verdict unless a nonempty `dirty.patch` artifact is declared and its verified digest equals `dirty_patch_sha256`.
-
 ## Expected suite
 
-The suite contains 245 current cases across 20 ordered section files. Sections 11–20 contain 111 cases. `suite.json` is the machine-readable count and order authority.
+The suite contains **266 current cases** across **22 ordered section source files**, compiled into **Role → Module → Functionality** chapters covering all **16 RBAC roles**, **72 Use Cases (`UC-*`)**, and **23 post-baseline patches**. `suite.json` and `use-cases.json` are the machine-readable authorities.
 
 ## Tooling
 
@@ -60,9 +56,5 @@ python -m unittest discover -s tools/blackbox/tests -p test_blackbox_tools.py -v
 ```
 
 The generated root Markdown and HTML must never be edited manually. Optional result overlays require sanitized, schema-valid evidence contained beneath one non-symlink run root; see `tools/blackbox/README.md`. Optional DOCX/PDF publication is handled by `tools/blackbox/publish.py`, fails without supported external prerequisites, and must be run in an OS-enforced no-network sandbox.
-
-## Running cases
-
-Use only the disposable procedure in `RUNBOOK.md`. Store raw evidence under the private writable layout in `EVIDENCE.md`; commit at most a sanitized summary under `runs/`. Resolve applicable entries in `CONTRACT-DECISIONS.md` before claiming acceptance. Hardware, MIS, AI, push, device, and native Guidance campaigns require their explicit gates.
 
 There is no current certification claim: all catalog verdicts begin `NOT_RUN`, and no run summary in this change overrides that fact.

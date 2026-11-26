@@ -16,7 +16,7 @@ const listPath = '/guidance/call-slips';
 const lookupPath = '/api/patients/search';
 const owner = 'guidance.call-slips';
 const statuses = Object.freeze(['pending', 'acknowledged', 'attended', 'missed', 'cancelled']);
-const purposes = Object.freeze(['personal_counseling', 'career_counseling', 'routine_interview', 'follow_up', 'academic_counseling', 'others']);
+const purposes = Object.freeze(['personal_counseling', 'career_counseling', 'academic_counseling', 'routine_interview', 'testing_interpretation', 'others']);
 const limits = Object.freeze({ bodyBytes: 16384, rendererBytes: 2 * 1024 * 1024, rows: 128, requests: 48, posts: 12, scenarios: 40, diagnostics: 24 });
 const MIME = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.woff2': 'font/woff2', '.woff': 'font/woff',
   '.ttf': 'font/ttf', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp' };

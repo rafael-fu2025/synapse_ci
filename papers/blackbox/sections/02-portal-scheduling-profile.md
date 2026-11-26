@@ -5,6 +5,9 @@
 - **Legacy IDs:** `PT-001`
 - **Changed by:** 884b9f0
 - **Requirement:** `PORTAL.HOME.OWNED_SUMMARY`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-01`, `UC-PT-02`
 - **Surface:** Personal portal
 - **Route/API:** GET /portal
 - **Actor/grants:** Student or employee with portal records and appointments read grants
@@ -24,6 +27,9 @@
 - **Legacy IDs:** `PT-002`
 - **Changed by:** 73a2e4d
 - **Requirement:** `PORTAL.APPOINTMENT.REQUEST`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-01`
 - **Surface:** Personal appointment form
 - **Route/API:** GET/POST /portal/appointments/{clinic|guidance}/create|store
 - **Actor/grants:** Student/employee with portal.appointments.create
@@ -43,6 +49,9 @@
 - **Legacy IDs:** `PT-003`
 - **Changed by:** 73a2e4d
 - **Requirement:** `PORTAL.APPOINTMENT.CONFIRM`
+- **Role:** `workstation_member`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-08`, `UC-GD-11`
 - **Surface:** Staff appointment confirmation
 - **Route/API:** GET/POST /{unit}/appointments/{id}/confirm
 - **Actor/grants:** Clinic/Guidance scheduler with unit appointment write/manage grant
@@ -62,6 +71,9 @@
 - **Legacy IDs:** `PT-004`
 - **Changed by:** 73a2e4d
 - **Requirement:** `PORTAL.APPOINTMENT.CANCEL_OWN`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-01`
 - **Surface:** My Appointments
 - **Route/API:** POST /portal/appointments/{unit}/cancel/{id}
 - **Actor/grants:** Owning student/employee with portal appointment grants
@@ -81,6 +93,9 @@
 - **Legacy IDs:** `PT-005`
 - **Changed by:** baseline
 - **Requirement:** `PORTAL.QUEUE.POSITION`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-02`
 - **Surface:** Personal queue
 - **Route/API:** GET /portal/queue
 - **Actor/grants:** Owning person with personal portal access
@@ -100,6 +115,9 @@
 - **Legacy IDs:** `PT-006`
 - **Changed by:** 73a2e4d
 - **Requirement:** `PORTAL.VISITS.NONCLINICAL`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-02`
 - **Surface:** My Visit History
 - **Route/API:** GET /portal/visits
 - **Actor/grants:** Student/employee with portal.records.read
@@ -119,6 +137,9 @@
 - **Legacy IDs:** `PT-007`
 - **Changed by:** baseline
 - **Requirement:** `PORTAL.PROFILE.PHOTO_LIFECYCLE`
+- **Role:** `all_authenticated`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-SH-05`
 - **Surface:** Profile settings
 - **Route/API:** GET/POST /portal/settings/photo; POST /portal/settings/photo/remove
 - **Actor/grants:** Linked student/employee person
@@ -138,6 +159,9 @@
 - **Legacy IDs:** `PT-008`
 - **Changed by:** baseline
 - **Requirement:** `PORTAL.PROFILE.EMERGENCY_CONTACT`
+- **Role:** `all_authenticated`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-SH-05`
 - **Surface:** Profile settings
 - **Route/API:** POST /portal/settings/emergency-contact
 - **Actor/grants:** Linked student/employee person
@@ -157,6 +181,9 @@
 - **Legacy IDs:** `PT-009`
 - **Changed by:** baseline
 - **Requirement:** `PORTAL.ANNOUNCEMENT.READ`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-03`
 - **Surface:** Portal announcements
 - **Route/API:** GET /portal/announcements/{id}; POST /portal/announcements/{id}/read
 - **Actor/grants:** Targeted student or employee
@@ -174,20 +201,23 @@
 ## PT-010 — Published survey accepts one owned response
 - **Lifecycle:** `READY`
 - **Legacy IDs:** `PT-010`
-- **Changed by:** baseline
+- **Changed by:** `6deffdf`
 - **Requirement:** `PORTAL.SURVEY.SUBMIT`
-- **Surface:** Portal surveys
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-03`
+- **Surface:** Portal surveys (including linear scale rating items)
 - **Route/API:** GET /portal/surveys/{id}; POST /portal/surveys/{id}/submit
 - **Actor/grants:** In-audience student/employee
-- **Preconditions:** Published synthetic identified survey with valid questions; actor has not responded; out-of-audience account available.
+- **Preconditions:** Published synthetic identified survey with text, choice, and linear-scale questions; actor has not responded; out-of-audience account available.
 **Steps**
-1. Open the survey, answer every required question, and submit.
-2. Reload the survey list, attempt a duplicate submission, and check the out-of-audience account.
-- **Expected:** One response is recorded and the survey moves from available to submitted for the actor.
+1. Open the survey, answer every required question including linear-scale rating bounds, and submit.
+2. Reload the survey list, attempt a duplicate or out-of-bounds scale submission, and check the out-of-audience account.
+- **Expected:** One response is recorded and the survey moves from available to submitted for the actor; linear-scale min/max/step constraints enforce valid selection.
 - **Negative/non-disclosure:** Duplicate/out-of-audience submissions are rejected and other respondents' answers are never shown.
 - **Cleanup:** Close and remove the synthetic survey/response in disposable teardown.
-- **Source:** app/Config/Routes.php:212-214; app/Controllers/PortalSurveyController.php:1-60
-- **Evidence:** Completed form, submission acknowledgement, list-state change, and duplicate/audience denial.
+- **Source:** app/Config/Routes.php:218-220; app/Controllers/PortalSurveyController.php:1-60
+- **Evidence:** Completed form with linear scale, submission acknowledgement, list-state change, and duplicate/audience denial.
 - **Verdict:** `NOT_RUN`
 
 ## PT-011 — Notification inbox read state is account-owned
@@ -195,6 +225,9 @@
 - **Legacy IDs:** `PT-011`
 - **Changed by:** baseline
 - **Requirement:** `PORTAL.NOTIFICATION.READ`
+- **Role:** `all_authenticated`
+- **Module:** Realtime & Notifications
+- **Use Cases:** `UC-SH-06`
 - **Surface:** Notification inbox
 - **Route/API:** GET /notifications; POST /notifications/{id}/read; POST /notifications/read-all
 - **Actor/grants:** Authenticated notification recipient
@@ -214,6 +247,9 @@
 - **Legacy IDs:** `PT-012`
 - **Changed by:** baseline
 - **Requirement:** `PORTAL.RECORDS.OWNERSHIP`
+- **Role:** `student`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-01`
 - **Surface:** Portal routes
 - **Route/API:** GET /portal, /portal/appointments/{id}, /portal/visits, /portal/settings
 - **Actor/grants:** Student/employee with self-service grants
@@ -233,6 +269,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 73a2e4d, b868a49
 - **Requirement:** `PORTAL.SCHEDULING.MANILA_ASSIGNMENT`
+- **Role:** `workstation_member`
+- **Module:** Clinic Operations & Extensions
+- **Use Cases:** `UC-CL-08`, `UC-GD-11`
 - **Surface:** Appointment request/confirmation
 - **Route/API:** GET /api/appointments/slots; POST /{unit}/appointments/{id}/confirm
 - **Actor/grants:** Requester plus unit scheduler
@@ -252,6 +291,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `PORTAL.PROFILE.CONTACT_INFO`
+- **Role:** `all_authenticated`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-SH-05`
 - **Surface:** Profile settings
 - **Route/API:** POST /portal/settings/contact-info
 - **Actor/grants:** Linked student/employee person
@@ -271,6 +313,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `PORTAL.PROFILE.PHOTO_VALIDATION`
+- **Role:** `all_authenticated`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-SH-05`
 - **Surface:** Profile settings
 - **Route/API:** POST /portal/settings/photo
 - **Actor/grants:** Linked student/employee person
@@ -290,6 +335,9 @@
 - **Legacy IDs:** None
 - **Changed by:** 884b9f0
 - **Requirement:** `PORTAL.PROFILE.MIS_READ_ONLY`
+- **Role:** `all_authenticated`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-SH-05`
 - **Surface:** Profile settings
 - **Route/API:** GET /portal/settings
 - **Actor/grants:** Linked student/employee person
@@ -309,6 +357,9 @@
 - **Legacy IDs:** None
 - **Changed by:** baseline
 - **Requirement:** `PORTAL.PROFILE.NO_PASSWORD_UI`
+- **Role:** `all_authenticated`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-SH-05`
 - **Surface:** Profile settings and navigation
 - **Route/API:** N/A
 - **Actor/grants:** Any student/employee

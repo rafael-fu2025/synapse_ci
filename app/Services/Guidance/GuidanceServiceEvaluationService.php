@@ -54,19 +54,19 @@ class GuidanceServiceEvaluationService
     ];
 
     public const PSYCHOSOCIAL_RATING_FIELDS = [
-        'rating_welcoming',
-        'rating_empathy',
         'rating_clarity',
         'rating_helpfulness',
+        'rating_welcoming',
+        'rating_empathy',
         'rating_environment',
     ];
 
     public const COUNSELING_RATING_FIELDS = [
+        'rating_goal_progress',
+        'rating_overall_service',
         'rating_rapport',
         'rating_understanding',
-        'rating_goal_progress',
         'rating_confidentiality_comfort',
-        'rating_overall_service',
     ];
 
     public const MODERATION_STATUSES = [
@@ -526,9 +526,7 @@ class GuidanceServiceEvaluationService
 
         $sums = array_fill_keys($dimensions, 0.0);
         $trueCount = 0;
-        $visitDistribution = $canonicalType === self::TYPE_PSYCHOSOCIAL
-            ? array_fill_keys(self::PSYCHOSOCIAL_VISIT_TYPES, 0)
-            : null;
+        $visitDistribution = array_fill_keys(self::PSYCHOSOCIAL_VISIT_TYPES, 0);
         $approvedComments = [];
 
         foreach ($rows as $row) {
@@ -609,13 +607,27 @@ class GuidanceServiceEvaluationService
             $visitType = $vt;
             $dimensions = self::PSYCHOSOCIAL_RATING_FIELDS;
             $boolField = 'future_visit_willingness';
+            $boolValue = $payload[$boolField] ?? ($payload['boolean_response'] ?? null);
             $commentRaw = $payload['qualitative_comments'] ?? $payload['qualitative_feedback'] ?? $payload['comments'] ?? null;
         } else {
-            if (isset($payload['visit_type']) && is_string($payload['visit_type']) && trim($payload['visit_type']) !== '') {
-                $visitType = trim($payload['visit_type']);
+            if (array_key_exists('visit_type', $payload) && $payload['visit_type'] !== null && $payload['visit_type'] !== '') {
+                if (!is_string($payload['visit_type'])) {
+                    throw new InvalidArgumentException('Counseling evaluation visit_type must be a string.', 422);
+                }
+                $vt = trim($payload['visit_type']);
+                if ($vt !== '') {
+                    if (!in_array($vt, self::PSYCHOSOCIAL_VISIT_TYPES, true)) {
+                        throw new InvalidArgumentException(
+                            'Counseling evaluation requires a valid visit_type (' . implode(', ', self::PSYCHOSOCIAL_VISIT_TYPES) . ').',
+                            422
+                        );
+                    }
+                    $visitType = $vt;
+                }
             }
             $dimensions = self::COUNSELING_RATING_FIELDS;
             $boolField = 'recommend_service';
+            $boolValue = $payload[$boolField] ?? ($payload['future_visit_willingness'] ?? ($payload['boolean_response'] ?? null));
             $commentRaw = $payload['qualitative_feedback'] ?? $payload['qualitative_comments'] ?? $payload['comments'] ?? null;
         }
 
@@ -639,11 +651,25 @@ class GuidanceServiceEvaluationService
             $ratings[$dim] = $intVal;
         }
 
-        $boolValue = $payload[$boolField] ?? ($payload['boolean_response'] ?? null);
         if ($boolValue === null) {
             throw new InvalidArgumentException("Missing required boolean field '{$boolField}'.", 422);
         }
         $booleanInt = $this->parseBooleanResponse($boolValue, $boolField);
+
+        $reasonRaw = $payload['future_visit_reason'] ?? $payload['boolean_reason'] ?? null;
+        $reason = null;
+        if ($reasonRaw !== null) {
+            if (!is_string($reasonRaw)) {
+                throw new InvalidArgumentException('Future visit reason must be a string.', 422);
+            }
+            $trimmedReason = trim($reasonRaw);
+            if (mb_strlen($trimmedReason) > 512) {
+                throw new InvalidArgumentException('Future visit reason must not exceed 512 characters.', 422);
+            }
+            if ($trimmedReason !== '') {
+                $reason = $trimmedReason;
+            }
+        }
 
         $comments = null;
         if ($commentRaw !== null) {
@@ -656,6 +682,19 @@ class GuidanceServiceEvaluationService
             }
             if ($trimmed !== '') {
                 $comments = $trimmed;
+            }
+        }
+
+        if ($reason !== null) {
+            $reasonLine = "Reason/s why: {$reason}";
+            if ($comments !== null) {
+                $combined = "{$reasonLine}\n\n{$comments}";
+                if (mb_strlen($combined) > 2048) {
+                    throw new InvalidArgumentException('Qualitative comments must not exceed 2048 characters.', 422);
+                }
+                $comments = $combined;
+            } else {
+                $comments = $reasonLine;
             }
         }
 

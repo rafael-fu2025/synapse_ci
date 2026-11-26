@@ -7,6 +7,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: `BM-010`
 - Changed by: `bea71cf`
 - Requirement: Registration must rotate a one-time credential and disable automation; an authorized gated command must bind to exactly one active device, expire safely, be acknowledged as a device claim, and remain distinct from a separately reported run.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-05`
 - Surface: BMG unit detail plus device API.
 - Route/API: `POST /facilities/unit/{unit}/device`; `POST /facilities/unit/{unit}/command`; `GET /api/v1/devices/bmg/commands`; `POST /api/v1/devices/bmg/commands/ack`; `POST /api/v1/devices/bmg/runs`.
 - Actor/grants: Human BMG administrator with configure/manage/hardware grants; approved simulator using the one-time device token.
@@ -29,6 +32,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: `BM-011`
 - Changed by: `bea71cf`
 - Requirement: A schedule is versioned intent in Asia/Manila, limited to eight distinct non-overlapping `HH:MM` windows, duration 1–600 seconds, optional PWM 1–255, forward direction, and effective only when all hardware/unit/binding gates hold.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-04`, `UC-BM-05`
 - Surface: BMG schedule editor and device schedule API.
 - Route/API: `POST /facilities/unit/{unit}/schedule`; `GET /api/v1/devices/bmg/schedule`.
 - Actor/grants: BMG administrator with configure/manage/hardware grants; bound simulator token.
@@ -51,6 +57,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: `BM-012`
 - Changed by: `bea71cf`
 - Requirement: Commissioning may build only reviewed sources with pinned toolchain/dependencies, motor outputs disabled, private actor/tenant/unit binding, 30-minute retention, and explicit physical-isolation consent; build artifacts do not authorize or perform flashing.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-06`
 - Surface: BMG USB workspace.
 - Route/API: `GET /facilities/unit/{unit}/usb/setup-status`; `POST /facilities/unit/{unit}/usb/build`; manifest/part routes; `POST /facilities/unit/{unit}/usb/authorize-flash`.
 - Actor/grants: Human BMG administrator with `facilities.read`, `facilities.manage`, and `facilities.configure`; separate flash authorization policy applies.
@@ -73,6 +82,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: None
 - Changed by: `bea71cf`
 - Requirement: Every device endpoint must require `X-Device-Token`, use no-store responses, bound IP/token throttles, bounded object input, and a maintenance-mode `503` that performs no device operation.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-05`
 - Surface: BMG device API.
 - Route/API: `/api/v1/devices/bmg/*`.
 - Actor/grants: Approved simulator; no human browser session authority.
@@ -95,6 +107,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: None
 - Changed by: `bea71cf`
 - Requirement: Heartbeat must update liveness and only explicitly supplied firmware, RTC, and applied-schedule fields with independent receipt timestamps; omission must retain prior/unknown values and an applied version cannot exceed the published version.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-05`
 - Surface: Device heartbeat and BMG unit detail.
 - Route/API: `POST /api/v1/devices/bmg/heartbeat`.
 - Actor/grants: Bound approved simulator token.
@@ -117,6 +132,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: None
 - Changed by: `bea71cf`
 - Requirement: Device run facts must use a bounded unique `run_uid`, allowed reported state, 0–86400 duration, valid nonfuture Manila start time strictly after current binding, and must never be reassigned across bindings.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-05`
 - Surface: Device run-ingest API and unit run history.
 - Route/API: `POST /api/v1/devices/bmg/runs`.
 - Actor/grants: Bound approved simulator token.
@@ -139,6 +157,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: None
 - Changed by: `bea71cf`
 - Requirement: Command delivery and acknowledgement must revalidate hardware gate, active unit, exact current binding, binding cutoff, and unit identity; invalid pending commands must become terminal rather than be delivered later.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-05`
 - Surface: BMG command form and device commands API.
 - Route/API: `POST /facilities/unit/{unit}/command`; `GET /api/v1/devices/bmg/commands`; `POST /api/v1/devices/bmg/commands/ack`.
 - Actor/grants: Hardware-authorized human plus bound simulator.
@@ -161,6 +182,9 @@ Every case in this annex is conditional on an approved disposable hardware campa
 - Legacy IDs: None
 - Changed by: `bea71cf`
 - Requirement: Archiving with explicit physical-safety acknowledgement must be refused while a batch is active, then disable schedule intent, cancel commands, revoke/unbind every controller, retain history, and restore only as offline with fresh commissioning required.
+- Role: `commissioned_hardware_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-03`, `UC-BM-05`
 - Surface: BMG archived-unit workflow.
 - Route/API: `POST /facilities/unit/{unit}/archive`; `POST /facilities/unit/{unit}/restore`.
 - Actor/grants: BMG administrator with configure/manage; hardware campaign controls for any prior device setup.

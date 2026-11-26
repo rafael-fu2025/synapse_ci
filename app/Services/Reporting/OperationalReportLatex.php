@@ -13,102 +13,115 @@ final class OperationalReportLatex
     {
         $hasClinicInsights = isset($groups['Clinic']) && $clinicInsights !== null;
         $totalPages = count($groups) * 2 + (count($groups) > 1 ? 1 : 0) + ($hasClinicInsights ? 2 : 0);
-        $source = <<<'TEX'
-\documentclass[10pt,a4paper]{article}
-\pdfminorversion=4
-\usepackage[top=16mm,bottom=20mm,left=18mm,right=18mm,footskip=10mm]{geometry}
-\usepackage[T1]{fontenc}
-\IfFileExists{t1ptm.fd}{\renewcommand{\rmdefault}{ptm}}{\renewcommand{\rmdefault}{utm}}
-\DeclareSymbolFont{operators}{T1}{\rmdefault}{m}{n}
-\SetSymbolFont{operators}{bold}{T1}{\rmdefault}{b}{n}
-\usepackage{graphicx,xcolor,booktabs,tabularx,pgfplots,microtype}
-\pgfplotsset{compat=1.18}
-\definecolor{Maroon}{HTML}{800000}
-\definecolor{Ink}{HTML}{293241}
-\definecolor{Muted}{HTML}{606975}
-\definecolor{Panel}{HTML}{F4F4F6}
-\definecolor{Clinic}{HTML}{800000}
-\definecolor{Guidance}{HTML}{21598C}
-\definecolor{Started}{HTML}{296E5C}
-\definecolor{Released}{HTML}{8F5C14}
-\definecolor{Voided}{HTML}{665C7A}
-\color{Ink}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{5pt}
-\setlength{\emergencystretch}{2em}
-\renewcommand{\arraystretch}{1.2}
-\renewcommand{\labelitemi}{\textcolor{Maroon}{\rule{0.7mm}{0.7mm}}}
-\pdfinfo{/Title (SYNAPSE Operational Report) /Author (Foundation University)}
-\newsavebox{\ReportBrand}
-\newlength{\ReportBrandHeight}
-\newlength{\SynapseLogoHeight}
-\newcommand{\ReportHeader}[3]{%
-  \sbox{\ReportBrand}{\begin{minipage}[c]{\dimexpr\linewidth-15mm\relax}
-    \setlength{\parskip}{2pt}
-    {\rmfamily\bfseries\large\color{Maroon}\textls[120]{FOUNDATION UNIVERSITY}}\par
-    {\rmfamily\small\color{Muted}SYNAPSE\enspace/\enspace Operational Reporting}
-  \end{minipage}}%
-  \setlength{\ReportBrandHeight}{\dimexpr\ht\ReportBrand+\dp\ReportBrand\relax}%
-  \includegraphics[trim=0 8.25bp 0 8.25bp,clip,height=\ReportBrandHeight]{university-seal.png}\hspace{3mm}%
-  \usebox{\ReportBrand}\par\vspace{3mm}
-  {\color{Maroon}\hrule height 0.8pt}\vspace{4mm}
-  {\rmfamily\bfseries\scriptsize\color{Maroon}#1}\par\vspace{1mm}
-  {\rmfamily\bfseries\LARGE #2}\par\vspace{2mm}
-  {\small\textbf{Reporting period:} #3\hfill\textcolor{Muted}{Asia/Manila (inclusive)}}\par\vspace{4mm}
+        $headerColors = DocumentHeaderLatex::colorDefinitions();
+        $fancy = DocumentHeaderLatex::fancyHeaderFooter(
+            'Operational Reporting',
+            '\\textbf{Report:} Operational Export',
+            '\\textbf{Issued via SYNAPSE} \\quad \\textit{Foundation University --- Aggregate operational data only}',
+            'Page \\thepage{} of ' . $totalPages
+        );
+        $source = <<<TEX
+\\documentclass[10pt,a4paper]{article}
+\\pdfminorversion=4
+\\usepackage[top=20mm,bottom=22mm,left=18mm,right=18mm,headheight=14pt,headsep=5mm]{geometry}
+\\usepackage[T1]{fontenc}
+\\IfFileExists{t1ptm.fd}{\\renewcommand{\\rmdefault}{ptm}}{\\renewcommand{\\rmdefault}{utm}}
+\\DeclareSymbolFont{operators}{T1}{\\rmdefault}{m}{n}
+\\SetSymbolFont{operators}{bold}{T1}{\\rmdefault}{b}{n}
+\\PassOptionsToPackage{framemethod=tikz}{mdframed}
+\\usepackage{graphicx,xcolor,tabularx,pgfplots,microtype,fancyhdr,mdframed}
+\\pgfplotsset{compat=1.18}
+\\definecolor{Maroon}{HTML}{800000}
+\\definecolor{Ink}{HTML}{293241}
+\\definecolor{Muted}{HTML}{606975}
+{$headerColors}
+\\definecolor{Panel}{HTML}{F8F9FB}
+\\definecolor{Clinic}{HTML}{800000}
+\\definecolor{Guidance}{HTML}{21598C}
+\\definecolor{Started}{HTML}{296E5C}
+\\definecolor{Released}{HTML}{8F5C14}
+\\definecolor{Voided}{HTML}{665C7A}
+\\color{DocInk}
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{4pt}
+\\setlength{\\emergencystretch}{2em}
+\\renewcommand{\\arraystretch}{1.25}
+\\renewcommand{\\labelitemi}{\\textcolor{FuMaroon}{\\rule{0.7mm}{0.7mm}}}
+\\mdfsetup{backgroundcolor=gray!2,linecolor=HeaderBorder,linewidth=0.5pt,innertopmargin=2mm,innerbottommargin=2mm,innerleftmargin=3mm,innerrightmargin=3mm}
+\\pdfinfo{/Title (SYNAPSE Operational Report) /Author (Foundation University)}
+\\newcommand{\\ReportHeader}[4]{%
+  {\\setlength{\\fboxsep}{3mm}\\setlength{\\fboxrule}{0.6pt}%
+  \\noindent\\fcolorbox{HeaderBorder}{HeaderBg}{%
+  \\begin{minipage}{\\dimexpr\\textwidth-2\\fboxsep-2\\fboxrule\\relax}
+    \\begin{minipage}[c]{18mm}
+      \\centering\\IfFileExists{university-seal.png}{\\includegraphics[width=16mm,height=16mm,keepaspectratio]{university-seal.png}}{\\vspace{16mm}}
+    \\end{minipage}\\hspace{2mm}%
+    \\begin{minipage}[c]{\\dimexpr\\linewidth-40mm\\relax}
+      \\centering
+      {\\normalsize\\bfseries\\color{FuMaroon} FOUNDATION UNIVERSITY}\\par\\vspace{0.15em}
+      {\\large\\bfseries\\color{DocInk} #1}\\par\\vspace{0.15em}
+      {\\normalsize\\bfseries\\color{DocInk} #2}\\par
+      \\vspace{0.25em}{\\color{HeaderRule}\\hrule height 0.4pt}\\vspace{0.25em}
+      {\\footnotesize\\color{DocMuted} \\textbf{Reporting period:} #3 \\quad \\textit{Asia/Manila (inclusive)}\\par}
+    \\end{minipage}\\hspace{2mm}%
+    \\begin{minipage}[c]{18mm}
+      \\centering\\if\\relax\\detokenize{#4}\\relax\\vspace{16mm}\\else\\IfFileExists{#4}{\\includegraphics[width=16mm,height=16mm,keepaspectratio]{#4}}{\\vspace{16mm}}\\fi
+    \\end{minipage}
+  \\end{minipage}%
+  }}\\par\\vspace{0.6em}
 }
-\newcommand{\Section}[1]{\par\vspace{3mm}{\rmfamily\bfseries\small #1}\par\vspace{1mm}}
-\newlength{\cardwidth}
-\setlength{\fboxsep}{3mm}
-\setlength{\cardwidth}{\dimexpr(\textwidth-12mm)/3-6mm\relax}
-\newcommand{\MetricCard}[3]{%
-  \colorbox{Panel}{\begin{minipage}[t][24mm][t]{\cardwidth}
-    {\rmfamily\bfseries\small #1}\par\vspace{1mm}
-    {\rmfamily\bfseries\Large\color{Maroon}#2}\par
-    {\rmfamily\scriptsize\color{Muted}#3}
-  \end{minipage}}%
+\\newcommand{\\Section}[1]{\\par\\addvspace{2.5mm}\\noindent{\\rmfamily\\bfseries\\small\\color{FuMaroon}#1}\\par\\nobreak\\vspace{1mm}}
+\\newlength{\\cardwidth}
+\\setlength{\\fboxsep}{3mm}
+\\setlength{\\fboxrule}{0.6pt}
+\\setlength{\\cardwidth}{\\dimexpr(\\textwidth-12mm)/3-6mm-2\\fboxrule\\relax}
+\\newcommand{\\MetricCard}[3]{%
+  \\fcolorbox{HeaderBorder}{HeaderBg}{\\begin{minipage}[t][21mm][t]{\\cardwidth}
+    {\\rmfamily\\bfseries\\small\\color{DocInk} #1}\\par\\vspace{1mm}
+    {\\rmfamily\\bfseries\\Large\\color{FuMaroon}#2}\\par
+    {\\rmfamily\\scriptsize\\color{DocMuted}#3}
+  \\end{minipage}}%
 }
-\makeatletter
-\def\ps@synapse{%
-  \def\@oddhead{}\def\@evenhead{}%
-  \def\@oddfoot{\parbox{\textwidth}{\rmfamily\scriptsize\color{black}%
-    \settoheight{\SynapseLogoHeight}{\textbf{SYNAPSE}}%
-    \raisebox{-0.5\height}{\includegraphics[trim=76bp 89bp 92bp 116bp,clip,height=\SynapseLogoHeight]{synapse-black.png}}\enspace
-    \textbf{SYNAPSE}\hfill Page \thepage{} of TOTALPAGES\par}}
-  \let\@evenfoot\@oddfoot
-}
-\makeatother
-\pagestyle{synapse}
-\begin{document}
+{$fancy}
+\\begin{document}
 TEX;
-        $source = str_replace('TOTALPAGES', (string) $totalPages, $source);
         if (count($groups) > 1) {
             $source .= self::header('EXECUTIVE SUMMARY', 'Operational report', $range);
-            $source .= "\n\\Section{Department results}\nEach department is reported independently. There is no combined activity total.\n";
+            $source .= "\n\\Section{Department results}\n{\\small\\color{DocMuted}\\textit{Each department is reported independently. There is no combined activity total.}}\\par\\vspace{1mm}\n";
             $page = 2;
             foreach ($groups as $unit => $metrics) {
                 $departmentPages = $unit === 'Clinic' && $hasClinicInsights ? 4 : 2;
                 $source .= '\Section{' . self::escape($unit) . '\hfill\normalfont\scriptsize Pages ' . $page . '--' . ($page + $departmentPages - 1) . "}\n";
-                $source .= "\\begin{tabularx}{\\linewidth}{@{}Xr@{}}\\toprule\n\\textbf{Measure} & \\textbf{Period total} \\\\ \\midrule\n";
-                foreach ($metrics as $metric => [$label]) $source .= self::escape($label) . ' & ' . number_format(array_sum(array_column($data, $metric))) . " \\\\\n";
-                $source .= "\\bottomrule\\end{tabularx}\n\\vspace{4mm}\n";
+                $source .= "\\begin{tabularx}{\\textwidth}{|X|r|}\n\\hline\n\\textcolor{FuMaroon}{\\textbf{Measure}} & \\textcolor{FuMaroon}{\\textbf{Period total}} \\\\\n\\hline\\hline\n";
+                foreach ($metrics as $metric => [$label]) $source .= self::escape($label) . ' & ' . number_format(array_sum(array_column($data, $metric))) . " \\\\\n\\hline\n";
+                $source .= "\\end{tabularx}\\par\\vspace{1.5mm}\n";
                 $page += $departmentPages;
             }
             if ($hasClinicInsights) {
-                $source .= "\n{\\small Clinic also includes a visit profile and medicine insights before its daily register.}\n";
+                $source .= "\n{\\small\\color{DocMuted}\\textit{Clinic also includes a visit profile and medicine insights before its daily register.}}\\par\\vspace{1mm}\n";
             }
             $source .= <<<'TEX'
 \Section{How to use this report}
-The following department sections each contain an analysis page and a daily register.
-Charts describe independent measures, with exact daily values provided in the tables.
+\begin{mdframed}
+{\small The following department sections each contain an analysis page and a daily register.
+Charts describe independent measures, with exact daily values provided in the tables.}
+\end{mdframed}
 \Section{Scope and interpretation}
-Only authorized departments are included. Clinic and Guidance figures count completed
+\begin{mdframed}
+{\small Only authorized departments are included. Clinic and Guidance figures count completed
 care activities, not unique people. BMG figures describe separate lifecycle events;
-they must not be added together or interpreted as a cohort success rate.
+they must not be added together or interpreted as a cohort success rate.}
+\end{mdframed}
 \newpage
 TEX;
         }
         foreach ($groups as $unit => $metrics) {
-            $source .= self::header('DEPARTMENT ANALYSIS', $unit . ' operational results', $range);
+            $unitLogo = match ($unit) {
+                'Clinic' => 'clinic-logo.png',
+                'Guidance' => 'guidance-logo.png',
+                default => '',
+            };
+            $source .= self::header('DEPARTMENT ANALYSIS', $unit . ' operational results', $range, $unitLogo);
             $source .= "\n\\Section{01\\enspace Performance summary}\n";
             $cards = [];
             if (count($metrics) === 1) {
@@ -129,9 +142,9 @@ TEX;
                 if ($index > 0) $source .= '\hfill';
                 $source .= '\MetricCard{' . self::escape($label) . '}{' . self::escape($value) . '}{' . self::escape($caption) . "}%\n";
             }
-            $source .= "\n\\par\\Section{02\\enspace Daily activity}\n{\\small Each measure has its own labelled scale; counts must not be combined.}\\par\n";
-            foreach ($metrics as $metric => [$label]) $source .= self::chart($data, $metric, $label, count($metrics) === 1 ? 65 : 27);
-            $source .= "\n\\Section{03\\enspace Interpretation and counting basis}\n\\begin{itemize}\\setlength{\\itemsep}{1pt}\\setlength{\\parskip}{0pt}\n";
+            $source .= "\n\\par\\Section{02\\enspace Daily activity}\n{\\small\\color{DocMuted}\\textit{Each measure has its own labelled scale; counts must not be combined.}}\\par\n";
+            foreach ($metrics as $metric => [$label]) $source .= self::chart($data, $metric, $label, count($metrics) === 1 ? 60 : 25);
+            $source .= "\n\\Section{03\\enspace Interpretation and counting basis}\n\\begin{mdframed}\n\\begin{itemize}\\setlength{\\itemsep}{1pt}\\setlength{\\parskip}{0pt}\n";
             if ($unit === 'BMG') {
                 $notes = ['Started counts use batch start date; released and voided counts use completion date.',
                     'These are separate lifecycle events, not a cohort or a release-success rate.',
@@ -148,40 +161,41 @@ TEX;
                     'Daily averages include zero-activity dates. Counts reflect current completion status.'];
             }
             foreach ($notes as $note) $source .= '\item {\small ' . self::escape($note) . "}\n";
-            $source .= "\\end{itemize}\n{\\scriptsize\\color{Muted}A zero count means no matching records; it does not establish service availability.}\n\\newpage\n";
+            $source .= "\\end{itemize}\n{\\scriptsize\\color{DocMuted}A zero count means no matching records; it does not establish service availability.}\n\\end{mdframed}\n\\newpage\n";
             if ($unit === 'Clinic' && $hasClinicInsights) {
                 $source .= self::clinicPages($clinicInsights, $range);
             }
-            $source .= self::header('DEPARTMENT DETAIL', $unit . ' daily register', $range);
-            $source .= "\n\\Section{Daily counts and period totals}\n{\\small Every date in the selected period is included, including zero-activity days.}\\par\n\\vspace{2mm}\n";
-            $source .= '\begin{tabularx}{\linewidth}{@{}X' . str_repeat('r', count($metrics)) . "@{}}\\toprule\n\\textbf{Date (Manila)}";
-            foreach ($metrics as [$label]) $source .= ' & \textbf{' . self::escape($label) . '}';
-            $source .= " \\\\ \\midrule\n";
+            $source .= self::header('DEPARTMENT DETAIL', $unit . ' daily register', $range, $unitLogo);
+            $source .= "\n\\Section{Daily counts and period totals}\n{\\small\\color{DocMuted}\\textit{Every date in the selected period is included, including zero-activity days.}}\\par\n\\vspace{1.5mm}\n";
+            $rowStretch = count($data) >= 20 ? '{\footnotesize\renewcommand{\arraystretch}{1.08}' : '{\small\renewcommand{\arraystretch}{1.18}';
+            $source .= $rowStretch . "\n" . '\begin{tabularx}{\textwidth}{|X' . str_repeat('|r', count($metrics)) . "|}\n\\hline\n\\textcolor{FuMaroon}{\\textbf{Date (Manila)}}";
+            foreach ($metrics as [$label]) $source .= ' & \textcolor{FuMaroon}{\textbf{' . self::escape($label) . '}}';
+            $source .= " \\\\\n\\hline\\hline\n";
             foreach ($data as $date => $daily) {
                 $source .= self::escape((new DateTimeImmutable($date))->format('d M Y'));
                 foreach ($metrics as $metric => $_) $source .= ' & ' . number_format($daily[$metric]);
-                $source .= " \\\\\n";
+                $source .= " \\\\\n\\hline\n";
             }
-            $source .= "\\midrule\n\\textbf{Period total}";
+            $source .= "\\textbf{Period total}";
             foreach ($metrics as $metric => $_) $source .= ' & \textbf{' . number_format(array_sum(array_column($data, $metric))) . '}';
-            $source .= " \\\\ \\bottomrule\n\\end{tabularx}\n";
+            $source .= " \\\\\n\\hline\n\\end{tabularx}}\n";
             if (count($data) < 20) {
-                $source .= "\n\\Section{Daily statistics}\n\\begin{tabularx}{\\linewidth}{@{}Xrrr@{}}\\toprule\n\\textbf{Measure} & \\textbf{Average/day} & \\textbf{Peak/day} & \\textbf{Active days} \\\\ \\midrule\n";
+                $source .= "\n\\Section{Daily statistics}\n\\begin{tabularx}{\\textwidth}{|X|r|r|r|}\n\\hline\n\\textcolor{FuMaroon}{\\textbf{Measure}} & \\textcolor{FuMaroon}{\\textbf{Average/day}} & \\textcolor{FuMaroon}{\\textbf{Peak/day}} & \\textcolor{FuMaroon}{\\textbf{Active days}} \\\\\n\\hline\\hline\n";
                 foreach ($metrics as $metric => [$label]) {
                     $values = array_column($data, $metric);
                     $source .= self::escape($label) . ' & ' . number_format(array_sum($values) / count($values), 1)
-                        . ' & ' . number_format(max($values)) . ' & ' . count(array_filter($values)) . ' / ' . count($values) . " \\\\\n";
+                        . ' & ' . number_format(max($values)) . ' & ' . count(array_filter($values)) . ' / ' . count($values) . " \\\\\n\\hline\n";
                 }
-                $source .= "\\bottomrule\\end{tabularx}\n";
+                $source .= "\\end{tabularx}\n";
             }
-            $source .= "\n\\vfill{\\scriptsize\\color{Muted}Daily values and period totals use the counting basis documented on this department's analysis page.}\\newpage\n";
+            $source .= "\n\\vfill{\\scriptsize\\color{DocMuted}Daily values and period totals use the counting basis documented on this department's analysis page.}\\newpage\n";
         }
         return $source . "\n\\end{document}\n";
     }
 
-    private static function header(string $section, string $title, string $range): string
+    private static function header(string $section, string $title, string $range, string $unitLogo = ''): string
     {
-        return '\ReportHeader{' . self::escape($section) . '}{' . self::escape($title) . '}{' . self::escape($range) . "}\n";
+        return '\ReportHeader{' . self::escape($section) . '}{' . self::escape($title) . '}{' . self::escape($range) . '}{' . self::escape($unitLogo) . "}\n";
     }
 
     private static function chart(array $data, string $metric, string $label, int $height): string
@@ -218,58 +232,65 @@ TEX;
     private static function clinicPages(array $insights, string $range): string
     {
         $total = $insights['encounter_total'];
-        $source = self::header('CLINIC INSIGHTS', 'Clinic visit profile', $range);
+        $source = self::header('CLINIC INSIGHTS', 'Clinic visit profile', $range, 'clinic-logo.png');
         $source .= self::clinicCohort($total);
         $source .= self::profileSection('01\\enspace Chief complaint', $insights['complaints'], $total);
         $source .= self::profileSection('02\\enspace Disposition', $insights['dispositions'], $total);
         $source .= <<<'TEX'
 \Section{Classification and privacy}
+\begin{mdframed}
 {\small Chief complaints use exact vocabulary matching, ignoring case and edge spaces only.
 No clinical inference is made. Top five matched complaints are shown; remaining recorded
 values are grouped as Other recorded. Missing values remain Not recorded, including zero.
 Disposition uses recorded categories. Free-text narratives are not exported.}
+\end{mdframed}
 \newpage
 TEX;
-        $source .= self::header('CLINIC INSIGHTS', 'Clinic medicine insights', $range);
+        $source .= self::header('CLINIC INSIGHTS', 'Clinic medicine insights', $range, 'clinic-logo.png');
         $source .= self::clinicCohort($total);
         if ($insights['medicine_status'] === 'unavailable') {
             $source .= <<<'TEX'
 \Section{Medicine reporting setup not ready}
+\begin{mdframed}
 {\small Medicine insights are unavailable because the ledger reporting setup is not ready.
 This is not a zero count and does not establish that no medicines were dispensed.
 No medicine chart, ranking, or numeric medicine totals are reported.}
+\end{mdframed}
 \Section{Counting basis when available}
+\begin{mdframed}
 {\small The top five ranking uses distinct encounters per medicine, not units or quantities.
 Shares use medicine encounters as their denominator; medicines can overlap within an encounter.
 Legacy medicine encounters are excluded from the ledger-based ranking; their count is unavailable.}
+\end{mdframed}
 TEX;
         } else {
             $medicines = $insights['medicines'];
             // Stable ties retain the validated collector's ordering.
             usort($medicines, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
             $source .= "\n\\Section{01\\enspace Top five medicines by encounters}\n";
-            $source .= '{\\small Medicine encounters: \\textbf{' . number_format($insights['medicine_encounters'])
+            $source .= '{\\small\\color{DocMuted} Medicine encounters: \\textbf{' . number_format($insights['medicine_encounters'])
                 . '}. Distinct completed encounters with qualifying ledger dispensations.}\\par' . "\n";
             $source .= self::medicineBars($medicines);
             $source .= "\n\\Section{02\\enspace Medicine ranking}\n";
             $source .= self::rankingTable($medicines, $insights['medicine_encounters'], 'Medicine');
-            $source .= "\n\\Section{Counting basis and exclusions}\n{\\small\n";
+            $source .= "\n\\Section{Counting basis and exclusions}\n\\begin{mdframed}\n{\\small\n";
             $source .= 'Top five ranking by distinct encounters per medicine, not units or quantities. '
                 . 'Each encounter counts at most once per medicine. Shares use medicine encounters ('
                 . number_format($insights['medicine_encounters']) . ') as the denominator, not all completed encounters. '
                 . 'Medicines can overlap within an encounter, so shares may sum to more than 100\\%. '
                 . 'Legacy medicine encounters: \\textbf{' . number_format($insights['legacy_medicine_encounters'])
                 . '}; their unlinked allocations are excluded. These encounters may also have qualifying ledger dispensing. '
-                . 'Counts reflect qualifying, non-reversed ledger dispensations in the same clinical cohort. Catalog labels use the current medicine name, strength, and dosage form.}' . "\n";
+                . 'Counts reflect qualifying, non-reversed ledger dispensations in the same clinical cohort. Catalog labels use the current medicine name, strength, and dosage form.}' . "\n\\end{mdframed}\n";
         }
-        return $source . "\n\\vfill{\\scriptsize\\color{Muted}Aggregate catalog labels only; no narratives or person-level records are exported.}\\newpage\n";
+        return $source . "\n\\vfill{\\scriptsize\\color{DocMuted}Aggregate catalog labels only; no narratives or person-level records are exported.}\\newpage\n";
     }
 
     private static function clinicCohort(int $total): string
     {
-        return '{\\small \\textbf{Clinical cohort: ' . number_format($total) . ' completed encounters.} '
+        return "\\begin{mdframed}[backgroundcolor=HeaderBg]\n"
+            . '{\\small \\textbf{Clinical cohort: ' . number_format($total) . ' completed encounters.} '
             . 'Grouped by encounter start date in the selected reporting period (Asia/Manila), '
-            . 'using current completion status, exactly as the Clinic daily counts; not unique patients.}\\par' . "\n";
+            . 'using current completion status, exactly as the Clinic daily counts; not unique patients.}' . "\n\\end{mdframed}\\par\\vspace{1mm}\n";
     }
 
     private static function profileSection(string $title, array $rows, int $total): string
@@ -317,16 +338,16 @@ TEX;
 
     private static function rankingTable(array $rows, int $denominator, string $label): string
     {
-        $source = "{\\footnotesize\\setlength{\\tabcolsep}{2pt}\\renewcommand{\\arraystretch}{1.15}\n"
-            . '\\begin{tabularx}{\\linewidth}{@{}r>{\\raggedright\\arraybackslash}Xrr@{}}\\toprule' . "\n"
-            . '\\textbf{' . ($label === 'Category' ? 'Key' : 'Rank') . '} & \\textbf{' . self::escape($label) . '} & \\textbf{Count} & \\textbf{Share} \\\\ \\midrule' . "\n";
+        $source = "{\\footnotesize\\setlength{\\tabcolsep}{3pt}\\renewcommand{\\arraystretch}{1.2}\n"
+            . '\\begin{tabularx}{\\linewidth}{|r|>{\\raggedright\\arraybackslash}X|r|r|}' . "\n\\hline\n"
+            . '\\textcolor{FuMaroon}{\\textbf{' . ($label === 'Category' ? 'Key' : 'Rank') . '}} & \\textcolor{FuMaroon}{\\textbf{' . self::escape($label) . '}} & \\textcolor{FuMaroon}{\\textbf{Count}} & \\textcolor{FuMaroon}{\\textbf{Share}} \\\\' . "\n\\hline\\hline\n";
         foreach ($rows as $index => $row) {
             $share = $denominator > 0 ? rtrim(rtrim(number_format(100 * $row['count'] / $denominator, 1, '.', ''), '0'), '.') : '0';
             $source .= '\\textcolor{' . self::rankColor($index) . '}{\\textbf{' . ($index + 1) . '}} & ' . self::escape($row['label']) . ' & ' . number_format($row['count'])
-                . ' & ' . $share . "\\% \\\\\n";
+                . ' & ' . $share . "\\% \\\\\n\\hline\n";
         }
-        if ($rows === []) $source .= "\\multicolumn{4}{@{}l@{}}{No matching medicine encounters.} \\\\\n";
-        return $source . "\\bottomrule\\end{tabularx}}\n";
+        if ($rows === []) $source .= "\\multicolumn{4}{|l|}{No matching medicine encounters.} \\\\\n\\hline\n";
+        return $source . "\\end{tabularx}}\n";
     }
 
     private static function medicineBars(array $rows): string

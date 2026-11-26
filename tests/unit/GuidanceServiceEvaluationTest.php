@@ -408,18 +408,35 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             self::assertSame(422, $e->getCode());
         }
 
-        // Valid counseling submission succeeds
+        // 6b. Invalid visit_type on counseling form
+        try {
+            $this->service->submitEvaluation($counsToken, $this->validCounselingPayload([
+                'visit_type' => 'invalid_visit_kind',
+            ]));
+            self::fail('Expected InvalidArgumentException for invalid counseling visit_type.');
+        } catch (InvalidArgumentException $e) {
+            self::assertSame(422, $e->getCode());
+        }
+
+        // Valid counseling submission succeeds (with visit_type and future_visit_reason)
         $counsEval = $this->service->submitEvaluation($counsToken, $this->validCounselingPayload([
+            'visit_type'                     => 'called',
+            'rating_goal_progress'           => 3,
+            'rating_overall_service'         => 4,
             'rating_rapport'                 => 5,
             'rating_understanding'           => 4,
-            'rating_goal_progress'           => 3,
             'rating_confidentiality_comfort' => 5,
-            'rating_overall_service'         => 4,
             'recommend_service'              => false,
+            'future_visit_reason'            => 'CONFIDENTIAL_REASON_XYZ: Prefer follow-up next term.',
         ]));
         self::assertSame('counseling_evaluation', $counsEval['evaluation_type']);
         self::assertSame('F-OGC-GCS-CEF-009-00', $counsEval['form_code']);
+        self::assertSame('called', $counsEval['visit_type']);
         self::assertSame(0, (int) $counsEval['boolean_response']);
+        self::assertStringNotContainsString('CONFIDENTIAL_REASON_XYZ', (string) $counsEval['comments_cipher']);
+        $decryptedCounsComment = $this->service->decryptComment((string) $counsEval['comments_cipher']);
+        self::assertNotNull($decryptedCounsComment);
+        self::assertStringContainsString('Reason/s why: CONFIDENTIAL_REASON_XYZ: Prefer follow-up next term.', $decryptedCounsComment);
     }
 
     public function testEncryptedQualitativeCommentsContainNoPlaintext(): void
@@ -585,6 +602,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             )['token'];
 
             $ev = $this->service->submitEvaluation($tok, $this->validCounselingPayload([
+                'visit_type'           => $i % 2 === 0 ? 'called' : 'walk_in',
                 'qualitative_feedback' => "Feedback statement #{$i}",
             ]));
             $evalIds[$i] = (int) $ev['id'];
@@ -611,6 +629,8 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
 
         self::assertTrue($agg['cohort_met']);
         self::assertSame(5, $agg['total_responses']);
+        self::assertSame(3, $agg['visit_type_distribution']['walk_in']);
+        self::assertSame(2, $agg['visit_type_distribution']['called']);
         self::assertSame([
             'Feedback statement #1',
             'Feedback statement #3',

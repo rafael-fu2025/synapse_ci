@@ -51,22 +51,28 @@ final class GuidanceServiceEvaluationPdfTest extends CIUnitTestCase
         ];
 
         $this->counselingAggregateSnapshot = [
-            'cohort_met'        => true,
-            'total_responses'   => 8,
-            'minimum_required'  => 5,
-            'evaluation_type'   => 'counseling_evaluation',
-            'form_code'         => 'F-OGC-GCS-CEF-009-00',
-            'provider_name'     => 'Dr. Maria Santos, RGC',
-            'academic_term'     => '1st Trimester',
-            'academic_year'     => '2026-2027',
-            'report_date'       => '2026-11-13',
-            'verification_code' => 'SYN-DOC-CEF-2026-02',
+            'cohort_met'              => true,
+            'total_responses'         => 8,
+            'minimum_required'        => 5,
+            'evaluation_type'         => 'counseling_evaluation',
+            'form_code'               => 'F-OGC-GCS-CEF-009-00',
+            'provider_name'           => 'Dr. Maria Santos, RGC',
+            'academic_term'           => '1st Trimester',
+            'academic_year'           => '2026-2027',
+            'report_date'             => '2026-11-13',
+            'verification_code'       => 'SYN-DOC-CEF-2026-02',
+            'visit_type_distribution' => [
+                'walk_in'   => 4,
+                'called'    => 2,
+                'referred'  => 1,
+                'follow_up' => 1,
+            ],
             'averages'          => [
+                'rating_goal_progress'           => 4.50,
+                'rating_overall_service'         => 4.88,
                 'rating_rapport'                 => 4.88,
                 'rating_understanding'           => 4.75,
-                'rating_goal_progress'           => 4.50,
                 'rating_confidentiality_comfort' => 5.00,
-                'rating_overall_service'         => 4.88,
                 'overall_mean'                   => 4.80,
             ],
             'boolean_rate' => 0.875,
@@ -95,25 +101,44 @@ final class GuidanceServiceEvaluationPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('Prof. Alex Mercer, RGC', $latex);
         $this->assertStringContainsString('Total Responses:} 6', $latex);
 
-        // Visit type distribution
-        $this->assertStringContainsString('walk\\_in', $latex);
-        $this->assertStringContainsString('called', $latex);
-        $this->assertStringContainsString('referred', $latex);
-        $this->assertStringContainsString('follow\\_up', $latex);
+        // Visit type distribution (human-readable labels, no raw field keys)
+        $this->assertStringContainsString('Voluntarily came / Walk-in', $latex);
+        $this->assertStringContainsString('Called by Guidance Personnel', $latex);
+        $this->assertStringContainsString('Referred', $latex);
+        $this->assertStringContainsString('Follow-up', $latex);
+        $this->assertStringNotContainsString('\\texttt{walk\\_in}', $latex);
+        $this->assertStringNotContainsString('\\texttt{called}', $latex);
+        $this->assertStringNotContainsString('\\texttt{referred}', $latex);
+        $this->assertStringNotContainsString('\\texttt{follow\\_up}', $latex);
 
-        // 5 rating dimensions & overall mean
-        $this->assertStringContainsString('rating\\_welcoming', $latex);
-        $this->assertStringContainsString('rating\\_empathy', $latex);
-        $this->assertStringContainsString('rating\\_clarity', $latex);
-        $this->assertStringContainsString('rating\\_helpfulness', $latex);
-        $this->assertStringContainsString('rating\\_environment', $latex);
-        $this->assertStringContainsString('overall\\_mean', $latex);
+        // 5 rating dimensions & overall mean (exact official order 1-5, no raw dimension keys)
+        $pefItems = [
+            '1 & The goal of the psychosocial support session was achieved.',
+            '2 & The psychosocial support session was helpful.',
+            '3 & The guidance personnel were approachable and welcoming.',
+            '4 & The guidance personnel understood and empathized with me.',
+            '5 & Confidentiality was kept.',
+        ];
+        $lastPos = -1;
+        foreach ($pefItems as $pefItem) {
+            $pos = strpos($latex, $pefItem);
+            $this->assertNotFalse($pos, "Missing expected PEF-008 item: {$pefItem}");
+            $this->assertGreaterThan($lastPos, $pos, "PEF-008 item out of order: {$pefItem}");
+            $lastPos = $pos;
+        }
+        $this->assertStringContainsString('Overall Mean Rating:', $latex);
         $this->assertStringContainsString('4.83 / 5.00', $latex);
         $this->assertStringContainsString('4.77 / 5.00', $latex);
+        $this->assertStringNotContainsString('rating\\_welcoming', $latex);
+        $this->assertStringNotContainsString('overall\\_mean', $latex);
 
-        // Willingness to visit again (boolean_rate)
-        $this->assertStringContainsString('future\\_visit\\_willingness', $latex);
+        // Willingness to visit again (no raw boolean_rate / ratio debug text)
+        $this->assertStringContainsString('Would you still wish to come and visit your guidance personnel in the future?', $latex);
+        $this->assertStringContainsString('Willingness to Visit Again Rate:', $latex);
         $this->assertStringContainsString('83.3\\%', $latex);
+        $this->assertStringNotContainsString('future\\_visit\\_willingness', $latex);
+        $this->assertStringNotContainsString('boolean\\_rate', $latex);
+        $this->assertStringNotContainsString('ratio:', $latex);
 
         // Approved qualitative comments
         $this->assertStringContainsString('The guidance office felt safe and welcoming', $latex);
@@ -142,6 +167,10 @@ final class GuidanceServiceEvaluationPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('COHORT SUPPRESSION ACTIVE', $suppressedLatex);
         $this->assertStringNotContainsString('Should never appear when cohort_met is false', $suppressedLatex);
         $this->assertStringNotContainsString('4.83 / 5.00', $suppressedLatex);
+        $this->assertStringNotContainsString('cohort\\_met', $suppressedLatex);
+        $this->assertStringNotContainsString('MIN\\_COHORT\\_SIZE', $suppressedLatex);
+        $this->assertStringNotContainsString('Cohort $<$ 5', $suppressedLatex);
+        $this->assertStringNotContainsString('person\\_id', $suppressedLatex);
 
         // 2. Form template / preview state (no cohort_met)
         $templateSnapshot = [
@@ -165,6 +194,9 @@ final class GuidanceServiceEvaluationPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('$\\boxtimes$ Voluntarily came / Walk-in', $templateLatex);
         $this->assertStringContainsString('$\\boxtimes$ \\textbf{Yes}', $templateLatex);
         $this->assertStringContainsString('Sample preview feedback on psychosocial support.', $templateLatex);
+        $this->assertStringContainsString('Psychosocial Support Evaluation', $templateLatex);
+        $this->assertStringNotContainsString('psychosocial\\_support\\_evaluation', $templateLatex);
+        $this->assertStringNotContainsString('qualitative\\_comments', $templateLatex);
     }
 
     public function testRenderCounselingEvaluationAggregateThresholdMet(): void
@@ -185,19 +217,41 @@ final class GuidanceServiceEvaluationPdfTest extends CIUnitTestCase
         $this->assertStringContainsString('Dr. Maria Santos, RGC', $latex);
         $this->assertStringContainsString('Total Responses:} 8', $latex);
 
-        // 5 counseling rating dimensions & overall mean
-        $this->assertStringContainsString('rating\\_rapport', $latex);
-        $this->assertStringContainsString('rating\\_understanding', $latex);
-        $this->assertStringContainsString('rating\\_goal\\_progress', $latex);
-        $this->assertStringContainsString('rating\\_confidentiality\\_comfort', $latex);
-        $this->assertStringContainsString('rating\\_overall\\_service', $latex);
-        $this->assertStringContainsString('overall\\_mean', $latex);
+        // Visit type distribution (present on CEF-009 with Counselor-initiated label)
+        $this->assertStringContainsString('Visit Type Distribution', $latex);
+        $this->assertStringContainsString('Voluntarily came / Walk-in', $latex);
+        $this->assertStringContainsString('Called by Counselor / Counselor-initiated', $latex);
+        $this->assertStringContainsString('Referred', $latex);
+        $this->assertStringContainsString('Follow-up', $latex);
+
+        // 5 counseling rating dimensions & overall mean (exact official order 1-5, no raw dimension keys)
+        $cefItems = [
+            '1 & The goal of the counseling session was achieved.',
+            '2 & The counseling session was helpful.',
+            '3 & The counselor was approachable and welcoming.',
+            '4 & The counselor understood and empathized with me.',
+            '5 & Confidentiality was kept.',
+        ];
+        $lastPos = -1;
+        foreach ($cefItems as $cefItem) {
+            $pos = strpos($latex, $cefItem);
+            $this->assertNotFalse($pos, "Missing expected CEF-009 item: {$cefItem}");
+            $this->assertGreaterThan($lastPos, $pos, "CEF-009 item out of order: {$cefItem}");
+            $lastPos = $pos;
+        }
+        $this->assertStringContainsString('Overall Mean Rating:', $latex);
         $this->assertStringContainsString('4.88 / 5.00', $latex);
         $this->assertStringContainsString('4.80 / 5.00', $latex);
+        $this->assertStringNotContainsString('rating\\_rapport', $latex);
+        $this->assertStringNotContainsString('overall\\_mean', $latex);
 
-        // Service recommendation rate
-        $this->assertStringContainsString('recommend\\_service', $latex);
+        // Willingness to visit again rate (no raw boolean_rate / ratio debug text)
+        $this->assertStringContainsString('Would you still wish to come and visit your counselor in the future?', $latex);
+        $this->assertStringContainsString('Willingness to Visit Again Rate:', $latex);
         $this->assertStringContainsString('87.5\\%', $latex);
+        $this->assertStringNotContainsString('recommend\\_service', $latex);
+        $this->assertStringNotContainsString('boolean\\_rate', $latex);
+        $this->assertStringNotContainsString('ratio:', $latex);
 
         // Approved qualitative feedback
         $this->assertStringContainsString('My counselor helped me work through academic stress', $latex);
@@ -228,12 +282,14 @@ final class GuidanceServiceEvaluationPdfTest extends CIUnitTestCase
         // 2. Form template / preview state
         $templateSnapshot = [
             'provider_name'                  => 'Dr. Maria Santos, RGC',
+            'visit_type'                     => 'called',
+            'rating_goal_progress'           => 4,
+            'rating_overall_service'         => 5,
             'rating_rapport'                 => 5,
             'rating_understanding'           => 5,
-            'rating_goal_progress'           => 4,
             'rating_confidentiality_comfort' => 5,
-            'rating_overall_service'         => 5,
             'recommend_service'              => true,
+            'future_visit_reason'            => 'I felt heard and supported.',
             'qualitative_feedback'           => 'Template preview counseling feedback.',
             'is_draft'                       => true,
         ];
@@ -241,7 +297,9 @@ final class GuidanceServiceEvaluationPdfTest extends CIUnitTestCase
         $templateLatex = GuidanceFormLatex::renderCounselingEvaluation($templateSnapshot);
         $this->assertStringContainsString('F-OGC-GCS-CEF-009-00', $templateLatex);
         $this->assertStringContainsString('DRAFT - PREVIEW ONLY', $templateLatex);
+        $this->assertStringContainsString('$\\boxtimes$ Called by Counselor / Counselor-initiated', $templateLatex);
         $this->assertStringContainsString('$\\boxtimes$ \\textbf{Yes}', $templateLatex);
+        $this->assertStringContainsString('\\textbf{Reason/s why:} I felt heard and supported.', $templateLatex);
         $this->assertStringContainsString('Template preview counseling feedback.', $templateLatex);
     }
 

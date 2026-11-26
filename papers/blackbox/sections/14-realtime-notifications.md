@@ -5,6 +5,9 @@
 - Legacy IDs: `RT-001`
 - Changed by: `bea71cf`, `c91477a`
 - Requirement: An authenticated web POST from an exact allowed origin must receive a short-lived no-store ticket containing only the caller’s private user channel plus currently authorized AI topics; no client selector may expand it.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Authenticated web realtime bootstrap.
 - Route/API: `POST /realtime/ticket`, then WebSocket `/` authenticate frame.
 - Actor/grants: Fresh DB-valid web identity; AI topics only if separately authorized.
@@ -27,6 +30,9 @@
 - Legacy IDs: `RT-002`
 - Changed by: `bea71cf`
 - Requirement: Tickets expire within configured 1–300 seconds; authentication at/after expiry fails, and an authenticated connection is destroyed when its claim deadline expires so queued data is discarded.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: WebSocket server.
 - Route/API: WebSocket `/` authenticate/publish flow.
 - Actor/grants: Valid ticket holder.
@@ -49,6 +55,9 @@
 - Legacy IDs: `RT-003`
 - Changed by: `bea71cf`
 - Requirement: Signature, encoding, version, channel-list, expiry, and shape validation must fail closed with no parsing detail returned to the peer.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: WebSocket authentication.
 - Route/API: WebSocket `/` authenticate frame.
 - Actor/grants: Test client with one valid ticket used only to derive tampered variants.
@@ -71,6 +80,9 @@
 - Legacy IDs: `RT-004`
 - Changed by: `bea71cf`, `73b8a11`
 - Requirement: Ticket issuance and socket handshake must require an exact configured HTTP origin; ticket claims bind that same origin and HTTPS pages require WSS.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Web ticket endpoint and WebSocket handshake.
 - Route/API: `POST /realtime/ticket`; WebSocket `/`.
 - Actor/grants: Authenticated web identity.
@@ -93,6 +105,9 @@
 - Legacy IDs: `RT-005`
 - Changed by: `c91477a`, `73b8a11`, `c179273`
 - Requirement: A matching `queue.invalidated` event is only a hint; the visible board must refetch its authorized GET, serialize refreshes, and update controls/history without accepting patient data from the event.
+- Role: `workstation_member`
+- Module: Realtime & Notifications
+- Use Cases: `UC-CL-02`, `UC-GD-01`
 - Surface: Clinic/guidance staff queue board.
 - Route/API: `GET /{unit}/queue/board` plus private realtime event.
 - Actor/grants: Staff member authorized for that unit’s queue.
@@ -115,6 +130,9 @@
 - Legacy IDs: `RT-006`
 - Changed by: `bea71cf`, `c91477a`
 - Requirement: Personal queue events must trigger a no-store authorized projection of at most the caller’s two unit tickets, with internally consistent position/ahead/wait fields and periodic reconciliation.
+- Role: `student`
+- Module: Realtime & Notifications
+- Use Cases: `UC-PT-02`
 - Surface: Personal portal queue card.
 - Route/API: `GET /portal/queue` plus `portal.queue.changed` hint.
 - Actor/grants: Linked student/employee viewing own portal.
@@ -137,6 +155,9 @@
 - Legacy IDs: `RT-007`
 - Changed by: `e08f383`, `73b8a11`, `c179273`
 - Requirement: A valid immutable team-chat mention must create an exact user-addressed notice linked to its source message and authorized unit; current membership is rechecked for inbox display and deep link.
+- Role: `workstation_member`
+- Module: Realtime & Notifications
+- Use Cases: `UC-TW-03`
 - Surface: Team chat and web/mobile notification inbox.
 - Route/API: `POST /api/v1/team/{unit}/chat/messages`; notification endpoints.
 - Actor/grants: Sender and mentioned active members of the same tenant/unit.
@@ -159,6 +180,9 @@
 - Legacy IDs: `RT-008`
 - Changed by: `bea71cf`, `c91477a`, `73b8a11`
 - Requirement: Realtime is an optimization only; disconnect, reconnect, visibility, and page-cache gaps must be repaired by authorized polling/refetch without replaying stale event payloads.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Queue board, personal queue, notifications, and active Team resources.
 - Route/API: Relevant authoritative GET endpoints plus realtime status events.
 - Actor/grants: Authorized web or mobile user for the resource under test.
@@ -181,6 +205,9 @@
 - Legacy IDs: `RT-009`
 - Changed by: `bea71cf`
 - Requirement: Clients cannot subscribe after authentication or choose channels; publisher access requires the separate bearer key, empty Origin, exact `/publish`, bounded three-field body, and events fan out only to ticket-granted channels.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: WebSocket and internal publish listener.
 - Route/API: WebSocket `/`; publisher `POST /publish`.
 - Actor/grants: Two user clients; isolated internal publisher harness.
@@ -203,6 +230,9 @@
 - Legacy IDs: `RT-010`
 - Changed by: `bea71cf`, `c91477a`
 - Requirement: Fresh bearer identity must receive at most its exact private user channel, no department/AI topics, from an allowed origin; forged selectors are ignored and per-user grant requests are throttled.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Mobile app realtime client.
 - Route/API: `GET /api/v1/realtime/grant`.
 - Actor/grants: Active mobile bearer user.
@@ -225,6 +255,9 @@
 - Legacy IDs: None
 - Changed by: `bea71cf`, `e08f383`, `c179273`
 - Requirement: Web bell, web history, and mobile inbox must use the same current person/user/resource authority; history is paginated current-resource visibility, not a raw immutable notification dump.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Web/mobile notifications.
 - Route/API: `GET /notifications`; `GET /notifications/history`; `GET /api/v1/notifications`; `GET /api/v1/notifications/history`.
 - Actor/grants: Active linked user with personal and/or department notices.
@@ -247,6 +280,9 @@
 - Legacy IDs: None
 - Changed by: `bea71cf`
 - Requirement: Individual and read-all operations must update only currently visible notices belonging to the caller, use POST, return no content or refreshed own inbox, and publish optional post-commit invalidation.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Web/mobile notification read controls.
 - Route/API: `POST /notifications/{id}/read`; `POST /notifications/read-all`; mobile equivalents.
 - Actor/grants: Two active users with separate notices.
@@ -269,6 +305,9 @@
 - Legacy IDs: None
 - Changed by: `e08f383`, `73b8a11`, `c179273`
 - Requirement: Notification clients must receive only typed target descriptors and server-allowlisted same-application URLs derived from valid source columns; arbitrary stored URLs or malformed IDs must not become navigation.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Web notification links and mobile notification targets.
 - Route/API: Notification inbox endpoints and client router.
 - Actor/grants: Authorized recipient.
@@ -291,6 +330,9 @@
 - Legacy IDs: None
 - Changed by: `bea71cf`, `73b8a11`
 - Requirement: `notifications.changed` is an empty hint sent only after outer commit, only to reauthorized exact recipients, within one second/four attempts; storage or transport failure must not roll back the owning write.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Server notification workflow and clients.
 - Route/API: Internal publisher plus authoritative inbox GETs.
 - Actor/grants: Synthetic transaction writers and recipients.
@@ -313,6 +355,9 @@
 - Legacy IDs: None
 - Changed by: `c91477a`, `c179273`, `884b9f0`
 - Requirement: When explicitly rollout-enabled per owner, region refresh must validate unique owner/regions, same-origin safe HTML and navigation scope, preserve tabs/scroll/focus, block on edits, ignore stale responses, and escalate security ambiguity to full navigation; rollout policy remains unresolved.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Rollout-enabled web workspaces.
 - Route/API: Authorized GET for each named owner/region following mutation or realtime hint.
 - Actor/grants: Authorized user for selected owner.
@@ -335,6 +380,9 @@
 - Legacy IDs: None
 - Changed by: `c91477a`, `73b8a11`
 - Requirement: Browser/mobile realtime clients must use no-store grants, authenticate within deadline, pause when hidden/backgrounded, reconnect with bounded jittered exponential backoff, invalidate after reconnect gaps, and clear private state on unauthorized/session/account change.
+- Role: `all_authenticated`
+- Module: Realtime & Notifications
+- Use Cases: `UC-SH-06`
 - Surface: Browser and React Native realtime lifecycle.
 - Route/API: Ticket/grant endpoints, WebSocket, authoritative resource endpoints.
 - Actor/grants: Authenticated user with one live resource.

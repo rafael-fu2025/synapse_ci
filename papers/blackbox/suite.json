@@ -1,8 +1,10 @@
 {
-  "suite_version": "2026.11-draft.1",
-  "target_application_commit": "884b9f0d647b9b7deb0085ac6af8d4520a269c53",
+  "suite_version": "2026.11-draft.2",
+  "target_application_commit": "e7d5572fd117c7f556393894798ec408204cd4ca",
   "historical_source_commit": "0383939de24119936dee372f86fb4565d12c42d7",
   "canonical_source": "papers/blackbox/sections",
+  "use_cases_path": "papers/blackbox/use-cases.json",
+  "organization": "role_module",
   "generated_root_outputs": [
     "papers/blackbox/SYNAPSE-BlackBox-Testing.md",
     "papers/blackbox/SYNAPSE-BlackBox-Testing.html"
@@ -27,9 +29,11 @@
     "papers/blackbox/sections/17-mobile-team-workspace.md",
     "papers/blackbox/sections/18-mobile-platform.md",
     "papers/blackbox/sections/19-responsive-web.md",
-    "papers/blackbox/sections/20-guidance-mobile-api.md"
+    "papers/blackbox/sections/20-guidance-mobile-api.md",
+    "papers/blackbox/sections/21-archive-governance.md",
+    "papers/blackbox/sections/22-student-intern-governance.md"
   ],
-  "expected_case_count": 245,
+  "expected_case_count": 266,
   "legacy_counts": {
     "historical_total": 119,
     "RETAIN": 72,

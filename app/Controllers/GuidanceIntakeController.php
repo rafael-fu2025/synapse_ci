@@ -372,7 +372,7 @@ final class GuidanceIntakeController extends BaseController
             throw new InvalidArgumentException('Referral narrative is required.', 422);
         }
 
-        $priorActionsRaw = trim((string) ($this->request->getPost('prior_actions_taken') ?? $this->request->getPost('prior_actions') ?? ''));
+        $priorActionsRaw = trim((string) ($this->request->getPost('remarks') ?? $this->request->getPost('prior_actions_taken') ?? $this->request->getPost('prior_actions') ?? ''));
         $priorActions    = $priorActionsRaw !== '' ? $priorActionsRaw : null;
 
         $priorityHint = trim((string) ($this->request->getPost('priority_hint') ?? 'routine'));

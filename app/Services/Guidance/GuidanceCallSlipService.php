@@ -23,10 +23,19 @@ final class GuidanceCallSlipService
     public const VALID_PURPOSES = [
         'personal_counseling',
         'career_counseling',
-        'routine_interview',
-        'follow_up',
         'academic_counseling',
+        'routine_interview',
+        'testing_interpretation',
         'others',
+    ];
+
+    public const PURPOSE_LABELS = [
+        'personal_counseling'    => 'Personal Counseling',
+        'career_counseling'      => 'Career Counseling',
+        'academic_counseling'    => 'Academic Counseling (INC or etc.)',
+        'routine_interview'      => 'Interview (Initial, Routine & Exit)',
+        'testing_interpretation' => 'Testing/ Test Interpretation',
+        'others'                 => 'Others',
     ];
 
     public const VALID_STATUSES = [
@@ -175,6 +184,9 @@ final class GuidanceCallSlipService
         ];
         if ($purposeOther !== null && $purposeOther !== '') {
             $formDraftData['purpose_other'] = $purposeOther;
+        }
+        if ($deliveryNotes !== null && $deliveryNotes !== '') {
+            $formDraftData['note'] = $deliveryNotes;
         }
 
         $formInstance = $this->formService->createDraft(

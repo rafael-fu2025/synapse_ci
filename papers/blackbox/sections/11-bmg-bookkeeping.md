@@ -5,6 +5,9 @@
 - Legacy IDs: `BM-001`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: The dashboard must show tenant-scoped unit, device-binding, batch, treated-weight, and seven-day Manila-bucket counts while describing them as recorded application facts; final dashboard wording awaits the wording decision.
+- Role: `bmg_intern`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-01`
 - Surface: Facilities web dashboard.
 - Route/API: `GET /facilities/dashboard`.
 - Actor/grants: Active BMG member with `facilities.read`.
@@ -27,6 +30,9 @@
 - Legacy IDs: `BM-002`
 - Changed by: `bea71cf`
 - Requirement: Unit creation must require a unique safe code, name, valid explicit drum capacity, and allowed status; it must create a disabled schedule and must not infer capacity or enable automation.
+- Role: `bmg_admin`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-03`
 - Surface: Facilities unit registry.
 - Route/API: `POST /facilities/units/store` followed by `GET /facilities/unit/{id}`.
 - Actor/grants: BMG administrator with `facilities.configure` and `facilities.manage`.
@@ -49,6 +55,9 @@
 - Legacy IDs: `BM-003`
 - Changed by: `bea71cf`
 - Requirement: Starting a batch on an active unit must store an exact positive input weight not exceeding capacity, assign a generated batch code and `processing` state, and explicitly not actuate a motor.
+- Role: `facilities_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-02`
 - Surface: BMG unit detail batch form.
 - Route/API: `POST /facilities/unit/{unit}/batch`.
 - Actor/grants: BMG member with `facilities.manage`.
@@ -71,6 +80,9 @@
 - Legacy IDs: `BM-004`
 - Changed by: `bea71cf`
 - Requirement: A unit may have at most one active batch across `processing`, `awaiting_output`, and `curing`, including concurrent submissions.
+- Role: `facilities_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-02`
 - Surface: BMG unit detail and mutation response.
 - Route/API: `POST /facilities/unit/{unit}/batch`.
 - Actor/grants: Two active BMG sessions with `facilities.manage` in the same tenant.
@@ -93,6 +105,9 @@
 - Legacy IDs: `BM-006`
 - Changed by: `bea71cf`
 - Requirement: Completing an active batch must move it to `released`, record an optional exact output weight not greater than input, retain `unclassified` quality, and leave the unit available for another bookkeeping batch.
+- Role: `facilities_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-02`
 - Surface: BMG unit detail completion form.
 - Route/API: `POST /facilities/batch/{batch}/release`.
 - Actor/grants: BMG member with `facilities.manage`.
@@ -115,6 +130,9 @@
 - Legacy IDs: `BM-007`
 - Changed by: `bea71cf`
 - Requirement: Release and cancel operations must accept only a currently active batch and must reject stale, repeated, wrong-unit, or terminal transitions without changing the first terminal result.
+- Role: `facilities_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-02`
 - Surface: BMG batch mutation endpoints.
 - Route/API: `POST /facilities/batch/{batch}/release`; `POST /facilities/batch/{batch}/cancel`.
 - Actor/grants: BMG member with `facilities.manage`.
@@ -137,6 +155,9 @@
 - Legacy IDs: `BM-008`
 - Changed by: `bea71cf`
 - Requirement: Cancelling an active batch must require a nonblank bounded reason, transition to `voided`, and free the bookkeeping slot without implying that the drum is physically safe.
+- Role: `facilities_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-02`
 - Surface: BMG unit detail cancellation form.
 - Route/API: `POST /facilities/batch/{batch}/cancel`.
 - Actor/grants: BMG member with `facilities.manage`.
@@ -159,6 +180,9 @@
 - Legacy IDs: `BM-009`
 - Changed by: `bea71cf`
 - Requirement: Changing a unit away from `active` must persist the configured status, disable saved schedule intent, cancel pending commands, increment version, and state that application availability does not confirm physical motor state.
+- Role: `bmg_admin`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-03`, `UC-BM-04`
 - Surface: BMG unit settings.
 - Route/API: `POST /facilities/unit/{unit}/update`.
 - Actor/grants: BMG administrator with `facilities.configure` and `facilities.manage`; hardware grant is not required for safe shutdown intent.
@@ -181,6 +205,9 @@
 - Legacy IDs: `BM-013`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: The current BMG dashboard must report only the implemented tenant-scoped recorded metrics and Manila-bucket batch counts; acceptance wording for availability and dashboard labels remains unresolved.
+- Role: `facilities_op`
+- Module: Facilities (BMG) & Hardware
+- Use Cases: `UC-BM-01`, `UC-BM-02`
 - Surface: Facilities dashboard analytics cards and chart.
 - Route/API: `GET /facilities/dashboard`.
 - Actor/grants: BMG member with `facilities.read`.

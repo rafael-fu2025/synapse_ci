@@ -144,6 +144,13 @@ final class WebAccessFilter implements FilterInterface
             if ($e->getMessage() === 'Department access forbidden.' || $e->getMessage() === 'Facilities access forbidden.' || $e->getMessage() === 'Reports access forbidden.') {
                 return AuthenticatedUser::denied($request, true, $e->getMessage(), '/portal');
             }
+            if ($request instanceof IncomingRequest && \App\Services\ErrorPageRenderer::wantsHtml($request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse(
+                    service('response'),
+                    $e->getCode() ?: 403,
+                    $e->getMessage()
+                );
+            }
             return service('response')->setStatusCode($e->getCode() ?: 403)->setHeader('Cache-Control', 'private, no-store')
                 ->setJSON(['message' => $e->getMessage()]);
         }

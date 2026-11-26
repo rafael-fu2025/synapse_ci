@@ -114,6 +114,15 @@ class GuidanceFormDefinitionService
                     'approval_state' => $approvalState,
                 ]);
                 $syncedRevisions++;
+            } elseif ((string) ($existingRev['schema_hash'] ?? '') !== $schemaHash) {
+                $this->revisionModel->update((int) $existingRev['id'], [
+                    'schema_version' => $schemaVersion,
+                    'renderer_version' => $rendererVersion,
+                    'schema_json' => $schemaJson,
+                    'schema_hash' => $schemaHash,
+                    'effectivity_date' => $effectivityDate,
+                ]);
+                $syncedRevisions++;
             }
         }
 

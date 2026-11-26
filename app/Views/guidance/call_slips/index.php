@@ -19,6 +19,14 @@
 $callSlips = $callSlips ?? [];
 $validStatuses = $validStatuses ?? \App\Services\Guidance\GuidanceCallSlipService::VALID_STATUSES;
 $validPurposes = $validPurposes ?? \App\Services\Guidance\GuidanceCallSlipService::VALID_PURPOSES;
+$purposeLabels = $purposeLabels ?? [
+    'personal_counseling'    => 'Personal Counseling',
+    'career_counseling'      => 'Career Counseling',
+    'academic_counseling'    => 'Academic Counseling (INC or etc.)',
+    'routine_interview'      => 'Interview (Initial, Routine & Exit)',
+    'testing_interpretation' => 'Testing/ Test Interpretation',
+    'others'                 => 'Others',
+];
 $currentStatus = (string) ($status ?? '');
 if (!in_array($currentStatus, $validStatuses, true)) {
     $currentStatus = '';
@@ -152,7 +160,8 @@ $matchingCount = (int) $pagination['filtered'];
                   default        => 'ce-status-slate',
               };
               $clientName = trim((string) (($cs['first_name'] ?? '') . ' ' . ($cs['last_name'] ?? '')));
-              $purposeLabel = ucwords(str_replace('_', ' ', (string) ($cs['purpose'] ?? 'personal_counseling')));
+              $rawPurpose = (string) ($cs['purpose'] ?? 'personal_counseling');
+              $purposeLabel = $purposeLabels[$rawPurpose] ?? ucwords(str_replace('_', ' ', $rawPurpose));
               $callTime = (string) ($cs['call_time'] ?? '');
               $callTimeStamp = $callTime !== '' ? strtotime($callTime) : false;
               ?>
@@ -342,7 +351,7 @@ $matchingCount = (int) $pagination['filtered'];
                 <label for="callSlipPurpose" class="form-label">Purpose <span class="text-danger" aria-hidden="true">*</span></label>
                 <select id="callSlipPurpose" name="purpose" class="form-select" required x-model="purpose">
                   <?php foreach ($validPurposes as $pKey): ?>
-                    <option value="<?= esc($pKey, 'attr') ?>" <?= $pKey === $defaultPurpose ? 'selected' : '' ?>><?= esc(ucwords(str_replace('_', ' ', $pKey))) ?></option>
+                    <option value="<?= esc($pKey, 'attr') ?>" <?= $pKey === $defaultPurpose ? 'selected' : '' ?>><?= esc($purposeLabels[$pKey] ?? ucwords(str_replace('_', ' ', $pKey))) ?></option>
                   <?php endforeach; ?>
                 </select>
               </div>
@@ -359,7 +368,7 @@ $matchingCount = (int) $pagination['filtered'];
               <input class="form-check-input" type="checkbox" id="guardianDeliveryCheck" name="parent_guardian_delivery" value="1">
               <label class="form-check-label" for="guardianDeliveryCheck">Flag for Parent / Guardian Delivery</label>
             </div>
-            <label for="callSlipDeliveryNotes" class="form-label">Delivery / Routing Notes <span class="text-muted fw-normal">(Optional)</span></label>
+            <label for="callSlipDeliveryNotes" class="form-label">Note / Delivery Instructions <span class="text-muted fw-normal">(Optional)</span></label>
             <textarea id="callSlipDeliveryNotes" name="delivery_notes" rows="2" class="form-control" maxlength="500" placeholder="Messenger, adviser, or guardian delivery instructions..." aria-describedby="callSlipDeliveryHelp"></textarea>
             <div class="form-text" id="callSlipDeliveryHelp">Delivery instructions only; keep confidential session notes in the case workspace. Up to 500 characters.</div>
           </fieldset>

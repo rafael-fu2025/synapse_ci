@@ -926,14 +926,19 @@ final class GuidanceController extends BaseController
             if ($attachSheet) {
                 $ccfPayload = [];
                 foreach ([
-                    'time_start',
-                    'time_end',
+                    'department',
+                    'time_started',
+                    'time_ended',
+                    'referral_source',
                     'session_type',
-                    'concerns_discussed',
-                    'counseling_goals',
-                    'interventions_and_responses',
-                    'homework_and_commitments',
-                    'next_schedule',
+                    'presenting_concerns',
+                    'predisposing_factors',
+                    'precipitating_factors',
+                    'perpetuating_factors',
+                    'protective_risk_factors',
+                    'intervention_plan',
+                    'follow_up_plan',
+                    'next_session_schedule',
                     'submission_notes',
                     'attestation_statement',
                 ] as $field) {
@@ -941,6 +946,13 @@ final class GuidanceController extends BaseController
                     if (is_string($val) && trim($val) !== '') {
                         $ccfPayload[$field] = trim($val);
                     }
+                }
+                if ($this->request->getPost('privacy_consent_acknowledged') !== null) {
+                    $ccfPayload['privacy_consent_acknowledged'] = in_array(
+                        (string) $this->request->getPost('privacy_consent_acknowledged'),
+                        ['1', 'true', 'on'],
+                        true
+                    );
                 }
                 if ($this->request->getPost('finalize') === '1') {
                     $ccfPayload['finalize'] = true;

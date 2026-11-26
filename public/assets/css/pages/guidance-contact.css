@@ -1,0 +1,371 @@
+/* PCF-008 — Psychosocial Support Contact clinical documentation and review workspace. */
+.guidance-contact.ce-encounter {
+  container: contact-workspace / inline-size;
+}
+
+.guidance-contact .gcw-identity-copy {
+  min-width: 0;
+}
+
+.guidance-contact .gcw-form-reference {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.65rem;
+  margin-bottom: 0.45rem;
+  color: var(--ce-muted-fg);
+  font-size: 0.71rem;
+}
+
+.guidance-contact .ce-tag {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.guidance-contact .gcw-context {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  background: var(--ce-subtle);
+  border-top: 1px solid var(--ce-border);
+}
+
+.guidance-contact .gcw-context > div {
+  min-width: 0;
+  padding: 0.8rem 1.1rem;
+}
+
+.guidance-contact .gcw-context > div + div {
+  border-left: 1px solid var(--ce-border);
+}
+
+.guidance-contact .gcw-context dt {
+  font-size: 0.69rem;
+  font-weight: 600;
+  color: var(--ce-muted-fg);
+}
+
+.guidance-contact .gcw-context dd {
+  margin: 0.3rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ce-fg);
+  overflow-wrap: anywhere;
+}
+
+.guidance-contact .gcw-context-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.7rem;
+}
+
+.guidance-contact .gcw-context-links a {
+  color: var(--ce-fg);
+  text-decoration: none;
+}
+
+.guidance-contact .gcw-context-links a:hover {
+  text-decoration: underline;
+}
+
+.guidance-contact .gcw-notice-detail {
+  margin-top: 0.2rem;
+}
+
+.guidance-contact .gcw-submission-notes {
+  margin-top: 0.6rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.guidance-contact .gcw-section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--ce-border);
+  border-radius: 0.375rem;
+  background: var(--ce-card);
+}
+
+.guidance-contact .gcw-section-nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 36px;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  color: var(--ce-fg-secondary);
+  font-size: 0.77rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  text-decoration: none;
+}
+
+.guidance-contact .gcw-section-nav a:hover {
+  background: var(--ce-muted);
+  border-color: var(--ce-border);
+  color: var(--ce-fg);
+}
+
+.guidance-contact .gcw-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.guidance-contact .gcw-documentation,
+.guidance-contact .gcw-review {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.guidance-contact .gcw-document-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.15rem 0;
+}
+
+.guidance-contact .gcw-section {
+  scroll-margin-top: 90px;
+}
+
+.guidance-contact .gcw-section .ce-card-header {
+  padding: 0.85rem 1rem;
+}
+
+.guidance-contact .gcw-section-hint,
+.guidance-contact .gcw-review-hint {
+  margin: 0.35rem 0 0;
+  color: var(--ce-muted-fg);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.guidance-contact .gcw-narrative-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.guidance-contact .gcw-encrypted {
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--ce-emerald);
+}
+
+.guidance-contact textarea.form-control {
+  min-height: 104px;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  resize: vertical;
+}
+
+.guidance-contact :is(input.form-control, textarea.form-control, select.form-select):disabled {
+  background: var(--ce-subtle) !important;
+  color: var(--ce-fg-secondary) !important;
+  opacity: 1;
+}
+
+.guidance-contact .gcw-consent {
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.guidance-contact .gcw-save-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  padding: 1rem;
+}
+
+.guidance-contact .gcw-save-bar > span {
+  flex: 1 1 200px;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.guidance-contact .gcw-save-bar > .btn {
+  width: auto !important;
+  flex-shrink: 0;
+}
+
+.guidance-contact .gcw-workflow-card > :is(.card-header, .ce-card-header) {
+  padding: 0.85rem 1rem !important;
+  background: var(--ce-subtle) !important;
+  border-bottom: 1px solid var(--ce-border) !important;
+}
+
+.guidance-contact .gcw-workflow-card .card-title {
+  margin: 0;
+  padding: 0;
+  color: var(--ce-fg) !important;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.guidance-contact .gcw-workflow-card .card-title i {
+  color: var(--ce-slate);
+}
+
+.guidance-contact .gcw-workflow-card > .card-body {
+  padding: 1rem;
+}
+
+.guidance-contact .gcw-workflow-card .alert {
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid var(--ce-border) !important;
+  border-radius: 0.25rem;
+  background: var(--ce-subtle) !important;
+  color: var(--ce-fg-secondary) !important;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+
+.guidance-contact .gcw-workflow-card .form-check {
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+html body section.guidance-contact.ce-encounter .gcw-workflow-card button[type="submit"].btn {
+  width: 100% !important;
+  min-height: 40px;
+  padding: 0.55rem 0.75rem;
+  background: var(--ce-brand) !important;
+  border-color: var(--ce-brand) !important;
+  color: #fff !important;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+html body section.guidance-contact.ce-encounter .gcw-workflow-card button[type="submit"].btn:is(:hover, :focus-visible) {
+  background: var(--ce-brand-hover) !important;
+  border-color: var(--ce-brand-hover) !important;
+}
+
+.guidance-contact .gcw-attestations-table {
+  table-layout: fixed;
+}
+
+html body section.guidance-contact.ce-encounter .table.gcw-attestations-table > thead {
+  display: none;
+}
+
+html body section.guidance-contact.ce-encounter .table.gcw-attestations-table,
+html body section.guidance-contact.ce-encounter .table.gcw-attestations-table > tbody {
+  display: block;
+  width: 100%;
+}
+
+html body section.guidance-contact.ce-encounter .table.gcw-attestations-table > tbody > tr {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--ce-border);
+}
+
+html body section.guidance-contact.ce-encounter .table.gcw-attestations-table > tbody > tr > td {
+  display: block;
+  padding: 0.15rem 0;
+  border-bottom: 0;
+  font-size: 0.77rem;
+  line-height: 1.6;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.guidance-contact .gcw-attestations-table td:is([data-label="Statement"], [data-label="Attested At"], [data-label="Signature Hash"])::before {
+  content: attr(data-label);
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--ce-muted-fg);
+}
+
+.guidance-contact .gcw-attestations-table .badge {
+  border-color: var(--ce-border) !important;
+  border-radius: 0.25rem;
+  background: var(--ce-subtle) !important;
+  color: var(--ce-fg-secondary) !important;
+}
+
+.guidance-contact a:focus-visible {
+  outline: 2px solid var(--ce-sky);
+  outline-offset: 3px;
+}
+
+@container contact-workspace (max-width: 940px) {
+  .guidance-contact .gcw-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .guidance-contact .gcw-context {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guidance-contact .gcw-context > div {
+    border-bottom: 1px solid var(--ce-border);
+  }
+
+  .guidance-contact .gcw-context > div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .guidance-contact .gcw-context > div:nth-last-child(-n+2) {
+    border-bottom: 0;
+  }
+}
+
+@container contact-workspace (max-width: 540px) {
+  .guidance-contact .gcw-context {
+    grid-template-columns: 1fr;
+  }
+
+  .guidance-contact .gcw-context > div:nth-child(n) {
+    border-left: 0;
+    border-bottom: 1px solid var(--ce-border);
+  }
+
+  .guidance-contact .gcw-context > div:last-child {
+    border-bottom: 0;
+  }
+
+  .guidance-contact .gcw-section-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guidance-contact .gcw-section-nav a {
+    min-height: 40px;
+    font-size: 0.73rem;
+  }
+
+  .guidance-contact .ce-card-body {
+    padding: 0.9rem;
+  }
+
+  .guidance-contact .gcw-save-bar > .btn {
+    width: 100% !important;
+    min-height: 40px;
+  }
+}

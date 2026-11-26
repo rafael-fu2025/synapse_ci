@@ -67,14 +67,30 @@ $permissions = $permissions ?? [];
     <div class="row g-2">
       <div class="col-md-6">
         <div class="adm-field">
-          <label class="adm-label" for="intern-starts-at">Starts at (Asia/Manila)</label>
-          <input id="intern-starts-at" name="starts_at" type="datetime-local" class="form-control" value="<?= esc($defaultStart ?? '') ?>" required>
+          <label class="adm-label" for="intern-starts-at-display">Starts at (Asia/Manila)</label>
+          <input id="intern-starts-at-display"
+                 type="text"
+                 class="form-control"
+                 data-datetimepicker
+                 data-target="#intern-starts-at"
+                 placeholder="DD/MM/YYYY hh:mm A"
+                 autocomplete="off"
+                 required>
+          <input type="hidden" id="intern-starts-at" name="starts_at" value="<?= esc($defaultStart ?? '') ?>">
         </div>
       </div>
       <div class="col-md-6">
         <div class="adm-field">
-          <label class="adm-label" for="intern-ends-at">Ends at (Asia/Manila)</label>
-          <input id="intern-ends-at" name="ends_at" type="datetime-local" class="form-control" value="<?= esc($defaultEnd ?? '') ?>" required>
+          <label class="adm-label" for="intern-ends-at-display">Ends at (Asia/Manila)</label>
+          <input id="intern-ends-at-display"
+                 type="text"
+                 class="form-control"
+                 data-datetimepicker
+                 data-target="#intern-ends-at"
+                 placeholder="DD/MM/YYYY hh:mm A"
+                 autocomplete="off"
+                 required>
+          <input type="hidden" id="intern-ends-at" name="ends_at" value="<?= esc($defaultEnd ?? '') ?>">
         </div>
       </div>
     </div>

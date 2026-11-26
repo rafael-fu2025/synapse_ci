@@ -361,10 +361,12 @@ test('Live E2E Guidance Walkthrough with Real Database Accounts', { timeout: 300
         await assertCleanPage(page, newPifHref, 'Psychosocial');
 
         const editor = page.locator('#clinicalFormEditor');
+        await editor.locator('select[name="fields[client_type]"]').selectOption('walk_in');
         await editor.locator('input[name="fields[course_year]"]').fill('BS Computer Science - Year 2');
         await editor.locator('textarea[name="fields[presenting_concerns]"]').fill('Academic workload stress and sleep disruption.');
-        await editor.locator('textarea[name="fields[counselor_assessment]"]').fill('Cooperative client experiencing situational transition strain.');
-        await editor.locator('textarea[name="fields[intervention_plan]"]').fill('CBT time-management strategies and biweekly follow-up.');
+        await editor.locator('select[name="fields[concern_severity]"]').selectOption('serious');
+        await editor.locator('textarea[name="fields[problem_duration]"]').fill('Two weeks.');
+        await editor.locator('textarea[name="fields[hoped_changes]"]').fill('Better rest and structured study routine.');
         await editor.locator('input[name="fields[privacy_consent_acknowledged]"][type="checkbox"]').check();
 
         await submitAndVerify(page, editor.locator('button[type="submit"]').first(), '/guidance/clinical/forms/create');

@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "role_catalog_count": 16,
+  "roles": [
+    {
+      "id": "public",
+      "label": "Public / Unauthenticated User",
+      "kind": "public",
+      "inherits": null,
+      "summary": "Anonymous visitor interacting with host login screens, the public Data Privacy Policy, and controlled document verification."
+    },
+    {
+      "id": "all_authenticated",
+      "label": "All Authenticated Roles (Shared)",
+      "kind": "shared_group",
+      "inherits": null,
+      "summary": "Capabilities shared by all 16 authenticated RBAC roles: host-scoped logout, CSRF/session security, own profile/photo/contacts, notification inbox, realtime tickets, and responsive web shell."
+    },
+    {
+      "id": "student",
+      "label": "Student",
+      "kind": "rbac",
+      "inherits": "all_authenticated",
+      "summary": "Enrolled student using web self-service portal and mobile personal app (appointments, queue, visit history, announcements, surveys, call slips, MI assessments, service evaluations)."
+    },
+    {
+      "id": "employee",
+      "label": "Employee",
+      "kind": "rbac",
+      "inherits": "student",
+      "summary": "University employee holding all Student self-service capabilities plus exclusive access to submit and withdraw multi-student Guidance General Referrals (GGR-005)."
+    },
+    {
+      "id": "workstation_member",
+      "label": "Department Workstation Member (Clinic, Guidance & BMG)",
+      "kind": "shared_group",
+      "inherits": "all_authenticated",
+      "summary": "Capabilities shared across Clinic, Guidance, and BMG department workstation members and interns: Team Workspace (Tasks, Calendar, Chat web & mobile), shared scheduling slots, interdepartmental referral lifecycle, and mobile read-only queue summary."
+    },
+    {
+      "id": "clinic_intern",
+      "label": "Clinic Intern",
+      "kind": "rbac",
+      "inherits": "workstation_member",
+      "summary": "Supervised student nurse/intern (`clinic_intern`): read-only patient/inventory/isolation/clearance views, Clinic queue operation, and open encounter vitals/notes drafting (cannot seal, add addenda, or dispense)."
+    },
+    {
+      "id": "clinic_staff",
+      "label": "Clinic Staff",
+      "kind": "rbac",
+      "inherits": "clinic_intern",
+      "summary": "Clinic Nurse/Staff (`clinic_staff`): full Clinic clinical encounters, dispensing, batch inventory & reversals, health profiles, labs, addenda, isolation tracker, clearances, Clinic reports/PDF, and Clinic↔Guidance referrals."
+    },
+    {
+      "id": "clinic_physician",
+      "label": "Clinic Physician",
+      "kind": "rbac",
+      "inherits": "clinic_staff",
+      "summary": "Clinic Physician (`clinic_physician`): holds identical seeded permission grants to Clinic Staff with explicit grant-driven physician clinical sealing, addendum, and dispensing verification."
+    },
+    {
+      "id": "clinic_admin",
+      "label": "Clinic Administrator",
+      "kind": "rbac",
+      "inherits": "clinic_staff",
+      "summary": "Clinic Administrator (`clinic_admin`): extends Clinic Staff with Clinic announcements, Clinic employee access management, Clinic student intern placements, MIS sync, operational export, and Clinic/Team Archive & Restore."
+    },
+    {
+      "id": "guidance_intern",
+      "label": "Guidance Intern",
+      "kind": "rbac",
+      "inherits": "workstation_member",
+      "summary": "Supervised Guidance intern (`guidance_intern`): Guidance queue operation, intake processing, assigned case & Clients directory browsing, and psychosocial/clinical form drafting for supervisor co-sign."
+    },
+    {
+      "id": "counsellor",
+      "label": "Counsellor",
+      "kind": "rbac",
+      "inherits": "guidance_intern",
+      "summary": "Counsellor (`counsellor`): full owned caseload management, encrypted sessions & follow-ups, safety triage, episodes, case transfers, official OGC forms (PIF/PCF/CCF/GGR/GAP/CSP/PEF/CEF), call slips, MI assessments, and evaluation token issuance."
+    },
+    {
+      "id": "guidance_supervisor",
+      "label": "Guidance Supervisor",
+      "kind": "rbac",
+      "inherits": "counsellor",
+      "summary": "Guidance Supervisor (`guidance_supervisor`): extends Counsellor with cross-case oversight (`read_any`), caseload reassignment, associate/intern co-signing, announcements, question bank, surveys, evaluation moderation, activation gates, and Guidance Archive & Restore."
+    },
+    {
+      "id": "guidance_admin",
+      "label": "Guidance Administrator",
+      "kind": "rbac",
+      "inherits": "guidance_supervisor",
+      "summary": "Guidance Administrator (`guidance_admin`): extends Guidance Supervisor with Guidance employee access management, Guidance student intern placements, Guidance legal holds, MIS sync, and operational export."
+    },
+    {
+      "id": "bmg_intern",
+      "label": "BMG Intern",
+      "kind": "rbac",
+      "inherits": "workstation_member",
+      "summary": "Supervised Facilities intern (`bmg_intern`): unit-scoped composting drum monitoring and supervised bookkeeping batch logging under BMG Team membership."
+    },
+    {
+      "id": "facilities_op",
+      "label": "Facilities Operator",
+      "kind": "rbac",
+      "inherits": "bmg_intern",
+      "summary": "Facilities Operator (`facilities_op`): BMG dashboard analytics and full bookkeeping batch lifecycle (start, contention guard, release, cancel)."
+    },
+    {
+      "id": "bmg_admin",
+      "label": "BMG Administrator",
+      "kind": "rbac",
+      "inherits": "facilities_op",
+      "summary": "BMG Administrator (`bmg_admin`): extends Facilities Operator with drum unit configuration, maintenance state, rotation schedules, BMG student intern placements, operational export, and BMG/Team Archive & Restore."
+    },
+    {
+      "id": "report_viewer",
+      "label": "Report Viewer",
+      "kind": "rbac",
+      "inherits": "all_authenticated",
+      "summary": "Report Viewer (`report_viewer`): read/export tenant-scoped operational aggregate CSV and PDF reports while strictly isolated from audit ledger and admin configuration routes."
+    },
+    {
+      "id": "audit_reader",
+      "label": "Audit Reader",
+      "kind": "rbac",
+      "inherits": "report_viewer",
+      "summary": "Audit Reader (`audit_reader`): extends Report Viewer with administrative dashboard counters, Audit Explorer cursor queries, SHA-256 hash-chain verification, and read-only institutional Archive Center inspection."
+    },
+    {
+      "id": "superadmin",
+      "label": "Platform Owner (Superadmin)",
+      "kind": "rbac",
+      "inherits": "clinic_admin, guidance_admin, facilities_op, audit_reader",
+      "summary": "Platform Owner (`superadmin`): break-glass local login, global RBAC assignment & catalogue, sign-in carousel, MIS sync, global intern governance, archive retention policies & global legal holds, and AI provider configuration & grants (withholds `facilities.hardware.manage` and `ai.insights.*` unless explicitly granted)."
+    },
+    {
+      "id": "commissioned_hardware_op",
+      "label": "Commissioned Hardware Operator (Explicit facilities.hardware.manage Grant)",
+      "kind": "explicit_grant",
+      "inherits": null,
+      "summary": "BMG administrator or operator explicitly granted `facilities.hardware.manage` to commission ESP32-S3 hardware, authorize USB firmware builds, publish hardware schedules, and execute simulated/live device commands."
+    },
+    {
+      "id": "ai_granted_staff",
+      "label": "Unit Staff under Explicit AI Grant (ai.insights.*)",
+      "kind": "explicit_grant",
+      "inherits": null,
+      "summary": "Department staff granted explicit tenant/unit/role-scoped `ai.insights.*` permissions outside default role seeding to prepare, generate, recover, review, approve, and read aggregate AI insights."
+    }
+  ],
+  "modules": [
+    "Authentication, Session & Privacy",
+    "Personal Portal & Self-Service",
+    "Clinic Operations & Extensions",
+    "Guidance & Counseling",
+    "Interdepartmental Referrals",
+    "Team Workspace (Web & Mobile)",
+    "Facilities (BMG) & Hardware",
+    "Archive Governance",
+    "Student Intern Governance",
+    "Administration, Access & Platform",
+    "Reporting & Audit Trail",
+    "Realtime & Notifications",
+    "AI Insights",
+    "Mobile Application & Platform",
+    "Responsive Web Contracts"
+  ],
+  "use_cases": [
+    {"id": "UC-SH-01", "figure": "Figure 5a", "role": "public", "module": "Authentication, Session & Privacy", "title": "View Foundation University Data Privacy Policy"},
+    {"id": "UC-SH-02", "figure": "Figure 5a", "role": "public", "module": "Authentication, Session & Privacy", "title": "Authenticate via host-scoped login with rate limiting"},
+    {"id": "UC-SH-03", "figure": "Figure 5a", "role": "public", "module": "Guidance & Counseling", "title": "Verify controlled document authenticity"},
+    {"id": "UC-SH-04", "figure": "Figure 5a", "role": "all_authenticated", "module": "Authentication, Session & Privacy", "title": "Log out of current host and enforce session/CSRF security"},
+    {"id": "UC-SH-05", "figure": "Figure 5a", "role": "all_authenticated", "module": "Personal Portal & Self-Service", "title": "Manage own profile, photo, contact details and emergency contact"},
+    {"id": "UC-SH-06", "figure": "Figure 5a", "role": "all_authenticated", "module": "Realtime & Notifications", "title": "Receive personal notifications, realtime updates and responsive UI"},
+
+    {"id": "UC-CL-01", "figure": "Figure 5b", "role": "clinic_intern", "module": "Clinic Operations & Extensions", "title": "Review patient records, isolation and clearances (read-only)"},
+    {"id": "UC-CL-02", "figure": "Figure 5b", "role": "clinic_intern", "module": "Clinic Operations & Extensions", "title": "Operate Clinic queue and check in appointments"},
+    {"id": "UC-CL-03", "figure": "Figure 5b", "role": "clinic_intern", "module": "Clinic Operations & Extensions", "title": "Open clinical encounter and draft vitals or clinical notes"},
+    {"id": "UC-CL-04", "figure": "Figure 5b", "role": "clinic_intern", "module": "Clinic Operations & Extensions", "title": "Review medicine inventory and stock ledgers (read-only)"},
+    {"id": "UC-CL-05", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Update patient health profiles and record delayed lab results"},
+    {"id": "UC-CL-06", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Dispense medicine from batches and seal clinical encounters"},
+    {"id": "UC-CL-07", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Append signed post-visit encounter addenda"},
+    {"id": "UC-CL-08", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Confirm, reschedule and check in Clinic appointments"},
+    {"id": "UC-CL-09", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Receive, adjust, quarantine and reverse medicine stock batches"},
+    {"id": "UC-CL-10", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Record and clear communicable disease isolation cases"},
+    {"id": "UC-CL-11", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Issue enrollment health clearances and certificates"},
+    {"id": "UC-CL-12", "figure": "Figure 5b", "role": "clinic_staff", "module": "Clinic Operations & Extensions", "title": "Generate Clinic summary and PDF reports"},
+    {"id": "UC-CL-13", "figure": "Figure 5b", "role": "clinic_physician", "module": "Clinic Operations & Extensions", "title": "Exercise grant-driven physician clinical sealing authority"},
+    {"id": "UC-CL-14", "figure": "Figure 5b", "role": "clinic_admin", "module": "Clinic Operations & Extensions", "title": "Publish Clinic notices and manage provider availability"},
+
+    {"id": "UC-GD-01", "figure": "Figure 5c", "role": "guidance_intern", "module": "Guidance & Counseling", "title": "Operate Guidance queue and review schedules"},
+    {"id": "UC-GD-02", "figure": "Figure 5c", "role": "guidance_intern", "module": "Guidance & Counseling", "title": "Process Guidance intakes and safety triage"},
+    {"id": "UC-GD-03", "figure": "Figure 5c", "role": "guidance_intern", "module": "Guidance & Counseling", "title": "Browse Clients Directory and assigned cases"},
+    {"id": "UC-GD-04", "figure": "Figure 5c", "role": "guidance_intern", "module": "Guidance & Counseling", "title": "Draft psychosocial and clinical forms for supervisor co-sign"},
+    {"id": "UC-GD-05", "figure": "Figure 5c", "role": "counsellor", "module": "Guidance & Counseling", "title": "Open counselling cases, record encrypted sessions and follow-ups"},
+    {"id": "UC-GD-06", "figure": "Figure 5c", "role": "counsellor", "module": "Guidance & Counseling", "title": "Manage care episodes, consultations and case transfers"},
+    {"id": "UC-GD-07", "figure": "Figure 5c", "role": "counsellor", "module": "Guidance & Counseling", "title": "Author, finalize and print official OGC controlled forms"},
+    {"id": "UC-GD-08", "figure": "Figure 5c", "role": "counsellor", "module": "Guidance & Counseling", "title": "Issue controlled call slips (CSP-007) and appointment forms (GAP-006)"},
+    {"id": "UC-GD-09", "figure": "Figure 5c", "role": "counsellor", "module": "Guidance & Counseling", "title": "Assign and interpret Multiple Intelligences assessments"},
+    {"id": "UC-GD-10", "figure": "Figure 5c", "role": "counsellor", "module": "Guidance & Counseling", "title": "Issue evaluation tokens and view own threshold-safe aggregates"},
+    {"id": "UC-GD-11", "figure": "Figure 5c", "role": "counsellor", "module": "Guidance & Counseling", "title": "Confirm, book and manage Guidance appointments"},
+    {"id": "UC-GD-12", "figure": "Figure 5c", "role": "guidance_supervisor", "module": "Guidance & Counseling", "title": "Review any tenant case and reassign caseloads"},
+    {"id": "UC-GD-13", "figure": "Figure 5c", "role": "guidance_supervisor", "module": "Guidance & Counseling", "title": "Co-sign associate and intern clinical forms"},
+    {"id": "UC-GD-14", "figure": "Figure 5c", "role": "guidance_supervisor", "module": "Guidance & Counseling", "title": "Publish announcements, question bank revisions and surveys"},
+    {"id": "UC-GD-15", "figure": "Figure 5c", "role": "guidance_supervisor", "module": "Guidance & Counseling", "title": "Review survey responses and moderate evaluation comments"},
+    {"id": "UC-GD-16", "figure": "Figure 5c", "role": "guidance_supervisor", "module": "Guidance & Counseling", "title": "Govern form definitions, practitioner profiles, activation gates and availability"},
+    {"id": "UC-GD-17", "figure": "Figure 5c", "role": "guidance_admin", "module": "Archive Governance", "title": "Place and lift Guidance archive legal holds"},
+
+    {"id": "UC-BM-01", "figure": "Figure 5d", "role": "bmg_intern", "module": "Facilities (BMG) & Hardware", "title": "Review composting units, batches and recorded metrics"},
+    {"id": "UC-BM-02", "figure": "Figure 5d", "role": "facilities_op", "module": "Facilities (BMG) & Hardware", "title": "Start, release and cancel bookkeeping batches"},
+    {"id": "UC-BM-03", "figure": "Figure 5d", "role": "bmg_admin", "module": "Facilities (BMG) & Hardware", "title": "Register, update and archive composting units"},
+    {"id": "UC-BM-04", "figure": "Figure 5d", "role": "bmg_admin", "module": "Facilities (BMG) & Hardware", "title": "Configure and trigger rotation schedules"},
+    {"id": "UC-BM-05", "figure": "Figure 5d", "role": "commissioned_hardware_op", "module": "Facilities (BMG) & Hardware", "title": "Commission hardware controllers and issue device commands"},
+    {"id": "UC-BM-06", "figure": "Figure 5d", "role": "commissioned_hardware_op", "module": "Facilities (BMG) & Hardware", "title": "Build and authorize USB firmware provisioning"},
+    {"id": "UC-TW-01", "figure": "Figure 5d", "role": "workstation_member", "module": "Team Workspace (Web & Mobile)", "title": "Manage operational Team tasks and checklists (web and mobile)"},
+    {"id": "UC-TW-02", "figure": "Figure 5d", "role": "workstation_member", "module": "Team Workspace (Web & Mobile)", "title": "Schedule and cancel Team calendar events (web and mobile)"},
+    {"id": "UC-TW-03", "figure": "Figure 5d", "role": "workstation_member", "module": "Team Workspace (Web & Mobile)", "title": "Send Team chat messages with mentions and backread (web and mobile)"},
+
+    {"id": "UC-AD-01", "figure": "Figure 5e", "role": "report_viewer", "module": "Reporting & Audit Trail", "title": "View operational dashboards and aggregate reports"},
+    {"id": "UC-AD-02", "figure": "Figure 5e", "role": "report_viewer", "module": "Reporting & Audit Trail", "title": "Export bounded operational CSV and PDF reports"},
+    {"id": "UC-AD-03", "figure": "Figure 5e", "role": "audit_reader", "module": "Reporting & Audit Trail", "title": "Filter audit explorer and verify hash-chain integrity"},
+    {"id": "UC-AD-04", "figure": "Figure 5e", "role": "audit_reader", "module": "Archive Governance", "title": "Inspect Archive Center, retention policies and legal holds (read-only)"},
+    {"id": "UC-AD-05", "figure": "Figure 5e", "role": "clinic_admin", "module": "Archive Governance", "title": "Archive and restore scoped department and Team records"},
+    {"id": "UC-AD-06", "figure": "Figure 5e", "role": "clinic_admin", "module": "Student Intern Governance", "title": "Manage scoped student intern placements, supervision and shift clocks"},
+    {"id": "UC-AD-07", "figure": "Figure 5e", "role": "clinic_admin", "module": "Administration, Access & Platform", "title": "Manage scoped employee access and MIS directory sync"},
+    {"id": "UC-AD-08", "figure": "Figure 5e", "role": "superadmin", "module": "Administration, Access & Platform", "title": "Manage platform-wide roles, sign-in carousel and break-glass login"},
+    {"id": "UC-AD-09", "figure": "Figure 5e", "role": "superadmin", "module": "Archive Governance", "title": "Configure institutional archive retention policies and global legal holds"},
+    {"id": "UC-AD-10", "figure": "Figure 5e", "role": "superadmin", "module": "AI Insights", "title": "Configure AI providers and department AI grants"},
+    {"id": "UC-AI-01", "figure": "Figure 5e", "role": "ai_granted_staff", "module": "AI Insights", "title": "Prepare, generate and recover aggregate AI insights"},
+    {"id": "UC-AI-02", "figure": "Figure 5e", "role": "ai_granted_staff", "module": "AI Insights", "title": "Review, approve and read approved AI insights"},
+
+    {"id": "UC-PT-01", "figure": "Figure 5f", "role": "student", "module": "Personal Portal & Self-Service", "title": "Request and cancel personal appointments"},
+    {"id": "UC-PT-02", "figure": "Figure 5f", "role": "student", "module": "Personal Portal & Self-Service", "title": "View personal queue position and visit history"},
+    {"id": "UC-PT-03", "figure": "Figure 5f", "role": "student", "module": "Personal Portal & Self-Service", "title": "Read announcements and answer Guidance surveys"},
+    {"id": "UC-PT-04", "figure": "Figure 5f", "role": "student", "module": "Personal Portal & Self-Service", "title": "Acknowledge Guidance call slips (web and mobile API)"},
+    {"id": "UC-PT-05", "figure": "Figure 5f", "role": "student", "module": "Personal Portal & Self-Service", "title": "Complete Multiple Intelligences assessment and download PDF"},
+    {"id": "UC-PT-06", "figure": "Figure 5f", "role": "student", "module": "Personal Portal & Self-Service", "title": "Redeem and submit pseudonymous service evaluation (PEF-008 / CEF-009)"},
+    {"id": "UC-PT-07", "figure": "Figure 5f", "role": "student", "module": "Mobile Application & Platform", "title": "Use mobile personal application, server binding and push notifications"},
+    {"id": "UC-PT-08", "figure": "Figure 5f", "role": "employee", "module": "Personal Portal & Self-Service", "title": "Submit and withdraw multi-student Guidance General Referral (GGR-005)"},
+    {"id": "UC-RF-01", "figure": "Figure 5f", "role": "clinic_staff", "module": "Interdepartmental Referrals", "title": "Create an interdepartmental referral (Clinic <-> Guidance)"},
+    {"id": "UC-RF-02", "figure": "Figure 5f", "role": "workstation_member", "module": "Interdepartmental Referrals", "title": "Acknowledge and review a received referral"},
+    {"id": "UC-RF-03", "figure": "Figure 5f", "role": "workstation_member", "module": "Interdepartmental Referrals", "title": "Hand off a referral to a Clinic encounter or Guidance case/intake"},
+    {"id": "UC-RF-04", "figure": "Figure 5f", "role": "workstation_member", "module": "Interdepartmental Referrals", "title": "Close a reviewed referral into history"}
+  ]
+}

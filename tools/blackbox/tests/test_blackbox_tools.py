@@ -27,7 +27,7 @@ import validate  # noqa: E402
 
 
 TARGET_COMMIT = "a" * 40
-PATCH_COMMITS = tuple(f"{0x1000001 + index:07x}" for index in range(14))
+PATCH_COMMITS = tuple(f"{0x1000001 + index:07x}" for index in range(23))
 
 
 def case_markdown(
@@ -38,6 +38,9 @@ def case_markdown(
     verdict: str = "NOT_RUN",
     legacy_id: str | None | object = ...,  # Ellipsis selects the normal fixture mapping.
     changed_by: str | None = None,
+    role: str = "student",
+    module: str = "Fixture Module",
+    use_cases: str = "`UC-FX-01`",
     steps: int = 2,
 ) -> str:
     case_id = case_id or f"TST-{number:03d}"
@@ -58,6 +61,9 @@ def case_markdown(
 - **Legacy IDs:** {legacy_value}
 - **Changed by:** {changed_value}
 - **Requirement:** FIXTURE.REQUIREMENT.{number:03d}
+- **Role:** `{role}`
+- **Module:** {module}
+- **Use Cases:** {use_cases}
 - **Surface:** Isolated fixture surface
 - **Route/API:** GET /fixture/{number}
 - **Actor/grants:** Synthetic actor with fixture.read
@@ -96,6 +102,31 @@ def legacy_markdown() -> str:
     return "\n".join(rows) + "\n"
 
 
+def use_cases_manifest() -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "roles": [
+            {
+                "id": "student",
+                "label": "Student",
+                "kind": "rbac",
+                "inherits": None,
+                "summary": "Fixture student actor.",
+            }
+        ],
+        "modules": ["Fixture Module"],
+        "use_cases": [
+            {
+                "id": "UC-FX-01",
+                "figure": "Figure 5a",
+                "role": "student",
+                "module": "Fixture Module",
+                "title": "Fixture use case 1",
+            }
+        ],
+    }
+
+
 def suite_manifest() -> dict[str, object]:
     return {
         "metadata": {
@@ -104,13 +135,14 @@ def suite_manifest() -> dict[str, object]:
             "status": "DRAFT",
         },
         "target_commit": TARGET_COMMIT,
-        "expected_case_count": 245,
+        "use_cases_path": "papers/blackbox/use-cases.json",
+        "expected_case_count": 266,
         "patch_commits": list(PATCH_COMMITS),
         "sections": [
             {
                 "file": "papers/blackbox/sections/01-fixture.md",
                 "title": "Fixture section",
-                "expected_count": 245,
+                "expected_count": 266,
             }
         ],
         "legacy": {
@@ -135,6 +167,7 @@ class FixtureRepository:
         self.section = self.blackbox / "sections" / "01-fixture.md"
         self.legacy = self.blackbox / "legacy-map.md"
         self.suite = self.blackbox / "suite.json"
+        self.use_cases = self.blackbox / "use-cases.json"
 
     def create(self) -> "FixtureRepository":
         (self.blackbox / "sections").mkdir(parents=True)
@@ -153,13 +186,22 @@ class FixtureRepository:
         )
         self.section.write_text(
             "# Fixture section\n\n"
-            + "\n".join(case_markdown(number) for number in range(1, 246)),
+            + "\n".join(case_markdown(number) for number in range(1, 267)),
             encoding="utf-8",
         )
         self.legacy.write_text(legacy_markdown(), encoding="utf-8")
+        self.write_use_cases(use_cases_manifest())
         self.write_suite(suite_manifest())
         self.create_valid_archive()
         return self
+
+    def write_use_cases(self, value: dict[str, object]) -> None:
+        self.use_cases.write_text(
+            json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+    def read_use_cases(self) -> dict[str, object]:
+        return json.loads(self.use_cases.read_text(encoding="utf-8"))
 
     def write_suite(self, value: dict[str, object]) -> None:
         self.suite.write_text(
@@ -403,9 +445,27 @@ class BlackBoxToolTests(unittest.TestCase):
         self.assertIsNotNone(suite)
         self.assertEqual([], report.errors)
         assert suite is not None
-        self.assertEqual(245, len(suite.cases))
+        self.assertEqual(266, len(suite.cases))
         self.assertEqual(119, len(suite.legacy_rows))
         self.assertEqual({"NOT_RUN"}, {case.effective_verdict for case in suite.cases})
+
+    def test_uncovered_use_case_and_unknown_role_are_rejected(self) -> None:
+        uc_data = self.fixture.read_use_cases()
+        assert isinstance(uc_data["use_cases"], list)
+        uc_data["use_cases"].append(
+            {
+                "id": "UC-FX-99",
+                "figure": "Figure 5a",
+                "role": "student",
+                "module": "Fixture Module",
+                "title": "Uncovered fixture use case",
+            }
+        )
+        self.fixture.write_use_cases(uc_data)
+        self.fixture.replace_once("- **Role:** `student`", "- **Role:** `ghost_role`")
+        _, report = self.fixture.validate()
+        self.assert_error_contains(report, "Role 'ghost_role' is not declared in use-cases.json")
+        self.assert_error_contains(report, "use-cases.json declares use case(s) with zero covering black-box tests: UC-FX-99")
 
     def test_duplicate_id_is_rejected(self) -> None:
         self.fixture.replace_once(
@@ -425,8 +485,8 @@ class BlackBoxToolTests(unittest.TestCase):
         self.fixture.section.write_text(original, encoding="utf-8")
         with self.subTest("wrong order"):
             self.fixture.replace_once(
-                "- **Requirement:** FIXTURE.REQUIREMENT.001\n- **Surface:** Isolated fixture surface\n",
-                "- **Surface:** Isolated fixture surface\n- **Requirement:** FIXTURE.REQUIREMENT.001\n",
+                "- **Requirement:** FIXTURE.REQUIREMENT.001\n- **Role:** `student`\n",
+                "- **Role:** `student`\n- **Requirement:** FIXTURE.REQUIREMENT.001\n",
             )
             _, report = self.fixture.validate()
             self.assert_error_contains(report, "field/order mismatch")
@@ -448,12 +508,12 @@ class BlackBoxToolTests(unittest.TestCase):
 
     def test_case_count_drift_is_rejected(self) -> None:
         content = self.fixture.section.read_text(encoding="utf-8")
-        marker = "## TST-245 — Fixture case 245"
+        marker = "## TST-266 — Fixture case 266"
         self.assertIn(marker, content)
         self.fixture.section.write_text(content[: content.index(marker)].rstrip() + "\n", encoding="utf-8")
         _, report = self.fixture.validate()
         self.assert_error_contains(report, "section count drift")
-        self.assert_error_contains(report, "case count drift: expected 245, parsed 244")
+        self.assert_error_contains(report, "case count drift: expected 266, parsed 265")
 
     def test_missing_legacy_id_is_rejected(self) -> None:
         lines = self.fixture.legacy.read_text(encoding="utf-8").splitlines()
@@ -957,6 +1017,111 @@ class BlackBoxToolTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(publish.PublishError, "unsupported Pandoc"):
                 publish.check_prerequisites()
+
+    def test_template_docx_builder_uses_narrow_margins_and_passes_docx_validation(self) -> None:
+        tools_dir = str(TOOLS_DIR)
+        if tools_dir not in sys.path:
+            sys.path.insert(0, tools_dir)
+        import docx_template
+        import xml.etree.ElementTree as ET
+
+        suite_data, report = validate.validate_project(self.fixture.root)
+        self.assertEqual([], report.errors)
+        assert suite_data is not None
+
+        stage = self.fixture.root / "stage-template"
+        stage.mkdir()
+        staged_docx = stage / "SYNAPSE-BlackBox-Testing.docx"
+        docx_template.build_template_docx(suite_data, staged_docx, title="Black Box Testing")
+
+        payload = publish._validate_docx(staged_docx, stage)
+        with zipfile.ZipFile(io.BytesIO(payload), "r") as archive:
+            doc_xml = ET.fromstring(archive.read("word/document.xml"))
+
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        w_ns = f"{{{ns['w']}}}"
+        pg_sz = doc_xml.find(".//w:sectPr/w:pgSz", ns)
+        pg_mar = doc_xml.find(".//w:sectPr/w:pgMar", ns)
+        self.assertIsNotNone(pg_sz)
+        self.assertIsNotNone(pg_mar)
+        assert pg_sz is not None and pg_mar is not None
+        self.assertEqual("12240", pg_sz.attrib[f"{w_ns}w"])
+        self.assertEqual("15840", pg_sz.attrib[f"{w_ns}h"])
+        for edge in ("top", "bottom", "left", "right"):
+            self.assertEqual("720", pg_mar.attrib[f"{w_ns}{edge}"])
+
+        expected_headers = ["Test Case ID", "Module / Function", "Test Scenario", "Expected Results", "Pass", "Remarks"]
+        matched_case_table = False
+        for tbl in doc_xml.findall(".//w:tbl", ns):
+            for row in tbl.findall("w:tr", ns):
+                if row.find("w:trPr/w:tblHeader", ns) is None:
+                    continue
+                cells = row.findall("w:tc", ns)
+                texts = ["".join(t.text or "" for t in tc.findall(".//w:t", ns)) for tc in cells]
+                if texts == expected_headers:
+                    matched_case_table = True
+                    for tc in cells:
+                        shd = tc.find("w:tcPr/w:shd", ns)
+                        self.assertIsNotNone(shd)
+                        assert shd is not None
+                        self.assertEqual("000000", shd.attrib[f"{w_ns}fill"])
+        self.assertTrue(matched_case_table, "expected template 6-column test-case header table")
+
+        sizes = {sz.attrib.get(f"{w_ns}val") for sz in doc_xml.findall(".//w:sz", ns)}
+        self.assertIn("21", sizes)
+        self.assertIn("22", sizes)
+        fonts = {rf.attrib.get(f"{w_ns}ascii") for rf in doc_xml.findall(".//w:rFonts", ns)}
+        self.assertIn("Times New Roman", fonts)
+
+    def test_defense_sheet_covers_all_70_use_cases_and_builds_valid_docx(self) -> None:
+        tools_dir = str(TOOLS_DIR)
+        if tools_dir not in sys.path:
+            sys.path.insert(0, tools_dir)
+        import build_defense_sheet
+        import xml.etree.ElementTree as ET
+
+        repo_root = TOOLS_DIR.parents[1]
+        sheet = build_defense_sheet.validate_defense_sheet(repo_root)
+        catalog = sheet.suite_data.use_case_catalog
+        assert isinstance(catalog, dict)
+        self.assertEqual(70, len(catalog["use_cases"]))
+        covered_ucs = {uc for case in sheet.cases for uc in case["use_cases"]}
+        self.assertEqual({uc["id"] for uc in catalog["use_cases"]}, covered_ucs)
+
+        stage = self.fixture.root / "stage-defense"
+        stage.mkdir()
+        staged_docx = stage / "SYNAPSE-BlackBox-Testing-Defense.docx"
+        build_defense_sheet.build_defense_docx(sheet, staged_docx)
+        payload = publish._validate_docx(staged_docx, stage)
+
+        with zipfile.ZipFile(io.BytesIO(payload), "r") as archive:
+            doc_xml = ET.fromstring(archive.read("word/document.xml"))
+
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        w_ns = f"{{{ns['w']}}}"
+        pg_sz = doc_xml.find(".//w:sectPr/w:pgSz", ns)
+        pg_mar = doc_xml.find(".//w:sectPr/w:pgMar", ns)
+        assert pg_sz is not None and pg_mar is not None
+        self.assertEqual("12240", pg_sz.attrib[f"{w_ns}w"])
+        self.assertEqual("15840", pg_sz.attrib[f"{w_ns}h"])
+        for edge in ("top", "bottom", "left", "right"):
+            self.assertEqual("720", pg_mar.attrib[f"{w_ns}{edge}"])
+
+        expected_headers = ["Test Case ID", "Module / Function", "Test Scenario", "Expected Results", "Pass", "Remarks"]
+        matched_case_table = False
+        for tbl in doc_xml.findall(".//w:tbl", ns):
+            for row in tbl.findall("w:tr", ns):
+                if row.find("w:trPr/w:tblHeader", ns) is None:
+                    continue
+                texts = ["".join(t.text or "" for t in tc.findall(".//w:t", ns)) for tc in row.findall("w:tc", ns)]
+                if texts == expected_headers:
+                    matched_case_table = True
+        self.assertTrue(matched_case_table, "expected 6-column black-box table header in defense DOCX")
+        sizes = {sz.attrib.get(f"{w_ns}val") for sz in doc_xml.findall(".//w:sz", ns)}
+        self.assertIn("21", sizes)
+        self.assertIn("22", sizes)
+        fonts = {rf.attrib.get(f"{w_ns}ascii") for rf in doc_xml.findall(".//w:rFonts", ns)}
+        self.assertIn("Times New Roman", fonts)
 
 
 if __name__ == "__main__":

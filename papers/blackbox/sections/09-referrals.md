@@ -5,6 +5,9 @@
 - **Legacy IDs:** `RF-001`
 - **Changed by:** b868a49
 - **Requirement:** `REFERRAL.CREATE.CLINIC_GUIDANCE`
+- **Role:** `clinic_staff`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-01`
 - **Surface:** Clinic referrals
 - **Route/API:** GET/POST /clinic/referrals/create|store
 - **Actor/grants:** Clinic actor with referrals.create; source encounter read when linked
@@ -24,6 +27,9 @@
 - **Legacy IDs:** `RF-002`
 - **Changed by:** b868a49
 - **Requirement:** `REFERRAL.CREATE.GUIDANCE_CLINIC`
+- **Role:** `counsellor`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-01`
 - **Surface:** Guidance referrals
 - **Route/API:** GET/POST /guidance/referrals/create|store
 - **Actor/grants:** Guidance actor with referrals.create
@@ -43,6 +49,9 @@
 - **Legacy IDs:** `RF-004`
 - **Changed by:** b868a49
 - **Requirement:** `REFERRAL.NONDISCLOSURE.REFERRER`
+- **Role:** `employee`
+- **Module:** Personal Portal & Self-Service
+- **Use Cases:** `UC-PT-08`
 - **Surface:** Portal Guidance intake and department records
 - **Route/API:** POST /portal/referrals/store; direct Clinic/Guidance GET attempts
 - **Actor/grants:** Employee/teacher or other supported general referrer without clinical grants
@@ -62,6 +71,9 @@
 - **Legacy IDs:** `RF-005`
 - **Changed by:** baseline
 - **Requirement:** `REFERRAL.ACKNOWLEDGE`
+- **Role:** `workstation_member`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-02`
 - **Surface:** Referral workstation
 - **Route/API:** POST /{target}/referrals/{id}/acknowledge
 - **Actor/grants:** Active receiving-unit actor with referrals.acknowledge
@@ -81,6 +93,9 @@
 - **Legacy IDs:** `RF-006`
 - **Changed by:** baseline
 - **Requirement:** `REFERRAL.REVIEW`
+- **Role:** `workstation_member`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-02`
 - **Surface:** Referral workstation
 - **Route/API:** POST /{target}/referrals/{id}/review
 - **Actor/grants:** Assigned receiving actor with referrals.review
@@ -100,6 +115,9 @@
 - **Legacy IDs:** `RF-007`
 - **Changed by:** b868a49
 - **Requirement:** `REFERRAL.HANDOFF.CLINIC_CREATE_LINK`
+- **Role:** `clinic_staff`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-03`
 - **Surface:** Clinic incoming referral
 - **Route/API:** GET/POST /clinic/referrals/{id}/handoff
 - **Actor/grants:** Clinic receiver with referrals.review plus clinic.encounters.read/create
@@ -119,6 +137,9 @@
 - **Legacy IDs:** `RF-008`
 - **Changed by:** b868a49
 - **Requirement:** `REFERRAL.HANDOFF.GUIDANCE_CREATE_LINK`
+- **Role:** `counsellor`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-03`
 - **Surface:** Guidance incoming referral
 - **Route/API:** GET/POST /guidance/referrals/{id}/handoff; compatibility /referrals/{id}/convert
 - **Actor/grants:** Guidance receiver with referrals.review plus guidance.cases.read/create
@@ -138,6 +159,9 @@
 - **Legacy IDs:** `RF-009`
 - **Changed by:** baseline
 - **Requirement:** `REFERRAL.CLOSE`
+- **Role:** `workstation_member`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-04`
 - **Surface:** Referral workstation
 - **Route/API:** POST /{unit}/referrals/{id}/close
 - **Actor/grants:** Authorized receiving actor with referrals.close
@@ -157,6 +181,9 @@
 - **Legacy IDs:** `RF-010`
 - **Changed by:** baseline
 - **Requirement:** `REFERRAL.LIST.FILTERS`
+- **Role:** `workstation_member`
+- **Module:** Interdepartmental Referrals
+- **Use Cases:** `UC-RF-02`
 - **Surface:** Referral lists
 - **Route/API:** GET /clinic/referrals; GET /guidance/referrals
 - **Actor/grants:** Unit actor with referrals.read

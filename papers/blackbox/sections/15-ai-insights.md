@@ -7,6 +7,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-001`
 - Changed by: `bea71cf`, `8674603`
 - Requirement: An authorized model discovery must use an approved endpoint profile, bounded/rate-limited response, release the session during network work, revalidate actor and settings revision afterward, and stage a private preview before selective import.
+- Role: `superadmin`
+- Module: AI Insights
+- Use Cases: `UC-AD-10`
 - Surface: AI configuration web console.
 - Route/API: `POST /admin/ai/models/preview`; `POST /admin/ai/models/import`.
 - Actor/grants: Platform administrator with `ai.configuration.write`.
@@ -29,6 +32,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-002`
 - Changed by: `bea71cf`, `8674603`
 - Requirement: Every settings save pauses dispatch; testing an enabled profile requires pause confirmation and leaves analytics disabled; only a successfully tested compatible saved revision plus explicit privacy confirmation can be enabled.
+- Role: `superadmin`
+- Module: AI Insights
+- Use Cases: `UC-AD-10`
 - Surface: AI configuration controls.
 - Route/API: `POST /admin/ai/save`; `/test`; `/enable`.
 - Actor/grants: Administrator with configuration write/test authority.
@@ -51,6 +57,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-003`
 - Changed by: `bea71cf`
 - Requirement: A saved provider key must be encrypted in managed storage, represented only by a boolean/status after save, never returned in HTML/JSON/logs, and blank input must retain it unless explicit removal/no-auth mode is chosen.
+- Role: `superadmin`
+- Module: AI Insights
+- Use Cases: `UC-AD-10`
 - Surface: AI settings page/status endpoint.
 - Route/API: `POST /admin/ai/save`; `GET /admin/ai`; `GET /admin/ai/status`.
 - Actor/grants: AI configuration administrator.
@@ -73,6 +82,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-004`
 - Changed by: `bea71cf`
 - Requirement: Read/generate/review/approve grants must be explicit tenant/unit/role permissions, independently audited, and must not grant underlying source-data authority.
+- Role: `superadmin`
+- Module: AI Insights
+- Use Cases: `UC-AD-10`
 - Surface: AI access matrix and department insight panels.
 - Route/API: `POST /admin/ai/access`; `GET /{unit}/insights`.
 - Actor/grants: AI configuration administrator; target staff roles in clinic/guidance/BMG.
@@ -95,6 +107,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-005`
 - Changed by: `bea71cf`
 - Requirement: Generate/prepare/recover/retry must revalidate current unit-specific AI generate and source permission; hidden controls are convenience only and direct POST must fail without queuing or contacting a provider.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-01`
 - Surface: Department insights panel/endpoints.
 - Route/API: `POST /{unit}/insights/prepare`; `/generate`; `/recover`; `/jobs/{id}/retry`.
 - Actor/grants: Staff role variants lacking AI generate or source-data permission.
@@ -117,6 +132,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-006`
 - Changed by: `bea71cf`, `884b9f0`
 - Requirement: Prepare must build only an approved fixed analysis over completed Manila months, apply contributor/small-cell disclosure rules, freeze released values/masks, encrypt the snapshot, and contact no AI provider.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-01`
 - Surface: Department “Preview data”.
 - Route/API: `POST /{unit}/insights/prepare`.
 - Actor/grants: Authorized generator with unit source permission.
@@ -139,6 +157,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-007`
 - Changed by: `bea71cf`
 - Requirement: Generate must prepare current evidence and enqueue one deduplicated, budget-reserved, provenance-stamped waiting request; the HTTP action itself must never call the provider.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-01`
 - Surface: Department Generate action.
 - Route/API: `POST /{unit}/insights/generate`.
 - Actor/grants: Authorized generator.
@@ -161,6 +182,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-008`
 - Changed by: `bea71cf`, `8674603`
 - Requirement: A separately launched worker may claim an eligible queued job, recheck authorization/profile/snapshot generation/pipeline provenance, reserve one outbound daily slot immediately before one provider POST, validate output, and store an encrypted draft.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-01`
 - Surface: `ai:dispatch` worker plus insights panel.
 - Route/API: CLI worker and `GET /{unit}/insights/panel`.
 - Actor/grants: Approved test operator; queued job’s actor still authorized.
@@ -183,6 +207,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-009`
 - Changed by: `bea71cf`
 - Requirement: Draft may transition `draft→accepted→approved` or `draft|accepted→rejected`, with current version and separate review/approve grants; nonreject decisions require current profile and pipeline provenance, and approval requires at least one program.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-02`
 - Surface: AI draft review dialog.
 - Route/API: `POST /{unit}/insights/{id}/review`.
 - Actor/grants: Reviewer with `ai.insights.review`; approver with `ai.insights.approve`.
@@ -205,6 +232,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-010`
 - Changed by: `bea71cf`
 - Requirement: Insight panel must expose only the caller’s authorized unit/tenant, unexpired encrypted-store projections and mark review state/policy accurately; read-only users must not gain review/generate controls or historical plaintext.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-02`
 - Surface: Department insights panel.
 - Route/API: `GET /{unit}/insights`; `GET /{unit}/insights/panel`.
 - Actor/grants: Role with `ai.insights.read` only.
@@ -227,6 +257,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: `AI-011`
 - Changed by: `bea71cf`
 - Requirement: Disable must pause deployment and mark settings disabled with current version while preserving provider configuration/key; new analytics actions refuse, queued/running handling remains explicit, and already-sent requests are not claimed recalled.
+- Role: `superadmin`
+- Module: AI Insights
+- Use Cases: `UC-AD-10`
 - Surface: AI settings and department panels.
 - Route/API: `POST /admin/ai/disable`; insight endpoints; worker status.
 - Actor/grants: Configuration administrator and department staff.
@@ -249,6 +282,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: None
 - Changed by: `bea71cf`, `8674603`
 - Requirement: Explicit confirmed recovery may rematerialize only current-period evidence whose schema, disclosure version, canonical fingerprint, analysis, tenant, and unit exactly match the expired row; it increments generation, encrypts a new retention payload, expires queued old jobs, and renews no approval.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-01`
 - Surface: “Needs attention” recovery control.
 - Route/API: `POST /{unit}/insights/recover`.
 - Actor/grants: Authorized generator.
@@ -271,6 +307,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: None
 - Changed by: `bea71cf`, `8674603`
 - Requirement: Manual retry is allowed only for a valid failed/cancelled/expired request family with current intact snapshot/profile/model/provenance and zero dispatch-attempt reservations across the chain; it creates one deduplicated successor under the normal budget.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-01`
 - Surface: “Queue safe new attempt”.
 - Route/API: `POST /{unit}/insights/jobs/{id}/retry`.
 - Actor/grants: Authorized generator.
@@ -293,6 +332,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: None
 - Changed by: `bea71cf`, `8674603`
 - Requirement: Timeout/lease loss or any failure after a possible provider dispatch must become `outcome_unknown`, clear active lease fields, warn that processing/charging may have occurred, and never become retry eligible.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-01`
 - Surface: Worker and request history.
 - Route/API: Worker failure path; `GET /{unit}/insights/panel`.
 - Actor/grants: Approved AI test operator and authorized panel reader.
@@ -315,6 +357,9 @@ AI/provider execution is allowed only in the gated disposable campaign described
 - Legacy IDs: None
 - Changed by: `bea71cf`, `8674603`
 - Requirement: Jobs and drafts must carry the deterministic public-code pipeline digest; dispatch completion and nonreject review require a digest matching current policy files and current snapshot generation, while historical drafts remain reject-only.
+- Role: `ai_granted_staff`
+- Module: AI Insights
+- Use Cases: `UC-AI-02`
 - Surface: Worker completion and draft review.
 - Route/API: Worker/store operations; `POST /{unit}/insights/{id}/review`.
 - Actor/grants: Authorized worker/reviewer/approver.

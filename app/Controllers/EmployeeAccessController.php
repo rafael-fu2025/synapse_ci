@@ -73,6 +73,9 @@ final class EmployeeAccessController extends BaseController
             $this->response->setStatusCode($status);
             if ($this->json()) return $this->response->setJSON(['success' => false, 'message' => $message,
                 'csrf' => ['name' => csrf_token(), 'hash' => csrf_hash()]]);
+            if (\App\Services\ErrorPageRenderer::wantsHtml($this->request)) {
+                return \App\Services\ErrorPageRenderer::htmlResponse($this->response, $status, $message);
+            }
             return $this->response->setContentType('text/plain')->setBody($message);
         }
     }

@@ -5,6 +5,9 @@
 - **Legacy IDs:** `AU-001`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.LOGIN.STUDENT`
+- **Role:** `student`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-02`
 - **Surface:** Web sign-in
 - **Route/API:** GET/POST /auth/login; GET /portal
 - **Actor/grants:** Active student with portal.appointments.read and portal.records.read
@@ -24,6 +27,9 @@
 - **Legacy IDs:** `AU-002`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.LOGIN.EMPLOYEE`
+- **Role:** `employee`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-02`
 - **Surface:** Web sign-in
 - **Route/API:** GET/POST /auth/login; GET /portal
 - **Actor/grants:** Active employee with personal-portal grants
@@ -43,6 +49,9 @@
 - **Legacy IDs:** `AU-003`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.LOGIN.REJECT_INVALID`
+- **Role:** `public`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-02`
 - **Surface:** Web sign-in
 - **Route/API:** POST /auth/login
 - **Actor/grants:** Anonymous user
@@ -62,6 +71,9 @@
 - **Legacy IDs:** `AU-004`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.HOST.WRONG_WORKSPACE`
+- **Role:** `all_authenticated`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-02`
 - **Surface:** Dedicated workstation sign-in
 - **Route/API:** POST /auth/login on clinic/guidance/bmg host
 - **Actor/grants:** Valid actor whose role is incompatible with the selected host
@@ -81,6 +93,9 @@
 - **Legacy IDs:** `AU-005`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.LOGIN.THROTTLE_WINDOW`
+- **Role:** `public`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-02`
 - **Surface:** Web sign-in
 - **Route/API:** POST /auth/login
 - **Actor/grants:** Anonymous user
@@ -100,6 +115,9 @@
 - **Legacy IDs:** `AU-006`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.LOGOUT.CURRENT_HOST`
+- **Role:** `all_authenticated`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-04`
 - **Surface:** Account menu and confirmation
 - **Route/API:** GET /auth/logout/confirm; POST /auth/logout
 - **Actor/grants:** Any authenticated web actor
@@ -119,6 +137,9 @@
 - **Legacy IDs:** `AU-007`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.SESSION.AUTH_VERSION_REVOKE`
+- **Role:** `all_authenticated`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-04`
 - **Surface:** Authenticated web session
 - **Route/API:** Any protected GET after trusted auth_version update
 - **Actor/grants:** Synthetic active account; two signed-in browsers; approved fixture/admin operation that atomically increments users.auth_version
@@ -138,6 +159,9 @@
 - **Legacy IDs:** `AU-008`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.WEB.CSRF`
+- **Role:** `all_authenticated`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-04`
 - **Surface:** Protected web form
 - **Route/API:** Representative protected POST, such as /portal/settings/emergency-contact
 - **Actor/grants:** Authenticated synthetic portal actor
@@ -157,6 +181,9 @@
 - **Legacy IDs:** `AU-010`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.MIS.UNAVAILABLE`
+- **Role:** `student`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-02`
 - **Surface:** Web sign-in
 - **Route/API:** POST /auth/login
 - **Actor/grants:** University student or employee identity (not a local break-glass account)
@@ -176,6 +203,9 @@
 - **Legacy IDs:** `AU-011`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.BREAK_GLASS.LOCAL`
+- **Role:** `superadmin`
+- **Module:** Administration, Access & Platform
+- **Use Cases:** `UC-AD-08`
 - **Surface:** Web sign-in
 - **Route/API:** POST /auth/login; GET /admin
 - **Actor/grants:** Deliberately provisioned active local superadmin with applicable grants
@@ -195,6 +225,9 @@
 - **Legacy IDs:** `AU-012`
 - **Changed by:** baseline
 - **Requirement:** `AUTH.HOST.SESSION_PINNING`
+- **Role:** `all_authenticated`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-04`
 - **Surface:** Dedicated hosts
 - **Route/API:** GET protected routes on synapse, clinic, guidance, and bmg hosts
 - **Actor/grants:** Authorized multi-workspace synthetic actor
@@ -207,4 +240,48 @@
 - **Cleanup:** Sign out independently on every host and clear each host's browser storage.
 - **Source:** docs/PORTAL_HOSTS.md:51-57; app/Config/PortalSites.php:1-26
 - **Evidence:** Cookie attribute screenshots with values redacted and before/after protected-route observations on both hosts.
+- **Verdict:** `NOT_RUN`
+
+## AU-013 — Public Data Privacy Policy route serves institutional notice without login
+- **Lifecycle:** `READY`
+- **Legacy IDs:** None
+- **Changed by:** `e7d5572`
+- **Requirement:** `AUTH.PRIVACY.PUBLIC_ROUTE`
+- **Role:** `public`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-01`
+- **Surface:** Public Data Privacy Policy page (uncommitted `feat/archive-management` Data Privacy Policy update)
+- **Route/API:** GET /privacy-policy
+- **Actor/grants:** Unauthenticated visitor and authenticated portal user
+- **Preconditions:** Clean anonymous browser session; optional authenticated browser session on main/workstation host.
+**Steps**
+1. Open `/privacy-policy` in an unauthenticated browser session and verify the complete Foundation University Data Privacy Policy sections render under RA 10173.
+2. Inspect the back-link target when logged out (`Back to Sign In` → `/auth/login`) vs logged in (`Back to Portal` → `/`) and check Cache-Control headers.
+- **Expected:** `/privacy-policy` renders with HTTP 200 and `Cache-Control: private, no-store` without redirecting to sign-in, and adapts its back-navigation link safely to session state.
+- **Negative/non-disclosure:** Page emits zero PII, user identifiers, session tokens, or stack traces regardless of authentication state.
+- **Cleanup:** Clear browser session if authenticated.
+- **Source:** app/Config/Routes.php:15-16; app/Controllers/AuthController.php:151-164; app/Views/auth/privacy_policy.php:1-40; app/Views/partials/privacy_policy_content.php:1-80
+- **Evidence:** Anonymous and authenticated `/privacy-policy` screenshots, response headers, and `tests/unit/PrivacyPolicyRouteTest.php` corroboration.
+- **Verdict:** `NOT_RUN`
+
+## AU-014 — Sign-in Data Privacy Policy modal and clinical RA 10173 consent links stay accessible
+- **Lifecycle:** `READY`
+- **Legacy IDs:** None
+- **Changed by:** `e7d5572`
+- **Requirement:** `AUTH.PRIVACY.LOGIN_MODAL_AND_INAPP_LINKS`
+- **Role:** `public`
+- **Module:** Authentication, Session & Privacy
+- **Use Cases:** `UC-SH-01`
+- **Surface:** Login screen modal and Guidance RA 10173 consent banners (uncommitted `feat/archive-management` Data Privacy Policy update)
+- **Route/API:** GET /auth/login; GET /portal/evaluations/redeem/{token}; GET /guidance/clinical/forms/{id}
+- **Actor/grants:** Public login visitor; token-holding student; authorized counsellor
+- **Preconditions:** Login screen accessible; synthetic evaluation token and clinical form draft available for in-app consent-link check.
+**Steps**
+1. On `/auth/login`, click the compact `Data Privacy Policy` trigger (`.auth-privacy-trigger`) and verify `#dataPrivacyPolicyModal` opens, scrolls, and closes cleanly while allowing full-page `/privacy-policy` navigation.
+2. Open the evaluation submission screen and clinical form editor and follow the inline Foundation University Data Privacy Policy (RA 10173) link.
+- **Expected:** Login modal renders identical shared policy markup (`privacy_policy_content.php`) without trapping keyboard focus or breaking credential submission; in-app consent notices link directly to `/privacy-policy`.
+- **Negative/non-disclosure:** Modal and login page do not cache user inputs, leak prior login identifiers, or alter authentication enforcement.
+- **Cleanup:** Close sessions and reset disposable evaluation/form fixtures.
+- **Source:** app/Views/auth/login.php:1-120; app/Views/layouts/auth.php:1-210; app/Views/portal/evaluations/submit.php:1-80; app/Views/guidance/clinical/form_editor.php:1-80
+- **Evidence:** Login modal open/scroll screenshot, mobile/desktop fit check, and in-app link navigation captures.
 - **Verdict:** `NOT_RUN`

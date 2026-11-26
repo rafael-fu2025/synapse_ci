@@ -48,6 +48,7 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
             Once you submit this form, your one-time token is marked redeemed and the evaluation record stores
             <strong>zero personal identifiers</strong> (no <code>person_id</code>, <code>student_id</code>, <code>session_id</code>, <code>episode_id</code>, or <code>token_id</code>).
             Individual evaluations are never disclosed to guidance providers; quantitative averages and moderated comments are only released when at least <strong>5</strong> responses have been collected.
+            <a href="<?= esc(site_url('privacy-policy'), 'attr') ?>" target="_blank" rel="noopener noreferrer" data-navigation="false">Read Foundation University Data Privacy Policy</a>.
           </span>
         </div>
       </div>
@@ -100,24 +101,22 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
         <div id="eval-error-banner" class="alert alert-danger pe-eval-error d-none" role="alert"></div>
 
         <section class="pe-eval-band">
-          <?php if ($isPsychosocial): ?>
-            <fieldset class="pe-eval-fieldset mb-4">
-              <legend class="pe-eval-section-title mb-2">
-                1. Visit Type <span class="pe-eval-req">*</span>
-              </legend>
-              <p class="pe-eval-section-desc mb-3">Select how this guidance session was initiated.</p>
-              <div class="pe-eval-visit-grid">
-                <?php foreach ($visitTypes as $vtKey => $vtLabel): ?>
-                  <label class="pe-eval-choice">
-                    <input class="form-check-input" type="radio" name="visit_type" value="<?= esc($vtKey, 'attr') ?>" required>
-                    <span class="pe-eval-choice-label"><?= esc($vtLabel) ?></span>
-                  </label>
-                <?php endforeach; ?>
-              </div>
-            </fieldset>
-          <?php endif; ?>
+          <fieldset class="pe-eval-fieldset mb-4">
+            <legend class="pe-eval-section-title mb-2">
+              1. Visit Type <span class="pe-eval-req">*</span>
+            </legend>
+            <p class="pe-eval-section-desc mb-3">Select how this guidance session was initiated.</p>
+            <div class="pe-eval-visit-grid">
+              <?php foreach ($visitTypes as $vtKey => $vtLabel): ?>
+                <label class="pe-eval-choice">
+                  <input class="form-check-input" type="radio" name="visit_type" value="<?= esc($vtKey, 'attr') ?>" required>
+                  <span class="pe-eval-choice-label"><?= esc($vtLabel) ?></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          </fieldset>
 
-          <div class="pe-eval-term-grid <?= $isPsychosocial ? 'is-divided' : '' ?>">
+          <div class="pe-eval-term-grid is-divided">
             <div class="pe-eval-field">
               <label for="eval-academic-term" class="pe-eval-label">
                 Academic Term <span class="pe-eval-optional">(Optional)</span>
@@ -197,9 +196,21 @@ $submitUrl = $submitUrl ?? site_url('/portal/evaluations/submit');
             </div>
           </fieldset>
 
+          <div class="pe-eval-field mt-3">
+            <label for="eval-future-visit-reason" class="pe-eval-label">
+              Reason/s why: <span class="pe-eval-optional">(Optional)</span>
+            </label>
+            <input id="eval-future-visit-reason"
+                   type="text"
+                   name="future_visit_reason"
+                   class="form-control pe-eval-input"
+                   maxlength="512"
+                   placeholder="Optional reason for your response above (do not include identifying details)">
+          </div>
+
           <div class="pe-eval-comment-block">
             <label for="eval-qualitative-comment" class="pe-eval-label">
-              Qualitative Comments / Suggestions
+              Comments and Suggestions
               <span class="pe-eval-optional">(Optional · Encrypted &amp; moderated before release)</span>
             </label>
             <textarea id="eval-qualitative-comment"

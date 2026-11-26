@@ -769,9 +769,6 @@ final class GuidanceClinicalController extends BaseController
             $studentName = '';
             $studentId = '';
             $courseYear = '';
-            $age = null;
-            $gender = '';
-            $contact = '';
 
             if ($person !== null) {
                 $studentName = trim((string) (($person['first_name'] ?? '') . ' ' . ($person['last_name'] ?? '')));
@@ -785,49 +782,52 @@ final class GuidanceClinicalController extends BaseController
                     $pos = trim((string) ($person['position'] ?? ''));
                     $courseYear = trim($dept . ($pos !== '' ? ' - ' . $pos : ''));
                 }
-                if (!empty($person['birth_date'])) {
-                    $dobTs = strtotime((string) $person['birth_date']);
-                    if ($dobTs !== false) {
-                        $age = (int) floor((time() - $dobTs) / 31556952);
-                    }
-                }
-                $gender = (string) ($person['sex'] ?? $person['gender'] ?? '');
-                $contact = (string) ($person['contact_number'] ?? $person['email'] ?? '');
             }
 
             return [
-                'student_name'   => $studentName,
-                'student_id'     => $studentId,
-                'course_year'    => $courseYear,
-                'interview_date' => $today,
-                'demographics'   => [
-                    'age'     => $age,
-                    'gender'  => $gender,
-                    'contact' => $contact,
-                ],
-                'mental_health_screening' => [
-                    'phq9_score' => null,
-                    'gad7_score' => null,
-                    'risk_level' => '',
-                ],
+                'client_type'                  => 'walk_in',
+                'interview_date'               => $today,
+                'interview_time'               => date('H:i'),
+                'student_name'                 => $studentName,
+                'student_id'                   => $studentId,
+                'course_year'                  => $courseYear,
+                'concern_severity'             => 'serious',
                 'privacy_consent_acknowledged' => false,
             ];
         }
 
-        if ($canonicalKey === GuidanceClinicalFormService::FORM_PSYCHOSOCIAL_CONTACT) {
-            return [
-                'session_date'   => $today,
-                'session_number' => 1,
-                'modality'       => 'in_person',
-            ];
+        // Both FORM_PSYCHOSOCIAL_CONTACT (PCF-008) and FORM_COUNSELING_CONTACT (CCF-009)
+        $studentName = '';
+        $studentId = '';
+        $courseYear = '';
+        $department = '';
+
+        if ($person !== null) {
+            $studentName = trim((string) (($person['first_name'] ?? '') . ' ' . ($person['last_name'] ?? '')));
+            $studentId = (string) ($person['mis_id'] ?? '');
+            $prog = trim((string) ($person['program'] ?? ''));
+            $yr = trim((string) ($person['year_level'] ?? ''));
+            $sec = trim((string) ($person['section'] ?? ''));
+            if ($prog !== '' || $yr !== '') {
+                $courseYear = trim($prog . ($yr !== '' ? ' - ' . $yr : '') . ($sec !== '' ? ' ' . $sec : ''));
+            } else {
+                $dept = trim((string) ($person['department'] ?? ''));
+                $pos = trim((string) ($person['position'] ?? ''));
+                $courseYear = trim($dept . ($pos !== '' ? ' - ' . $pos : ''));
+            }
+            $department = trim((string) ($person['department'] ?? $prog));
         }
 
         return [
-            'session_date'   => $today,
-            'session_number' => 1,
-            'time_start'     => '09:00',
-            'time_end'       => '10:00',
-            'session_type'   => 'regular',
+            'department'                   => $department,
+            'session_date'                 => $today,
+            'student_name'                 => $studentName,
+            'student_id'                   => $studentId,
+            'course_year'                  => $courseYear,
+            'time_started'                 => date('H:i'),
+            'referral_source'              => 'walk_in',
+            'session_type'                 => 'individual',
+            'privacy_consent_acknowledged' => false,
         ];
     }
 
@@ -837,96 +837,78 @@ final class GuidanceClinicalController extends BaseController
     private function normalizeClinicalFields(string $formKey, array $raw): array
     {
         if ($formKey === GuidanceClinicalFormService::FORM_PSYCHOSOCIAL_INTERVIEW) {
-            $demo = is_array($raw['demographics'] ?? null) ? $raw['demographics'] : [];
-            $cleanDemo = [];
-            if (isset($demo['age']) && $demo['age'] !== '' && is_numeric($demo['age'])) {
-                $cleanDemo['age'] = (int) $demo['age'];
-            }
-            if (isset($demo['gender']) && trim((string) $demo['gender']) !== '') {
-                $cleanDemo['gender'] = trim((string) $demo['gender']);
-            }
-            if (isset($demo['contact']) && trim((string) $demo['contact']) !== '') {
-                $cleanDemo['contact'] = trim((string) $demo['contact']);
-            }
-
-            $screen = is_array($raw['mental_health_screening'] ?? null) ? $raw['mental_health_screening'] : [];
-            $cleanScreen = [];
-            if (isset($screen['phq9_score']) && $screen['phq9_score'] !== '' && is_numeric($screen['phq9_score'])) {
-                $cleanScreen['phq9_score'] = (int) $screen['phq9_score'];
-            }
-            if (isset($screen['gad7_score']) && $screen['gad7_score'] !== '' && is_numeric($screen['gad7_score'])) {
-                $cleanScreen['gad7_score'] = (int) $screen['gad7_score'];
-            }
-            if (isset($screen['risk_level']) && trim((string) $screen['risk_level']) !== '') {
-                $cleanScreen['risk_level'] = trim((string) $screen['risk_level']);
-            }
-
             $out = [
-                'student_name'                 => trim((string) ($raw['student_name'] ?? '')),
-                'student_id'                   => trim((string) ($raw['student_id'] ?? '')),
-                'course_year'                  => trim((string) ($raw['course_year'] ?? '')),
+                'client_type'                  => trim((string) ($raw['client_type'] ?? 'walk_in')),
                 'interview_date'               => trim((string) ($raw['interview_date'] ?? '')),
-                'demographics'                 => $cleanDemo,
+                'student_name'                 => trim((string) ($raw['student_name'] ?? '')),
+                'course_year'                  => trim((string) ($raw['course_year'] ?? '')),
                 'presenting_concerns'          => trim((string) ($raw['presenting_concerns'] ?? '')),
-                'counselor_assessment'         => trim((string) ($raw['counselor_assessment'] ?? '')),
-                'intervention_plan'            => trim((string) ($raw['intervention_plan'] ?? '')),
+                'concern_severity'             => trim((string) ($raw['concern_severity'] ?? 'serious')),
                 'privacy_consent_acknowledged' => in_array((string) ($raw['privacy_consent_acknowledged'] ?? '0'), ['1', 'true', 'on'], true),
             ];
 
-            if ($cleanScreen !== []) {
-                $out['mental_health_screening'] = $cleanScreen;
+            $studentId = trim((string) ($raw['student_id'] ?? ''));
+            if ($studentId !== '') {
+                $out['student_id'] = $studentId;
             }
-            $family = trim((string) ($raw['family_social_support'] ?? ''));
-            if ($family !== '') {
-                $out['family_social_support'] = $family;
+            $interviewTime = trim((string) ($raw['interview_time'] ?? ''));
+            if ($interviewTime !== '') {
+                $out['interview_time'] = $interviewTime;
+            }
+            foreach ([
+                'problem_duration',
+                'perceived_cause',
+                'coping_barriers',
+                'prior_coping_attempts',
+                'desired_help',
+                'hoped_changes',
+            ] as $optionalNarrative) {
+                $val = trim((string) ($raw[$optionalNarrative] ?? ''));
+                if ($val !== '') {
+                    $out[$optionalNarrative] = $val;
+                }
             }
 
             return $out;
         }
 
-        if ($formKey === GuidanceClinicalFormService::FORM_PSYCHOSOCIAL_CONTACT) {
-            $out = [
-                'session_date'      => trim((string) ($raw['session_date'] ?? '')),
-                'session_number'    => max(1, (int) ($raw['session_number'] ?? 1)),
-                'modality'          => trim((string) ($raw['modality'] ?? 'in_person')),
-                'client_state'      => trim((string) ($raw['client_state'] ?? '')),
-                'interventions_used' => trim((string) ($raw['interventions_used'] ?? '')),
-                'client_response'   => trim((string) ($raw['client_response'] ?? '')),
-            ];
-            $actionItems = trim((string) ($raw['action_items'] ?? ''));
-            if ($actionItems !== '') {
-                $out['action_items'] = $actionItems;
-            }
-            $nextDate = trim((string) ($raw['next_session_date'] ?? ''));
-            if ($nextDate !== '') {
-                $out['next_session_date'] = $nextDate;
-            }
-            return $out;
-        }
-
-        // FORM_COUNSELING_CONTACT (CCF-009)
+        // Both FORM_PSYCHOSOCIAL_CONTACT (PCF-008) and FORM_COUNSELING_CONTACT (CCF-009)
         $out = [
-            'session_date'               => trim((string) ($raw['session_date'] ?? '')),
-            'session_number'             => max(1, (int) ($raw['session_number'] ?? 1)),
-            'time_start'                 => trim((string) ($raw['time_start'] ?? '')),
-            'time_end'                   => trim((string) ($raw['time_end'] ?? '')),
-            'session_type'               => trim((string) ($raw['session_type'] ?? 'regular')),
-            'concerns_discussed'         => trim((string) ($raw['concerns_discussed'] ?? '')),
-            'counseling_goals'           => trim((string) ($raw['counseling_goals'] ?? '')),
-            'interventions_and_responses' => trim((string) ($raw['interventions_and_responses'] ?? '')),
+            'session_date'                 => trim((string) ($raw['session_date'] ?? '')),
+            'student_name'                 => trim((string) ($raw['student_name'] ?? '')),
+            'course_year'                  => trim((string) ($raw['course_year'] ?? '')),
+            'referral_source'              => trim((string) ($raw['referral_source'] ?? 'walk_in')),
+            'session_type'                 => trim((string) ($raw['session_type'] ?? 'individual')),
+            'presenting_concerns'          => trim((string) ($raw['presenting_concerns'] ?? '')),
+            'intervention_plan'            => trim((string) ($raw['intervention_plan'] ?? '')),
+            'privacy_consent_acknowledged' => in_array((string) ($raw['privacy_consent_acknowledged'] ?? '0'), ['1', 'true', 'on'], true),
         ];
-        $homework = trim((string) ($raw['homework_and_commitments'] ?? ''));
-        if ($homework !== '') {
-            $out['homework_and_commitments'] = $homework;
+
+        foreach (['department', 'student_id', 'time_started', 'time_ended'] as $optionalHeader) {
+            $val = trim((string) ($raw[$optionalHeader] ?? ''));
+            if ($val !== '') {
+                $out[$optionalHeader] = $val;
+            }
         }
-        $nextSchedule = trim((string) ($raw['next_schedule'] ?? ''));
+        foreach ([
+            'predisposing_factors',
+            'precipitating_factors',
+            'perpetuating_factors',
+            'protective_risk_factors',
+            'follow_up_plan',
+        ] as $optionalNarrative) {
+            $val = trim((string) ($raw[$optionalNarrative] ?? ''));
+            if ($val !== '') {
+                $out[$optionalNarrative] = $val;
+            }
+        }
+        $nextSchedule = trim((string) ($raw['next_session_schedule'] ?? ''));
         if ($nextSchedule !== '') {
-            // Normalize HTML5 datetime-local (YYYY-MM-DDTHH:MM) -> Y-m-d H:i:s
             $nextSchedule = str_replace('T', ' ', $nextSchedule);
             if (strlen($nextSchedule) === 16) {
                 $nextSchedule .= ':00';
             }
-            $out['next_schedule'] = $nextSchedule;
+            $out['next_session_schedule'] = $nextSchedule;
         }
 
         return $out;

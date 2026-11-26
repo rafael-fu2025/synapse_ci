@@ -281,10 +281,19 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $this->assertSame('1.0.0', $catalog['version']);
         $this->assertSame('F-OGC-GRE-GGR-005-00', $catalog['form_code']);
         $this->assertNotEmpty($catalog['checklist']);
-        $this->assertArrayHasKey('academic_deficiency', $catalog['checklist']);
-        $this->assertArrayHasKey('emotional_distress', $catalog['checklist']);
-        $this->assertArrayHasKey('behavioral_misconduct', $catalog['checklist']);
-        $this->assertArrayHasKey('substance_use_suspicion', $catalog['checklist']);
+        $this->assertCount(21, $catalog['checklist']);
+        $this->assertArrayHasKey('family_concerns', $catalog['checklist']);
+        $this->assertArrayHasKey('victim_of_physical_abuse', $catalog['checklist']);
+        $this->assertArrayHasKey('out_of_touch_with_reality', $catalog['checklist']);
+        $this->assertArrayHasKey('excessive_anxiety', $catalog['checklist']);
+        $this->assertArrayHasKey('self_harming_tendencies', $catalog['checklist']);
+        $this->assertArrayHasKey('absenteeism', $catalog['checklist']);
+        $this->assertArrayHasKey('disruptive_behaviors', $catalog['checklist']);
+        $this->assertArrayHasKey('cheating', $catalog['checklist']);
+        $this->assertArrayHasKey('others', $catalog['checklist']);
+        $this->assertArrayNotHasKey('academic_deficiency', $catalog['checklist']);
+        $this->assertArrayNotHasKey('financial_difficulty', $catalog['checklist']);
+        $this->assertArrayNotHasKey('substance_use_suspicion', $catalog['checklist']);
 
         // Verify checklist helper
         $checklist = $this->intakeService->getChecklist();
@@ -302,7 +311,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $created = $this->intakeService->createEmployeeReferrals(
             [$this->studentPersonId, (string) $this->secondStudentPersonId, $this->studentPersonId],
             'employee_teacher',
-            ['emotional_distress'],
+            ['excessive_anxiety'],
             'Observed the same classroom concern for both selected students.',
             null,
             'urgent',
@@ -339,7 +348,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
             $this->intakeService->createEmployeeReferrals(
                 [$this->studentPersonId, $this->secondStudentPersonId],
                 'employee_teacher',
-                ['emotional_distress'],
+                ['excessive_anxiety'],
                 'Both records must roll back if either student referral cannot be created.',
                 null,
                 'routine',
@@ -360,7 +369,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $created = $this->intakeService->createEmployeeReferrals(
             [$this->studentPersonId, $this->secondStudentPersonId],
             'employee_teacher',
-            ['emotional_distress'],
+            ['excessive_anxiety'],
             'Retry after the injected failure.',
             null,
             'routine',
@@ -380,7 +389,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
             $this->intakeService->createEmployeeReferrals(
                 [$this->studentPersonId, $employeePersonId],
                 'employee_teacher',
-                ['emotional_distress'],
+                ['excessive_anxiety'],
                 'This batch must fail before creating either record.',
                 null,
                 'routine',
@@ -416,7 +425,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $referrerActor = $this->signInUser($this->referrerUserId);
 
         // 1. Draft
-        $selections = ['academic_deficiency', 'emotional_distress'];
+        $selections = ['absenteeism', 'excessive_anxiety'];
         $narrative = 'Student has had unexcused absences and appears anxious in class.';
         $priorActions = 'Sent email notification to student and scheduled initial teacher conference.';
 
@@ -487,7 +496,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $draft = $this->intakeService->createDraft(
             subjectPersonId: $this->studentPersonId,
             sourceType: 'employee_teacher',
-            selections: ['behavioral_misconduct'],
+            selections: ['disruptive_behaviors'],
             narrative: 'Referral drafted in error.',
             priorActions: null,
             priorityHint: 'routine',
@@ -516,7 +525,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $draft2 = $this->intakeService->createDraft(
             subjectPersonId: $this->studentPersonId,
             sourceType: 'employee_teacher',
-            selections: ['academic_deficiency'],
+            selections: ['absenteeism'],
             narrative: 'Legitimate referral.',
             priorActions: null,
             priorityHint: 'routine',
@@ -546,8 +555,8 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $draft = $this->intakeService->createDraft(
             subjectPersonId: $this->studentPersonId,
             sourceType: 'employee_teacher',
-            selections: ['career_indecision'],
-            narrative: 'Student wants assistance with college major choices.',
+            selections: ['inattentiveness'],
+            narrative: 'Student wants assistance with focus and college course choices.',
             priorActions: null,
             priorityHint: 'routine',
             actor: $referrerActor
@@ -587,7 +596,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         $draft = $this->intakeService->createDraft(
             subjectPersonId: $this->studentPersonId,
             sourceType: 'employee_teacher',
-            selections: ['emotional_distress'],
+            selections: ['persistent_sadness'],
             narrative: 'Requires specialized psychiatric facility intervention.',
             priorActions: null,
             priorityHint: 'urgent',
@@ -629,7 +638,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
 
         $secretNarrative = 'Highly sensitive narrative: Student experiencing severe panic attacks during math exams.';
         $secretPriorActions = 'Confidential prior action: Advised parents and scheduled quiet exam room accommodation.';
-        $selections = ['emotional_distress', 'academic_deficiency'];
+        $selections = ['excessive_anxiety', 'absenteeism'];
 
         $draft = $this->intakeService->createDraft(
             subjectPersonId: $this->studentPersonId,
@@ -653,7 +662,7 @@ final class GuidanceIntakeServiceTest extends FreshDatabaseTestCase
         // 1. Plaintext strings must NEVER exist anywhere in raw DB columns
         $this->assertStringNotContainsString($secretNarrative, (string) $rawRow['narrative_cipher']);
         $this->assertStringNotContainsString($secretPriorActions, (string) $rawRow['prior_actions_cipher']);
-        $this->assertStringNotContainsString('emotional_distress', (string) $rawRow['selections_cipher']);
+        $this->assertStringNotContainsString('excessive_anxiety', (string) $rawRow['selections_cipher']);
 
         // 2. Cipher columns must contain non-empty encrypted data
         $this->assertNotEmpty($rawRow['narrative_cipher']);

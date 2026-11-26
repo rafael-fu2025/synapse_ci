@@ -47,18 +47,18 @@ namespace {
     // Literal question/display labels are safe fixture vocabulary, not imported
     // controller constants. Synthetic-prefixed strings may contain hostile text.
     $psychosocialDimensions = [
+        'rating_clarity' => 'The goal of the psychosocial support session was achieved.',
+        'rating_helpfulness' => 'The psychosocial support session was helpful.',
         'rating_welcoming' => 'The guidance personnel were approachable and welcoming.',
         'rating_empathy' => 'The guidance personnel understood and empathized with me.',
-        'rating_clarity' => 'The goal of the psychosocial support session was clear and achieved.',
-        'rating_helpfulness' => 'The psychosocial support session was helpful.',
-        'rating_environment' => 'Confidentiality and a safe, supportive environment were maintained.',
+        'rating_environment' => 'Confidentiality was kept.',
     ];
     $counselingDimensions = [
-        'rating_rapport' => 'The counselor was approachable, welcoming, and established good rapport.',
+        'rating_goal_progress' => 'The goal of the counseling session was achieved.',
+        'rating_overall_service' => 'The counseling session was helpful.',
+        'rating_rapport' => 'The counselor was approachable and welcoming.',
         'rating_understanding' => 'The counselor understood and empathized with me.',
-        'rating_goal_progress' => 'The goal of the counseling session was achieved and progress was made.',
-        'rating_confidentiality_comfort' => 'Confidentiality was kept and I felt comfortable during the session.',
-        'rating_overall_service' => 'Overall, the counseling session was helpful and effective.',
+        'rating_confidentiality_comfort' => 'Confidentiality was kept.',
     ];
     $visitLabels = [
         'walk_in' => 'Voluntarily came / Walk-in',
