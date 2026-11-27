@@ -253,9 +253,12 @@ final class EncounterService
         $existing = $this->vitalsModel->findByEncounterId($encounterId);
         $data = $vitals + [
             'tenant_id' => CurrentTenant::id(), 'encounter_id' => $encounterId,
-            'bmi' => $bmi, 'recorded_by_user_id' => $recordedByUserId,
+            'recorded_by_user_id' => $recordedByUserId,
             'recorded_at' => date('Y-m-d H:i:s'),
         ];
+        if ($this->vitalsModel->db->DBDriver !== 'MySQLi') {
+            $data['bmi'] = $bmi;
+        }
         $saved = $existing !== null
             ? $this->vitalsModel->scoped()->update($existing['id'], $data)
             : $this->vitalsModel->insert($data);

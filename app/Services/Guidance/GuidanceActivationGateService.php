@@ -227,7 +227,7 @@ final class GuidanceActivationGateService
         }
 
         $required = $this->decodeRequiredSignoffs((string) ($row['required_signoffs_json'] ?? '[]'));
-        $recorded = $this->decodeRecordedSignoffs((string) ($row['recorded_signoffs_json'] ?? '[]'));
+        $recorded = $this->loadGateSignoffs($tid, (int) $row['id'], (string) ($row['recorded_signoffs_json'] ?? '[]'));
 
         $actorUserId = $this->resolveActorUserId($actor);
         $now         = date('Y-m-d H:i:s');
@@ -255,6 +255,22 @@ final class GuidanceActivationGateService
             'is_enabled'             => $isEnabled,
             'approved_at'            => $approvedAt,
         ]);
+
+        if ($this->db->tableExists('guidance_activation_gate_signoffs')) {
+            $this->db->table('guidance_activation_gate_signoffs')
+                ->where('tenant_id', $tid)
+                ->where('gate_id', (int) $row['id'])
+                ->where('authority_role', $role)
+                ->delete();
+            $this->db->table('guidance_activation_gate_signoffs')->insert([
+                'tenant_id'      => $tid,
+                'gate_id'        => (int) $row['id'],
+                'authority_role' => $role,
+                'user_id'        => $actorUserId,
+                'notes'          => trim($notes),
+                'signed_at'      => $now,
+            ]);
+        }
 
         $updated = $this->gateModel->find((int) $row['id']);
         if ($updated === null) {
@@ -382,7 +398,7 @@ final class GuidanceActivationGateService
     private function formatGate(array $row): array
     {
         $required = $this->decodeRequiredSignoffs((string) ($row['required_signoffs_json'] ?? '[]'));
-        $recorded = $this->decodeRecordedSignoffs((string) ($row['recorded_signoffs_json'] ?? '[]'));
+        $recorded = $this->loadGateSignoffs((int) ($row['tenant_id'] ?? 1), (int) ($row['id'] ?? 0), (string) ($row['recorded_signoffs_json'] ?? '[]'));
 
         return [
             'id'                     => (int) $row['id'],
@@ -391,7 +407,7 @@ final class GuidanceActivationGateService
             'title'                  => (string) $row['title'],
             'description'            => $row['description'] ?? null,
             'required_signoffs_json' => (string) $row['required_signoffs_json'],
-            'recorded_signoffs_json' => (string) $row['recorded_signoffs_json'],
+            'recorded_signoffs_json' => json_encode($recorded, JSON_UNESCAPED_SLASHES) ?: (string) $row['recorded_signoffs_json'],
             'required_signoffs'      => $required,
             'recorded_signoffs'      => $recorded,
             'is_enabled'             => (int) $row['is_enabled'],
@@ -399,6 +415,33 @@ final class GuidanceActivationGateService
             'created_at'             => $row['created_at'] ?? null,
             'updated_at'             => $row['updated_at'] ?? null,
         ];
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function loadGateSignoffs(int $tenantId, int $gateId, string $fallbackJson): array
+    {
+        if ($gateId > 0 && $this->db->tableExists('guidance_activation_gate_signoffs')) {
+            $rows = $this->db->table('guidance_activation_gate_signoffs')
+                ->where('tenant_id', $tenantId)
+                ->where('gate_id', $gateId)
+                ->get()->getResultArray();
+            if ($rows !== []) {
+                $mapped = [];
+                foreach ($rows as $r) {
+                    $role = (string) $r['authority_role'];
+                    $mapped[$role] = [
+                        'authority_role' => $role,
+                        'user_id'        => (int) $r['user_id'],
+                        'notes'          => (string) ($r['notes'] ?? ''),
+                        'signed_at'      => (string) $r['signed_at'],
+                    ];
+                }
+                return $mapped;
+            }
+        }
+        return $this->decodeRecordedSignoffs($fallbackJson);
     }
 
     /**

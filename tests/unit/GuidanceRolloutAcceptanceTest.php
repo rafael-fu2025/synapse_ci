@@ -784,7 +784,7 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
             $student1PersonId,
             GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
             $this->licensedCounselorUserId,
-            ['session_id' => 901]
+            ['session_id' => $this->createCounsellingSession($student1PersonId, $this->licensedCounselorUserId)]
         );
 
         // 2. Verify getStudentDashboardPayload returns student artifacts without leaking confidential data
@@ -1073,7 +1073,7 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
                 $this->studentPersonIds[$i],
                 GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
                 $this->associateUserId,
-                ['episode_id' => $episodeId, 'session_id' => 1000 + $i]
+                ['episode_id' => $episodeId, 'session_id' => $this->createCounsellingSession($this->studentPersonIds[$i], $this->associateUserId)]
             )['token'];
 
             $evalRow = $this->evaluationService->submitEvaluation($tok, [
@@ -1144,5 +1144,33 @@ final class GuidanceRolloutAcceptanceTest extends FreshDatabaseTestCase
         // 7c. Pseudonymous Service Evaluation Aggregate Report PDF
         $evalPdf = $this->documentService->renderPsychosocialEvaluationPdf($aggregates);
         self::assertStringStartsWith('%PDF-', $evalPdf);
+    }
+
+    private function createCounsellingSession(int $personId, int $counsellorUserId): int
+    {
+        $now = date('Y-m-d H:i:s');
+        $this->db->table('counselling_cases')->insert([
+            'tenant_id'          => 1,
+            'person_id'          => $personId,
+            'counsellor_user_id' => $counsellorUserId,
+            'case_number'        => 'ROLL-' . strtoupper(bin2hex(random_bytes(5))),
+            'title'              => 'Rollout evaluation fixture case',
+            'opened_at'          => $now,
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ]);
+        $caseId = (int) $this->db->insertID();
+
+        $this->db->table('counselling_sessions')->insert([
+            'tenant_id'          => 1,
+            'case_id'            => $caseId,
+            'counsellor_user_id' => $counsellorUserId,
+            'session_number'     => 1,
+            'started_at'         => $now,
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ]);
+
+        return (int) $this->db->insertID();
     }
 }

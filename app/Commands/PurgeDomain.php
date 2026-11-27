@@ -53,7 +53,6 @@ final class PurgeDomain extends BaseCommand
             'bmg_rotation_runs',
             'bmg_rotation_commands',
             'bmg_rotation_schedules',
-            'bmg_device_runs',
             'bmg_devices',
             'bmg_process_logs',
             'bmg_batches',

@@ -124,9 +124,24 @@ class GuidancePractitionerService
             ]);
         }
 
+        if ($this->db->tableExists('guidance_practitioner_scopes')) {
+            $this->db->table('guidance_practitioner_scopes')
+                ->where('tenant_id', $tenantId)
+                ->where('profile_id', $profileId)
+                ->delete();
+            if ($scopes !== []) {
+                $scopeRows = array_map(static fn (string $code): array => [
+                    'tenant_id'  => $tenantId,
+                    'profile_id' => $profileId,
+                    'scope_code' => $code,
+                ], $scopes);
+                $this->db->table('guidance_practitioner_scopes')->insertBatch($scopeRows);
+            }
+        }
+
         $profile = $this->profileModel->scoped($tenantId)->find($profileId);
         if ($profile !== null) {
-            $profile['service_scope'] = json_decode((string) ($profile['service_scope_json'] ?? '[]'), true) ?: [];
+            $profile['service_scope'] = $this->loadProfileScopes($tenantId, (int) $profile['id'], (string) ($profile['service_scope_json'] ?? '[]'));
         }
 
         return $profile ?? [];
@@ -204,10 +219,27 @@ class GuidancePractitionerService
         $tenantId ??= CurrentTenant::id();
         $profile = $this->profileModel->scoped($tenantId)->where('user_id', $userId)->first();
         if ($profile !== null) {
-            $profile['service_scope'] = json_decode((string) ($profile['service_scope_json'] ?? '[]'), true) ?: [];
+            $profile['service_scope'] = $this->loadProfileScopes($tenantId, (int) $profile['id'], (string) ($profile['service_scope_json'] ?? '[]'));
         }
 
         return $profile;
+    }
+
+    /** @return list<string> */
+    private function loadProfileScopes(int $tenantId, int $profileId, string $fallbackJson): array
+    {
+        if ($profileId > 0 && $this->db->tableExists('guidance_practitioner_scopes')) {
+            $rows = $this->db->table('guidance_practitioner_scopes')
+                ->select('scope_code')
+                ->where('tenant_id', $tenantId)
+                ->where('profile_id', $profileId)
+                ->orderBy('scope_code', 'ASC')
+                ->get()->getResultArray();
+            if ($rows !== []) {
+                return array_values(array_map(static fn (array $r): string => (string) $r['scope_code'], $rows));
+            }
+        }
+        return json_decode($fallbackJson, true) ?: [];
     }
 
     /**

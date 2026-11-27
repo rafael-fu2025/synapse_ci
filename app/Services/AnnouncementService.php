@@ -137,7 +137,9 @@ final class AnnouncementService
                 'tenant_id' => $actor['tenant_id'], 'unit' => $unit, 'status' => 'draft',
                 'created_by' => $actor['id'], 'created_at' => $now, 'updated_at' => $now, 'version' => 1,
             ]));
-            $row = $this->record((int) $this->db->insertID(), $actor, $unit);
+            $announcementId = (int) $this->db->insertID();
+            EngagementAudience::syncTargets($this->db, 'announcements', (int) $actor['tenant_id'], $announcementId, $data);
+            $row = $this->record($announcementId, $actor, $unit);
             $this->audit('created', $row, $actor);
             return $row;
         });
@@ -153,6 +155,7 @@ final class AnnouncementService
             $data = $this->validate($input);
             $this->must($this->db->table('announcements')->where('tenant_id', $actor['tenant_id'])->where('id', $id)
                 ->update($data + ['version' => (int) $row['version'] + 1, 'updated_at' => gmdate('Y-m-d H:i:s')]));
+            EngagementAudience::syncTargets($this->db, 'announcements', (int) $actor['tenant_id'], $id, $data);
             $row = $this->record($id, $actor, $unit);
             $this->audit('updated', $row, $actor);
             return $row;

@@ -154,8 +154,22 @@ final class GuidanceGovernanceController extends BaseController
                 ->get()
                 ->getResultArray();
 
+            $scopesByProfile = [];
+            if ($profiles !== [] && $this->db->tableExists('guidance_practitioner_scopes')) {
+                $profileIds = array_map(static fn (array $r): int => (int) $r['id'], $profiles);
+                foreach ($this->db->table('guidance_practitioner_scopes')
+                    ->select('profile_id, scope_code')
+                    ->where('tenant_id', $tenantId)
+                    ->whereIn('profile_id', $profileIds)
+                    ->orderBy('scope_code', 'ASC')
+                    ->get()->getResultArray() as $sRow) {
+                    $scopesByProfile[(int) $sRow['profile_id']][] = (string) $sRow['scope_code'];
+                }
+            }
             foreach ($profiles as &$profile) {
-                $profile['service_scope'] = json_decode((string) ($profile['service_scope_json'] ?? '[]'), true) ?: [];
+                $pid = (int) $profile['id'];
+                $profile['service_scope'] = $scopesByProfile[$pid]
+                    ?? (json_decode((string) ($profile['service_scope_json'] ?? '[]'), true) ?: []);
             }
             unset($profile);
 

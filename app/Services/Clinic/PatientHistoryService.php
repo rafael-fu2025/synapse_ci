@@ -229,7 +229,7 @@ final class PatientHistoryService
                 ->join('users u', 'u.id = c.cleared_by_user_id AND u.tenant_id = c.tenant_id', 'left')
                 ->where('c.tenant_id', $tenant)->where('c.person_id', $personId)->where('c.deleted_at', null)
                 ->orderBy('c.school_year', 'DESC')->orderBy('c.id', 'DESC'), $historyPages['clearances'] ?? null);
-            $enrollmentClearances = $clearancePage['rows'];
+            $enrollmentClearances = $this->hydrateClearanceLabs($db, $tenant, $clearancePage['rows']);
             if ($historyQuery !== null) {
                 $historyPagination['clearances'] = $clearancePage['pagination'];
             }
@@ -572,19 +572,80 @@ final class PatientHistoryService
             'school_year'        => $schoolYear,
             'semester'           => $semester,
             'applicant_category' => $category,
-            'required_labs_json' => json_encode($checklist, JSON_THROW_ON_ERROR),
             'clearance_status'   => $status,
             'remarks'            => $remarks !== '' ? $remarks : null,
             'cleared_by_user_id' => $status === 'cleared' ? $actorUserId : ($existing['cleared_by_user_id'] ?? null),
             'cleared_at'         => $status === 'cleared' ? gmdate('Y-m-d H:i:s') : ($existing['cleared_at'] ?? null),
         ];
+        if ($model->db->fieldExists('required_labs_json', 'clinic_enrollment_clearances')) {
+            $payload['required_labs_json'] = json_encode($checklist, JSON_THROW_ON_ERROR);
+        }
 
         if ($existing !== null) {
-            $model->scoped()->update((int) $existing['id'], $payload);
-            return $model->scoped()->find((int) $existing['id']);
+            $clearanceId = (int) $existing['id'];
+            $model->scoped()->update($clearanceId, $payload);
+        } else {
+            $clearanceId = (int) $model->insert($payload);
         }
-        $id = $model->insert($payload);
-        return $model->scoped()->find((int) $id);
+
+        if ($model->db->tableExists('clinic_enrollment_clearance_labs')) {
+            $model->db->table('clinic_enrollment_clearance_labs')
+                ->where('tenant_id', CurrentTenant::id())
+                ->where('clearance_id', $clearanceId)
+                ->delete();
+            $batch = [];
+            foreach ($checklist as $labKey => $done) {
+                $batch[] = [
+                    'tenant_id'    => CurrentTenant::id(),
+                    'clearance_id' => $clearanceId,
+                    'lab_key'      => (string) $labKey,
+                    'is_completed' => $done ? 1 : 0,
+                ];
+            }
+            if ($batch !== []) {
+                $model->db->table('clinic_enrollment_clearance_labs')->insertBatch($batch);
+            }
+        }
+
+        $saved = $model->scoped()->find($clearanceId);
+        if ($saved !== null) {
+            $saved['required_labs'] = $checklist;
+        }
+        return $saved ?? [];
+    }
+
+    /**
+     * @param list<array<string, mixed>> $rows
+     * @return list<array<string, mixed>>
+     */
+    private function hydrateClearanceLabs(\CodeIgniter\Database\BaseConnection $db, int $tenantId, array $rows): array
+    {
+        if ($rows === []) {
+            return $rows;
+        }
+        $labsByClearance = [];
+        if ($db->tableExists('clinic_enrollment_clearance_labs')) {
+            $ids = array_map(static fn (array $r): int => (int) $r['id'], $rows);
+            $labRows = $db->table('clinic_enrollment_clearance_labs')
+                ->where('tenant_id', $tenantId)
+                ->whereIn('clearance_id', $ids)
+                ->get()->getResultArray();
+            foreach ($labRows as $lab) {
+                $labsByClearance[(int) $lab['clearance_id']][(string) $lab['lab_key']] = (bool) (int) $lab['is_completed'];
+            }
+        }
+        foreach ($rows as &$row) {
+            $cid = (int) $row['id'];
+            if (isset($labsByClearance[$cid])) {
+                $row['required_labs'] = $labsByClearance[$cid];
+            } elseif (isset($row['required_labs_json'])) {
+                $row['required_labs'] = json_decode((string) $row['required_labs_json'], true) ?: [];
+            } else {
+                $row['required_labs'] = [];
+            }
+        }
+        unset($row);
+        return $rows;
     }
 
     public static function currentSchoolYear(): string

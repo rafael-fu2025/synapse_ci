@@ -26,7 +26,9 @@
                   <tbody>
                     <?php foreach ($enrollmentClearances as $clr): ?>
                       <?php
-                        $items = json_decode((string) ($clr['required_labs_json'] ?? '{}'), true) ?: [];
+                        $items = is_array($clr['required_labs'] ?? null)
+                            ? $clr['required_labs']
+                            : (json_decode((string) ($clr['required_labs_json'] ?? '{}'), true) ?: []);
                         $clrTone = match ($clr['clearance_status']) {
                             'cleared' => 'cp-status-inline--active',
                             'hold_followup' => 'cp-status-inline--danger',

@@ -68,6 +68,7 @@ final class SurveyService
                 'created_at' => $this->now(), 'updated_at' => $this->now(),
             ]));
             $id = (int) $db->insertID();
+            \App\Services\EngagementAudience::syncTargets($db, 'surveys', (int) $actor['tenant_id'], $id, $fields);
             $this->audit('created', $id, $actor);
             return $this->hydrate($this->record($id, $actor));
         });
@@ -91,6 +92,7 @@ final class SurveyService
             $this->must(Database::connect()->table('surveys')->where('tenant_id', $actor['tenant_id'])
                 ->where('id', $id)->where('version', $row['version'])
                 ->update($fields + ['version' => (int) $row['version'] + 1, 'updated_at' => $this->now()]));
+            \App\Services\EngagementAudience::syncTargets(Database::connect(), 'surveys', (int) $actor['tenant_id'], $id, $fields);
             $this->audit('updated', $id, $actor);
             return $this->hydrate($this->record($id, $actor));
         });

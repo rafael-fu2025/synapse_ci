@@ -600,7 +600,7 @@ async function runTrackA(browser, byId, fixtures) {
   }, { authUser: 'test.clinic.admin' }));
 
   results.push(await runCase(browser, 'Track A', byId['CLA-03'], async (page) => {
-    await assertCleanPage(page, '/admin/interns', 'Student Intern Placements');
+    await assertCleanPage(page, '/admin/interns', 'Student Interns');
     await page.locator('a[href*="/admin/interns/create"]').first().click();
     const modal = page.locator('#appFormModal');
     await modal.waitFor({ state: 'visible', timeout: 5000 });

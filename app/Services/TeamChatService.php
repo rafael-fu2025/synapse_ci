@@ -103,12 +103,19 @@ final class TeamChatService
                     ->where('id', $data['reply_to_id'])->countAllResults() !== 1) {
                     throw new RuntimeException('Reply must exist in this department.', 422);
                 }
-                $taskIds = json_encode($data['task_ids'], JSON_THROW_ON_ERROR);
-                $mentions = json_encode($data['mentions'], JSON_THROW_ON_ERROR);
+                $hasTaskIdsCol = $this->db->fieldExists('task_ids', 'team_chat_messages');
+                $hasMentionsCol = $this->db->fieldExists('mentions', 'team_chat_messages');
+                $taskIds = $hasTaskIdsCol ? json_encode($data['task_ids'], JSON_THROW_ON_ERROR) : null;
+                $mentions = $hasMentionsCol ? json_encode($data['mentions'], JSON_THROW_ON_ERROR) : null;
                 // Bind text separately so driver SQL error strings do not contain the body.
                 $table = $this->db->protectIdentifiers($this->db->prefixTable('team_chat_messages'));
-                $sql = 'INSERT INTO ' . $table
-                    . ' (tenant_id, unit, sender_user_id, client_nonce, body, task_id, task_ids, mentions, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+                if ($hasTaskIdsCol && $hasMentionsCol) {
+                    $sql = 'INSERT INTO ' . $table
+                        . ' (tenant_id, unit, sender_user_id, client_nonce, body, task_id, task_ids, mentions, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+                } else {
+                    $sql = 'INSERT INTO ' . $table
+                        . ' (tenant_id, unit, sender_user_id, client_nonce, body, task_id, reply_to_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+                }
                 $mysql = $this->db->DBDriver === 'MySQLi';
                 $statement = $mysql ? $this->db->connID->prepare($sql) : $this->db->prepare(static fn () => $sql);
                 try {
@@ -116,12 +123,22 @@ final class TeamChatService
                     if ($mysql) {
                         // CI's MySQL prepared binder treats numeric strings as doubles.
                         // Explicit string binding preserves bodies like "000123" verbatim.
-                        $statement->bind_param('isississis', $actor['tenant_id'], $unit, $actor['id'],
-                            $data['client_nonce'], $data['body'], $data['task_id'], $taskIds, $mentions, $data['reply_to_id'], $now);
+                        if ($hasTaskIdsCol && $hasMentionsCol) {
+                            $statement->bind_param('isississis', $actor['tenant_id'], $unit, $actor['id'],
+                                $data['client_nonce'], $data['body'], $data['task_id'], $taskIds, $mentions, $data['reply_to_id'], $now);
+                        } else {
+                            $statement->bind_param('isissiis', $actor['tenant_id'], $unit, $actor['id'],
+                                $data['client_nonce'], $data['body'], $data['task_id'], $data['reply_to_id'], $now);
+                        }
                         $ok = $statement->execute();
                     } else {
-                        $ok = $statement->execute($actor['tenant_id'], $unit, $actor['id'], $data['client_nonce'],
-                            $data['body'], $data['task_id'], $taskIds, $mentions, $data['reply_to_id'], $now);
+                        if ($hasTaskIdsCol && $hasMentionsCol) {
+                            $ok = $statement->execute($actor['tenant_id'], $unit, $actor['id'], $data['client_nonce'],
+                                $data['body'], $data['task_id'], $taskIds, $mentions, $data['reply_to_id'], $now);
+                        } else {
+                            $ok = $statement->execute($actor['tenant_id'], $unit, $actor['id'], $data['client_nonce'],
+                                $data['body'], $data['task_id'], $data['reply_to_id'], $now);
+                        }
                     }
                     if ($ok === false) {
                         throw new RuntimeException('Team chat unavailable.', 503);
@@ -136,6 +153,33 @@ final class TeamChatService
                 }
                 $row = $this->nonce($unit, $actor, $data['client_nonce']);
                 if ($row === null) { throw new RuntimeException('Team chat unavailable.', 503); }
+                if ($this->db->tableExists('team_chat_message_tasks') && $data['task_ids'] !== []) {
+                    $taskRows = [];
+                    foreach (array_values($data['task_ids']) as $pos => $tid) {
+                        $taskRows[] = [
+                            'tenant_id'  => (int) $actor['tenant_id'],
+                            'unit'       => $unit,
+                            'message_id' => (int) $row['id'],
+                            'task_id'    => (int) $tid,
+                            'position'   => $pos,
+                        ];
+                    }
+                    $this->db->table('team_chat_message_tasks')->insertBatch($taskRows);
+                }
+                if ($this->db->tableExists('team_chat_message_mentions') && $data['mentions'] !== []) {
+                    $mentionRows = [];
+                    foreach ($data['mentions'] as $m) {
+                        $mentionRows[] = [
+                            'tenant_id'    => (int) $actor['tenant_id'],
+                            'unit'         => $unit,
+                            'message_id'   => (int) $row['id'],
+                            'user_id'      => (int) $m['user_id'],
+                            'start_offset' => (int) $m['start'],
+                            'length'       => (int) $m['length'],
+                        ];
+                    }
+                    $this->db->table('team_chat_message_mentions')->insertBatch($mentionRows);
+                }
                 $notifications->enqueue($row, $actor, $data['mentions']);
                 if (!$this->db->transStatus() || !$this->db->transCommit()) {
                     throw new RuntimeException('Team chat unavailable.', 503);
@@ -342,6 +386,18 @@ final class TeamChatService
 
     private function taskIds(array $row): array
     {
+        if ($this->db->tableExists('team_chat_message_tasks') && isset($row['id'], $row['tenant_id'], $row['unit'])) {
+            $rows = $this->db->table('team_chat_message_tasks')
+                ->select('task_id')
+                ->where('tenant_id', (int) $row['tenant_id'])
+                ->where('unit', (string) $row['unit'])
+                ->where('message_id', (int) $row['id'])
+                ->orderBy('position', 'ASC')
+                ->get()->getResultArray();
+            if ($rows !== [] || ! array_key_exists('task_ids', $row)) {
+                return array_map(static fn (array $r): int => (int) $r['task_id'], $rows);
+            }
+        }
         return ($row['task_ids'] ?? null) === null
             ? ($row['task_id'] === null ? [] : [(int) $row['task_id']])
             : json_decode($row['task_ids'], true, 512, JSON_THROW_ON_ERROR);
@@ -349,6 +405,22 @@ final class TeamChatService
 
     private function storedMentions(array $row): array
     {
+        if ($this->db->tableExists('team_chat_message_mentions') && isset($row['id'], $row['tenant_id'], $row['unit'])) {
+            $rows = $this->db->table('team_chat_message_mentions')
+                ->select('user_id, start_offset, length')
+                ->where('tenant_id', (int) $row['tenant_id'])
+                ->where('unit', (string) $row['unit'])
+                ->where('message_id', (int) $row['id'])
+                ->orderBy('start_offset', 'ASC')
+                ->get()->getResultArray();
+            if ($rows !== [] || ! array_key_exists('mentions', $row)) {
+                return array_map(static fn (array $r): array => [
+                    'user_id' => (int) $r['user_id'],
+                    'start'   => (int) $r['start_offset'],
+                    'length'  => (int) $r['length'],
+                ], $rows);
+            }
+        }
         return ($row['mentions'] ?? null) === null ? [] : json_decode($row['mentions'], true, 512, JSON_THROW_ON_ERROR);
     }
 
@@ -409,7 +481,12 @@ final class TeamChatService
     {
         $this->db->resetDataCache();
         $this->storage(function (): array {
-            foreach (['team_chat_messages' => ['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'task_ids', 'mentions', 'reply_to_id', 'created_at'],
+            $hasNormalizedTasks = $this->db->tableExists('team_chat_message_tasks');
+            $hasNormalizedMentions = $this->db->tableExists('team_chat_message_mentions');
+            $messageCols = ($hasNormalizedTasks && $hasNormalizedMentions)
+                ? ['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'reply_to_id', 'created_at']
+                : ['id', 'tenant_id', 'unit', 'sender_user_id', 'client_nonce', 'body', 'task_id', 'task_ids', 'mentions', 'reply_to_id', 'created_at'];
+            foreach (['team_chat_messages' => $messageCols,
                 'team_chat_reads' => ['tenant_id', 'unit', 'user_id', 'last_read_message_id'],
                 'team_tasks' => ['id', 'tenant_id', 'unit', 'title', 'status']] as $table => $fields) {
                 if (!$this->db->tableExists($table) || array_diff($fields, $this->db->getFieldNames($table)) !== []) {

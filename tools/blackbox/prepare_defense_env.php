@@ -227,11 +227,20 @@ foreach ($defaultGates as $gateKey => [$title, $desc]) {
     $gStmt->execute([$tenantId, $gateKey]);
     $gRow = $gStmt->fetch(PDO::FETCH_ASSOC);
     if ($gRow) {
+        $gateId = (int) $gRow['id'];
         $pdo->prepare('UPDATE guidance_activation_gates SET recorded_signoffs_json = ?, is_enabled = 1, approved_at = COALESCE(approved_at, ?), updated_at = ? WHERE id = ?')
-            ->execute([$recJson, $now, $now, $gRow['id']]);
+            ->execute([$recJson, $now, $now, $gateId]);
     } else {
         $pdo->prepare('INSERT INTO guidance_activation_gates (tenant_id, gate_key, title, description, required_signoffs_json, recorded_signoffs_json, is_enabled, approved_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)')
             ->execute([$tenantId, $gateKey, $title, $desc, $reqJson, $recJson, $now, $now, $now]);
+        $gateId = (int) $pdo->lastInsertId();
+    }
+    if ($pdo->query("SHOW TABLES LIKE 'guidance_activation_gate_signoffs'")->fetchColumn()) {
+        $pdo->prepare('DELETE FROM guidance_activation_gate_signoffs WHERE tenant_id = ? AND gate_id = ?')->execute([$tenantId, $gateId]);
+        $insSignoff = $pdo->prepare('INSERT INTO guidance_activation_gate_signoffs (tenant_id, gate_id, authority_role, user_id, notes, signed_at) VALUES (?, ?, ?, ?, ?, ?)');
+        foreach (['guidance_head', 'qa_office', 'dpo'] as $role) {
+            $insSignoff->execute([$tenantId, $gateId, $role, $signoffUserId, 'Pre-defense evaluation signoff', $now]);
+        }
     }
 }
 

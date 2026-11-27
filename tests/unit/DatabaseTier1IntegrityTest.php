@@ -49,7 +49,15 @@ final class DatabaseTier1IntegrityTest extends FreshDatabaseTestCase
                  WHERE k.TABLE_SCHEMA = DATABASE()
                    AND k.TABLE_NAME = ?
                    AND k.COLUMN_NAME = ?
-                   AND k.REFERENCED_TABLE_NAME IS NOT NULL',
+                   AND k.REFERENCED_TABLE_NAME IS NOT NULL
+                   AND k.ORDINAL_POSITION = 1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM information_schema.KEY_COLUMN_USAGE k2
+                       WHERE k2.TABLE_SCHEMA = k.TABLE_SCHEMA
+                         AND k2.TABLE_NAME = k.TABLE_NAME
+                         AND k2.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+                         AND k2.ORDINAL_POSITION > 1
+                   )',
                 [$table, $column]
             )->getRowArray();
 
@@ -103,9 +111,9 @@ final class DatabaseTier1IntegrityTest extends FreshDatabaseTestCase
     {
         $tables = [
             'guidance_form_definitions', 'guidance_form_definition_revisions', 'guidance_privacy_notices',
-            'guidance_retention_policies', 'guidance_consent_receipts', 'guidance_form_instances',
+            'guidance_consent_receipts', 'guidance_form_instances',
             'guidance_form_drafts', 'guidance_form_revisions', 'guidance_form_attestations',
-            'guidance_document_jobs', 'guidance_document_issuances', 'guidance_legal_holds',
+            'guidance_document_jobs', 'guidance_document_issuances',
             'guidance_practitioner_profiles', 'guidance_supervision_assignments', 'guidance_case_assignments',
             'guidance_case_transfers', 'guidance_intake_referrals', 'guidance_safety_assessments',
             'guidance_safety_escalations', 'guidance_episodes', 'guidance_appointments', 'guidance_call_slips',

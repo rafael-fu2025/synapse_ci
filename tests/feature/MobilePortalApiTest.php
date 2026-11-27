@@ -49,13 +49,16 @@ final class MobilePortalApiTest extends FreshDatabaseTestCase
         ApiContext::clear();
         CurrentTenant::reset();
         $db = Database::connect();
+        if ($this->people !== []) {
+            $db->table('queue_entries')->whereIn('person_id', $this->people)->delete();
+        }
         if ($this->appointments !== []) {
             $db->table('notifications')->whereIn('appointment_id', $this->appointments)->delete();
+            $db->table('queue_entries')->whereIn('appointment_id', $this->appointments)->delete();
             $db->table('appointments')->whereIn('id', $this->appointments)->delete();
         }
         if ($this->users !== []) {
             $db->table('api_tokens')->whereIn('user_id', $this->users)->delete();
-            $db->table('queue_entries')->whereIn('person_id', $this->people)->delete();
             // Booking fixtures record workflow events with the fixture user as actor;
             // their notifications must go before the events themselves (FK).
             $eventIds = array_column($db->table('workflow_events')->select('id')

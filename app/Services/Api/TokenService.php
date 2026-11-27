@@ -63,13 +63,29 @@ final class TokenService
         $this->enforceActiveTokenCap($userId, $tenantId, $now);
         $this->users->update($userId, ['last_login_at' => $this->dateTime($now)]);
 
+        $familyId = bin2hex(random_bytes(16));
+        $createdAt = $this->dateTime($now);
+        $db = $this->tokens->db;
+        if ($db->tableExists('api_token_families')) {
+            $db->table('api_token_families')->insert([
+                'tenant_id' => $tenantId,
+                'family_id' => $familyId,
+                'user_id' => $userId,
+                'device_label' => $deviceLabel === '' ? null : $deviceLabel,
+                'created_ip' => $ip === '' ? null : $ip,
+                'revoked_at' => null,
+                'created_at' => $createdAt,
+                'updated_at' => $createdAt,
+            ]);
+        }
+
         $this->tokens->insert([
             'tenant_id' => $tenantId,
             'user_id' => $userId,
             'auth_version' => (int) $identity['auth_version'],
             'token_hash' => self::hash($accessToken),
             'refresh_hash' => self::hash($refreshToken),
-            'family_id' => bin2hex(random_bytes(16)),
+            'family_id' => $familyId,
             'device_label' => $deviceLabel === '' ? null : $deviceLabel,
             'created_ip' => $ip === '' ? null : $ip,
             'access_expires_at' => $this->dateTime($now + $this->config->accessTtl),
@@ -225,14 +241,24 @@ final class TokenService
 
     public function revokeAllForUser(int $userId, int $tenantId, ?int $now = null): void
     {
+        $ts = $this->dateTime($now ?? $this->now());
         $this->tokens->builder()->where('user_id', $userId)->where('tenant_id', $tenantId)->where('revoked_at', null)
-            ->update(['revoked_at' => $this->dateTime($now ?? $this->now())]);
+            ->update(['revoked_at' => $ts]);
+        if ($this->tokens->db->tableExists('api_token_families')) {
+            $this->tokens->db->table('api_token_families')->where('tenant_id', $tenantId)->where('user_id', $userId)->where('revoked_at', null)
+                ->update(['revoked_at' => $ts, 'updated_at' => $ts]);
+        }
     }
 
     private function revokeFamily(string $familyId, int $now): void
     {
+        $ts = $this->dateTime($now);
         $this->tokens->builder()->where('family_id', $familyId)->where('revoked_at', null)
-            ->update(['revoked_at' => $this->dateTime($now)]);
+            ->update(['revoked_at' => $ts]);
+        if ($this->tokens->db->tableExists('api_token_families')) {
+            $this->tokens->db->table('api_token_families')->where('family_id', $familyId)->where('revoked_at', null)
+                ->update(['revoked_at' => $ts, 'updated_at' => $ts]);
+        }
     }
 
     private function enforceActiveTokenCap(int $userId, int $tenantId, int $now): void
