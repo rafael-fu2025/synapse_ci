@@ -92,6 +92,106 @@ final class EngagementAudience
 
     private static function storedTargets(array $row, string $audience): array
     {
+        $child = self::loadChildTargetValues($row);
+        $fromChild = $child !== null;
+        $input = $fromChild ? $child : self::decodeRowTargetValues($row);
+        try { $normalized = self::targeting($input, $audience); }
+        catch (RuntimeException $e) { throw new RuntimeException('Invalid stored student targeting.', 503, $e); }
+        if (! $fromChild) {
+            foreach ($normalized as $field => $canonical) {
+                if (($row[$field] ?? null) !== $canonical) {
+                    throw new RuntimeException('Noncanonical stored student targeting.', 503);
+                }
+            }
+        }
+        return array_map(static fn ($value) => $value === null ? [] : json_decode($value, true, 512, JSON_THROW_ON_ERROR), $normalized);
+    }
+
+    /**
+     * Synchronize normalized 1NF student targeting child rows for an announcement or survey.
+     *
+     * @param array<string, mixed> $storedData
+     */
+    public static function syncTargets(\CodeIgniter\Database\BaseConnection $db, string $parentTable, int $tenantId, int $recordId, array $storedData): void
+    {
+        $map = [
+            'announcements' => ['announcement_id', 'announcement_target_year_levels', 'announcement_target_categories'],
+            'surveys'       => ['survey_id', 'survey_target_year_levels', 'survey_target_categories'],
+        ];
+        if (! isset($map[$parentTable]) || $tenantId <= 0 || $recordId <= 0) {
+            return;
+        }
+        [$fkColumn, $yearTable, $categoryTable] = $map[$parentTable];
+
+        if ($db->tableExists($yearTable)) {
+            $db->table($yearTable)->where('tenant_id', $tenantId)->where($fkColumn, $recordId)->delete();
+            $years = json_decode((string) ($storedData['target_year_levels'] ?? '[]'), true);
+            if (is_array($years) && $years !== []) {
+                $batch = [];
+                foreach ($years as $yr) {
+                    $batch[] = ['tenant_id' => $tenantId, $fkColumn => $recordId, 'year_level' => (int) $yr];
+                }
+                $db->table($yearTable)->insertBatch($batch);
+            }
+        }
+
+        if ($db->tableExists($categoryTable)) {
+            $db->table($categoryTable)->where('tenant_id', $tenantId)->where($fkColumn, $recordId)->delete();
+            $cats = json_decode((string) ($storedData['target_student_categories'] ?? '[]'), true);
+            if (is_array($cats) && $cats !== []) {
+                $batch = [];
+                foreach ($cats as $cat) {
+                    $batch[] = ['tenant_id' => $tenantId, $fkColumn => $recordId, 'student_category' => (string) $cat];
+                }
+                $db->table($categoryTable)->insertBatch($batch);
+            }
+        }
+    }
+
+    /** @return array{target_year_levels: list<int>, target_student_categories: list<string>}|null */
+    private static function loadChildTargetValues(array $row): ?array
+    {
+        if (empty($row['id']) || empty($row['tenant_id'])) {
+            return null;
+        }
+        $db = Database::connect();
+        $tenantId = (int) $row['tenant_id'];
+        $recordId = (int) $row['id'];
+        if (array_key_exists('unit', $row)) {
+            $fkColumn = 'announcement_id';
+            $yearTable = 'announcement_target_year_levels';
+            $catTable = 'announcement_target_categories';
+        } elseif (array_key_exists('questions_json', $row) || array_key_exists('survey_mode', $row) || array_key_exists('closed_at', $row)) {
+            $fkColumn = 'survey_id';
+            $yearTable = 'survey_target_year_levels';
+            $catTable = 'survey_target_categories';
+        } else {
+            return null;
+        }
+
+        if (! $db->tableExists($yearTable) || ! $db->tableExists($catTable)) {
+            return null;
+        }
+
+        $years = array_values(array_map(
+            static fn (array $r): int => (int) $r['year_level'],
+            $db->table($yearTable)->select('year_level')->where('tenant_id', $tenantId)->where($fkColumn, $recordId)->orderBy('year_level', 'ASC')->get()->getResultArray()
+        ));
+        $cats = array_values(array_map(
+            static fn (array $r): string => (string) $r['student_category'],
+            $db->table($catTable)->select('student_category')->where('tenant_id', $tenantId)->where($fkColumn, $recordId)->get()->getResultArray()
+        ));
+
+        if ($years === [] && $cats === []) {
+            return null;
+        }
+
+        return ['target_year_levels' => $years, 'target_student_categories' => $cats];
+    }
+
+    /** @return array{target_year_levels: list<mixed>, target_student_categories: list<mixed>} */
+    private static function decodeRowTargetValues(array $row): array
+    {
         $input = [];
         foreach (['target_year_levels', 'target_student_categories'] as $field) {
             $value = $row[$field] ?? null;
@@ -101,12 +201,7 @@ final class EngagementAudience
             catch (\JsonException $e) { throw new RuntimeException('Invalid stored student targeting.', 503, $e); }
             if (!is_array($input[$field]) || !array_is_list($input[$field])) { throw new RuntimeException('Invalid stored student targeting.', 503); }
         }
-        try { $normalized = self::targeting($input, $audience); }
-        catch (RuntimeException $e) { throw new RuntimeException('Invalid stored student targeting.', 503, $e); }
-        foreach ($normalized as $field => $canonical) {
-            if (($row[$field] ?? null) !== $canonical) { throw new RuntimeException('Noncanonical stored student targeting.', 503); }
-        }
-        return array_map(static fn ($value) => $value === null ? [] : json_decode($value, true, 512, JSON_THROW_ON_ERROR), $normalized);
+        return $input;
     }
 
     /** Apply the same predicate to joined student profiles when publication fans out. */

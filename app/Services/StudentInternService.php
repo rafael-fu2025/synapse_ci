@@ -980,15 +980,17 @@ final class StudentInternService
         if ($this->db->tableExists('guidance_practitioner_profiles')) {
             $user = $this->db->table('users')->select('person_id, role')->where('id', $userId)->where('tenant_id', $tenantId)->get()->getRowArray();
             $personId = !empty($user['person_id']) ? (int) $user['person_id'] : null;
-            $scopeJson = json_encode(['intake', 'psychosocial', 'counseling'], JSON_UNESCAPED_SLASHES);
+            $scopeList = ['intake', 'psychosocial', 'counseling'];
+            $scopeJson = json_encode($scopeList, JSON_UNESCAPED_SLASHES);
 
             $existing = $this->db->table('guidance_practitioner_profiles')
                 ->where('tenant_id', $tenantId)
                 ->where('user_id', $userId)
                 ->get()->getRowArray();
             if ($existing !== null) {
+                $internProfileId = (int) $existing['id'];
                 $this->db->table('guidance_practitioner_profiles')
-                    ->where('id', (int) $existing['id'])
+                    ->where('id', $internProfileId)
                     ->where('tenant_id', $tenantId)
                     ->update([
                         'person_id'             => $personId,
@@ -1013,7 +1015,9 @@ final class StudentInternService
                     'created_at'            => $nowUtc,
                     'updated_at'            => $nowUtc,
                 ]);
+                $internProfileId = (int) $this->db->insertID();
             }
+            $this->syncPractitionerScopes($tenantId, $internProfileId, $scopeList);
 
             // Ensure the assigned Guidance supervisor holds an active co-signing practitioner profile.
             $supProfile = $this->db->table('guidance_practitioner_profiles')
@@ -1025,6 +1029,7 @@ final class StudentInternService
                 $supTier = in_array($supUser['role'] ?? '', ['guidance_admin', 'guidance_supervisor'], true)
                     ? 'guidance_supervisor'
                     : 'licensed_counselor';
+                $supScopes = ['intake', 'psychosocial', 'counseling', 'assessment_interpretation'];
                 $this->db->table('guidance_practitioner_profiles')->insert([
                     'tenant_id'             => $tenantId,
                     'person_id'             => !empty($supUser['person_id']) ? (int) $supUser['person_id'] : null,
@@ -1033,11 +1038,12 @@ final class StudentInternService
                     'license_number'        => null,
                     'credential_expiry'     => null,
                     'professional_standing' => 'active',
-                    'service_scope_json'    => json_encode(['intake', 'psychosocial', 'counseling', 'assessment_interpretation'], JSON_UNESCAPED_SLASHES),
+                    'service_scope_json'    => json_encode($supScopes, JSON_UNESCAPED_SLASHES),
                     'is_active'             => 1,
                     'created_at'            => $nowUtc,
                     'updated_at'            => $nowUtc,
                 ]);
+                $this->syncPractitionerScopes($tenantId, (int) $this->db->insertID(), $supScopes);
             }
         }
 
@@ -1337,5 +1343,27 @@ final class StudentInternService
         } finally {
             CurrentTenant::set($prevTenant);
         }
+    }
+
+    /** @param list<string> $scopes */
+    private function syncPractitionerScopes(int $tenantId, int $profileId, array $scopes): void
+    {
+        if ($profileId <= 0 || !$this->db->tableExists('guidance_practitioner_scopes')) {
+            return;
+        }
+        $this->db->table('guidance_practitioner_scopes')
+            ->where('tenant_id', $tenantId)
+            ->where('profile_id', $profileId)
+            ->delete();
+        $clean = array_values(array_unique(array_filter(array_map('trim', $scopes), static fn (string $s): bool => $s !== '')));
+        if ($clean === []) {
+            return;
+        }
+        $batch = array_map(static fn (string $code): array => [
+            'tenant_id'  => $tenantId,
+            'profile_id' => $profileId,
+            'scope_code' => substr($code, 0, 64),
+        ], $clean);
+        $this->db->table('guidance_practitioner_scopes')->insertBatch($batch);
     }
 }

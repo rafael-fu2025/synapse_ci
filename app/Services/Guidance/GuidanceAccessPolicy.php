@@ -344,7 +344,18 @@ final class GuidanceAccessPolicy
             throw new DomainException('Practitioner credentials have expired.', 403);
         }
 
-        $scopes = json_decode((string) ($profile['service_scope_json'] ?? '[]'), true) ?: [];
+        $scopes = [];
+        if ($this->db->tableExists('guidance_practitioner_scopes') && ! empty($profile['id'])) {
+            $scopeRows = $this->db->table('guidance_practitioner_scopes')
+                ->select('scope_code')
+                ->where('tenant_id', $tenantId)
+                ->where('profile_id', (int) $profile['id'])
+                ->get()->getResultArray();
+            $scopes = array_values(array_map(static fn (array $r): string => (string) $r['scope_code'], $scopeRows));
+        }
+        if ($scopes === []) {
+            $scopes = json_decode((string) ($profile['service_scope_json'] ?? '[]'), true) ?: [];
+        }
         if (!in_array($serviceCapability, $scopes, true)) {
             throw new DomainException("Practitioner lacks required '{$serviceCapability}' capability scope.", 403);
         }

@@ -372,6 +372,20 @@ class GuidanceServiceEvaluationService
         }
 
         $evalId = (int) $evalId;
+        if ($this->db->tableExists('guidance_service_evaluation_ratings')) {
+            $ratingRows = [];
+            foreach ($validated['ratings'] as $dim => $score) {
+                $ratingRows[] = [
+                    'tenant_id'      => $tid,
+                    'evaluation_id'  => $evalId,
+                    'dimension_code' => (string) $dim,
+                    'score'          => (int) $score,
+                ];
+            }
+            if ($ratingRows !== []) {
+                $this->db->table('guidance_service_evaluation_ratings')->insertBatch($ratingRows);
+            }
+        }
         $record = $this->evaluationModel->scoped($tid)->find($evalId) ?? $evalInsert;
         $record['id'] = $evalId;
         $record['evaluation_id'] = $evalId;
@@ -435,8 +449,8 @@ class GuidanceServiceEvaluationService
         ]);
 
         $updated = $this->evaluationModel->scoped($tid)->find($evaluationId);
-        if ($updated !== null && isset($updated['ratings_json'])) {
-            $updated['ratings'] = json_decode((string) $updated['ratings_json'], true) ?: [];
+        if ($updated !== null) {
+            $updated['ratings'] = $this->loadRatingsForEvaluation($tid, $evaluationId, (string) ($updated['ratings_json'] ?? '{}'));
         }
 
         return $updated ?? [];
@@ -529,8 +543,10 @@ class GuidanceServiceEvaluationService
         $visitDistribution = array_fill_keys(self::PSYCHOSOCIAL_VISIT_TYPES, 0);
         $approvedComments = [];
 
+        $ratingsByEval = $this->loadRatingsBatch($tid, array_map(static fn (array $r): int => (int) $r['id'], $rows));
         foreach ($rows as $row) {
-            $ratings = json_decode((string) ($row['ratings_json'] ?? '{}'), true) ?: [];
+            $ratings = $ratingsByEval[(int) $row['id']]
+                ?? (json_decode((string) ($row['ratings_json'] ?? '{}'), true) ?: []);
             foreach ($dimensions as $dim) {
                 $sums[$dim] += (float) ($ratings[$dim] ?? 0);
             }
@@ -942,6 +958,49 @@ class GuidanceServiceEvaluationService
             'Access forbidden: counselors may only view their own evaluation aggregates.',
             403
         );
+    }
+
+    /** @return array<string, int> */
+    private function loadRatingsForEvaluation(int $tenantId, int $evaluationId, string $fallbackJson): array
+    {
+        if ($evaluationId > 0 && $this->db->tableExists('guidance_service_evaluation_ratings')) {
+            $rows = $this->db->table('guidance_service_evaluation_ratings')
+                ->select('dimension_code, score')
+                ->where('tenant_id', $tenantId)
+                ->where('evaluation_id', $evaluationId)
+                ->get()->getResultArray();
+            if ($rows !== []) {
+                $out = [];
+                foreach ($rows as $r) {
+                    $out[(string) $r['dimension_code']] = (int) $r['score'];
+                }
+                return $out;
+            }
+        }
+
+        return json_decode($fallbackJson, true) ?: [];
+    }
+
+    /**
+     * @param list<int> $evaluationIds
+     * @return array<int, array<string, int>>
+     */
+    private function loadRatingsBatch(int $tenantId, array $evaluationIds): array
+    {
+        if ($evaluationIds === [] || !$this->db->tableExists('guidance_service_evaluation_ratings')) {
+            return [];
+        }
+        $rows = $this->db->table('guidance_service_evaluation_ratings')
+            ->select('evaluation_id, dimension_code, score')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('evaluation_id', $evaluationIds)
+            ->get()->getResultArray();
+        $out = [];
+        foreach ($rows as $r) {
+            $out[(int) $r['evaluation_id']][(string) $r['dimension_code']] = (int) $r['score'];
+        }
+
+        return $out;
     }
 }
 

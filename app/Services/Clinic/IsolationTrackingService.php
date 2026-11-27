@@ -193,7 +193,7 @@ final class IsolationTrackingService
             $status = 'active_isolation';
         }
 
-        $id = $this->model->insert([
+        $row = [
             'tenant_id'            => $tenantId,
             'person_id'            => $personId,
             'encounter_id'         => $encounterId,
@@ -201,11 +201,14 @@ final class IsolationTrackingService
             'condition_other'      => $conditionOther !== '' ? mb_substr($conditionOther, 0, 100) : null,
             'isolation_start_date' => $startDate->format('Y-m-d'),
             'isolation_days'       => $days,
-            'isolation_end_date'   => $endDate->format('Y-m-d'),
             'clearance_status'     => $status,
             'notes'                => $notes !== '' ? $notes : null,
             'reported_by_user_id'  => $actorId,
-        ]);
+        ];
+        if ($this->db->DBDriver !== 'MySQLi') {
+            $row['isolation_end_date'] = $endDate->format('Y-m-d');
+        }
+        $id = $this->model->insert($row);
         if ($id === false) {
             throw new RuntimeException('Could not log communicable isolation case.');
         }

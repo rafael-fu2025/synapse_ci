@@ -646,12 +646,29 @@ final class BmgRotationService
     private function formatSchedule(?array $row): array
     {
         if ($row === null) { return $this->defaultSchedule(); }
-        $times = json_decode($row['times_json'], true, 16, JSON_THROW_ON_ERROR);
+        $times = $this->scheduleTimes($row);
         $enabled = (bool) $row['enabled'];
         return ['version' => (int) $row['version'], 'enabled' => $enabled, 'timezone' => 'Asia/Manila',
             'times' => $times, 'rotations' => (int) $row['rotations'],
             'pwm' => $row['pwm'] === null ? null : (int) $row['pwm'], 'direction' => 'forward',
             'next_run_at' => $this->nextRunAt($times, $enabled)];
+    }
+
+    /** @return list<string> */
+    private function scheduleTimes(array $row): array
+    {
+        if ($this->db->tableExists('bmg_rotation_schedule_slots') && isset($row['id'], $row['tenant_id'])) {
+            $slots = $this->db->table('bmg_rotation_schedule_slots')
+                ->select('run_time')
+                ->where('tenant_id', (int) $row['tenant_id'])
+                ->where('schedule_id', (int) $row['id'])
+                ->orderBy('slot_order', 'ASC')
+                ->get()->getResultArray();
+            if ($slots !== [] || ! array_key_exists('times_json', $row)) {
+                return array_values(array_map(static fn (array $s): string => (string) $s['run_time'], $slots));
+            }
+        }
+        return json_decode((string) ($row['times_json'] ?? '[]'), true, 16, JSON_THROW_ON_ERROR);
     }
 
     /** Next upcoming Asia/Manila scheduled run timestamp, or null when off/empty. */
@@ -687,13 +704,36 @@ final class BmgRotationService
     private function persistSchedule(int $tenant, int $unit, int $actor, bool $enabled, array $times, int $rotations, ?int $pwm): void
     {
         $old = $this->db->table('bmg_rotation_schedules')->where('tenant_id', $tenant)->where('unit_id', $unit)->get()->getRowArray();
-        $values = ['enabled' => $enabled, 'times_json' => json_encode($times, JSON_THROW_ON_ERROR), 'rotations' => $rotations,
+        $values = ['enabled' => $enabled, 'rotations' => $rotations,
             'pwm' => $pwm, 'version' => $old === null ? 1 : (int) $old['version'] + 1,
             'updated_by_user_id' => $actor, 'updated_at' => $this->now()];
+        if ($this->db->fieldExists('times_json', 'bmg_rotation_schedules')) {
+            $values['times_json'] = json_encode($times, JSON_THROW_ON_ERROR);
+        }
         if ($old === null) {
             $this->db->table('bmg_rotation_schedules')->insert($values + ['tenant_id' => $tenant, 'unit_id' => $unit, 'created_at' => $this->now()]);
+            $scheduleId = (int) $this->db->insertID();
         } else {
             $this->db->table('bmg_rotation_schedules')->where('tenant_id', $tenant)->where('id', $old['id'])->update($values);
+            $scheduleId = (int) $old['id'];
+        }
+        if ($this->db->tableExists('bmg_rotation_schedule_slots')) {
+            $this->db->table('bmg_rotation_schedule_slots')
+                ->where('tenant_id', $tenant)
+                ->where('schedule_id', $scheduleId)
+                ->delete();
+            $batch = [];
+            foreach (array_values($times) as $order => $runTime) {
+                $batch[] = [
+                    'tenant_id'   => $tenant,
+                    'schedule_id' => $scheduleId,
+                    'slot_order'  => $order,
+                    'run_time'    => (string) $runTime,
+                ];
+            }
+            if ($batch !== []) {
+                $this->db->table('bmg_rotation_schedule_slots')->insertBatch($batch);
+            }
         }
     }
 

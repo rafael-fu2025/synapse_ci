@@ -265,6 +265,8 @@ __pycache__/
 !/tests/unit/ResourceHistoryPaginationTest.php
 !/tests/unit/ResourceHistoryPaginationViewTest.php
 !/tests/unit/StudentInternPolicyTest.php
+!/tests/unit/DatabaseTier1IntegrityTest.php
+!/tests/unit/DatabaseTier2NormalizationTest.php
 !/tests/_support/
 /tests/_support/*
 !/tests/_support/api-token-race-worker.php

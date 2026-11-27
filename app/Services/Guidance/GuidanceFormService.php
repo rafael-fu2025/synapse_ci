@@ -12,7 +12,6 @@ use App\Models\GuidanceFormDraftModel;
 use App\Models\GuidanceFormInstanceModel;
 use App\Models\GuidanceFormRevisionModel;
 use App\Models\GuidancePrivacyNoticeModel;
-use App\Models\GuidanceRetentionPolicyModel;
 use App\Models\PersonModel;
 use App\Services\Audit\AuditService;
 use App\Services\Crypto\GuidanceFormCipher;
@@ -29,7 +28,6 @@ class GuidanceFormService
     private GuidanceFormDraftModel $draftModel;
     private GuidanceFormRevisionModel $revisionModel;
     private GuidancePrivacyNoticeModel $privacyNoticeModel;
-    private GuidanceRetentionPolicyModel $retentionPolicyModel;
     private GuidanceConsentReceiptModel $consentReceiptModel;
     private PersonModel $personModel;
     private GuidanceFormCipher $cipher;
@@ -45,7 +43,6 @@ class GuidanceFormService
         ?GuidanceFormDraftModel $draftModel = null,
         ?GuidanceFormRevisionModel $revisionModel = null,
         ?GuidancePrivacyNoticeModel $privacyNoticeModel = null,
-        ?GuidanceRetentionPolicyModel $retentionPolicyModel = null,
         ?GuidanceConsentReceiptModel $consentReceiptModel = null,
         ?PersonModel $personModel = null,
         ?GuidanceFormCipher $cipher = null,
@@ -57,7 +54,7 @@ class GuidanceFormService
     ) {
         $models = array_filter([
             $instanceModel, $draftModel, $revisionModel, $privacyNoticeModel,
-            $retentionPolicyModel, $consentReceiptModel, $personModel,
+            $consentReceiptModel, $personModel,
         ]);
         $this->db = $db ?? ($models !== [] ? reset($models)->db : Database::connect());
         foreach ($models as $model) {
@@ -69,7 +66,6 @@ class GuidanceFormService
         $this->draftModel = $draftModel ?? new GuidanceFormDraftModel($this->db);
         $this->revisionModel = $revisionModel ?? new GuidanceFormRevisionModel($this->db);
         $this->privacyNoticeModel = $privacyNoticeModel ?? new GuidancePrivacyNoticeModel($this->db);
-        $this->retentionPolicyModel = $retentionPolicyModel ?? new GuidanceRetentionPolicyModel($this->db);
         $this->consentReceiptModel = $consentReceiptModel ?? new GuidanceConsentReceiptModel($this->db);
         $this->personModel = $personModel ?? new PersonModel($this->db);
         $this->cipher = $cipher ?? new GuidanceFormCipher();

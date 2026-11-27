@@ -239,12 +239,14 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
     public function testOneTimeTokenIssuanceAndDuplicatePrevention(): void
     {
         $studentId = $this->studentPersonIds[1];
+        $episodeId = $this->createEpisode($studentId);
+        $sessionId = $this->createSession($studentId, $this->counselorAUserId);
 
         $issued = $this->service->issueEvaluationToken(
             $studentId,
             GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
             $this->counselorAUserId,
-            ['episode_id' => 101, 'session_id' => 201]
+            ['episode_id' => $episodeId, 'session_id' => $sessionId]
         );
 
         self::assertNotEmpty($issued['token']);
@@ -264,7 +266,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
                 $studentId,
                 GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
                 $this->counselorAUserId,
-                ['episode_id' => 101, 'session_id' => 201]
+                ['episode_id' => $episodeId, 'session_id' => $sessionId]
             );
             self::fail('Expected DomainException (409) on duplicate token issuance.');
         } catch (DomainException $e) {
@@ -276,7 +278,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             $studentId,
             GuidanceServiceEvaluationService::TYPE_COUNSELING,
             $this->counselorAUserId,
-            ['episode_id' => 101, 'session_id' => 201]
+            ['episode_id' => $episodeId, 'session_id' => $sessionId]
         );
         self::assertNotSame($issued['token'], $counselingToken['token']);
         self::assertSame('F-OGC-GCS-CEF-009-00', $counselingToken['form_code']);
@@ -305,8 +307,8 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
             $this->counselorAUserId,
             [
-                'episode_id' => 102,
-                'session_id' => 202,
+                'episode_id' => $this->createEpisode($this->studentPersonIds[2]),
+                'session_id' => $this->createSession($this->studentPersonIds[2], $this->counselorAUserId),
                 'expires_at' => date('Y-m-d H:i:s', time() - 3600),
             ]
         );
@@ -325,7 +327,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             $this->studentPersonIds[1],
             'F-OGC-GPS-PEF-008-00',
             $this->counselorAUserId,
-            ['session_id' => 301]
+            ['session_id' => $this->createSession($this->studentPersonIds[1], $this->counselorAUserId)]
         )['token'];
 
         // 1. Invalid rating > 5 on psychosocial form
@@ -385,7 +387,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             $this->studentPersonIds[1],
             'F-OGC-GCS-CEF-009-00',
             $this->counselorAUserId,
-            ['session_id' => 302]
+            ['session_id' => $this->createSession($this->studentPersonIds[1], $this->counselorAUserId)]
         )['token'];
 
         // 5. Out-of-range rating on counseling form
@@ -445,7 +447,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             $this->studentPersonIds[1],
             GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
             $this->counselorAUserId,
-            ['session_id' => 401]
+            ['session_id' => $this->createSession($this->studentPersonIds[1], $this->counselorAUserId)]
         )['token'];
 
         $secretComment = 'CONFIDENTIAL_FEEDBACK_998877: The counselor listened empathetically without judgment.';
@@ -498,7 +500,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
                 $this->studentPersonIds[$i],
                 GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
                 $this->counselorAUserId,
-                ['session_id' => 500 + $i]
+                ['session_id' => $this->createSession($this->studentPersonIds[$i], $this->counselorAUserId)]
             )['token'];
 
             $ev = $this->service->submitEvaluation($tok, [
@@ -536,7 +538,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             $this->studentPersonIds[5],
             GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
             $this->counselorAUserId,
-            ['session_id' => 505]
+            ['session_id' => $this->createSession($this->studentPersonIds[5], $this->counselorAUserId)]
         )['token'];
 
         $ev5 = $this->service->submitEvaluation($tok5, [
@@ -598,7 +600,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
                 $this->studentPersonIds[$i],
                 GuidanceServiceEvaluationService::TYPE_COUNSELING,
                 $this->counselorAUserId,
-                ['session_id' => 600 + $i]
+                ['session_id' => $this->createSession($this->studentPersonIds[$i], $this->counselorAUserId)]
             )['token'];
 
             $ev = $this->service->submitEvaluation($tok, $this->validCounselingPayload([
@@ -654,7 +656,7 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
             $this->studentPersonIds[1],
             GuidanceServiceEvaluationService::TYPE_PSYCHOSOCIAL,
             $this->counselorAUserId,
-            ['session_id' => 701]
+            ['session_id' => $this->createSession($this->studentPersonIds[1], $this->counselorAUserId)]
         )['token'];
         $ev = $this->service->submitEvaluation($tok, $this->validPsychosocialPayload(), 1, $studentActor);
         $evalId = (int) $ev['id'];
@@ -736,5 +738,48 @@ final class GuidanceServiceEvaluationTest extends FreshDatabaseTestCase
         $moderatedByAdm = $this->service->moderateComment($evalId, 'redacted', 1, $adminActor);
         self::assertSame('redacted', $moderatedByAdm['comment_moderation_status']);
         self::assertSame($this->adminUserId, (int) $moderatedByAdm['moderated_by_user_id']);
+    }
+
+    private function createEpisode(int $personId): int
+    {
+        $now = date('Y-m-d H:i:s');
+        $this->db->table('guidance_episodes')->insert([
+            'tenant_id' => 1,
+            'person_id' => $personId,
+            'status'    => 'active',
+            'opened_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        return (int) $this->db->insertID();
+    }
+
+    private function createSession(int $personId, int $counsellorUserId): int
+    {
+        $now = date('Y-m-d H:i:s');
+        $this->db->table('counselling_cases')->insert([
+            'tenant_id'          => 1,
+            'person_id'          => $personId,
+            'counsellor_user_id' => $counsellorUserId,
+            'case_number'        => 'EVAL-' . strtoupper(bin2hex(random_bytes(5))),
+            'title'              => 'Evaluation fixture case',
+            'opened_at'          => $now,
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ]);
+        $caseId = (int) $this->db->insertID();
+
+        $this->db->table('counselling_sessions')->insert([
+            'tenant_id'          => 1,
+            'case_id'            => $caseId,
+            'counsellor_user_id' => $counsellorUserId,
+            'session_number'     => 1,
+            'started_at'         => $now,
+            'created_at'         => $now,
+            'updated_at'         => $now,
+        ]);
+
+        return (int) $this->db->insertID();
     }
 }
