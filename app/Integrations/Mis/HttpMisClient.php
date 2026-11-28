@@ -10,10 +10,17 @@ final class HttpMisClient implements MisClientInterface
 
     private const VALIDATION_ID_REJECTION_PATTERN = '/^(?:the\s+(?:selected\s+)?(?:student|employee)[_\s]?id\s+is\s+invalid|invalid\s+(?:student|employee)[_\s]?id)[.!]?$/iD';
 
+    public const DIRECTORY_BATCH_SIZE = 6;
+
+    private const DIRECTORY_MAX_RETRIES = 2;
+
     private string $baseUrl;
     private string $apiKey;
     private int $timeout;
     private \Closure $transport;
+    private bool $customTransport;
+    private ?\CurlHandle $curlHandle = null;
+    private ?\CurlMultiHandle $multiHandle = null;
 
     public function __construct(
         ?string $baseUrl = null,
@@ -25,9 +32,22 @@ final class HttpMisClient implements MisClientInterface
         $this->apiKey = $apiKey ?? (string) env('FUMIS_API_KEY', '');
         $configuredTimeout = filter_var(env('FUMIS_TIMEOUT_SECONDS', 10), FILTER_VALIDATE_INT);
         $this->timeout = max(2, min(60, $timeout ?? ($configuredTimeout === false ? 10 : $configuredTimeout)));
+        $this->customTransport = $transport !== null;
         $this->transport = $transport === null
             ? $this->curlLoginRequest(...)
             : \Closure::fromCallable($transport);
+    }
+
+    public function __destruct()
+    {
+        if ($this->curlHandle !== null) {
+            curl_close($this->curlHandle);
+            $this->curlHandle = null;
+        }
+        if ($this->multiHandle !== null) {
+            curl_multi_close($this->multiHandle);
+            $this->multiHandle = null;
+        }
     }
 
     public function studentLogin(string $studentId, string $password): ?array
@@ -245,38 +265,40 @@ final class HttpMisClient implements MisClientInterface
      */
     private function curlLoginRequest(string $method, string $url, array $headers, ?string $body, int $timeout): array
     {
-        $ch = curl_init($url);
+        $ch = $this->curlHandle ?? curl_init();
         if ($ch === false) {
             throw new MisUnavailableException();
         }
+        $this->curlHandle = $ch;
+        curl_reset($ch);
 
-        try {
-            curl_setopt_array($ch, [
-                CURLOPT_CUSTOMREQUEST  => $method,
-                CURLOPT_HTTPHEADER     => $headers,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => false,
-                CURLOPT_TIMEOUT        => $timeout,
-                CURLOPT_CONNECTTIMEOUT => min(3, $timeout),
-                CURLOPT_SSL_VERIFYPEER => true,
-                CURLOPT_SSL_VERIFYHOST => 2,
-            ]);
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_TIMEOUT        => $timeout,
+            CURLOPT_CONNECTTIMEOUT => min(8, $timeout),
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+        ]);
 
-            if ($method !== 'GET') {
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-            }
-
-            $raw = curl_exec($ch);
-            if ($raw === false) {
-                $path = parse_url($url, PHP_URL_PATH);
-                $this->logLoginFailure(is_string($path) ? $path : 'unknown', 'curl_exec', 0, null, curl_errno($ch));
-                throw new MisUnavailableException();
-            }
-
-            return ['status' => (int) curl_getinfo($ch, CURLINFO_HTTP_CODE), 'body' => $raw];
-        } finally {
-            curl_close($ch);
+        if ($method !== 'GET') {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
+
+        $raw = curl_exec($ch);
+        if ($raw === false) {
+            $errno = curl_errno($ch);
+            curl_close($ch);
+            $this->curlHandle = null;
+            $path = parse_url($url, PHP_URL_PATH);
+            $this->logLoginFailure(is_string($path) ? $path : 'unknown', 'curl_exec', 0, null, $errno);
+            throw new MisUnavailableException();
+        }
+
+        return ['status' => (int) curl_getinfo($ch, CURLINFO_HTTP_CODE), 'body' => $raw];
     }
 
     public function searchStudents(string $query, int $limit = 25, int $page = 1): array
@@ -323,64 +345,296 @@ final class HttpMisClient implements MisClientInterface
         return $this->fetchPeoplePage('/api/v1/employees', $page, $limit);
     }
 
+    /**
+     * Fetch a bounded batch of unfiltered student directory pages using persistent keep-alive
+     * connections and bounded transient retries. Returns results keyed by page number in request order.
+     *
+     * @param list<int> $pages
+     * @return array<int, array{limit:int, current_page:int, max_page:int, data:list<mixed>, total?:int}>
+     */
+    public function fetchStudentsPages(array $pages, int $limit = 25): array
+    {
+        return $this->fetchPeoplePages('/api/v1/students', $pages, $limit);
+    }
+
+    /**
+     * Fetch a bounded batch of unfiltered employee directory pages using persistent keep-alive
+     * connections and bounded transient retries. Returns results keyed by page number in request order.
+     *
+     * @param list<int> $pages
+     * @return array<int, array{limit:int, current_page:int, max_page:int, data:list<mixed>, total?:int}>
+     */
+    public function fetchEmployeesPages(array $pages, int $limit = 25): array
+    {
+        return $this->fetchPeoplePages('/api/v1/employees', $pages, $limit);
+    }
+
     /** Unfiltered listing only; never mistake a failed request for an empty directory. */
     private function fetchPeoplePage(string $path, int $page, int $limit): array
     {
+        $batch = $this->fetchPeoplePages($path, [$page], $limit);
+        return $batch[$page];
+    }
+
+    /**
+     * @param list<int> $pages
+     * @return array<int, array{limit:int, current_page:int, max_page:int, data:list<mixed>, total?:int}>
+     */
+    private function fetchPeoplePages(string $path, array $pages, int $limit): array
+    {
         try {
-            if ($page < 1 || $page > 400 || $limit !== 25) {
+            if ($pages === [] || count($pages) > self::DIRECTORY_BATCH_SIZE || $limit !== 25) {
                 throw new MisUnavailableException();
             }
-            $token = $this->getServiceAccessToken();
-            if ($token === null) { throw new MisUnavailableException(); }
-            $response = $this->getJson($path . '?' . http_build_query(['limit' => $limit, 'page' => $page]), $token);
-            if ($response === null) { throw new MisUnavailableException(); }
-            // Accept the documented top-level page and the MIS data-wrapped page.
-            if (is_array($response['data'] ?? null) && !array_is_list($response['data'])
-                && array_key_exists('data', $response['data'])) {
-                $nested = $response['data'];
-                foreach (['limit', 'current_page', 'max_page', 'total'] as $field) {
-                    if (array_key_exists($field, $response)
-                        && (!(is_int($response[$field]) || is_string($response[$field]))
-                            || !array_key_exists($field, $nested)
-                            || !(is_int($nested[$field]) || is_string($nested[$field]))
-                            || (string) $response[$field] !== (string) $nested[$field])) {
-                        throw new MisUnavailableException();
-                    }
-                }
-                $response = $nested;
-            }
-            $normalized = [];
-            foreach (['limit' => 25, 'current_page' => 400, 'max_page' => 400] as $field => $bound) {
-                $value = $response[$field] ?? null;
-                // An empty directory may report max_page=0 on its first page.
-                $normalized[$field] = $field === 'max_page' && ($value === 0 || $value === '0')
-                    ? 0 : $this->paginationInteger($value, $bound);
-                if ($normalized[$field] === null) { throw new MisUnavailableException(); }
-            }
-            $data = $response['data'] ?? null;
-            $max = $normalized['max_page'];
-            if (!is_array($data) || !array_is_list($data) || $normalized['limit'] !== $limit
-                || $normalized['current_page'] !== $page || count($data) > $limit
-                || ($max === 0 && ($page !== 1 || $data !== []))
-                || ($max > 0 && ($page > $max || ($page < $max && count($data) !== $limit)
-                    || ($page > 1 && $data === [])))) {
-                throw new MisUnavailableException();
-            }
-            $normalized['data'] = $data;
-            if (array_key_exists('total', $response)) {
-                $value = $response['total'];
-                $total = $value === 0 || $value === '0' ? 0 : $this->paginationInteger($value, 10000);
-                if ($total === null || max(1, $max) !== max(1, (int) ceil($total / $limit))
-                    || ($page === max(1, $max) && count($data) !== $total - ($page - 1) * $limit)) {
+            $uniquePages = [];
+            foreach ($pages as $page) {
+                if (!is_int($page) || $page < 1 || $page > 400 || isset($uniquePages[$page])) {
                     throw new MisUnavailableException();
                 }
-                $normalized['total'] = $total;
+                $uniquePages[$page] = true;
             }
-            return $normalized;
+            $this->assertValidServiceConfig();
+            $token = $this->getServiceAccessToken();
+            if ($token === null) {
+                throw new MisUnavailableException();
+            }
+
+            $pending = array_values($pages);
+            $results = [];
+            $refreshedToken = false;
+
+            for ($attempt = 0; $attempt <= self::DIRECTORY_MAX_RETRIES && $pending !== []; ++$attempt) {
+                if ($attempt > 0 && !$this->customTransport) {
+                    usleep($attempt * 250000);
+                }
+
+                $responses = $this->executeDirectoryGetBatch($path, $pending, $limit, $token);
+                $retryPages = [];
+                $unauthorizedPages = [];
+
+                foreach ($pending as $page) {
+                    $res = $responses[$page] ?? ['status' => 0, 'body' => null, 'errno' => 0];
+                    $status = $res['status'];
+
+                    if ($status === 401 && !$refreshedToken) {
+                        $unauthorizedPages[] = $page;
+                        continue;
+                    }
+
+                    if ($this->isRetryableDirectoryStatus($status)) {
+                        $retryPages[] = $page;
+                        continue;
+                    }
+
+                    if ($status < 200 || $status >= 300 || !is_string($res['body'])) {
+                        throw new MisUnavailableException();
+                    }
+
+                    $decoded = json_decode($res['body'], true, 512, JSON_THROW_ON_ERROR);
+                    if (!is_array($decoded)) {
+                        throw new MisUnavailableException();
+                    }
+
+                    $results[$page] = $this->normalizePeoplePageResponse($decoded, $page, $limit);
+                }
+
+                if ($unauthorizedPages !== []) {
+                    $refreshedToken = true;
+                    $token = $this->refreshServiceAccessToken();
+                    if ($token === null) {
+                        throw new MisUnavailableException();
+                    }
+                    $pending = array_values(array_unique(array_merge($unauthorizedPages, $retryPages)));
+                    // Allow the refreshed token attempt without burning a transient retry slot.
+                    --$attempt;
+                    continue;
+                }
+
+                $pending = $retryPages;
+            }
+
+            if ($pending !== []) {
+                throw new MisUnavailableException();
+            }
+
+            $ordered = [];
+            foreach ($pages as $page) {
+                $ordered[$page] = $results[$page];
+            }
+            return $ordered;
         } catch (\Throwable) {
             // Never expose upstream response bodies, token/cache errors, or transport details.
             throw new MisUnavailableException();
         }
+    }
+
+    /**
+     * @param list<int> $pages
+     * @return array<int, array{status: int, body: ?string, errno: int}>
+     */
+    private function executeDirectoryGetBatch(string $path, array $pages, int $limit, string $token): array
+    {
+        if (preg_match('/[\r\n]/', $token)) {
+            throw new MisUnavailableException();
+        }
+        $headers = [
+            'Accept: application/json',
+            'API-Key: ' . $this->apiKey,
+            'Authorization: Bearer ' . $token,
+        ];
+        $timeout = $this->customTransport ? $this->timeout : max(15, $this->timeout);
+
+        if ($this->customTransport || count($pages) === 1) {
+            $out = [];
+            foreach ($pages as $page) {
+                $url = $this->baseUrl . $path . '?' . http_build_query(['limit' => $limit, 'page' => $page]);
+                try {
+                    $res = ($this->transport)('GET', $url, $headers, null, $timeout);
+                    if (is_array($res) && is_int($res['status'] ?? null) && is_string($res['body'] ?? null)) {
+                        $out[$page] = ['status' => $res['status'], 'body' => $res['body'], 'errno' => 0];
+                    } else {
+                        $out[$page] = ['status' => 0, 'body' => null, 'errno' => 0];
+                    }
+                } catch (\Throwable) {
+                    $out[$page] = ['status' => 0, 'body' => null, 'errno' => 28];
+                }
+            }
+            return $out;
+        }
+
+        $mh = $this->multiHandle ?? curl_multi_init();
+        $this->multiHandle = $mh;
+        $handles = [];
+        $out = [];
+
+        foreach ($pages as $page) {
+            $url = $this->baseUrl . $path . '?' . http_build_query(['limit' => $limit, 'page' => $page]);
+            $ch = curl_init($url);
+            if ($ch === false) {
+                foreach ($handles as $existing) {
+                    curl_multi_remove_handle($mh, $existing);
+                    curl_close($existing);
+                }
+                throw new MisUnavailableException();
+            }
+            curl_setopt_array($ch, [
+                CURLOPT_CUSTOMREQUEST  => 'GET',
+                CURLOPT_HTTPHEADER     => $headers,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_TIMEOUT        => $timeout,
+                CURLOPT_CONNECTTIMEOUT => min(8, $timeout),
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+            ]);
+            curl_multi_add_handle($mh, $ch);
+            $handles[$page] = $ch;
+        }
+
+        try {
+            $active = null;
+            do {
+                $mrc = curl_multi_exec($mh, $active);
+                if ($active && $mrc === CURLM_OK) {
+                    if (curl_multi_select($mh, 1.0) === -1) {
+                        usleep(10000);
+                    }
+                }
+            } while ($active && $mrc === CURLM_OK);
+
+            foreach ($handles as $page => $ch) {
+                $errno = curl_errno($ch);
+                if ($errno !== 0) {
+                    $this->logLoginFailure($path, 'curl_multi_exec', 0, null, $errno);
+                    $out[$page] = ['status' => 0, 'body' => null, 'errno' => $errno];
+                } else {
+                    $body = curl_multi_getcontent($ch);
+                    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    $out[$page] = ['status' => $status, 'body' => is_string($body) ? $body : null, 'errno' => 0];
+                }
+            }
+        } finally {
+            foreach ($handles as $ch) {
+                curl_multi_remove_handle($mh, $ch);
+                curl_close($ch);
+            }
+        }
+
+        return $out;
+    }
+
+    private function isRetryableDirectoryStatus(int $status): bool
+    {
+        return in_array($status, [0, 429, 502, 503, 504], true);
+    }
+
+    private function assertValidServiceConfig(): void
+    {
+        $url = parse_url($this->baseUrl);
+        if (trim($this->apiKey) === '' || preg_match('/[\r\n]/', $this->apiKey)
+            || !is_array($url) || ($url['scheme'] ?? null) !== 'https' || empty($url['host'])
+            || isset($url['user']) || isset($url['pass']) || isset($url['query']) || isset($url['fragment'])) {
+            throw new MisUnavailableException();
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $response
+     * @return array{limit:int, current_page:int, max_page:int, data:list<mixed>, total?:int}
+     */
+    private function normalizePeoplePageResponse(array $response, int $page, int $limit): array
+    {
+        // Accept the documented top-level page and the MIS data-wrapped page.
+        if (is_array($response['data'] ?? null) && !array_is_list($response['data'])
+            && array_key_exists('data', $response['data'])) {
+            $nested = $response['data'];
+            foreach (['limit', 'current_page', 'max_page', 'total'] as $field) {
+                if (array_key_exists($field, $response)
+                    && (!(is_int($response[$field]) || is_string($response[$field]))
+                        || !array_key_exists($field, $nested)
+                        || !(is_int($nested[$field]) || is_string($nested[$field]))
+                        || (string) $response[$field] !== (string) $nested[$field])) {
+                    throw new MisUnavailableException();
+                }
+            }
+            $response = $nested;
+        }
+        $normalized = [];
+        foreach (['limit' => 25, 'current_page' => 400, 'max_page' => 400] as $field => $bound) {
+            $value = $response[$field] ?? null;
+            // An empty directory may report max_page=0 on its first page.
+            $normalized[$field] = $field === 'max_page' && ($value === 0 || $value === '0')
+                ? 0 : $this->paginationInteger($value, $bound);
+            if ($normalized[$field] === null) { throw new MisUnavailableException(); }
+        }
+        $data = $response['data'] ?? null;
+        $max = $normalized['max_page'];
+        $hasTotal = array_key_exists('total', $response);
+        // Live MIS computes max_page via floor(total / limit) when total is omitted,
+        // placing 1..(limit - 1) trailing records on page (max_page + 1), or 0 rows when exact.
+        $isFloorOverflowPage = !$hasTotal && $max > 0 && $page === $max + 1;
+        if (!is_array($data) || !array_is_list($data) || $normalized['limit'] !== $limit
+            || $normalized['current_page'] !== $page || count($data) > $limit
+            || ($max === 0 && ($page !== 1 || $data !== []))
+            || ($max > 0 && (
+                $isFloorOverflowPage
+                    ? count($data) >= $limit
+                    : ($page > $max || ($page < $max && count($data) !== $limit)
+                        || ($page > 1 && $data === []))
+            ))) {
+            throw new MisUnavailableException();
+        }
+        $normalized['data'] = $data;
+        if (array_key_exists('total', $response)) {
+            $value = $response['total'];
+            $total = $value === 0 || $value === '0' ? 0 : $this->paginationInteger($value, 10000);
+            if ($total === null || max(1, $max) !== max(1, (int) ceil($total / $limit))
+                || ($page === max(1, $max) && count($data) !== $total - ($page - 1) * $limit)) {
+                throw new MisUnavailableException();
+            }
+            $normalized['total'] = $total;
+        }
+        return $normalized;
     }
 
     public function fetchDepartments(): array
@@ -401,12 +655,14 @@ final class HttpMisClient implements MisClientInterface
     /**
      * Obtains a valid service bearer token using the generate->refresh lifecycle.
      */
-    private function getServiceAccessToken(): ?string
+    private function getServiceAccessToken(bool $forceRefresh = false): ?string
     {
         $cache = \Config\Services::cache();
-        $cachedToken = $cache->get('fumis_service_access_token');
-        if (is_string($cachedToken) && $cachedToken !== '') {
-            return $cachedToken;
+        if (!$forceRefresh) {
+            $cachedToken = $cache->get('fumis_service_access_token');
+            if (is_string($cachedToken) && $cachedToken !== '') {
+                return $cachedToken;
+            }
         }
 
         // 1. Generate refresh token
@@ -426,6 +682,16 @@ final class HttpMisClient implements MisClientInterface
         }
 
         return null;
+    }
+
+    private function refreshServiceAccessToken(): ?string
+    {
+        try {
+            \Config\Services::cache()->delete('fumis_service_access_token');
+        } catch (\Throwable) {
+            // Best-effort cache invalidation before generating a fresh token.
+        }
+        return $this->getServiceAccessToken(true);
     }
 
     /**

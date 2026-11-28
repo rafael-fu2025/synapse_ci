@@ -57,7 +57,17 @@
     } catch (_) { /* Manual search remains available for malformed optional prefill. */ }
     return state;
   };
-  window.newCaseForm = config => patientSearch(config);
+  window.newCaseForm = config => ({
+    ...patientSearch(config),
+    selectedCategory: 'academic',
+    summaryLength: 0,
+    clientInitials(person) {
+      if (!person) return '';
+      const f = (person.first_name || '').trim().charAt(0);
+      const l = (person.last_name || '').trim().charAt(0);
+      return (f + l).toUpperCase() || '?';
+    },
+  });
   window.appointmentRequest = config => ({ ...patientSearch(config), date: config.initialDate });
   window.appointmentBooking = config => ({
     providerId: '', date: config.initialDate,
