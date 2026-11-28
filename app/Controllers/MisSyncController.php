@@ -32,7 +32,7 @@ final class MisSyncController extends BaseController
     public function peopleStatus()
     {
         if (strtoupper($this->request->getMethod()) !== 'GET') { return $this->methodNotAllowed('GET'); }
-        return $this->respond(fn () => $this->response->setJSON((new MisPeopleSyncService())->status()));
+        return $this->respond(fn () => $this->response->setJSON((new MisPeopleSyncService())->status()), true);
     }
 
     public function people()
@@ -51,6 +51,9 @@ final class MisSyncController extends BaseController
         // Reuses the request-scoped verification marker when the parent web_csrf filter already ran.
         if (($denied = (new WebCsrfFilter())->before($this->request)) !== null) { return $denied; }
         return $this->respond(function () use ($people) {
+            if ($people && function_exists('set_time_limit')) {
+                @set_time_limit(300);
+            }
             $progressId = $this->request->getPost('progress_id');
             if ($progressId !== null && $progressId !== ''
                 && (!is_string($progressId) || preg_match('/\A[A-Za-z0-9_-]{16,64}\z/D', $progressId) !== 1)) {
@@ -91,7 +94,7 @@ final class MisSyncController extends BaseController
             }
             session()->setFlashdata('success', $message);
             return redirect()->to(site_url('admin/mis-sync'))->setHeader('Cache-Control', 'private, no-store');
-        });
+        }, $people);
     }
 
     private function methodNotAllowed(string $method)
@@ -112,17 +115,19 @@ final class MisSyncController extends BaseController
         return $this->request->isAJAX() || str_contains(strtolower($this->request->getHeaderLine('Accept')), 'json');
     }
 
-    private function respond(callable $operation)
+    private function respond(callable $operation, bool $people = false)
     {
         $this->response->setHeader('Cache-Control', 'private, no-store');
         try { return $operation(); }
         catch (Throwable $error) {
             $status = $error instanceof RuntimeException && in_array($error->getCode(), [401, 403, 503], true)
                 ? $error->getCode() : 503;
+            $label = $people ? 'MIS people directory synchronization' : 'MIS reference synchronization';
+            $rollback = $people ? 'No people were changed.' : 'No synchronization was committed.';
             $message = match ($status) {
                 401 => 'Please sign in to continue.',
-                403 => 'MIS reference synchronization is not permitted. Reload or sign in again.',
-                default => 'MIS reference synchronization is unavailable or incomplete. No synchronization was committed.',
+                403 => $label . ' is not permitted. Reload or sign in again.',
+                default => $label . ' is unavailable or incomplete. ' . $rollback,
             };
             // Never log the exception: upstream errors can contain API keys or raw payloads.
             $this->response->setStatusCode($status);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Directory;
 
+use App\Integrations\Mis\HttpMisClient;
 use App\Integrations\Mis\MisClientInterface;
 use App\Integrations\Mis\MisProfileMapper;
 use App\Services\Audit\AuditService;
@@ -60,9 +61,9 @@ final class MisPeopleSyncService
         try {
             $client = $this->client ??= Services::misClient();
             $this->progress($progress, 5, 'Fetching and validating student directory.');
-            $rows = ['student' => $this->fetch($client, 'student')];
+            $rows = ['student' => $this->fetch($client, 'student', $progress, 5, 39)];
             $this->progress($progress, 40, 'Fetching and validating employee directory.');
-            $rows['employee'] = $this->fetch($client, 'employee');
+            $rows['employee'] = $this->fetch($client, 'employee', $progress, 40, 79);
         } catch (Throwable) {
             throw new RuntimeException('MIS people directory is unavailable or incomplete. No people were changed.', 503);
         }
@@ -150,52 +151,141 @@ final class MisPeopleSyncService
         return compact('counts', 'syncedAt');
     }
 
-    private function fetch(MisClientInterface $client, string $kind): array
-    {
+    private function fetch(
+        MisClientInterface $client,
+        string $kind,
+        ?callable $progress = null,
+        int $startPercent = 5,
+        int $endPercent = 39
+    ): array {
         $result = $seen = [];
         $total = $max = null;
         $mapper = new MisProfileMapper();
-        for ($page = 1; $page <= 400; $page++) {
-            $response = $kind === 'student' ? $client->fetchStudentsPage($page, 25) : $client->fetchEmployeesPage($page, 25);
-            foreach (['current_page', 'max_page', 'limit'] as $field) {
-                if (!is_int($response[$field] ?? null)) { throw new RuntimeException('Invalid pagination.'); }
-            }
-            $max ??= $response['max_page'];
-            $data = $response['data'] ?? null;
-            if ($max < 0 || $max > 400 || $response['max_page'] !== $max || $response['limit'] !== 25
-                || $response['current_page'] !== $page || !is_array($data) || !array_is_list($data)
-                || count($data) > 25 || count($result) + count($data) > 10000
-                || ($max === 0 && ($page !== 1 || $data !== []))
-                || ($max > 0 && ($page > $max || ($page < $max && count($data) !== 25)
-                    || ($page > 1 && $data === [])))) {
-                throw new RuntimeException('Incomplete directory.');
-            }
-            // total is not documented/required, but validate it when supplied.
-            if (array_key_exists('total', $response)) {
-                $pageTotal = $response['total'];
-                if (!is_int($pageTotal) || $pageTotal < 0 || $pageTotal > 10000
-                    || ($total !== null && $total !== $pageTotal)
-                    || max(1, $max) !== max(1, (int) ceil($pageTotal / 25))
-                    || ($page === max(1, $max) && count($result) + count($data) !== $pageTotal)) {
-                    throw new RuntimeException('Inconsistent directory total.');
+        $lastReportedPercent = $startPercent;
+
+        $firstResponse = $kind === 'student' ? $client->fetchStudentsPage(1, 25) : $client->fetchEmployeesPage(1, 25);
+        $lastPageRowCount = $this->consumeDirectoryPage($firstResponse, 1, $kind, $mapper, $result, $seen, $max, $total);
+
+        $lastPage = max(1, (int) $max);
+        if ($lastPage > 1) {
+            $remainingPages = range(2, $lastPage);
+            if ($client instanceof HttpMisClient) {
+                foreach (array_chunk($remainingPages, HttpMisClient::DIRECTORY_BATCH_SIZE) as $batch) {
+                    $responses = $kind === 'student'
+                        ? $client->fetchStudentsPages($batch, 25)
+                        : $client->fetchEmployeesPages($batch, 25);
+                    foreach ($batch as $page) {
+                        if (!array_key_exists($page, $responses) || !is_array($responses[$page])) {
+                            throw new RuntimeException('Incomplete directory.');
+                        }
+                        $lastPageRowCount = $this->consumeDirectoryPage($responses[$page], $page, $kind, $mapper, $result, $seen, $max, $total);
+                    }
+                    $completedPage = $batch[count($batch) - 1];
+                    $this->reportPageProgress($progress, $kind, $completedPage, $lastPage, $startPercent, $endPercent, $lastReportedPercent);
                 }
-                $total = $pageTotal;
+            } else {
+                foreach ($remainingPages as $page) {
+                    $response = $kind === 'student' ? $client->fetchStudentsPage($page, 25) : $client->fetchEmployeesPage($page, 25);
+                    $lastPageRowCount = $this->consumeDirectoryPage($response, $page, $kind, $mapper, $result, $seen, $max, $total);
+                    $this->reportPageProgress($progress, $kind, $page, $lastPage, $startPercent, $endPercent, $lastReportedPercent);
+                }
             }
-            if ($page === max(1, $max) && $total !== null && count($result) + count($data) !== $total) {
-                throw new RuntimeException('Incomplete directory total.');
-            }
-            foreach ($response['data'] as $row) {
-                if (!is_array($row) || array_is_list($row) || isset($row['data'])) { throw new RuntimeException('Invalid directory row.'); }
-                $mapped = $kind === 'student' ? $mapper->mapStudent($row) : $mapper->mapEmployee($row);
-                $this->validate($row, $mapped, $kind);
-                $key = mb_strtolower($mapped['mis_id'], 'UTF-8');
-                if (isset($seen[$key])) { throw new RuntimeException('Duplicate official ID.'); }
-                $seen[$key] = true;
-                $result[] = $mapped;
-            }
-            if ($page === max(1, $max)) { return $result; }
         }
-        throw new RuntimeException('Directory bound exceeded.');
+
+        // Live MIS computes max_page via floor(total / 25) without a total field, so when the
+        // reported final page is completely full (25 rows), up to 24 trailing records sit on page (max_page + 1).
+        if ($total === null && $max > 0 && $lastPage < 400 && $lastPageRowCount === 25) {
+            $overflowPage = $lastPage + 1;
+            $overflowResponse = $kind === 'student'
+                ? $client->fetchStudentsPage($overflowPage, 25)
+                : $client->fetchEmployeesPage($overflowPage, 25);
+            $this->consumeDirectoryPage($overflowResponse, $overflowPage, $kind, $mapper, $result, $seen, $max, $total, true);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $response
+     * @param list<array<string, mixed>> $result
+     * @param array<string, bool> $seen
+     * @return int Number of rows consumed from this page.
+     */
+    private function consumeDirectoryPage(
+        array $response,
+        int $page,
+        string $kind,
+        MisProfileMapper $mapper,
+        array &$result,
+        array &$seen,
+        ?int &$max,
+        ?int &$total,
+        bool $allowFloorOverflow = false
+    ): int {
+        foreach (['current_page', 'max_page', 'limit'] as $field) {
+            if (!is_int($response[$field] ?? null)) { throw new RuntimeException('Invalid pagination.'); }
+        }
+        $max ??= $response['max_page'];
+        $data = $response['data'] ?? null;
+        $isFloorOverflowPage = $allowFloorOverflow && $total === null && !array_key_exists('total', $response)
+            && $max > 0 && $page === $max + 1;
+        if ($max < 0 || $max > 400 || $response['max_page'] !== $max || $response['limit'] !== 25
+            || $response['current_page'] !== $page || !is_array($data) || !array_is_list($data)
+            || count($data) > 25 || count($result) + count($data) > 10000
+            || ($max === 0 && ($page !== 1 || $data !== []))
+            || ($max > 0 && (
+                $isFloorOverflowPage
+                    ? count($data) >= 25
+                    : ($page > $max || ($page < $max && count($data) !== 25)
+                        || ($page > 1 && $data === []))
+            ))) {
+            throw new RuntimeException('Incomplete directory.');
+        }
+        // total is not documented/required, but validate it when supplied.
+        if (array_key_exists('total', $response)) {
+            $pageTotal = $response['total'];
+            if (!is_int($pageTotal) || $pageTotal < 0 || $pageTotal > 10000
+                || ($total !== null && $total !== $pageTotal)
+                || max(1, $max) !== max(1, (int) ceil($pageTotal / 25))
+                || ($page === max(1, $max) && count($result) + count($data) !== $pageTotal)) {
+                throw new RuntimeException('Inconsistent directory total.');
+            }
+            $total = $pageTotal;
+        }
+        if ($page === max(1, $max) && $total !== null && count($result) + count($data) !== $total) {
+            throw new RuntimeException('Incomplete directory total.');
+        }
+        foreach ($data as $row) {
+            if (!is_array($row) || array_is_list($row) || isset($row['data'])) { throw new RuntimeException('Invalid directory row.'); }
+            $mapped = $kind === 'student' ? $mapper->mapStudent($row) : $mapper->mapEmployee($row);
+            $this->validate($row, $mapped, $kind);
+            $key = mb_strtolower($mapped['mis_id'], 'UTF-8');
+            if (isset($seen[$key])) { throw new RuntimeException('Duplicate official ID.'); }
+            $seen[$key] = true;
+            $result[] = $mapped;
+        }
+        return count($data);
+    }
+
+    private function reportPageProgress(
+        ?callable $progress,
+        string $kind,
+        int $completedPage,
+        int $totalPages,
+        int $startPercent,
+        int $endPercent,
+        int &$lastReportedPercent
+    ): void {
+        if ($progress === null || $totalPages <= 1) {
+            return;
+        }
+        $span = max(0, $endPercent - $startPercent);
+        $percent = min($endPercent, $startPercent + (int) floor(($completedPage / $totalPages) * $span));
+        if ($percent <= $lastReportedPercent) {
+            return;
+        }
+        $lastReportedPercent = $percent;
+        $this->progress($progress, $percent, sprintf('Fetching and validating %s directory (page %d of %d).', $kind, $completedPage, $totalPages));
     }
 
     private function validate(array $raw, array $mapped, string $kind): void

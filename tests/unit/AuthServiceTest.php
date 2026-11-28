@@ -668,4 +668,100 @@ final class AuthServiceTest extends FreshDatabaseTestCase
 
         $this->assertNull($auth->login('20239999', 'secret'));
     }
+
+    public function testUnsyncedSixDigitIdPrefersEmployeeNamespaceFirstAndFallsBackToStudentOnRejection(): void
+    {
+        // 1. Unsynced 6-digit employee authenticates directly via employeeLogin without calling studentLogin.
+        $client = $this->createMock(MisClientInterface::class);
+        $client->expects($this->never())->method('studentLogin');
+        $client->expects($this->once())->method('employeeLogin')
+            ->with('210470', 'emp-pass')
+            ->willReturn([
+                'data' => [
+                    'employee_id' => '210470',
+                    'first_name'  => 'John',
+                    'last_name'   => 'Partosa',
+                ],
+            ]);
+
+        $auth = new AuthService(
+            misClient: $client,
+            userModel: $this->userModel,
+            personModel: $this->personModel,
+            studentProfileModel: new StudentProfileModel(),
+            employeeProfileModel: new EmployeeProfileModel()
+        );
+
+        $session = $auth->login('210470', 'emp-pass');
+        $this->assertNotNull($session);
+        $this->assertSame('employee', $session['role']);
+        $this->assertSame('210470', $session['identifier']);
+
+        AuthenticatedUser::clear();
+        CurrentTenant::set(1);
+
+        // 2. Soft hint: an unsynced 6-digit ID that employeeLogin rejects still falls back to studentLogin.
+        $callOrder = [];
+        $fallbackClient = $this->createMock(MisClientInterface::class);
+        $fallbackClient->expects($this->once())->method('employeeLogin')
+            ->with('299999', 'student-pass')
+            ->willReturnCallback(function () use (&$callOrder): ?array {
+                $callOrder[] = 'employee';
+                return null;
+            });
+        $fallbackClient->expects($this->once())->method('studentLogin')
+            ->with('299999', 'student-pass')
+            ->willReturnCallback(function () use (&$callOrder): array {
+                $callOrder[] = 'student';
+                return [
+                    'data' => [
+                        'student_id' => '299999',
+                        'first_name' => 'Edge',
+                        'last_name'  => 'Student',
+                    ],
+                ];
+            });
+
+        $fallbackAuth = new AuthService(
+            misClient: $fallbackClient,
+            userModel: $this->userModel,
+            personModel: $this->personModel,
+            studentProfileModel: new StudentProfileModel(),
+            employeeProfileModel: new EmployeeProfileModel()
+        );
+
+        $fallbackSession = $fallbackAuth->login('299999', 'student-pass');
+        $this->assertNotNull($fallbackSession);
+        $this->assertSame('student', $fallbackSession['role']);
+        $this->assertSame(['employee', 'student'], $callOrder);
+
+        AuthenticatedUser::clear();
+        CurrentTenant::set(1);
+
+        // 3. Local directory truth overrides the 6-digit hint: now that 299999 is a student in people,
+        // subsequent logins try studentLogin first and skip employeeLogin.
+        $studentFirstClient = $this->createMock(MisClientInterface::class);
+        $studentFirstClient->expects($this->once())->method('studentLogin')
+            ->with('299999', 'student-pass')
+            ->willReturn([
+                'data' => [
+                    'student_id' => '299999',
+                    'first_name' => 'Edge',
+                    'last_name'  => 'Student',
+                ],
+            ]);
+        $studentFirstClient->expects($this->never())->method('employeeLogin');
+
+        $studentFirstAuth = new AuthService(
+            misClient: $studentFirstClient,
+            userModel: $this->userModel,
+            personModel: $this->personModel,
+            studentProfileModel: new StudentProfileModel(),
+            employeeProfileModel: new EmployeeProfileModel()
+        );
+
+        $secondSession = $studentFirstAuth->login('299999', 'student-pass');
+        $this->assertNotNull($secondSession);
+        $this->assertSame('student', $secondSession['role']);
+    }
 }

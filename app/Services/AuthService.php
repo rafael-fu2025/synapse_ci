@@ -85,7 +85,7 @@ final class AuthService
         // Only a credential rejection (null) permits trying the other MIS namespace.
         // Transport/contract failures propagate instead of being reported as a bad password.
         // Staff-only hosts skip the student namespace; on shared hosts, uniquely synced employees
-        // authenticate directly against the employee endpoint first.
+        // and unsynced 6-digit numeric IDs authenticate against the employee endpoint first.
         $misLookupId = $this->resolveMisLookupId($id, $localUser);
         if ($allowStudentMis) {
             $namespaces = $this->shouldPreferEmployeeNamespace($misLookupId) ? ['employee', 'student'] : ['student', 'employee'];
@@ -136,7 +136,9 @@ final class AuthService
     }
 
     /**
-     * True when active local directory records uniquely identify this MIS ID as an employee.
+     * True when active local directory records uniquely identify this MIS ID as an employee,
+     * or when no local directory record exists yet and the identifier matches the 6-digit
+     * numeric employee ID format (soft ordering hint; credential rejection still falls back).
      */
     private function shouldPreferEmployeeNamespace(string $misLookupId): bool
     {
@@ -147,7 +149,11 @@ final class AuthService
             ->findAll(2);
         $kinds = array_values(array_unique(array_column($rows, 'kind')));
 
-        return $kinds === ['employee'];
+        if ($kinds !== []) {
+            return $kinds === ['employee'];
+        }
+
+        return preg_match('/\A[0-9]{6}\z/', $misLookupId) === 1;
     }
 
     /**

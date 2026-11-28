@@ -261,4 +261,170 @@ final class MisPeopleSyncTest extends CIUnitTestCase
         $request->setGlobal('post', []);
         $this->assertSame(403, $controller->people()->getStatusCode());
     }
+
+    public function testLiveDirectoryBatchRetriesTransientFailuresAndRefreshesExpiredToken(): void
+    {
+        $cache = $this->createMock(\CodeIgniter\Cache\CacheInterface::class);
+        $cache->method('get')->with('fumis_service_access_token')->willReturn('stale-access');
+        $cache->expects($this->once())->method('delete')->with('fumis_service_access_token');
+        $cache->expects($this->once())->method('save')->with('fumis_service_access_token', 'fresh-access', 480);
+        \Config\Services::injectMock('cache', $cache);
+
+        $page2Attempts = 0;
+        $page3Attempts = 0;
+        $client = new \App\Integrations\Mis\HttpMisClient('https://mis.example.test/sandbox', 'fixture-key', 7,
+            static function (string $verb, string $url, array $headers, ?string $body) use (&$page2Attempts, &$page3Attempts): array {
+                if (str_ends_with($url, '/api/tokens/generate')) {
+                    return ['status' => 200, 'body' => json_encode(['data' => ['refresh_token' => 'fresh-refresh']], JSON_THROW_ON_ERROR)];
+                }
+                if (str_ends_with($url, '/api/tokens/refresh')) {
+                    return ['status' => 200, 'body' => json_encode(['data' => ['access_token' => 'fresh-access']], JSON_THROW_ON_ERROR)];
+                }
+                if (str_contains($url, 'page=2')) {
+                    ++$page2Attempts;
+                    if ($page2Attempts === 1) {
+                        throw new \RuntimeException('simulated cURL timeout');
+                    }
+                    $rows = array_map(static fn (int $i): array => [
+                        'student_id' => sprintf('2023%04d', 25 + $i),
+                        'first_name' => 'Student',
+                        'last_name'  => 'Two',
+                    ], range(1, 25));
+                    return ['status' => 200, 'body' => json_encode([
+                        'data' => ['data' => $rows, 'limit' => '25', 'current_page' => '2', 'max_page' => '3'],
+                    ], JSON_THROW_ON_ERROR)];
+                }
+                if (str_contains($url, 'page=3')) {
+                    ++$page3Attempts;
+                    if ($page3Attempts === 1) {
+                        return ['status' => 401, 'body' => '{"message":"Expired"}'];
+                    }
+                    if (!in_array('Authorization: Bearer fresh-access', $headers, true)) {
+                        return ['status' => 401, 'body' => '{"message":"Expected refreshed token"}'];
+                    }
+                    return ['status' => 200, 'body' => json_encode([
+                        'data' => [
+                            'data' => [['student_id' => '20230099', 'first_name' => 'Last', 'last_name' => 'Student']],
+                            'limit' => '25', 'current_page' => '3', 'max_page' => '3',
+                        ],
+                    ], JSON_THROW_ON_ERROR)];
+                }
+                throw new \RuntimeException('Unexpected URL: ' . $url);
+            });
+
+        $pages = $client->fetchStudentsPages([2, 3], 25);
+        $this->assertSame([2, 3], array_keys($pages));
+        $this->assertCount(25, $pages[2]['data']);
+        $this->assertCount(1, $pages[3]['data']);
+        $this->assertSame(2, $page2Attempts);
+        $this->assertSame(2, $page3Attempts);
+    }
+
+    public function testPeopleSyncEmitsMonotonicPageProgressAndUsesPeopleErrorMessage(): void
+    {
+        $rows = [];
+        for ($i = 0; $i < 55; $i++) {
+            $rows[] = ['student_id' => sprintf('2024%04d', $i + 1), 'first_name' => 'Student', 'last_name' => 'Batch'];
+        }
+        $client = $this->createMock(MisClientInterface::class);
+        $client->method('fetchStudentsPage')->willReturnCallback(static function (int $page, int $limit) use ($rows): array {
+            return ['data' => array_slice($rows, ($page - 1) * 25, 25), 'current_page' => $page, 'max_page' => 3, 'limit' => $limit];
+        });
+        $client->method('fetchEmployeesPage')->willReturn(['data' => [], 'current_page' => 1, 'max_page' => 0, 'limit' => 25]);
+
+        $stages = [];
+        (new MisPeopleSyncService($client, $this->db))->sync(static function (array $stage) use (&$stages): void {
+            $stages[] = $stage;
+        });
+
+        $percents = array_column($stages, 'percent');
+        $sorted = $percents;
+        sort($sorted);
+        $this->assertSame($sorted, $percents, 'Progress percentages must be monotonically non-decreasing.');
+        $this->assertSame(5, $percents[0]);
+        $this->assertContains(40, $percents);
+        $this->assertContains(80, $percents);
+        $this->assertSame(100, $percents[count($percents) - 1]);
+        $this->assertGreaterThan(4, count($stages), 'Multi-page people sync must emit intermediate page progress.');
+
+        // Verify MisSyncController::people() reports a people-specific error message on 503.
+        try {
+            \Config\Services::injectMock('misClient', new \App\Integrations\Mis\DisabledMisClient());
+            $controller = new MisSyncController();
+            $request = service('request', null, false);
+            $request->setMethod('POST');
+            $request->setHeader('Accept', 'application/json');
+            $request->setGlobal('post', [csrf_token() => csrf_hash()]);
+            $controller->initController($request, service('response', null, false), service('logger'));
+            $response = $controller->people();
+            $this->assertSame(503, $response->getStatusCode());
+            $payload = json_decode($response->getBody(), true, 512, JSON_THROW_ON_ERROR);
+            $this->assertStringContainsString('MIS people directory synchronization', $payload['message']);
+            $this->assertStringNotContainsString('MIS reference synchronization', $payload['message']);
+        } finally {
+            \Config\Services::resetSingle('misClient');
+            \Config\Services::resetSingle('request');
+            \Config\Services::resetSingle('response');
+        }
+    }
+
+    public function testFloorMaxPageOverflowFetchesTrailingRecordsAndRejectsFullOverflow(): void
+    {
+        $cache = $this->createMock(\CodeIgniter\Cache\CacheInterface::class);
+        $cache->method('get')->with('fumis_service_access_token')->willReturn('fixture-access');
+        \Config\Services::injectMock('cache', $cache);
+
+        $students = [];
+        for ($i = 1; $i <= 28; $i++) {
+            $students[] = ['student_id' => sprintf('2025%04d', $i), 'first_name' => 'Student', 'last_name' => 'Row' . $i];
+        }
+        $employees = [];
+        for ($i = 1; $i <= 25; $i++) {
+            $employees[] = ['employee_id' => sprintf('22%04d', $i), 'first_name' => 'Emp', 'last_name' => 'Row' . $i];
+        }
+
+        // Case 1: 28 students (max_page=1 via floor(28/25), 3 trailing rows on page 2)
+        //       + 25 employees (max_page=1 exact multiple, 0 rows on page 2).
+        $client = new \App\Integrations\Mis\HttpMisClient('https://mis.example.test/sandbox', 'fixture-key', 7,
+            static function (string $verb, string $url) use ($students, $employees): array {
+                parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+                $page = (int) ($q['page'] ?? 1);
+                if (str_contains($url, '/students')) {
+                    $slice = array_slice($students, ($page - 1) * 25, 25);
+                    return ['status' => 200, 'body' => json_encode([
+                        'data' => ['data' => $slice, 'limit' => '25', 'current_page' => (string) $page, 'max_page' => 1],
+                    ], JSON_THROW_ON_ERROR)];
+                }
+                $slice = array_slice($employees, ($page - 1) * 25, 25);
+                return ['status' => 200, 'body' => json_encode([
+                    'data' => ['data' => $slice, 'limit' => '25', 'current_page' => (string) $page, 'max_page' => 1],
+                ], JSON_THROW_ON_ERROR)];
+            });
+
+        $result = (new MisPeopleSyncService($client, $this->db))->sync();
+        $this->assertSame(28, $result['counts']['student']['inserted']);
+        $this->assertSame(25, $result['counts']['employee']['inserted']);
+        $this->assertNotNull($this->db->table('people')->where('kind', 'student')->where('mis_id', '20250028')->get()->getRowArray());
+
+        // Case 2: If page (max_page + 1) itself returns a full 25 rows, max_page is off by >1 page -> fail closed.
+        $brokenClient = new \App\Integrations\Mis\HttpMisClient('https://mis.example.test/sandbox', 'fixture-key', 7,
+            static function (string $verb, string $url): array {
+                parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+                $page = (int) ($q['page'] ?? 1);
+                $rows = [];
+                for ($i = 1; $i <= 25; $i++) {
+                    $rows[] = ['student_id' => sprintf('2026%04d', ($page - 1) * 25 + $i), 'first_name' => 'Over', 'last_name' => 'Full'];
+                }
+                return ['status' => 200, 'body' => json_encode([
+                    'data' => ['data' => $rows, 'limit' => '25', 'current_page' => (string) $page, 'max_page' => 1],
+                ], JSON_THROW_ON_ERROR)];
+            });
+
+        try {
+            (new MisPeopleSyncService($brokenClient, $this->db))->sync();
+            $this->fail('Full 25-row overflow page must fail closed.');
+        } catch (RuntimeException $error) {
+            $this->assertSame(503, $error->getCode());
+        }
+    }
 }
